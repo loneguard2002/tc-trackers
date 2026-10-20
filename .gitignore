@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets and local configuration
+.env
+.env.*
+
+# Brainstorming and agent workspaces
+.superpowers/
+
+# Empty placeholder files created by the Claude Code sandbox; not part of this project
+.bash_profile
+.bashrc
+.gitconfig
+.gitmodules
+.idea
+.mcp.json
+.npmrc
+.profile
+.ripgreprc
+.vscode
+.yarnrc
+.yarnrc.yml
+.zprofile
+.zshrc
+bunfig.toml
+node_modules/
+package.json
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
