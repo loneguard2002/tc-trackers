@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon %}
+{% block content %}
+<section class="empty-state error-state">
+  {{ icon('warning', 'icon empty-icon') }}
+  <span class="eyebrow">Error {{ status }}</span>
+  <h1>{{ title }}</h1>
+  <p>{{ message }}</p>
+  <a class="button primary" href="/">Back to Trackers</a>
+</section>
+{% endblock %}

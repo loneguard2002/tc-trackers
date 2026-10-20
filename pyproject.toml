@@ -1,0 +1,21 @@
+[project]
+name = "tracker"
+version = "0.1.0"
+description = "Generic progress tracker"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["docs", ".superpowers"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "db: tests that need a reachable Postgres database (skipped when unavailable)",
+    "browser: tests that need a Playwright browser",
+]

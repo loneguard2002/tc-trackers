@@ -1,0 +1,47 @@
+{% from "macros.html" import icon %}
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}{{ page_title|default('Trackers') }} · Progress Tracker{% endblock %}</title>
+  <link href="{{ url_for('static', filename='tracker.css') }}" rel="stylesheet">
+  <script src="{{ url_for('static', filename='tracker.js') }}" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <button class="icon-button mobile-menu" type="button" data-sidebar-toggle aria-label="Open navigation" aria-controls="primary-navigation" aria-expanded="false">
+    {{ icon('menu') }}
+  </button>
+  <a class="brand" href="/"><strong>Progress Tracker</strong></a>
+  <span class="app-version" title="Deployed version {{ app_version }}">v{{ app_version }}</span>
+  {% if session.get('user_id') %}
+  <div class="user-chip">
+    <span class="user-avatar">{{ session.get('display_name', 'U')[:1]|upper }}</span>
+    <span class="user-label">{{ session.get('display_name') }}</span>
+  </div>
+  {% endif %}
+</header>
+
+<div class="app-shell">
+  <div class="sidebar-backdrop" data-sidebar-close></div>
+  <aside class="sidebar" id="primary-navigation" aria-label="Primary navigation">
+    <nav class="sidebar-nav">
+      <a class="nav-link {{ 'active' if current_page == 'trackers' }}" href="/" {% if current_page == 'trackers' %}aria-current="page"{% endif %}>{{ icon('trackers') }}<span>Trackers</span></a>
+      {% if is_admin %}
+      <a class="nav-link {{ 'active' if current_page == 'admin' }}" href="/admin" {% if current_page == 'admin' %}aria-current="page"{% endif %}>{{ icon('admin') }}<span>Admin</span></a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-actions">
+      <button class="nav-link" type="button" data-theme-toggle>{{ icon('moon') }}<span data-theme-label>Dark mode</span></button>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    {% block content %}{% endblock %}
+    <footer class="page-footer">Progress Tracker · {{ current_year }}</footer>
+  </main>
+</div>
+</body>
+</html>

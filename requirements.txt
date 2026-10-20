@@ -1,0 +1,16 @@
+flask
+sqlalchemy>=2
+psycopg[binary]>=3
+alembic
+passlib[bcrypt]
+bcrypt==3.2.2
+msal
+matplotlib
+playwright
+openpyxl
+apscheduler
+gunicorn
+python-dotenv
+pytest
+ruff
+sqlfluff
