@@ -9,6 +9,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .config import load_config, validate_config
+from .db import init_db
 
 ERROR_TITLES = {
     400: "Bad request",
@@ -23,6 +24,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     app = Flask(__name__, static_folder="static", template_folder="templates")
     app.config.update(load_config(overrides))
     validate_config(app.config)
+    init_db(app)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)  # type: ignore[method-assign]
 
     @app.context_processor

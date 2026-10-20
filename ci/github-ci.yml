@@ -38,8 +38,6 @@ jobs:
           if [ -d migrations/sql ]; then sqlfluff lint migrations/sql; fi
       - name: Apply and check migrations
         run: |
-          if [ -f alembic.ini ]; then
-            alembic upgrade head
-            alembic check
-          fi
+          alembic upgrade head
+          alembic check
       - run: pytest
