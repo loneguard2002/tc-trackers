@@ -1,0 +1,529 @@
+"""Views for trackers, settings, groups and role assignment (spec sections 5.1 to 5.3)."""
+
+from __future__ import annotations
+
+from datetime import date
+
+from flask import abort, flash, g, redirect, render_template, request, url_for
+from sqlalchemy import func, select
+
+from ..audit import record
+from ..auth import ROLE_ORDER, admin_required, current_user, login_required, require_tracker_role, visible_trackers
+from ..db import get_session
+from ..engine.calc import GroupInput, Headline, build_headline, build_week_rows, group_positions
+from ..engine.weeks import week_endings
+from ..models import CompletionEntry, Group, Tracker, TrackerRole, User, Week
+from . import bp
+from .forms import (
+    RAG_VALUES,
+    validate_group_form,
+    validate_snapshot_form,
+    validate_tracker_form,
+)
+
+WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+ARCHIVED_MESSAGE = "This tracker is archived."
+ROLES = ("viewer", "editor", "owner")
+
+
+# --- Data loading --------------------------------------------------------------------------------------------
+
+
+def load_engine_inputs(
+    session, tracker: Tracker, as_of: date
+) -> tuple[list[date], dict, dict, list[GroupInput], dict[int, int]]:
+    """Load weeks, targets, actuals, groups and per-group entry totals for the engine.
+
+    Actuals and entry totals count only entries dated on or before ``as_of`` (ruling R14); actuals also include each
+    week's imported actual. Actuals are keyed by week-ending date.
+    """
+    weeks = week_endings(tracker.first_week_ending, tracker.last_week_ending)
+    week_rows = session.scalars(select(Week).where(Week.tracker_id == tracker.id)).all()
+    targets = {w.week_ending: w.target for w in week_rows}
+
+    actuals: dict[date, int] = {}
+    for week_ending, total in session.execute(
+        select(CompletionEntry.week_ending, func.sum(CompletionEntry.quantity))
+        .where(CompletionEntry.tracker_id == tracker.id, CompletionEntry.entry_date <= as_of)
+        .group_by(CompletionEntry.week_ending)
+    ):
+        actuals[week_ending] = int(total)
+    for w in week_rows:
+        if w.imported_actual is not None:
+            actuals[w.week_ending] = actuals.get(w.week_ending, 0) + w.imported_actual
+
+    groups = [
+        GroupInput(
+            group_id=g_.id,
+            name=g_.name,
+            baseline=g_.baseline,
+            starting_completed=g_.starting_completed,
+            ready_not_complete=g_.ready_not_complete,
+            planned_completion=g_.planned_completion,
+            rag=g_.rag,
+            comment=g_.comment,
+            retired=g_.retired,
+        )
+        for g_ in session.scalars(
+            select(Group).where(Group.tracker_id == tracker.id).order_by(Group.sort_order, Group.id)
+        )
+    ]
+    entry_totals = {
+        group_id: int(total)
+        for group_id, total in session.execute(
+            select(CompletionEntry.group_id, func.sum(CompletionEntry.quantity))
+            .where(CompletionEntry.tracker_id == tracker.id, CompletionEntry.entry_date <= as_of)
+            .group_by(CompletionEntry.group_id)
+        )
+    }
+    return weeks, targets, actuals, groups, entry_totals
+
+
+def default_report_week(weeks: list[date], today: date) -> date:
+    """The latest week-ending on or before ``today``, or the first week if none has passed."""
+    passed = [w for w in weeks if w <= today]
+    return passed[-1] if passed else weeks[0]
+
+
+def tracker_summary(session, tracker: Tracker, today: date) -> Headline:
+    """Headline figures for the default report week (reused by the home page and the report)."""
+    weeks = week_endings(tracker.first_week_ending, tracker.last_week_ending)
+    report_week = default_report_week(weeks, today)
+    as_of = min(report_week, today)
+    weeks, targets, actuals, groups, entry_totals = load_engine_inputs(session, tracker, as_of)
+    positions = group_positions(groups, entry_totals)
+    rows = build_week_rows(
+        weeks,
+        targets,
+        actuals,
+        sum(p.baseline for p in positions),
+        tracker.completed_before_first,
+        tracker.moving_average_weeks,
+        as_of,
+        tracker.week_ending_weekday,
+    )
+    return build_headline(rows, positions, tracker.completed_before_first, tracker.target_completion, report_week)
+
+
+def _last_entry_dates(session, tracker_ids: list[int]) -> dict[int, date]:
+    if not tracker_ids:
+        return {}
+    return dict(
+        session.execute(
+            select(CompletionEntry.tracker_id, func.max(CompletionEntry.entry_date))
+            .where(CompletionEntry.tracker_id.in_(tracker_ids))
+            .group_by(CompletionEntry.tracker_id)
+        ).all()
+    )
+
+
+def _deployed_by_group(session, tracker: Tracker) -> dict[int, int]:
+    return {
+        group_id: int(total)
+        for group_id, total in session.execute(
+            select(CompletionEntry.group_id, func.sum(CompletionEntry.quantity))
+            .where(CompletionEntry.tracker_id == tracker.id)
+            .group_by(CompletionEntry.group_id)
+        )
+    }
+
+
+def _has_entries(session, tracker: Tracker) -> bool:
+    return (
+        session.scalar(select(CompletionEntry.id).where(CompletionEntry.tracker_id == tracker.id).limit(1)) is not None
+    )
+
+
+# --- Home ----------------------------------------------------------------------------------------------------
+
+
+@login_required
+def home():
+    db = get_session()
+    user = current_user()
+    show_archived = request.args.get("archived") == "1"
+    trackers = [t for t in visible_trackers(db, user) if show_archived or t.status == "active"]
+    last_entries = _last_entry_dates(db, [t.id for t in trackers])
+    today = date.today()
+    cards = [
+        {"tracker": t, "headline": tracker_summary(db, t, today), "last_entry": last_entries.get(t.id)}
+        for t in trackers
+    ]
+    return render_template(
+        "home.html", cards=cards, show_archived=show_archived, page_title="Trackers", current_page="trackers"
+    )
+
+
+# --- Create, view, archive -----------------------------------------------------------------------------------
+
+
+def _defaults_form() -> dict:
+    today = date.today()
+    return {
+        "name": "",
+        "unit_label": "",
+        "group_label": "",
+        "description": "",
+        "week_ending_weekday": "4",
+        "start_date": today.isoformat(),
+        "last_week_ending": "",
+        "target_completion": "",
+        "completed_before_first": "0",
+        "moving_average_weeks": "3",
+    }
+
+
+def _form_from_tracker(t: Tracker) -> dict:
+    return {
+        "name": t.name,
+        "unit_label": t.unit_label,
+        "group_label": t.group_label,
+        "description": t.description,
+        "week_ending_weekday": str(t.week_ending_weekday),
+        "start_date": t.first_week_ending.isoformat(),
+        "last_week_ending": t.last_week_ending.isoformat(),
+        "target_completion": t.target_completion.isoformat() if t.target_completion else "",
+        "completed_before_first": str(t.completed_before_first),
+        "moving_average_weeks": str(t.moving_average_weeks),
+    }
+
+
+@bp.route("/trackers/new", methods=["GET", "POST"])
+@admin_required
+def new():
+    db = get_session()
+    if request.method == "POST":
+        values, errors = validate_tracker_form(request.form)
+        if not errors:
+            tracker = Tracker(**values)
+            db.add(tracker)
+            db.flush()
+            db.add(TrackerRole(user_id=current_user().id, tracker_id=tracker.id, role="owner"))
+            record(
+                db,
+                user_id=current_user().id,
+                tracker_id=tracker.id,
+                action="tracker_created",
+                entity="tracker",
+                entity_id=tracker.id,
+                detail={"name": tracker.name},
+            )
+            db.commit()
+            flash("Tracker created.", "success")
+            return redirect(url_for("trackers.settings", tracker_id=tracker.id))
+        return _render_settings(None, request.form, errors, status=400)
+    return _render_settings(None, _defaults_form(), [])
+
+
+def _render_settings(tracker: Tracker | None, form, errors: list[str], status: int = 200):
+    template = "trackers/settings.html" if tracker is not None else "trackers/new.html"
+    locked = tracker is not None and _has_entries(get_session(), tracker)
+    return (
+        render_template(
+            template,
+            tracker=tracker,
+            form=form,
+            errors=errors,
+            weekdays=list(enumerate(WEEKDAYS)),
+            weekday_locked=locked,
+            page_title="New tracker" if tracker is None else f"{tracker.name} settings",
+            current_page="trackers",
+        ),
+        status,
+    )
+
+
+@bp.get("/trackers/<int:tracker_id>")
+@require_tracker_role("viewer")
+def view(tracker_id: int):
+    # TODO(Task 8): redirect every role to the weekly report. Until it exists, owners go to the settings page and
+    # other roles see a minimal overview.
+    tracker = g.tracker
+    if g.role == "owner":
+        return redirect(url_for("trackers.settings", tracker_id=tracker.id))
+    db = get_session()
+    return render_template(
+        "trackers/overview.html",
+        tracker=tracker,
+        headline=tracker_summary(db, tracker, date.today()),
+        page_title=tracker.name,
+        current_page="trackers",
+    )
+
+
+@bp.get("/trackers/<int:tracker_id>/entries/new")
+@require_tracker_role("editor")
+def new_entry(tracker_id: int):
+    return "placeholder"  # PLACEHOLDER: replaced in Task 7
+
+
+@bp.post("/trackers/<int:tracker_id>/archive")
+@admin_required
+@require_tracker_role("owner")
+def archive(tracker_id: int):
+    tracker, db = g.tracker, get_session()
+    if tracker.status != "archived":
+        tracker.status = "archived"
+        record(
+            db,
+            user_id=current_user().id,
+            tracker_id=tracker.id,
+            action="tracker_archived",
+            entity="tracker",
+            entity_id=tracker.id,
+        )
+        db.commit()
+    flash("Tracker archived.", "success")
+    return redirect(url_for("index"))
+
+
+# --- Settings ------------------------------------------------------------------------------------------------
+
+
+def _refuse_if_archived(tracker: Tracker, endpoint: str):
+    if tracker.status == "archived":
+        flash(ARCHIVED_MESSAGE, "danger")
+        return redirect(url_for(endpoint, tracker_id=tracker.id))
+    return None
+
+
+def _jsonable(value):
+    return value.isoformat() if isinstance(value, date) else value
+
+
+@bp.route("/trackers/<int:tracker_id>/settings", methods=["GET", "POST"])
+@require_tracker_role("owner")
+def settings(tracker_id: int):
+    tracker, db = g.tracker, get_session()
+    if request.method == "GET":
+        return _render_settings(tracker, _form_from_tracker(tracker), [])
+    refused = _refuse_if_archived(tracker, "trackers.settings")
+    if refused:
+        return refused
+    locked = tracker.week_ending_weekday if _has_entries(db, tracker) else None
+    values, errors = validate_tracker_form(request.form, locked_weekday=locked)
+    if not errors:
+        low, high = db.execute(
+            select(func.min(CompletionEntry.week_ending), func.max(CompletionEntry.week_ending)).where(
+                CompletionEntry.tracker_id == tracker.id
+            )
+        ).one()
+        if low is not None and (low < values["first_week_ending"] or high > values["last_week_ending"]):
+            errors.append("Entries exist outside the new week range. Widen the range to include them.")
+    if errors:
+        return _render_settings(tracker, request.form, errors, status=400)
+    changed = {}
+    for field, new_value in values.items():
+        old_value = getattr(tracker, field)
+        if old_value != new_value:
+            changed[field] = [_jsonable(old_value), _jsonable(new_value)]
+            setattr(tracker, field, new_value)
+    if changed:
+        record(
+            db,
+            user_id=current_user().id,
+            tracker_id=tracker.id,
+            action="settings_updated",
+            entity="tracker",
+            entity_id=tracker.id,
+            detail=changed,
+        )
+    db.commit()
+    flash("Settings saved.", "success")
+    return redirect(url_for("trackers.settings", tracker_id=tracker.id))
+
+
+# --- Groups --------------------------------------------------------------------------------------------------
+
+
+def _ordered_groups(db, tracker: Tracker) -> list[Group]:
+    return list(db.scalars(select(Group).where(Group.tracker_id == tracker.id).order_by(Group.sort_order, Group.id)))
+
+
+def _group_or_404(db, tracker: Tracker) -> Group:
+    group_id = request.form.get("group_id", type=int)
+    group = db.get(Group, group_id) if group_id is not None else None
+    if group is None or group.tracker_id != tracker.id:
+        abort(404)
+    return group
+
+
+def _name_taken(db, tracker: Tracker, name: str, exclude_id: int | None = None) -> bool:
+    query = select(Group.id).where(Group.tracker_id == tracker.id, Group.name == name)
+    if exclude_id is not None:
+        query = query.where(Group.id != exclude_id)
+    return db.scalar(query) is not None
+
+
+def _require_owner() -> None:
+    if ROLE_ORDER[g.role] < ROLE_ORDER["owner"]:
+        abort(403, description="Only an owner can do this.")
+
+
+def _audit_group(db, tracker: Tracker, action: str, group: Group, detail: dict | None = None) -> None:
+    record(
+        db,
+        user_id=current_user().id,
+        tracker_id=tracker.id,
+        action=action,
+        entity="group",
+        entity_id=group.id,
+        detail=detail,
+    )
+
+
+@bp.route("/trackers/<int:tracker_id>/groups", methods=["GET", "POST"])
+@require_tracker_role("editor")
+def groups(tracker_id: int):
+    tracker, db = g.tracker, get_session()
+    if request.method == "POST":
+        refused = _refuse_if_archived(tracker, "trackers.groups")
+        if refused:
+            return refused
+        error = _handle_group_action(db, tracker)
+        if error:
+            flash(error, "danger")
+        return redirect(url_for("trackers.groups", tracker_id=tracker.id))
+    deployed = _deployed_by_group(db, tracker)
+    return render_template(
+        "trackers/groups.html",
+        tracker=tracker,
+        groups=_ordered_groups(db, tracker),
+        deployed=deployed,
+        is_owner=g.role == "owner",
+        rag_values=RAG_VALUES,
+        page_title=f"{tracker.name}: {tracker.group_label or 'Groups'}",
+        current_page="trackers",
+    )
+
+
+def _handle_group_action(db, tracker: Tracker) -> str | None:
+    """Apply one group action; return an error message, or ``None`` after committing a change."""
+    action = request.form.get("action", "")
+    if action == "update":
+        return _update_group(db, tracker)
+    _require_owner()
+    if action == "create":
+        values, errors = validate_group_form(request.form)
+        if not errors and _name_taken(db, tracker, values["name"]):
+            errors.append("A group with that name already exists.")
+        if errors:
+            return errors[0]
+        order = db.scalar(select(func.max(Group.sort_order)).where(Group.tracker_id == tracker.id))
+        group = Group(tracker_id=tracker.id, sort_order=(order or 0) + 1, **values)
+        db.add(group)
+        db.flush()
+        _audit_group(db, tracker, "group_created", group, {"name": group.name, "baseline": group.baseline})
+        db.commit()
+        flash("Group added.", "success")
+        return None
+    group = _group_or_404(db, tracker)
+    if action == "retire":
+        deployed = group.starting_completed + _deployed_by_group(db, tracker).get(group.id, 0)
+        if group.baseline - deployed > 0:
+            return "Correct the baseline to the deployed figure before retiring this group."
+        group.retired = True
+        _audit_group(db, tracker, "group_retired", group)
+    elif action == "unretire":
+        group.retired = False
+        _audit_group(db, tracker, "group_unretired", group)
+    elif action in ("up", "down"):
+        ordered = _ordered_groups(db, tracker)
+        index = ordered.index(group)
+        swap = index - 1 if action == "up" else index + 1
+        if 0 <= swap < len(ordered):
+            ordered[index], ordered[swap] = ordered[swap], ordered[index]
+        for position, item in enumerate(ordered):
+            item.sort_order = position
+        _audit_group(db, tracker, "group_reordered", group, {"direction": action})
+    else:
+        abort(400, description="Unknown action.")
+    db.commit()
+    return None
+
+
+def _update_group(db, tracker: Tracker) -> str | None:
+    group = _group_or_404(db, tracker)
+    changes: dict[str, list] = {}
+    snapshot, errors = validate_snapshot_form(request.form)
+    if errors:
+        return errors[0]
+    owner_values: dict = {}
+    if g.role == "owner":
+        owner_values, errors = validate_group_form(
+            {
+                **request.form,
+                "starting_completed": request.form.get("starting_completed", str(group.starting_completed)),
+            }
+        )
+        if errors:
+            return errors[0]
+        if _name_taken(db, tracker, owner_values["name"], exclude_id=group.id):
+            return "A group with that name already exists."
+    baseline_change = None
+    for field, new_value in {**snapshot, **owner_values}.items():
+        old_value = getattr(group, field)
+        if old_value == new_value:
+            continue
+        if field == "baseline":
+            baseline_change = [old_value, new_value]
+        else:
+            changes[field] = [_jsonable(old_value), _jsonable(new_value)]
+        setattr(group, field, new_value)
+    if baseline_change:
+        _audit_group(db, tracker, "baseline_changed", group, {"baseline": baseline_change})
+    if changes:
+        _audit_group(db, tracker, "group_updated", group, changes)
+    db.commit()
+    flash("Group saved.", "success")
+    return None
+
+
+# --- Roles ---------------------------------------------------------------------------------------------------
+
+
+@bp.route("/trackers/<int:tracker_id>/roles", methods=["GET", "POST"])
+@admin_required
+@require_tracker_role("owner")
+def roles(tracker_id: int):
+    tracker, db = g.tracker, get_session()
+    if request.method == "POST":
+        refused = _refuse_if_archived(tracker, "trackers.roles")
+        if refused:
+            return refused
+        user = db.get(User, request.form.get("user_id", type=int) or 0)
+        choice = request.form.get("role", "")
+        if user is None or user.is_admin or choice not in (*ROLES, "remove"):
+            abort(400, description="Choose a user and a role.")
+        existing = db.get(TrackerRole, (user.id, tracker.id))
+        previous = existing.role if existing else None
+        if choice == "remove":
+            if existing:
+                db.delete(existing)
+        elif existing:
+            existing.role = choice
+        else:
+            db.add(TrackerRole(user_id=user.id, tracker_id=tracker.id, role=choice))
+        record(
+            db,
+            user_id=current_user().id,
+            tracker_id=tracker.id,
+            action="role_removed" if choice == "remove" else "role_set",
+            entity="user",
+            entity_id=user.id,
+            detail={"role": [previous, None if choice == "remove" else choice]},
+        )
+        db.commit()
+        flash(f"Updated access for {user.full_name}.", "success")
+        return redirect(url_for("trackers.roles", tracker_id=tracker.id))
+    current = {r.user_id: r.role for r in db.scalars(select(TrackerRole).where(TrackerRole.tracker_id == tracker.id))}
+    users = db.scalars(select(User).where(User.status == "active").order_by(User.full_name, User.id)).all()
+    return render_template(
+        "trackers/roles.html",
+        tracker=tracker,
+        users=users,
+        current=current,
+        roles=ROLES,
+        page_title=f"{tracker.name} access",
+        current_page="trackers",
+    )

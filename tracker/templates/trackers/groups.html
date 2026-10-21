@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% set label = tracker.group_label or 'Group' %}
+{% block content %}
+<h1>{{ tracker.name }}</h1>
+{% include "trackers/_nav.html" %}
+{% for group in groups %}
+{% set done = group.starting_completed + deployed.get(group.id, 0) %}
+<section class="card">
+  <h2>{{ group.name }} {% if group.retired %}<span class="badge badge-muted">Retired</span>{% endif %}</h2>
+  <p>{{ done }} of {{ group.baseline }} {{ tracker.unit_label }} complete; {{ group.baseline - done }} remaining.</p>
+  <form method="post" action="{{ url_for('trackers.groups', tracker_id=tracker.id) }}">
+    {{ csrf_field(csrf_token()) }}
+    <input type="hidden" name="action" value="update"><input type="hidden" name="group_id" value="{{ group.id }}">
+    {% if is_owner %}
+    <div class="form-row"><label for="name-{{ group.id }}">{{ label }} name</label><input id="name-{{ group.id }}" name="name" value="{{ group.name }}" required></div>
+    <div class="form-row"><label for="baseline-{{ group.id }}">Baseline ({{ tracker.unit_label }} in scope)</label><input id="baseline-{{ group.id }}" name="baseline" type="number" min="0" value="{{ group.baseline }}" required></div>
+    <div class="form-row"><label for="start-{{ group.id }}">Starting completed figure</label><input id="start-{{ group.id }}" name="starting_completed" type="number" min="0" value="{{ group.starting_completed }}"></div>
+    {% endif %}
+    <div class="form-row"><label for="ready-{{ group.id }}">Ready, not yet complete</label><input id="ready-{{ group.id }}" name="ready_not_complete" type="number" min="0" value="{{ group.ready_not_complete }}"></div>
+    <div class="form-row"><label for="planned-{{ group.id }}">Planned completion</label><input id="planned-{{ group.id }}" name="planned_completion" type="date" value="{{ group.planned_completion.isoformat() if group.planned_completion }}"></div>
+    <div class="form-row"><label for="rag-{{ group.id }}">Status</label>
+      <select id="rag-{{ group.id }}" name="rag"><option value="">Not set</option>
+        {% for r in rag_values %}<option {{ 'selected' if group.rag == r }}>{{ r }}</option>{% endfor %}</select></div>
+    <div class="form-row"><label for="comment-{{ group.id }}">Comment or exception</label><textarea id="comment-{{ group.id }}" name="comment" rows="2">{{ group.comment }}</textarea></div>
+    <button class="button primary" type="submit">Save</button>
+  </form>
+  {% if is_owner and tracker.status == 'active' %}
+  <div class="row-actions">
+    {% for act, text in (('up', 'Move up'), ('down', 'Move down'), ('unretire' if group.retired else 'retire', 'Reinstate' if group.retired else 'Retire')) %}
+    <form method="post" action="{{ url_for('trackers.groups', tracker_id=tracker.id) }}">
+      {{ csrf_field(csrf_token()) }}<input type="hidden" name="group_id" value="{{ group.id }}"><input type="hidden" name="action" value="{{ act }}">
+      <button class="button" type="submit">{{ text }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% else %}
+<section class="empty-state"><p>No {{ label|lower }}s have been added yet.</p></section>
+{% endfor %}
+{% if is_owner and tracker.status == 'active' %}
+<section class="card">
+  <h2>Add a {{ label|lower }}</h2>
+  <form method="post" action="{{ url_for('trackers.groups', tracker_id=tracker.id) }}">
+    {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="create">
+    <div class="form-row"><label for="new-name">Name</label><input id="new-name" name="name" required></div>
+    <div class="form-row"><label for="new-baseline">Baseline</label><input id="new-baseline" name="baseline" type="number" min="0" required></div>
+    <div class="form-row"><label for="new-start">Starting completed figure</label><input id="new-start" name="starting_completed" type="number" min="0" value="0"></div>
+    <button class="button primary" type="submit">Add</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

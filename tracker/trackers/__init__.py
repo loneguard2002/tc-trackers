@@ -1,25 +1,12 @@
-"""PLACEHOLDER tracker views.
-
-These stubs exist only so that the role tests of Task 5 can exercise ``require_tracker_role``.
-Task 6 replaces ``view`` and Task 7 replaces ``new_entry``; delete this module's routes then.
-"""
+"""Trackers: home page, settings, groups and role assignment."""
 
 from __future__ import annotations
 
 from flask import Blueprint
 
-from ..auth import require_tracker_role
-
 bp = Blueprint("trackers", __name__)
 
+from . import views  # noqa: E402,F401  (registers the routes on ``bp``)
+from .views import home, load_engine_inputs, tracker_summary  # noqa: E402
 
-@bp.get("/trackers/<int:tracker_id>")
-@require_tracker_role("viewer")
-def view(tracker_id: int):
-    return "placeholder"  # PLACEHOLDER: replaced in Task 6
-
-
-@bp.get("/trackers/<int:tracker_id>/entries/new")
-@require_tracker_role("editor")
-def new_entry(tracker_id: int):
-    return "placeholder"  # PLACEHOLDER: replaced in Task 7
+__all__ = ["bp", "home", "load_engine_inputs", "tracker_summary"]

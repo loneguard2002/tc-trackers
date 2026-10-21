@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% block content %}
+<h1>{{ tracker.name }}</h1>
+{% include "trackers/_nav.html" %}
+<section class="card">
+  <h2>Settings</h2>
+  <form method="post" action="{{ url_for('trackers.settings', tracker_id=tracker.id) }}">
+    {% include "trackers/_fields.html" %}
+    <button class="button primary" type="submit">Save settings</button>
+  </form>
+</section>
+{% if current_user.is_admin and tracker.status == 'active' %}
+<section class="card">
+  <h2>Archive</h2>
+  <p>An archived tracker keeps its history and stays viewable, but can no longer be changed.</p>
+  <form method="post" action="{{ url_for('trackers.archive', tracker_id=tracker.id) }}">
+    {{ csrf_field(csrf_token()) }}<button class="button danger" type="submit">Archive tracker</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

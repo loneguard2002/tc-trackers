@@ -12,13 +12,14 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from .admin import bp as admin_bp
 from .audit import record
 from .auth import bp as auth_bp
-from .auth import current_user, login_required
+from .auth import current_user
 from .auth.csrf import install_csrf
 from .auth.passwords import hash_password, validate_new_password
 from .config import load_config, validate_config
 from .db import get_session, init_db
 from .models import User
 from .trackers import bp as trackers_bp
+from .trackers import home
 
 ERROR_TITLES = {
     400: "Bad request",
@@ -47,7 +48,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     install_csrf(app)
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
-    app.register_blueprint(trackers_bp)  # placeholder views until Tasks 6 and 7
+    app.register_blueprint(trackers_bp)
     if app.config["SSO_ENABLED"]:
         from .auth.sso import bp as sso_bp
 
@@ -71,11 +72,7 @@ def create_app(overrides: dict | None = None) -> Flask:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
-    @app.get("/")
-    @login_required
-    def index():
-        # PLACEHOLDER home page: replaced by the tracker list in Task 8.
-        return render_template("home_placeholder.html", page_title="Trackers", current_page="trackers")
+    app.add_url_rule("/", endpoint="index", view_func=home)
 
     @app.get("/healthz")
     def healthz():

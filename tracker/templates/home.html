@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Trackers</h1>
+{% if current_user.is_admin %}
+<p><a class="button primary" href="{{ url_for('trackers.new') }}">New tracker</a>
+  {% if show_archived %}<a class="button" href="{{ url_for('index') }}">Hide archived</a>
+  {% else %}<a class="button" href="{{ url_for('index', archived=1) }}">Show archived</a>{% endif %}</p>
+{% endif %}
+{% if not cards %}
+<section class="empty-state">
+  <p>{{ 'There are no trackers yet.' if current_user.is_admin else 'You have not been given access to any trackers.' }}</p>
+</section>
+{% else %}
+<div class="card-grid">
+  {% for c in cards %}
+  {% set t = c.tracker %}{% set h = c.headline %}
+  <section class="card">
+    <h2><a href="{{ url_for('trackers.view', tracker_id=t.id) }}">{{ t.name }}</a></h2>
+    <p><span class="badge badge-{{ 'muted' if t.status == 'archived' else 'success' }}">{{ t.status|title }}</span></p>
+    <dl>
+      <dt>Complete</dt>
+      <dd>{% if h.pct_complete is not none %}{{ (h.pct_complete * 100)|round(1) }}%{% else %}Not available{% endif %}
+        ({{ h.completed }} of {{ h.total_scope }} {{ t.unit_label }})</dd>
+      <dt>Forecast completion</dt>
+      <dd>{{ h.forecast_completion.strftime('%d %b %Y') if h.forecast_completion else 'No forecast yet' }}
+        {% if h.target_completion %}against a target of {{ h.target_completion.strftime('%d %b %Y') }}{% endif %}</dd>
+      <dd>{{ h.verdict }}</dd>
+      <dt>Last entry</dt>
+      <dd>{{ c.last_entry.strftime('%d %b %Y') if c.last_entry else 'No entries yet' }}</dd>
+    </dl>
+  </section>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

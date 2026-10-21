@@ -1,0 +1,18 @@
+{% from "macros.html" import csrf_field %}
+{% if errors %}<ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+{{ csrf_field(csrf_token()) }}
+<div class="form-row"><label for="name">Name</label><input id="name" name="name" value="{{ form.get('name', '') }}" required></div>
+<div class="form-row"><label for="unit_label">Unit being counted (for example, thin clients)</label><input id="unit_label" name="unit_label" value="{{ form.get('unit_label', '') }}"></div>
+<div class="form-row"><label for="group_label">Grouping label (for example, Location)</label><input id="group_label" name="group_label" value="{{ form.get('group_label', '') }}"></div>
+<div class="form-row"><label for="description">Description</label><textarea id="description" name="description" rows="3">{{ form.get('description', '') }}</textarea></div>
+<div class="form-row"><label for="week_ending_weekday">Week-ending day</label>
+  <select id="week_ending_weekday" name="week_ending_weekday">
+    {% for n, day in weekdays %}<option value="{{ n }}" {{ 'selected' if form.get('week_ending_weekday') == n|string }}>{{ day }}</option>{% endfor %}
+  </select>
+  {% if weekday_locked %}<small>The week-ending day cannot change once entries exist.</small>{% endif %}
+</div>
+<div class="form-row"><label for="start_date">First week-ending (any start date moves to the next week-ending day)</label><input id="start_date" name="start_date" type="date" value="{{ form.get('start_date', '') }}" required></div>
+<div class="form-row"><label for="last_week_ending">Last week-ending (at most 52 weeks after the first)</label><input id="last_week_ending" name="last_week_ending" type="date" value="{{ form.get('last_week_ending', '') }}" required></div>
+<div class="form-row"><label for="target_completion">Target completion date</label><input id="target_completion" name="target_completion" type="date" value="{{ form.get('target_completion', '') }}"></div>
+<div class="form-row"><label for="completed_before_first">Quantity completed before the first week</label><input id="completed_before_first" name="completed_before_first" type="number" min="0" value="{{ form.get('completed_before_first', '0') }}"></div>
+<div class="form-row"><label for="moving_average_weeks">Moving-average period (weeks, 1 to 12)</label><input id="moving_average_weeks" name="moving_average_weeks" type="number" min="1" max="12" value="{{ form.get('moving_average_weeks', '3') }}"></div>

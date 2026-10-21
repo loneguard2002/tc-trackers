@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% block content %}
+<h1>{{ tracker.name }}</h1>
+{% include "trackers/_nav.html" %}
+<section class="card">
+  <h2>Access</h2>
+  <table class="table">
+    <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td>{{ u.full_name }}</td><td>{{ u.email }}</td>
+        {% if u.is_admin %}
+        <td>Administrator (owner)</td><td></td>
+        {% else %}
+        <td>{{ current.get(u.id, 'No access')|title }}</td>
+        <td class="row-actions">
+          <form method="post" action="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">
+            {{ csrf_field(csrf_token()) }}<input type="hidden" name="user_id" value="{{ u.id }}">
+            <label class="sr-only" for="role-{{ u.id }}">Role for {{ u.full_name }}</label>
+            <select id="role-{{ u.id }}" name="role">
+              {% for r in roles %}<option value="{{ r }}" {{ 'selected' if current.get(u.id) == r }}>{{ r|title }}</option>{% endfor %}
+            </select>
+            <button class="button" type="submit">Set role</button>
+          </form>
+          {% if u.id in current %}
+          <form method="post" action="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">
+            {{ csrf_field(csrf_token()) }}<input type="hidden" name="user_id" value="{{ u.id }}"><input type="hidden" name="role" value="remove">
+            <button class="button" type="submit">Remove access</button>
+          </form>
+          {% endif %}
+        </td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

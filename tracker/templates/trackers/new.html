@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>New tracker</h1>
+<section class="card">
+  <form method="post" action="{{ url_for('trackers.new') }}">
+    {% include "trackers/_fields.html" %}
+    <button class="button primary" type="submit">Create tracker</button>
+  </form>
+</section>
+{% endblock %}

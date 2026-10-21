@@ -1,0 +1,7 @@
+<p>
+  <a href="{{ url_for('trackers.view', tracker_id=tracker.id) }}">Overview</a>
+  {% if g.role == 'owner' %} · <a href="{{ url_for('trackers.settings', tracker_id=tracker.id) }}">Settings</a>{% endif %}
+  · <a href="{{ url_for('trackers.groups', tracker_id=tracker.id) }}">{{ tracker.group_label or 'Groups' }}</a>
+  {% if current_user.is_admin %} · <a href="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">Access</a>{% endif %}
+</p>
+{% if tracker.status == 'archived' %}<p class="flash flash-danger">This tracker is archived.</p>{% endif %}
