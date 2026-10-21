@@ -205,7 +205,7 @@ FRI = 4
 def test_week_ending_for_midweek():      assert week_ending_for(date(2026, 10, 14), FRI) == date(2026, 10, 16)
 def test_week_ending_for_on_the_day():   assert week_ending_for(date(2026, 10, 16), FRI) == date(2026, 10, 16)
 def test_monday_report_maps_to_previous_friday():
-    assert report_date_to_week_ending(date(2026, 10, 13), FRI) == date(2026, 10, 10)
+    assert report_date_to_week_ending(date(2026, 10, 12), FRI) == date(2026, 10, 9)
 def test_report_date_on_week_ending_day_maps_to_previous_week():
     assert report_date_to_week_ending(date(2026, 10, 16), FRI) == date(2026, 10, 9)
 def test_week_endings_52_max():
