@@ -6,6 +6,6 @@
   <span class="eyebrow">Error {{ status }}</span>
   <h1>{{ title }}</h1>
   <p>{{ message }}</p>
-  <a class="button primary" href="/">Back to Trackers</a>
+  <a class="button primary" href="{{ url_for('index') }}">Back to Trackers</a>
 </section>
 {% endblock %}

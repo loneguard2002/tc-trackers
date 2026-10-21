@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from tracker.app import create_app
-from tracker.models import Base, Tracker
+from tracker.auth.passwords import hash_password
+from tracker.models import Base, Tracker, TrackerRole, User
 
 DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "postgresql+psycopg://localhost/tracker_test")
 ROOT = Path(__file__).resolve().parent.parent
@@ -81,3 +82,67 @@ def tracker_factory(db):
         return tracker
 
     return make
+
+
+TEST_PASSWORD = "correct horse battery"
+
+
+@pytest.fixture
+def user_factory(db):
+    counter = {"n": 0}
+
+    def make(**overrides) -> User:
+        counter["n"] += 1
+        values = {
+            "email": f"user{counter['n']}@example.com",
+            "full_name": f"User {counter['n']}",
+            "password_hash": hash_password(TEST_PASSWORD),
+            "auth_source": "local",
+            "status": "active",
+            "is_admin": False,
+        }
+        values.update(overrides)
+        user = User(**values)
+        db.add(user)
+        db.commit()
+        return user
+
+    return make
+
+
+def sign_in(client, user: User) -> None:
+    with client.session_transaction() as sess:
+        sess["user_id"] = user.id
+        sess["csrf_token"] = "test-csrf-token"
+
+
+@pytest.fixture
+def logged_in_user(client, user_factory):
+    user = user_factory()
+    sign_in(client, user)
+    return user
+
+
+@pytest.fixture
+def logged_in_admin(client, user_factory):
+    user = user_factory(is_admin=True)
+    sign_in(client, user)
+    return user
+
+
+@pytest.fixture
+def grant(db):
+    def give(user: User, tracker: Tracker, role: str) -> None:
+        db.add(TrackerRole(user_id=user.id, tracker_id=tracker.id, role=role))
+        db.commit()
+
+    return give
+
+
+def post(client, url: str, data: dict | None = None, **kwargs):
+    """POST with the CSRF token of the current session (establishing one when absent)."""
+    with client.session_transaction() as sess:
+        token = sess.setdefault("csrf_token", "test-csrf-token")
+    payload = dict(data or {})
+    payload["csrf_token"] = token
+    return client.post(url, data=payload, **kwargs)

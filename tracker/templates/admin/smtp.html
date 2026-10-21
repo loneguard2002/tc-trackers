@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% block content %}
+<h1>Email settings</h1>
+<section class="card">
+  <form method="post" action="{{ url_for('admin.smtp') }}">
+    {{ csrf_field(csrf_token()) }}
+    <div class="form-row"><label for="smtp_host">SMTP host</label><input id="smtp_host" name="smtp_host" value="{{ values.smtp_host }}"></div>
+    <div class="form-row"><label for="smtp_port">SMTP port</label><input id="smtp_port" name="smtp_port" inputmode="numeric" value="{{ values.smtp_port }}"></div>
+    <div class="form-row"><label for="smtp_auth">Authentication</label>
+      <select id="smtp_auth" name="smtp_auth">
+        {% for mode in modes %}<option value="{{ mode }}" {{ 'selected' if values.smtp_auth == mode }}>{{ mode }}</option>{% endfor %}
+      </select></div>
+    <div class="form-row"><label for="smtp_user">SMTP user</label><input id="smtp_user" name="smtp_user" value="{{ values.smtp_user }}"></div>
+    <div class="form-row"><label for="smtp_from">From address</label><input id="smtp_from" name="smtp_from" value="{{ values.smtp_from }}"></div>
+    <div class="form-row"><label for="smtp_tenant_id">Tenant ID (xoauth2)</label><input id="smtp_tenant_id" name="smtp_tenant_id" value="{{ values.smtp_tenant_id }}"></div>
+    <div class="form-row"><label for="smtp_client_id">Client ID (xoauth2)</label><input id="smtp_client_id" name="smtp_client_id" value="{{ values.smtp_client_id }}"></div>
+    <p>The SMTP password and client secret are never stored here. Set them as the environment variables <code>SMTP_PASSWORD</code> and <code>SMTP_CLIENT_SECRET</code>.</p>
+    <button class="button primary" type="submit">Save</button>
+  </form>
+</section>
+{% endblock %}

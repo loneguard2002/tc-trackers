@@ -62,3 +62,13 @@ input:focus, select:focus, textarea:focus, .button:focus-visible, .nav-link:focu
   .sidebar-open .sidebar-backdrop { display: block; position: fixed; inset: var(--topbar-height) 0 0 0; z-index: 25; background: rgba(0, 0, 0, .4); }
   .main-content { padding: 16px; }
 }
+
+/* Authentication and administration */
+.auth-card { max-width: 26rem; margin: 3rem auto; }
+.flash { padding: 0.6rem 0.9rem; border-radius: 6px; border: 1px solid currentColor; }
+.flash-danger { color: #b3261e; }
+.flash-success { color: #1b6e3c; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(128, 128, 128, 0.3); }
+.row-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.user-chip form { display: inline; margin: 0; }

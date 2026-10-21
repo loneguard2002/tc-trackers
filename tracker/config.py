@@ -11,6 +11,11 @@ class ConfigurationError(RuntimeError):
     """Raised when the application cannot start securely."""
 
 
+def _cookie_secure(raw: str | None) -> bool:
+    """Fail closed: only an explicit false-like value turns the Secure flag off."""
+    return (raw or "true").strip().lower() not in {"false", "0", "no", "off"}
+
+
 def load_config(overrides: dict | None = None) -> dict:
     load_dotenv()
     config = {
@@ -26,7 +31,7 @@ def load_config(overrides: dict | None = None) -> dict:
         "APP_VERSION": (os.getenv("GIT_COMMIT") or "local")[:7],
         "SESSION_COOKIE_HTTPONLY": True,
         "SESSION_COOKIE_SAMESITE": "Lax",
-        "SESSION_COOKIE_SECURE": os.getenv("SESSION_COOKIE_SECURE", "true").lower() == "true",
+        "SESSION_COOKIE_SECURE": _cookie_secure(os.getenv("SESSION_COOKIE_SECURE")),
         "PERMANENT_SESSION_LIFETIME": 60 * 60 * 8,
     }
     if overrides:

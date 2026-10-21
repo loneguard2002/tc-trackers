@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="empty-state">
+  <span class="eyebrow">Awaiting approval</span>
+  <h1>Thank you{% if name %}, {{ name }}{% endif %}</h1>
+  <p>Your account has been created and is awaiting approval by an administrator. You will be able to sign in once it has been approved.</p>
+  <a class="button" href="{{ url_for('auth.login') }}">Back to sign in</a>
+</section>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% block content %}
+<h1>Users</h1>
+<section class="card">
+  <table class="table">
+    <thead><tr><th>Name</th><th>Email</th><th>Sign-in</th><th>Status</th><th>Administrator</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td>{{ u.full_name }}</td>
+        <td>{{ u.email }}</td>
+        <td>{{ 'Microsoft' if u.auth_source == 'sso' else 'Local' }}</td>
+        <td><span class="badge badge-{{ {'active': 'success', 'pending': 'info'}.get(u.status, 'muted') }}">{{ u.status|title }}</span></td>
+        <td>{{ 'Yes' if u.is_admin else 'No' }}</td>
+        <td class="row-actions">
+          {% if u.status != 'active' %}
+          <form method="post" action="{{ url_for('admin.approve', user_id=u.id) }}">{{ csrf_field(csrf_token()) }}<button class="button" type="submit">{{ 'Approve' if u.status == 'pending' else 'Re-enable' }}</button></form>
+          {% endif %}
+          {% if u.status != 'disabled' and u.id != current_user.id %}
+          <form method="post" action="{{ url_for('admin.disable', user_id=u.id) }}">{{ csrf_field(csrf_token()) }}<button class="button" type="submit">Disable</button></form>
+          {% endif %}
+          {% if u.id != current_user.id %}
+          <form method="post" action="{{ url_for('admin.set_admin', user_id=u.id) }}">{{ csrf_field(csrf_token()) }}<input type="hidden" name="is_admin" value="{{ '0' if u.is_admin else '1' }}"><button class="button" type="submit">{{ 'Remove administrator' if u.is_admin else 'Make administrator' }}</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+<section class="card">
+  <h2>Add a local user</h2>
+  <form method="post" action="{{ url_for('admin.create_user') }}">
+    {{ csrf_field(csrf_token()) }}
+    <div class="form-row"><label for="new-name">Full name</label><input id="new-name" name="full_name" required></div>
+    <div class="form-row"><label for="new-email">Email address</label><input id="new-email" name="email" type="email" required></div>
+    <div class="form-row"><label for="new-password">Initial password (at least 12 characters)</label><input id="new-password" name="password" type="password" autocomplete="new-password" minlength="12" required></div>
+    <button class="button primary" type="submit">Create user</button>
+  </form>
+</section>
+<p><a href="{{ url_for('admin.smtp') }}">Email settings</a></p>
+{% endblock %}

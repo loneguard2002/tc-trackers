@@ -4,12 +4,21 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, render_template, request, session
+import click
+from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from .admin import bp as admin_bp
+from .audit import record
+from .auth import bp as auth_bp
+from .auth import current_user, login_required
+from .auth.csrf import install_csrf
+from .auth.passwords import hash_password, validate_new_password
 from .config import load_config, validate_config
-from .db import init_db
+from .db import get_session, init_db
+from .models import User
+from .trackers import bp as trackers_bp
 
 ERROR_TITLES = {
     400: "Bad request",
@@ -32,8 +41,18 @@ def create_app(overrides: dict | None = None) -> Flask:
         return {
             "current_year": datetime.now(timezone.utc).year,
             "app_version": app.config["APP_VERSION"],
-            "is_admin": bool(session.get("is_admin")),
+            "current_user": current_user(),
         }
+
+    install_csrf(app)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(trackers_bp)  # placeholder views until Tasks 6 and 7
+    if app.config["SSO_ENABLED"]:
+        from .auth.sso import bp as sso_bp
+
+        app.register_blueprint(sso_bp)
+    _register_cli(app)
 
     @app.after_request
     def security_headers(response):
@@ -52,6 +71,12 @@ def create_app(overrides: dict | None = None) -> Flask:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
+    @app.get("/")
+    @login_required
+    def index():
+        # PLACEHOLDER home page: replaced by the tracker list in Task 8.
+        return render_template("home_placeholder.html", page_title="Trackers", current_page="trackers")
+
     @app.get("/healthz")
     def healthz():
         return jsonify({"status": "ok"})
@@ -69,3 +94,44 @@ def create_app(overrides: dict | None = None) -> Flask:
         return render_template("error.html", status=500, title="Something went wrong", message=message), 500
 
     return app
+
+
+def _register_cli(app: Flask) -> None:
+    @app.cli.command("create-admin")
+    @click.argument("email")
+    @click.option("--password", default=None, help="Password; prompted for when omitted.")
+    @click.option("--name", default=None, help="Full name; defaults to the email address.")
+    def create_admin(email: str, password: str | None, name: str | None) -> None:
+        """Create an active local administrator."""
+        email = email.strip().lower()
+        if "@" not in email:
+            raise click.ClickException("Enter a valid email address.")
+        if password is None:
+            password = click.prompt("Password", hide_input=True, confirmation_prompt=True)
+        problem = validate_new_password(password)
+        if problem:
+            raise click.ClickException(problem)
+        db = get_session()
+        if db.query(User).filter(User.email == email).first() is not None:
+            raise click.ClickException(f"A user with the email {email} already exists.")
+        user = User(
+            email=email,
+            full_name=name or email,
+            password_hash=hash_password(password),
+            auth_source="local",
+            status="active",
+            is_admin=True,
+        )
+        db.add(user)
+        db.flush()
+        record(
+            db,
+            user_id=None,
+            tracker_id=None,
+            action="user_created",
+            entity="user",
+            entity_id=user.id,
+            detail={"email": email, "source": "cli", "is_admin": True},
+        )
+        db.commit()
+        click.echo(f"Created administrator {email}.")
