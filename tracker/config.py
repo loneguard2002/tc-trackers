@@ -6,6 +6,8 @@ import os
 
 from dotenv import load_dotenv
 
+MULTI_TENANT_AUTHORITIES = {"common", "organizations", "consumers"}
+
 
 class ConfigurationError(RuntimeError):
     """Raised when the application cannot start securely."""
@@ -47,3 +49,5 @@ def validate_config(config: dict) -> None:
         raise ConfigurationError("Missing required configuration: " + ", ".join(missing))
     if not config.get("TESTING") and len(str(config["SECRET_KEY"])) < 32:
         raise ConfigurationError("FLASK_SECRET_KEY must be at least 32 characters")
+    if config.get("SSO_ENABLED") and str(config.get("SSO_TENANT_ID", "")).strip().lower() in MULTI_TENANT_AUTHORITIES:
+        raise ConfigurationError("SSO_TENANT_ID must be a specific tenant, not a multi-tenant authority")

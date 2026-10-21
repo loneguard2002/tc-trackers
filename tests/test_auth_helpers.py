@@ -59,7 +59,21 @@ def test_valid_csrf_false_without_session_token():
         assert not valid_csrf("anything")
 
 
-@pytest.mark.parametrize("value", [None, "", "https://evil.example/", "//evil.example", "/\\evil.example", "evil"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        "",
+        "https://evil.example/",
+        "//evil.example",
+        "/\\evil.example",
+        "evil",
+        "///evil.example",
+        "////evil.example",
+        "/ok\nx",
+        "/ok\r",
+    ],
+)
 def test_safe_next_url_rejects_unsafe(value):
     assert safe_next_url(value) is None
 
@@ -130,3 +144,21 @@ def test_tracker_pages_redirect_anonymous_to_login():
     client = _app_without_sso().test_client()
     response = client.get("/trackers/1")
     assert response.status_code == 302 and "/login" in response.headers["Location"]
+
+
+@pytest.mark.parametrize("tenant", ["common", "organizations", "consumers", "Common"])
+def test_config_rejects_multi_tenant_sso_authority(tenant):
+    from tracker.config import ConfigurationError, validate_config
+
+    cfg = load_config(
+        {
+            "SECRET_KEY": "x",
+            "DATABASE_URL": "postgresql+psycopg://u@h/d",
+            "TESTING": True,
+            "SSO_TENANT_ID": tenant,
+            "SSO_CLIENT_ID": "c",
+            "SSO_CLIENT_SECRET": "s",
+        }
+    )
+    with pytest.raises(ConfigurationError):
+        validate_config(cfg)

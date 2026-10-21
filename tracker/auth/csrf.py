@@ -57,10 +57,13 @@ def valid_csrf(candidate: str | None) -> bool:
 
 def safe_next_url(value: str | None) -> str | None:
     """Accept only same-site absolute paths."""
-    if not value or "\\" in value:
+    if not value or "\\" in value or any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        return None
+    # Exactly one leading slash: "//host" and "///host" are read by browsers as protocol-relative URLs.
+    if not value.startswith("/") or value.startswith("//"):
         return None
     parts = urlsplit(value)
-    if parts.scheme or parts.netloc or not parts.path.startswith("/"):
+    if parts.scheme or parts.netloc:
         return None
     return value
 

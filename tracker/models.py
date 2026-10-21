@@ -53,6 +53,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(Text, unique=True)
     full_name: Mapped[str] = mapped_column(Text)
     password_hash: Mapped[str | None] = mapped_column(Text)
+    sso_subject: Mapped[str | None] = mapped_column(Text, unique=True)
     auth_source: Mapped[str] = mapped_column(Text, default="local", server_default="local")
     status: Mapped[str] = mapped_column(Text, default="pending", server_default="pending")
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))

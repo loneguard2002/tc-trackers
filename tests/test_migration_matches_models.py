@@ -30,6 +30,8 @@ def _parse_tables(sql: str) -> dict[str, set[str]]:
             if match and match.group(1).upper() not in {"CONSTRAINT", "PRIMARY", "UNIQUE", "CHECK", "FOREIGN"}:
                 columns.add(match.group(1))
         tables[name] = columns
+    for name, column in re.findall(r"ALTER TABLE (\w+) ADD COLUMN (\w+)", sql):
+        tables[name].add(column)
     return tables
 
 
