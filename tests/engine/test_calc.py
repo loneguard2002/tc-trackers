@@ -203,3 +203,13 @@ def test_totals_check_flags_mismatch(rows):
     assert h.totals_check_ok is False
     h = build_headline([], [], 0, None, REPORT_WEEK)
     assert h.totals_check_ok is True
+
+
+def test_totals_check_ok_during_in_progress_week():
+    actuals = {**ACTUALS, date(2026, 10, 2): 10}
+    rows = make_rows(actuals=actuals, as_of=date(2026, 9, 30))
+    h = build_headline(rows, make_positions(deployed_total=148), 0, None, date(2026, 10, 2))
+    assert h.completed == 148 and h.totals_check_ok is True
+    assert h.forecast_based_on == date(2026, 9, 25)
+    h = build_headline(rows, make_positions(deployed_total=138), 0, None, date(2026, 10, 2))
+    assert h.totals_check_ok is False

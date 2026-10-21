@@ -203,6 +203,11 @@ def build_headline(
     target_completion: date | None,
     report_week: date,
 ) -> Headline:
+    """Build the headline figures.
+
+    Precondition: the group positions' ``deployed`` figures (from ``entry_totals``) must cover entries with
+    ``entry_date <= as_of``, the same cut-off used for the rows' actuals.
+    """
     total_scope = sum(p.baseline for p in positions)
     completed = sum(p.deployed for p in positions)
     remaining = total_scope - completed
@@ -211,10 +216,11 @@ def build_headline(
     for row in rows:
         if row.state == COMPLETE and row.week_ending <= report_week:
             basis = row
-    last_complete = None
+    # Complete or in-progress rows both reflect entries up to ``as_of``, so either may anchor the totals check.
+    check_row = None
     for row in rows:
-        if row.state == COMPLETE:
-            last_complete = row
+        if row.week_ending <= report_week and row.cum_actual is not None:
+            check_row = row
 
     rate = basis.moving_average if basis is not None else None
     forecast_completion: date | None = None
@@ -245,7 +251,7 @@ def build_headline(
     this_week = by_week.get(report_week)
     next_week = by_week.get(report_week + timedelta(days=7))
 
-    expected_completed = last_complete.cum_actual if last_complete is not None else completed_before_first
+    expected_completed = check_row.cum_actual if check_row is not None else completed_before_first
 
     return Headline(
         total_scope=total_scope,
