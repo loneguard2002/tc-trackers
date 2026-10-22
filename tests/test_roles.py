@@ -19,7 +19,8 @@ def test_missing_tracker_is_404_for_everyone(client, logged_in_admin):
 def test_viewer_can_view(client, logged_in_user, tracker_factory, grant):
     t = tracker_factory()
     grant(logged_in_user, t, "viewer")
-    assert client.get(f"/trackers/{t.id}").status_code == 200
+    page = client.get(f"/trackers/{t.id}", follow_redirects=True)
+    assert page.status_code == 200 and page.request.path == f"/trackers/{t.id}/report"
 
 
 def test_viewer_cannot_reach_editor_route(client, logged_in_user, tracker_factory, grant):

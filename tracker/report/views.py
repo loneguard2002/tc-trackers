@@ -13,6 +13,11 @@ from . import bp
 from .build import build_report
 
 
+def today() -> date:
+    """The current date; a separate function so that tests can fix the clock."""
+    return date.today()
+
+
 def _requested_week(tracker) -> date | None:
     raw = request.args.get("week")
     if not raw:
@@ -30,10 +35,12 @@ def _requested_week(tracker) -> date | None:
 @require_tracker_role("viewer")
 def view(tracker_id: int):
     tracker = g.tracker
-    report = build_report(get_session(), tracker, _requested_week(tracker), date.today())
+    report = build_report(get_session(), tracker, _requested_week(tracker), today())
     weeks = week_endings(tracker.first_week_ending, tracker.last_week_ending)
     return render_template(
         "report/page.html",
+        tracker=tracker,
+        tracker=tracker,
         report=report,
         weeks=weeks,
         page_title=f"{tracker.name} report",
