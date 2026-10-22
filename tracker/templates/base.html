@@ -32,9 +32,9 @@
   <div class="sidebar-backdrop" data-sidebar-close></div>
   <aside class="sidebar" id="primary-navigation" aria-label="Primary navigation">
     <nav class="sidebar-nav">
-      <a class="nav-link {{ 'active' if current_page == 'trackers' }}" href="{{ url_for('index') }}" {% if current_page == 'trackers' %}aria-current="page"{% endif %}>{{ icon('trackers') }}<span>Trackers</span></a>
+      <a class="nav-link {{ 'active' if current_page|default('') == 'trackers' }}" href="{{ url_for('index') }}" {% if current_page|default('') == 'trackers' %}aria-current="page"{% endif %}>{{ icon('trackers') }}<span>Trackers</span></a>
       {% if current_user and current_user.is_admin %}
-      <a class="nav-link {{ 'active' if current_page == 'admin' }}" href="{{ url_for('admin.users') }}" {% if current_page == 'admin' %}aria-current="page"{% endif %}>{{ icon('admin') }}<span>Admin</span></a>
+      <a class="nav-link {{ 'active' if current_page|default('') == 'admin' }}" href="{{ url_for('admin.users') }}" {% if current_page|default('') == 'admin' %}aria-current="page"{% endif %}>{{ icon('admin') }}<span>Admin</span></a>
       {% endif %}
     </nav>
     <div class="sidebar-actions">

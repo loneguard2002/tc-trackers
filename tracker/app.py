@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import click
 from flask import Flask, jsonify, render_template, request
+from jinja2 import StrictUndefined
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -49,6 +50,8 @@ def create_app(overrides: dict | None = None) -> Flask:
         }
 
     register_filters(app)
+    if app.config.get("TESTING"):
+        app.jinja_env.undefined = StrictUndefined
     install_csrf(app)
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)

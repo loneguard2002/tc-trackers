@@ -16,6 +16,7 @@ from tracker.report.build import build_report, default_report_week, select_top_r
 from tracker.report.charts import cumulative_chart, remaining_chart, weekly_chart
 
 FRIDAY = 4
+BADGE_IN_PROGRESS = '<span class="badge badge-info">In progress</span>'
 WEEKS = [date(2026, 9, 4), date(2026, 9, 11), date(2026, 9, 18), date(2026, 9, 25)]
 
 
@@ -181,16 +182,19 @@ def test_report_page_renders_sections(client, db, small_tracker, viewer):
     assert "Needed from you" in html and "Approve extra staff" in html and "Amber" in html
     assert "Site A" in html and "Rate (3 wk)" in html
     assert html.count("data:image/svg+xml;base64,") == 3
-    assert "In progress" not in html
+    assert BADGE_IN_PROGRESS not in html
 
 
-def test_report_page_in_progress_badge_and_bad_week(client, db, small_tracker, viewer):
+def test_report_page_in_progress_badge_and_bad_week(client, db, small_tracker, viewer, monkeypatch):
     seed(db, small_tracker)
     base = f"/trackers/{small_tracker.id}/report"
     assert client.get(f"{base}?week=2099-01-01").status_code == 404
     assert client.get(f"{base}?week=nonsense").status_code == 400
+    monkeypatch.setattr("tracker.report.views.today", lambda: date(2026, 9, 21))
     future = client.get(f"{base}?week={WEEKS[-1].isoformat()}")
-    assert future.status_code == 200 and "In progress" in future.get_data(as_text=True)
+    assert future.status_code == 200 and BADGE_IN_PROGRESS in future.get_data(as_text=True)
+    past = client.get(f"{base}?week={WEEKS[0].isoformat()}")
+    assert BADGE_IN_PROGRESS not in past.get_data(as_text=True)
 
 
 def test_report_page_empty_tracker(client, small_tracker, viewer):
@@ -227,4 +231,56 @@ def test_home_shows_weekly_status_from_latest_input(client, db, small_tracker, v
     db.add(ReportInput(tracker_id=small_tracker.id, week_ending=WEEKS[1], status="Green"))
     db.commit()
     html = client.get("/").get_data(as_text=True)
-    assert "Green" in html and "Red" not in html
+    assert 'badge-success">Green</span>' in html
+    assert 'badge-danger">Red</span>' not in html
+
+
+# --- Template rendering without a database ----------------------------------------------------------------------
+
+
+def synthetic_report(in_progress: bool = False):
+    from tracker.engine.calc import GroupInput, build_headline, group_positions
+    from tracker.report.build import Report
+
+    rows = sample_rows()
+    positions = group_positions([GroupInput(1, "Site A", 100, 0, 0, None, "Red", "c", False)], {1: 20})
+    headline = build_headline(rows, positions, 0, date(2026, 12, 25), WEEKS[1])
+    tracker = SimpleNamespace(
+        id=1, name="Stub tracker", unit_label="devices", group_label="Site", moving_average_weeks=3, status="active"
+    )
+    risk = SimpleNamespace(ref="R1", description="d", status="In progress", rag="Red", target_date=None)
+    charts = {
+        "remaining": remaining_chart(rows, "devices"),
+        "weekly": weekly_chart(rows),
+        "cumulative": cumulative_chart(rows),
+    }
+    report = Report(tracker, WEEKS[1], WEEKS[1], in_progress, rows, headline, positions, [risk], 1, 1, None, charts)
+    return report, tracker
+
+
+def test_report_page_template_renders_without_database(app):
+    from flask import g, render_template
+
+    report, tracker = synthetic_report()
+    with app.test_request_context("/"):
+        g.role, g.tracker = "viewer", tracker
+        html = render_template(
+            "report/page.html",
+            tracker=tracker,
+            report=report,
+            weeks=WEEKS,
+            page_title="x",
+            current_page="trackers",
+            current_user=SimpleNamespace(is_admin=False, full_name="Test User"),
+        )
+    assert "Stub tracker" in html and "Needed from you" in html and html.count("data:image/svg+xml;base64,") == 3
+    assert BADGE_IN_PROGRESS not in html
+
+
+def test_report_body_in_progress_badge_without_database(app):
+    from flask import render_template
+
+    report, _ = synthetic_report(in_progress=True)
+    with app.test_request_context("/"):
+        html = render_template("report/_body.html", report=report)
+    assert BADGE_IN_PROGRESS in html

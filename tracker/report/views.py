@@ -40,7 +40,6 @@ def view(tracker_id: int):
     return render_template(
         "report/page.html",
         tracker=tracker,
-        tracker=tracker,
         report=report,
         weeks=weeks,
         page_title=f"{tracker.name} report",
