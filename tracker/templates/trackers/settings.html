@@ -10,7 +10,7 @@
     <button class="button primary" type="submit">Save settings</button>
   </form>
 </section>
-{% if current_user.is_admin and tracker.status == 'active' %}
+{% if current_user and current_user.is_admin and tracker.status == 'active' %}
 <section class="card">
   <h2>Archive</h2>
   <p>An archived tracker keeps its history and stays viewable, but can no longer be changed.</p>

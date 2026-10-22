@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Trackers</h1>
-{% if current_user.is_admin %}
+{% if current_user and current_user.is_admin %}
 <p><a class="button primary" href="{{ url_for('trackers.new') }}">New tracker</a>
   {% if show_archived %}<a class="button" href="{{ url_for('index') }}">Hide archived</a>
   {% else %}<a class="button" href="{{ url_for('index', archived=1) }}">Show archived</a>{% endif %}</p>
 {% endif %}
 {% if not cards %}
 <section class="empty-state">
-  <p>{{ 'There are no trackers yet.' if current_user.is_admin else 'You have not been given access to any trackers.' }}</p>
+  <p>{{ 'There are no trackers yet.' if current_user and current_user.is_admin else 'You have not been given access to any trackers.' }}</p>
 </section>
 {% else %}
 <div class="card-grid">

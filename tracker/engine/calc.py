@@ -225,7 +225,9 @@ def build_headline(
     rate = basis.moving_average if basis is not None else None
     forecast_completion: date | None = None
     if basis is not None and basis.actual_remaining is not None:
-        if basis.actual_remaining <= 0:
+        if total_scope <= 0:
+            forecast_completion = None  # an empty scope has nothing to forecast
+        elif basis.actual_remaining <= 0:
             forecast_completion = basis.week_ending
         elif rate is not None and rate > 0:
             forecast_completion = basis.week_ending + timedelta(days=ceil(basis.actual_remaining / rate) * 7)

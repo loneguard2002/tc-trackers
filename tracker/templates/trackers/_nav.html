@@ -8,6 +8,6 @@
   · <a href="{{ url_for('entries.inputs', tracker_id=tracker.id) }}">Weekly inputs</a>
   · <a href="{{ url_for('entries.risks', tracker_id=tracker.id) }}">Risks</a>
   {% endif %}
-  {% if current_user.is_admin %} · <a href="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">Access</a>{% endif %}
+  {% if current_user and current_user.is_admin %} · <a href="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">Access</a>{% endif %}
 </p>
 {% if tracker.status == 'archived' %}<p class="flash flash-danger">This tracker is archived.</p>{% endif %}

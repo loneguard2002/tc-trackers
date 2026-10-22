@@ -16,6 +16,7 @@ from tracker.report.build import build_report, default_report_week, select_top_r
 from tracker.report.charts import cumulative_chart, remaining_chart, weekly_chart
 
 FRIDAY = 4
+STUB_USER = SimpleNamespace(is_admin=False, full_name="Test User")
 BADGE_IN_PROGRESS = '<span class="badge badge-info">In progress</span>'
 WEEKS = [date(2026, 9, 4), date(2026, 9, 11), date(2026, 9, 18), date(2026, 9, 25)]
 
@@ -264,6 +265,7 @@ def test_report_page_template_renders_without_database(app):
     report, tracker = synthetic_report()
     with app.test_request_context("/"):
         g.role, g.tracker = "viewer", tracker
+        g.current_user = STUB_USER  # read by the app's context processor, with or without a database
         html = render_template(
             "report/page.html",
             tracker=tracker,
@@ -271,7 +273,6 @@ def test_report_page_template_renders_without_database(app):
             weeks=WEEKS,
             page_title="x",
             current_page="trackers",
-            current_user=SimpleNamespace(is_admin=False, full_name="Test User"),
         )
     assert "Stub tracker" in html and "Needed from you" in html and html.count("data:image/svg+xml;base64,") == 3
     assert BADGE_IN_PROGRESS not in html
@@ -284,3 +285,38 @@ def test_report_body_in_progress_badge_without_database(app):
     with app.test_request_context("/"):
         html = render_template("report/_body.html", report=report)
     assert BADGE_IN_PROGRESS in html
+
+
+def render_page(app, report, tracker, user):
+    from flask import g, render_template
+
+    with app.test_request_context("/"):
+        g.role, g.tracker, g.current_user = "viewer", tracker, user
+        return render_template(
+            "report/page.html", tracker=tracker, report=report, weeks=WEEKS, page_title="x", current_page="trackers"
+        )
+
+
+def test_report_page_tolerates_anonymous_user(app):
+    report, tracker = synthetic_report()
+    assert "Stub tracker" in render_page(app, report, tracker, None)
+
+
+def test_empty_report_renders_expected_messages_without_database(app):
+    from tracker.engine.calc import build_headline, build_week_rows
+    from tracker.report.build import Report
+
+    rows = build_week_rows(WEEKS, {}, {}, 0, 0, 3, date(2026, 10, 22), FRIDAY)
+    headline = build_headline(rows, [], 0, date(2026, 12, 25), WEEKS[-1])
+    tracker = SimpleNamespace(
+        id=1, name="Empty", unit_label="devices", group_label="", moving_average_weeks=3, status="active"
+    )
+    charts = {
+        "remaining": remaining_chart(rows, "d"),
+        "weekly": weekly_chart(rows),
+        "cumulative": cumulative_chart(rows),
+    }
+    report = Report(tracker, WEEKS[-1], WEEKS[-1], False, rows, headline, [], [], 0, 0, None, charts)
+    html = render_page(app, report, tracker, STUB_USER)
+    assert headline.verdict == "No forecast yet"
+    assert "No forecast yet" in html and "Not set" in html and "No open risks" in html
