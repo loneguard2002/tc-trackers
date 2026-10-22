@@ -8,6 +8,7 @@ from datetime import date
 from types import SimpleNamespace
 
 import pytest
+from report_helpers import FRIDAY, WEEKS, sample_rows, synthetic_report
 
 from tracker.engine.calc import WeekRow, build_week_rows
 from tracker.formatting import fmt_dash, fmt_date, fmt_pct, fmt_rate
@@ -15,23 +16,8 @@ from tracker.models import CompletionEntry, Group, ReportInput, Risk, Week
 from tracker.report.build import build_report, default_report_week, select_top_risks
 from tracker.report.charts import cumulative_chart, remaining_chart, weekly_chart
 
-FRIDAY = 4
 STUB_USER = SimpleNamespace(is_admin=False, full_name="Test User")
 BADGE_IN_PROGRESS = '<span class="badge badge-info">In progress</span>'
-WEEKS = [date(2026, 9, 4), date(2026, 9, 11), date(2026, 9, 18), date(2026, 9, 25)]
-
-
-def sample_rows() -> list[WeekRow]:
-    return build_week_rows(
-        WEEKS,
-        {w: 10 for w in WEEKS},
-        {WEEKS[0]: 8, WEEKS[1]: 12},
-        100,
-        0,
-        3,
-        date(2026, 9, 12),
-        FRIDAY,
-    )
 
 
 # --- Charts and formatting (no database) ----------------------------------------------------------------------
@@ -239,26 +225,6 @@ def test_home_shows_weekly_status_from_latest_input(client, db, small_tracker, v
 # --- Template rendering without a database ----------------------------------------------------------------------
 
 
-def synthetic_report(in_progress: bool = False):
-    from tracker.engine.calc import GroupInput, build_headline, group_positions
-    from tracker.report.build import Report
-
-    rows = sample_rows()
-    positions = group_positions([GroupInput(1, "Site A", 100, 0, 0, None, "Red", "c", False)], {1: 20})
-    headline = build_headline(rows, positions, 0, date(2026, 12, 25), WEEKS[1])
-    tracker = SimpleNamespace(
-        id=1, name="Stub tracker", unit_label="devices", group_label="Site", moving_average_weeks=3, status="active"
-    )
-    risk = SimpleNamespace(ref="R1", description="d", status="In progress", rag="Red", target_date=None)
-    charts = {
-        "remaining": remaining_chart(rows, "devices"),
-        "weekly": weekly_chart(rows),
-        "cumulative": cumulative_chart(rows),
-    }
-    report = Report(tracker, WEEKS[1], WEEKS[1], in_progress, rows, headline, positions, [risk], 1, 1, None, charts)
-    return report, tracker
-
-
 def test_report_page_template_renders_without_database(app):
     from flask import g, render_template
 
@@ -303,7 +269,7 @@ def test_report_page_tolerates_anonymous_user(app):
 
 
 def test_empty_report_renders_expected_messages_without_database(app):
-    from tracker.engine.calc import build_headline, build_week_rows
+    from tracker.engine.calc import build_headline
     from tracker.report.build import Report
 
     rows = build_week_rows(WEEKS, {}, {}, 0, 0, 3, date(2026, 10, 22), FRIDAY)

@@ -8,6 +8,8 @@
     </select>
   </label>
   <button class="button" type="submit">Show</button>
+  <a class="button" href="{{ url_for('report.export_pdf', tracker_id=report.tracker.id, week=report.week_ending.isoformat()) }}">Download PDF</a>
+  <a class="button" href="{{ url_for('report.export_png', tracker_id=report.tracker.id, week=report.week_ending.isoformat()) }}">Download PNG</a>
 </form>
 {% include "report/_body.html" %}
 {% endblock %}

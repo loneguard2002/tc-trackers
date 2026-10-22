@@ -146,3 +146,25 @@ def post(client, url: str, data: dict | None = None, **kwargs):
     payload = dict(data or {})
     payload["csrf_token"] = token
     return client.post(url, data=payload, **kwargs)
+
+
+def _chromium_available() -> bool:
+    """Probe once per session whether Playwright's Chromium is installed."""
+    if "chromium" not in _state:
+        try:
+            from playwright.sync_api import sync_playwright
+
+            with sync_playwright() as playwright:
+                _state["chromium"] = Path(playwright.chromium.executable_path).exists()
+        except Exception:
+            _state["chromium"] = False
+    return _state["chromium"]
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip tests marked ``browser`` when Chromium is not installed."""
+    browser_items = [item for item in items if item.get_closest_marker("browser")]
+    if browser_items and not _chromium_available():
+        skip = pytest.mark.skip(reason="Playwright Chromium is not installed")
+        for item in browser_items:
+            item.add_marker(skip)

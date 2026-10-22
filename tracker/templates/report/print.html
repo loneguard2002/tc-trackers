@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <title>{{ report.tracker.name }}: week ending {{ report.week_ending|fdate }}</title>
+  <style>
+{{ css|safe }}
+@page { size: A4 portrait; margin: 14mm; }
+body { background: #fff; margin: 0; padding: 0; }
+.report { max-width: none; }
+.report-band, .report-figure, .report-details, .report-charts, table, img { break-inside: avoid; }
+  </style>
+</head>
+<body>
+{% include "report/_body.html" %}
+</body>
+</html>

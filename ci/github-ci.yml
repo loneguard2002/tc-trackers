@@ -40,4 +40,5 @@ jobs:
         run: |
           alembic upgrade head
           alembic check
+      - run: playwright install --with-deps chromium
       - run: pytest

@@ -5,7 +5,7 @@ alembic
 passlib[bcrypt]
 bcrypt==3.2.2
 msal
-matplotlib
+matplotlib>=3.5
 playwright
 openpyxl
 apscheduler

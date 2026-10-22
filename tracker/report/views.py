@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
-from flask import abort, g, render_template, request
+from flask import Response, abort, g, render_template, request
 
 from ..auth import require_tracker_role
 from ..db import get_session
 from ..engine.weeks import week_endings
 from . import bp
 from .build import build_report
+from .render import html_to_pdf, html_to_png, render_print_html
 
 
 def today() -> date:
@@ -45,3 +47,29 @@ def view(tracker_id: int):
         page_title=f"{tracker.name} report",
         current_page="trackers",
     )
+
+
+def _slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "tracker"
+
+
+def _export(tracker_id: int, extension: str, convert, mimetype: str) -> Response:
+    tracker = g.tracker
+    report = build_report(get_session(), tracker, _requested_week(tracker), today())
+    data = convert(render_print_html(report))
+    filename = f"{_slug(tracker.name)}-week-ending-{report.week_ending.isoformat()}.{extension}"
+    response = Response(data, mimetype=mimetype)
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@bp.get("/trackers/<int:tracker_id>/report.pdf")
+@require_tracker_role("viewer")
+def export_pdf(tracker_id: int):
+    return _export(tracker_id, "pdf", html_to_pdf, "application/pdf")
+
+
+@bp.get("/trackers/<int:tracker_id>/report.png")
+@require_tracker_role("viewer")
+def export_png(tracker_id: int):
+    return _export(tracker_id, "png", html_to_png, "image/png")
