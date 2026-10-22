@@ -10,9 +10,9 @@ from sqlalchemy import func, select
 from ..audit import record
 from ..auth import ROLE_ORDER, admin_required, current_user, login_required, require_tracker_role, visible_trackers
 from ..db import get_session
-from ..engine.calc import GroupInput, Headline, build_headline, build_week_rows, group_positions
+from ..engine.calc import GroupInput, Headline
 from ..engine.weeks import week_endings
-from ..models import CompletionEntry, Group, Tracker, TrackerRole, User, Week
+from ..models import CompletionEntry, Group, ReportInput, Tracker, TrackerRole, User, Week
 from . import bp
 from .forms import (
     RAG_VALUES,
@@ -79,30 +79,11 @@ def load_engine_inputs(
     return weeks, targets, actuals, groups, entry_totals
 
 
-def default_report_week(weeks: list[date], today: date) -> date:
-    """The latest week-ending on or before ``today``, or the first week if none has passed."""
-    passed = [w for w in weeks if w <= today]
-    return passed[-1] if passed else weeks[0]
-
-
 def tracker_summary(session, tracker: Tracker, today: date) -> Headline:
-    """Headline figures for the default report week (reused by the home page and the report)."""
-    weeks = week_endings(tracker.first_week_ending, tracker.last_week_ending)
-    report_week = default_report_week(weeks, today)
-    as_of = min(report_week, today)
-    weeks, targets, actuals, groups, entry_totals = load_engine_inputs(session, tracker, as_of)
-    positions = group_positions(groups, entry_totals)
-    rows = build_week_rows(
-        weeks,
-        targets,
-        actuals,
-        sum(p.baseline for p in positions),
-        tracker.completed_before_first,
-        tracker.moving_average_weeks,
-        as_of,
-        tracker.week_ending_weekday,
-    )
-    return build_headline(rows, positions, tracker.completed_before_first, tracker.target_completion, report_week)
+    """Headline figures for the default report week (shares its calculation with the report)."""
+    from ..report.build import compute_position  # local import: the report package imports this module
+
+    return compute_position(session, tracker, None, today).headline
 
 
 def _last_entry_dates(session, tracker_ids: list[int]) -> dict[int, date]:
@@ -115,6 +96,20 @@ def _last_entry_dates(session, tracker_ids: list[int]) -> dict[int, date]:
             .group_by(CompletionEntry.tracker_id)
         ).all()
     )
+
+
+def _latest_statuses(session, tracker_ids: list[int]) -> dict[int, str | None]:
+    """The weekly Red/Amber/Green status of each tracker's latest report input (ruling R18)."""
+    if not tracker_ids:
+        return {}
+    latest: dict[int, str | None] = {}
+    for tracker_id, status in session.execute(
+        select(ReportInput.tracker_id, ReportInput.status)
+        .where(ReportInput.tracker_id.in_(tracker_ids))
+        .order_by(ReportInput.tracker_id, ReportInput.week_ending)
+    ):
+        latest[tracker_id] = status
+    return latest
 
 
 def _deployed_by_group(session, tracker: Tracker) -> dict[int, int]:
@@ -144,9 +139,15 @@ def home():
     show_archived = request.args.get("archived") == "1"
     trackers = [t for t in visible_trackers(db, user) if show_archived or t.status == "active"]
     last_entries = _last_entry_dates(db, [t.id for t in trackers])
+    statuses = _latest_statuses(db, [t.id for t in trackers])
     today = date.today()
     cards = [
-        {"tracker": t, "headline": tracker_summary(db, t, today), "last_entry": last_entries.get(t.id)}
+        {
+            "tracker": t,
+            "headline": tracker_summary(db, t, today),
+            "last_entry": last_entries.get(t.id),
+            "status": statuses.get(t.id),
+        }
         for t in trackers
     ]
     return render_template(
@@ -236,19 +237,7 @@ def _render_settings(tracker: Tracker | None, form, errors: list[str], status: i
 @bp.get("/trackers/<int:tracker_id>")
 @require_tracker_role("viewer")
 def view(tracker_id: int):
-    # TODO(Task 8): redirect every role to the weekly report. Until it exists, owners go to the settings page and
-    # other roles see a minimal overview.
-    tracker = g.tracker
-    if g.role == "owner":
-        return redirect(url_for("trackers.settings", tracker_id=tracker.id))
-    db = get_session()
-    return render_template(
-        "trackers/overview.html",
-        tracker=tracker,
-        headline=tracker_summary(db, tracker, date.today()),
-        page_title=tracker.name,
-        current_page="trackers",
-    )
+    return redirect(url_for("report.view", tracker_id=tracker_id))
 
 
 @bp.post("/trackers/<int:tracker_id>/archive")

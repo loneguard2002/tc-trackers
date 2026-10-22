@@ -203,7 +203,7 @@ def test_home_shows_last_entry_date_and_percent(client, logged_in_user, db, trac
     add_entry(db, tracker, group, date(2026, 9, 3), 10, date(2026, 9, 4))
     page = client.get("/")
     assert b"03 Sep 2026" in page.data
-    assert b"25.0%" in page.data
+    assert b"25%" in page.data
 
 
 def test_archived_tracker_hidden_from_home_but_reachable(client, logged_in_admin, db, tracker_factory):
@@ -270,10 +270,17 @@ def test_admin_sets_and_removes_roles_audited(client, logged_in_admin, db, track
     assert post(client, url, {"user_id": member.id, "role": "boss"}).status_code == 400
 
 
-def test_owner_opens_settings_viewer_sees_overview(client, logged_in_user, tracker_factory, grant):
+def test_every_role_redirects_to_report(client, logged_in_user, tracker_factory, grant, db):
     tracker = tracker_factory()
     grant(logged_in_user, tracker, "owner")
-    assert client.get(f"/trackers/{tracker.id}").headers["Location"].endswith(f"/trackers/{tracker.id}/settings")
+    assert client.get(f"/trackers/{tracker.id}").headers["Location"].endswith(f"/trackers/{tracker.id}/report")
+    role = db.get(TrackerRole, (logged_in_user.id, tracker.id))
+    for name in ("viewer", "editor"):
+        role.role = name
+        db.commit()
+        response = client.get(f"/trackers/{tracker.id}")
+        assert response.status_code == 302
+        assert response.headers["Location"].endswith(f"/trackers/{tracker.id}/report")
 
 
 # --- Engine data loading -----------------------------------------------------------------------------------------

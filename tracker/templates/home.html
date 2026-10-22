@@ -16,17 +16,20 @@
   {% set t = c.tracker %}{% set h = c.headline %}
   <section class="card">
     <h2><a href="{{ url_for('trackers.view', tracker_id=t.id) }}">{{ t.name }}</a></h2>
-    <p><span class="badge badge-{{ 'muted' if t.status == 'archived' else 'success' }}">{{ t.status|title }}</span></p>
+    <p>
+      <span class="badge badge-{{ {'Red': 'danger', 'Amber': 'warning', 'Green': 'success'}.get(c.status, 'muted') }}">{{ c.status or 'Not set' }}</span>
+      <span class="muted">{{ h.verdict }}</span>
+      {% if t.status == 'archived' %}<span class="badge badge-muted">Archived</span>{% endif %}
+    </p>
     <dl>
       <dt>Complete</dt>
-      <dd>{% if h.pct_complete is not none %}{{ (h.pct_complete * 100)|round(1) }}%{% else %}Not available{% endif %}
+      <dd>{% if h.pct_complete is not none %}{{ h.pct_complete|pct }}{% else %}Not available{% endif %}
         ({{ h.completed }} of {{ h.total_scope }} {{ t.unit_label }})</dd>
       <dt>Forecast completion</dt>
-      <dd>{{ h.forecast_completion.strftime('%d %b %Y') if h.forecast_completion else 'No forecast yet' }}
-        {% if h.target_completion %}against a target of {{ h.target_completion.strftime('%d %b %Y') }}{% endif %}</dd>
-      <dd>{{ h.verdict }}</dd>
+      <dd>{{ h.forecast_completion|fdate if h.forecast_completion else 'No forecast yet' }}
+        {% if h.target_completion %}against a target of {{ h.target_completion|fdate }}{% endif %}</dd>
       <dt>Last entry</dt>
-      <dd>{{ c.last_entry.strftime('%d %b %Y') if c.last_entry else 'No entries yet' }}</dd>
+      <dd>{{ c.last_entry|fdate if c.last_entry else 'No entries yet' }}</dd>
     </dl>
   </section>
   {% endfor %}

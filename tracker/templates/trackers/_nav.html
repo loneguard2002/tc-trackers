@@ -1,5 +1,5 @@
 <p>
-  <a href="{{ url_for('trackers.view', tracker_id=tracker.id) }}">Overview</a>
+  <a href="{{ url_for('report.view', tracker_id=tracker.id) }}">Report</a>
   {% if g.role == 'owner' %} · <a href="{{ url_for('trackers.settings', tracker_id=tracker.id) }}">Settings</a>{% endif %}
   · <a href="{{ url_for('trackers.groups', tracker_id=tracker.id) }}">{{ tracker.group_label or 'Groups' }}</a>
   {% if g.role in ('editor', 'owner') %}

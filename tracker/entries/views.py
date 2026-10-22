@@ -13,8 +13,9 @@ from ..auth import current_user, require_tracker_role
 from ..db import get_session
 from ..engine.weeks import week_endings
 from ..models import CompletionEntry, Group, ReportInput, Risk, Tracker, User, Week
+from ..report.build import default_report_week
 from ..trackers.forms import RAG_VALUES, parse_date
-from ..trackers.views import _jsonable, _ordered_groups, _refuse_if_archived, default_report_week
+from ..trackers.views import _jsonable, _ordered_groups, _refuse_if_archived
 from . import bp
 from .forms import (
     RISK_STATUSES,
@@ -224,7 +225,7 @@ def inputs(tracker_id: int):
     tracker, db = g.tracker, get_session()
     weeks = week_endings(tracker.first_week_ending, tracker.last_week_ending)
     requested = request.args.get("week")
-    week = parse_date(requested) if requested else default_report_week(weeks, date.today())
+    week = parse_date(requested) if requested else default_report_week(tracker, date.today())
     if week not in weeks:
         abort(404)
     row = db.get(ReportInput, (tracker.id, week))

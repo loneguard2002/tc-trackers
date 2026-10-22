@@ -12,6 +12,7 @@ def test_security_headers(client):
     r = client.get("/healthz")
     csp = r.headers["Content-Security-Policy"]
     assert "default-src 'self'" in csp and "unsafe-inline" not in csp
+    assert "img-src 'self' data:" in csp
     assert r.headers["X-Frame-Options"] == "DENY"
 
 
