@@ -6,7 +6,8 @@
   <style>
 {{ css|safe }}
 @page { size: A4 portrait; margin: 14mm; }
-body { background: #fff; margin: 0; padding: 0; }
+body { background: #fff; margin: 0; padding: 20px; }
+@media print { body { padding: 0; } }
 .report { max-width: none; }
 .report-band, .report-figure, .report-details, .report-charts, table, img { break-inside: avoid; }
   </style>

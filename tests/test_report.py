@@ -286,3 +286,15 @@ def test_empty_report_renders_expected_messages_without_database(app):
     html = render_page(app, report, tracker, STUB_USER)
     assert headline.verdict == "No forecast yet"
     assert "No forecast yet" in html and "Not set" in html and "No open risks" in html
+
+
+def test_actual_series_uses_completed_weeks_only():
+    from tracker.engine.calc import COMPLETE
+    from tracker.report.charts import actual_series
+
+    rows = sample_rows()
+    complete = [r.week_ending for r in rows if r.state == COMPLETE]
+    assert any(r.state != COMPLETE and r.actual_remaining is not None for r in rows)  # the in-progress row is excluded
+    for attr in ("actual_remaining", "cum_actual"):
+        xs, _ = actual_series(rows, attr)
+        assert xs == complete

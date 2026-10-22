@@ -13,7 +13,7 @@
   <section class="report-band report-band-{{ tone }}">
     <p class="report-status">{{ status or 'Not set' }}: {{ h.verdict }}</p>
     <p>Forecast completion {{ h.forecast_completion|fdate }} against a target of {{ h.target_completion|fdate }}
-      {% if h.planned_completion %}(planned {{ h.planned_completion|fdate }}){% endif %}.</p>
+      {%- if h.planned_completion %} (planned {{ h.planned_completion|fdate }}){% endif -%}.</p>
     {% if r.inputs and r.inputs.headline %}<p>{{ r.inputs.headline }}</p>{% endif %}
     <p><strong>Needed from you:</strong> {{ r.inputs.decisions if r.inputs and r.inputs.decisions else 'None' }}</p>
   </section>

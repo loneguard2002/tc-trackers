@@ -100,3 +100,35 @@ def test_report_png_download_headers(client, small_tracker, viewer, monkeypatch)
     assert response.content_type == "image/png"
     assert "core-rollout-week-ending-2026-09-25.png" in response.headers["Content-Disposition"]
     assert response.data[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+# --- Launch arguments and layout --------------------------------------------------------------------------------
+
+
+def test_launch_args(monkeypatch):
+    from tracker.report import render
+
+    monkeypatch.setattr(render.os, "geteuid", lambda: 1000, raising=False)
+    monkeypatch.delenv("TRACKER_CHROMIUM_NO_SANDBOX", raising=False)
+    assert render._launch_args() == []
+    monkeypatch.setenv("TRACKER_CHROMIUM_NO_SANDBOX", "1")
+    assert render._launch_args() == ["--no-sandbox"]
+    monkeypatch.setenv("TRACKER_CHROMIUM_NO_SANDBOX", "0")
+    assert render._launch_args() == []
+    monkeypatch.setattr(render.os, "geteuid", lambda: 0, raising=False)
+    assert render._launch_args() == ["--no-sandbox"]
+
+
+def test_render_timeout_is_set():
+    from tracker.report.render import RENDER_TIMEOUT_MS
+
+    assert RENDER_TIMEOUT_MS == 20_000
+
+
+def test_print_html_has_body_padding(app):
+    assert "padding: 20px" in print_html(app)
+
+
+def test_headline_sentence_has_no_stray_space(app):
+    html = print_html(app)
+    assert "Forecast completion" in html and "2026 ." not in html

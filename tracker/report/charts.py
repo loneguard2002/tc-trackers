@@ -13,7 +13,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.dates import DateFormatter
 from matplotlib.figure import Figure
 
-from ..engine.calc import FUTURE, WeekRow
+from ..engine.calc import COMPLETE, WeekRow
 
 PLAN = "#888888"
 ACTUAL = "#2c7be5"
@@ -32,6 +32,11 @@ def _series(rows: list[WeekRow], attr: str, include=None) -> tuple[list[date], l
         xs.append(row.week_ending)
         ys.append(value)
     return xs, ys
+
+
+def actual_series(rows: list[WeekRow], attr: str) -> tuple[list[date], list[float]]:
+    """The actual line: completed weeks only, so that a part-week figure never draws a flat segment."""
+    return _series(rows, attr, include=lambda r: r.state == COMPLETE)
 
 
 def _render(fig: Figure, fmt: str) -> bytes:
@@ -72,7 +77,7 @@ def remaining_chart(rows: list[WeekRow], unit_label: str, fmt: str = "svg") -> b
     """Remaining against plan: planned (dashed grey), actual (solid blue) and forecast (dotted amber)."""
     fig, ax = _new_figure("Remaining", unit_label)
     px, py = _series(rows, "planned_remaining")
-    ax_, ay = _series(rows, "actual_remaining", include=lambda r: r.state != FUTURE)
+    ax_, ay = actual_series(rows, "actual_remaining")
     # The forecast starts from the last completed week, which carries the actual remaining as its first point.
     last_complete = max((r.week_ending for r in rows if r.moving_average is not None), default=None)
     fx, fy = _series(
@@ -103,7 +108,7 @@ def cumulative_chart(rows: list[WeekRow], fmt: str = "svg") -> bytes:
     """Cumulative target (dashed grey) against cumulative actual (solid blue)."""
     fig, ax = _new_figure("Cumulative completed")
     px, py = _series(rows, "cum_target")
-    ax_, ay = _series(rows, "cum_actual", include=lambda r: r.state != FUTURE)
+    ax_, ay = actual_series(rows, "cum_actual")
     if px:
         ax.plot(px, py, color=PLAN, linestyle="--", linewidth=1.6, label="Plan")
     if ax_:
