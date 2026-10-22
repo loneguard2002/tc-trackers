@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% block content %}
+<h1>{{ tracker.name }}</h1>
+{% include "trackers/_nav.html" %}
+<h2>Weekly targets</h2>
+<p class="muted">Leave a week blank to clear its target.</p>
+<form method="post" action="{{ url_for('entries.targets', tracker_id=tracker.id) }}">
+  {{ csrf_field(csrf_token()) }}
+  <table class="table">
+    <thead><tr><th>Week ending</th><th>Target ({{ tracker.unit_label }})</th></tr></thead>
+    <tbody>
+    {% for w in weeks %}
+    <tr><td><label for="target-{{ w.isoformat() }}">{{ format_date(w) }}</label></td>
+      <td><input id="target-{{ w.isoformat() }}" name="target-{{ w.isoformat() }}" type="number" min="0" step="1" value="{{ form.get('target-' ~ w.isoformat(), '') }}"></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <button class="button primary" type="submit">Save targets</button>
+</form>
+{% endblock %}

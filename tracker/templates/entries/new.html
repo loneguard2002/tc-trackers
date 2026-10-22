@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% block content %}
+<h1>{{ tracker.name }}</h1>
+{% include "trackers/_nav.html" %}
+<h2>Record completions</h2>
+{% include "entries/_errors.html" %}
+{% if tracker.status == 'active' %}
+<form method="post" action="{{ url_for('entries.new_entry', tracker_id=tracker.id) }}">
+  {{ csrf_field(csrf_token()) }}
+  <div class="form-row"><label for="group_id">{{ tracker.group_label or 'Group' }}</label>
+    <select id="group_id" name="group_id" required><option value="">Choose</option>
+      {% for grp in groups %}<option value="{{ grp.id }}" {{ 'selected' if form.get('group_id')|string == grp.id|string }}>{{ grp.name }}</option>{% endfor %}</select></div>
+  <div class="form-row"><label for="entry_date">Date</label><input id="entry_date" name="entry_date" type="date" value="{{ form.get('entry_date', '') }}" required></div>
+  <div class="form-row"><label for="quantity">Quantity ({{ tracker.unit_label }})</label><input id="quantity" name="quantity" type="number" min="1" step="1" value="{{ form.get('quantity', '') }}" required></div>
+  <div class="form-row"><label for="note">Note</label><input id="note" name="note" value="{{ form.get('note', '') }}"></div>
+  <button class="button primary" type="submit">Record</button>
+</form>
+{% endif %}
+{% endblock %}

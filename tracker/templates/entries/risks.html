@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% block content %}
+<h1>{{ tracker.name }}</h1>
+{% include "trackers/_nav.html" %}
+{% if not risk %}
+<h2>Risks</h2>
+{% if risks %}
+<table class="table">
+  <thead><tr><th>Ref</th><th>Description</th><th>{{ tracker.group_label or 'Group' }}</th><th>Status</th><th>RAG</th><th></th></tr></thead>
+  <tbody>
+  {% for r in risks %}
+  <tr><td>{{ r.ref }}</td><td>{{ r.description }}</td><td>{{ group_names.get(r.group_id, '') }}</td><td>{{ r.status }}</td><td>{{ r.rag or '' }}</td>
+    <td><a href="{{ url_for('entries.edit_risk', tracker_id=tracker.id, risk_id=r.id) }}">Edit</a></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<section class="empty-state"><p>No risks have been recorded.</p></section>
+{% endif %}
+<h2>Add a risk</h2>
+{% else %}
+<h2>Risk {{ risk.ref }}</h2>
+{% endif %}
+{% include "entries/_errors.html" %}
+<form method="post" action="{{ url_for('entries.edit_risk', tracker_id=tracker.id, risk_id=risk.id) if risk else url_for('entries.risks', tracker_id=tracker.id) }}">
+  {{ csrf_field(csrf_token()) }}
+  <div class="form-row"><label for="ref">Reference (blank for automatic)</label><input id="ref" name="ref" value="{{ form.get('ref', '') }}"></div>
+  <div class="form-row"><label for="description">Description</label><textarea id="description" name="description" rows="2">{{ form.get('description', '') }}</textarea></div>
+  <div class="form-row"><label for="impact">Impact</label><textarea id="impact" name="impact" rows="2">{{ form.get('impact', '') }}</textarea></div>
+  <div class="form-row"><label for="group_id">{{ tracker.group_label or 'Group' }}</label>
+    <select id="group_id" name="group_id"><option value="">None</option>
+      {% for grp in groups %}<option value="{{ grp.id }}" {{ 'selected' if form.get('group_id')|string == grp.id|string }}>{{ grp.name }}</option>{% endfor %}</select></div>
+  <div class="form-row"><label for="owner_role">Owner</label><input id="owner_role" name="owner_role" value="{{ form.get('owner_role', '') }}"></div>
+  <div class="form-row"><label for="raised_on">Raised on</label><input id="raised_on" name="raised_on" type="date" value="{{ form.get('raised_on', '') }}"></div>
+  <div class="form-row"><label for="target_date">Target date</label><input id="target_date" name="target_date" type="date" value="{{ form.get('target_date', '') }}"></div>
+  <div class="form-row"><label for="status">Status</label>
+    <select id="status" name="status">{% for s in statuses %}<option {{ 'selected' if form.get('status', 'Open') == s }}>{{ s }}</option>{% endfor %}</select></div>
+  <div class="form-row"><label for="rag">RAG</label>
+    <select id="rag" name="rag"><option value="">Not set</option>{% for r in rag_values %}<option {{ 'selected' if form.get('rag') == r }}>{{ r }}</option>{% endfor %}</select></div>
+  <div class="form-row"><label for="latest_update">Latest update</label><textarea id="latest_update" name="latest_update" rows="2">{{ form.get('latest_update', '') }}</textarea></div>
+  <button class="button primary" type="submit">Save</button>
+  {% if risk %}<a href="{{ url_for('entries.risks', tracker_id=tracker.id) }}">Back to the register</a>{% endif %}
+</form>
+{% endblock %}

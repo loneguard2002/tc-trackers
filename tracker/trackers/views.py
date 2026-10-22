@@ -251,12 +251,6 @@ def view(tracker_id: int):
     )
 
 
-@bp.get("/trackers/<int:tracker_id>/entries/new")
-@require_tracker_role("editor")
-def new_entry(tracker_id: int):
-    return "placeholder"  # PLACEHOLDER: replaced in Task 7
-
-
 @bp.post("/trackers/<int:tracker_id>/archive")
 @admin_required
 @require_tracker_role("owner")

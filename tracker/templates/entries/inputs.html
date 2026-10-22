@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% block content %}
+<h1>{{ tracker.name }}</h1>
+{% include "trackers/_nav.html" %}
+<h2>Weekly inputs</h2>
+<form method="get" class="form-inline">
+  <label for="week">Week ending</label>
+  <select id="week" name="week">{% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if w == week }}>{{ format_date(w) }}</option>{% endfor %}</select>
+  <button class="button" type="submit">Show</button>
+</form>
+{% include "entries/_errors.html" %}
+<form method="post" action="{{ url_for('entries.inputs', tracker_id=tracker.id, week=week.isoformat()) }}">
+  {{ csrf_field(csrf_token()) }}
+  <div class="form-row"><label for="status">Overall status</label>
+    <select id="status" name="status"><option value="">Not set</option>
+      {% for r in rag_values %}<option {{ 'selected' if form.get('status') == r }}>{{ r }}</option>{% endfor %}</select></div>
+  <div class="form-row"><label for="headline">Headline</label><textarea id="headline" name="headline" rows="3">{{ form.get('headline', '') }}</textarea></div>
+  <div class="form-row"><label for="decisions">Decisions or support needed</label><textarea id="decisions" name="decisions" rows="3">{{ form.get('decisions', '') }}</textarea></div>
+  <button class="button primary" type="submit">Save</button>
+</form>
+{% if row and row.prepared_by %}<p class="muted">Last prepared by {{ preparer.full_name if preparer else 'a former user' }}.</p>{% endif %}
+{% endblock %}

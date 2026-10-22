@@ -17,6 +17,7 @@ from .auth.csrf import install_csrf
 from .auth.passwords import hash_password, validate_new_password
 from .config import load_config, validate_config
 from .db import get_session, init_db
+from .entries import bp as entries_bp
 from .models import User
 from .trackers import bp as trackers_bp
 from .trackers import home
@@ -49,6 +50,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(trackers_bp)
+    app.register_blueprint(entries_bp)
     if app.config["SSO_ENABLED"]:
         from .auth.sso import bp as sso_bp
 
