@@ -6,6 +6,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine
 
+from tracker.config import normalise_database_url
 from tracker.models import Base
 
 config = context.config
@@ -23,7 +24,7 @@ def _url() -> str:
     )
     if not url:
         raise RuntimeError("Set DATABASE_URL (or TEST_DATABASE_URL for tests) before running Alembic.")
-    return url
+    return normalise_database_url(url)
 
 
 def run_migrations_offline() -> None:

@@ -18,6 +18,14 @@ def _cookie_secure(raw: str | None) -> bool:
     return (raw or "true").strip().lower() not in {"false", "0", "no", "off"}
 
 
+def normalise_database_url(url: str) -> str:
+    """Use the psycopg 3 driver for plain ``postgres://`` and ``postgresql://`` URLs (as providers hand them out)."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix) :]
+    return url
+
+
 def load_config(overrides: dict | None = None) -> dict:
     load_dotenv()
     config = {
@@ -38,6 +46,7 @@ def load_config(overrides: dict | None = None) -> dict:
     }
     if overrides:
         config.update(overrides)
+    config["DATABASE_URL"] = normalise_database_url(str(config.get("DATABASE_URL") or ""))
     # SSO is enabled only when tenant, client id and client secret are all present.
     config["SSO_ENABLED"] = all(config.get(key) for key in ("SSO_TENANT_ID", "SSO_CLIENT_ID", "SSO_CLIENT_SECRET"))
     return config

@@ -15,3 +15,4 @@ pytest
 ruff
 sqlfluff
 PyYAML
+tzdata
