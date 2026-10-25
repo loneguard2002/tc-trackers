@@ -88,4 +88,8 @@ input:focus, select:focus, textarea:focus, .button:focus-visible, .nav-link:focu
 .report-figure strong { display: block; font-size: 1.3rem; }
 .report-details h2, .report-risks h2 { font-size: 1.05rem; }
 .report-charts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-@media (max-width: 700px) { .report-figures, .report-charts { grid-template-columns: 1fr; } }
+.report-supporting { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 12px; margin: 8px 0 16px; }
+.report-supporting dt { color: var(--muted); font-size: 0.85rem; } .report-supporting dd { margin: 0; font-weight: 600; }
+.report-details h3 { font-size: 0.95rem; margin: 12px 0 4px; }
+@media (max-width: 700px) { .report-supporting { grid-template-columns: repeat(2, 1fr); }
+  .report-figures, .report-charts { grid-template-columns: 1fr; } }

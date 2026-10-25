@@ -34,10 +34,10 @@
     <p class="muted">{{ r.open_risks }} open, {{ r.red_risks }} Red</p>
     {% if r.top_risks %}
     <table>
-      <thead><tr><th>Ref</th><th>Risk</th><th>Status</th><th>RAG</th><th>Target date</th></tr></thead>
+      <thead><tr><th>Ref</th><th>Risk</th><th>Owner</th><th>Status</th><th>RAG</th><th>Target date</th></tr></thead>
       <tbody>
         {% for risk in r.top_risks %}
-        <tr><td>{{ risk.ref }}</td><td>{{ risk.description|dash }}</td><td>{{ risk.status }}</td>
+        <tr><td>{{ risk.ref }}</td><td>{{ risk.description|dash }}</td><td>{{ risk.owner_role|dash }}</td><td>{{ risk.status }}</td>
           <td>{{ risk.rag|dash }}</td><td>{{ risk.target_date|fdate }}</td></tr>
         {% endfor %}
       </tbody>
@@ -47,6 +47,18 @@
 
   <section class="report-details">
     <h2>Details</h2>
+    {% if not h.totals_check_ok %}
+    <p class="flash flash-danger report-check">Data check: the tracker total does not match the sum of the groups.</p>
+    {% endif %}
+    <h3>Supporting figures</h3>
+    {% set dvt = h.forecast_vs_target_days %}
+    <dl class="report-supporting">
+      <div><dt>Weeks left to target</dt><dd>{{ h.weeks_left|dash }}</dd></div>
+      <div><dt>Required rate</dt><dd>{{ h.required_rate|rate }} per week</dd></div>
+      <div><dt>Forecast against target</dt>
+        <dd>{% if dvt is none %}–{% elif dvt > 0 %}{{ dvt }} day{{ '' if dvt == 1 else 's' }} late{% elif dvt < 0 %}{{ -dvt }} day{{ '' if dvt == -1 else 's' }} early{% else %}On target{% endif %}</dd></div>
+      <div><dt>Next week's target</dt><dd>{{ h.next_week_target|dash }}</dd></div>
+    </dl>
     <table>
       <thead><tr><th>{{ t.group_label or 'Group' }}</th><th>Scope</th><th>Done</th><th>Remaining</th><th>Complete</th>
         <th>Ready</th><th>Planned</th><th>RAG</th><th>Comment</th></tr></thead>

@@ -298,3 +298,61 @@ def test_actual_series_uses_completed_weeks_only():
     for attr in ("actual_remaining", "cum_actual"):
         xs, _ = actual_series(rows, attr)
         assert xs == complete
+
+
+# --- Owner column and supporting figures (database-free) ---------------------------------------------------------------
+
+
+def body_html(app, report):
+    from flask import render_template
+
+    with app.test_request_context("/"):
+        return render_template("report/_body.html", report=report)
+
+
+def test_top_risks_show_owner_role(app):
+    report, _ = synthetic_report()
+    html = body_html(app, report)
+    assert "<th>Owner</th>" in html and "Programme Lead" in html
+
+
+def test_supporting_figures_are_shown(app):
+    report, _ = synthetic_report()
+    h = report.headline
+    html = body_html(app, report)
+    assert "Supporting figures" in html
+    for label in ("Weeks left to target", "Required rate", "Forecast against target", "Next week's target"):
+        assert label in html.replace("&#39;", "'")
+    assert h.weeks_left is not None and f"<dd>{h.weeks_left}</dd>" in html
+
+
+def test_data_check_warning_when_totals_differ(app):
+    import dataclasses
+
+    report, _ = synthetic_report()
+    bad = dataclasses.replace(report, headline=dataclasses.replace(report.headline, totals_check_ok=False))
+    assert "Data check: the tracker total does not match the sum of the groups." in body_html(app, bad)
+    good = dataclasses.replace(report, headline=dataclasses.replace(report.headline, totals_check_ok=True))
+    assert "Data check:" not in body_html(app, good)
+
+
+def test_supporting_figures_render_with_missing_values(app):
+    import dataclasses
+
+    report, _ = synthetic_report()
+    sparse = dataclasses.replace(
+        report,
+        headline=dataclasses.replace(
+            report.headline, weeks_left=None, required_rate=None, forecast_vs_target_days=None, next_week_target=None
+        ),
+    )
+    assert "Supporting figures" in body_html(app, sparse)
+
+
+def test_supporting_figures_in_print_html(app):
+    from tracker.report.render import render_print_html
+
+    report, _ = synthetic_report()
+    with app.app_context():
+        html = render_print_html(report)
+    assert "Supporting figures" in html and "Programme Lead" in html
