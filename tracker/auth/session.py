@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import wraps
 
-from flask import abort, g, redirect, request, session, url_for
+from flask import abort, g, has_request_context, redirect, request, session, url_for
 
 from ..db import get_session
 from ..models import User
@@ -24,7 +24,12 @@ def logout_user() -> None:
 
 
 def current_user() -> User | None:
-    """Load the signed-in user; users that are not active count as logged out."""
+    """Load the signed-in user; users that are not active count as logged out.
+
+    Outside a request (the scheduler worker renders templates in an app context only) nobody is signed in.
+    """
+    if not has_request_context():
+        return None
     if "current_user" in g:
         return g.current_user
     user = None
