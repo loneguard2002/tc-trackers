@@ -1,0 +1,36 @@
+# Render Blueprint: one web service and one scheduler worker, both built from the same Dockerfile.
+# Secrets are never stored here; every variable is entered in the Render dashboard (sync: false).
+# The plan below is a starting point; the owner may change it.
+services:
+  - type: web
+    name: tracker-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /healthz
+    preDeployCommand: alembic upgrade head
+    envVars: &env_vars
+      - key: DATABASE_URL
+        sync: false
+      - key: FLASK_SECRET_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_CLIENT_SECRET
+        sync: false
+      - key: SSO_TENANT_ID
+        sync: false
+      - key: SSO_CLIENT_ID
+        sync: false
+      - key: SSO_CLIENT_SECRET
+        sync: false
+
+  - type: worker
+    name: tracker-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    dockerCommand: flask --app "tracker.app:create_app()" run-scheduler --interval 60
+    envVars: *env_vars

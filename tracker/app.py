@@ -111,6 +111,16 @@ def create_app(overrides: dict | None = None) -> Flask:
     return app
 
 
+def _read_valid_password(password: str | None) -> str:
+    """Prompt (hidden, confirmed) when no password was given, then apply the shared password rules."""
+    if password is None:
+        password = click.prompt("Password", hide_input=True, confirmation_prompt=True)
+    problem = validate_new_password(password)
+    if problem:
+        raise click.ClickException(problem)
+    return password
+
+
 def _register_cli(app: Flask) -> None:
     @app.cli.command("create-admin")
     @click.argument("email")
@@ -121,11 +131,7 @@ def _register_cli(app: Flask) -> None:
         email = email.strip().lower()
         if "@" not in email:
             raise click.ClickException("Enter a valid email address.")
-        if password is None:
-            password = click.prompt("Password", hide_input=True, confirmation_prompt=True)
-        problem = validate_new_password(password)
-        if problem:
-            raise click.ClickException(problem)
+        password = _read_valid_password(password)
         db = get_session()
         if db.query(User).filter(User.email == email).first() is not None:
             raise click.ClickException(f"A user with the email {email} already exists.")
@@ -150,6 +156,32 @@ def _register_cli(app: Flask) -> None:
         )
         db.commit()
         click.echo(f"Created administrator {email}.")
+
+    @app.cli.command("reset-password")
+    @click.argument("email")
+    @click.option("--password", default=None, help="New password; prompted for (hidden) when omitted.")
+    def reset_password(email: str, password: str | None) -> None:
+        """Set a new password for an existing local account."""
+        email = email.strip().lower()
+        password = _read_valid_password(password)
+        db = get_session()
+        user = db.query(User).filter(User.email == email).first()
+        if user is None:
+            raise click.ClickException(f"No user with the email {email} exists.")
+        if user.auth_source != "local":
+            raise click.ClickException(f"{email} signs in with single sign-on and has no local password.")
+        user.password_hash = hash_password(password)
+        record(
+            db,
+            user_id=None,
+            tracker_id=None,
+            action="password_reset",
+            entity="user",
+            entity_id=user.id,
+            detail={"email": email, "source": "cli"},
+        )
+        db.commit()
+        click.echo(f"Reset the password for {email}.")
 
     @app.cli.command("run-scheduler")
     @click.option(

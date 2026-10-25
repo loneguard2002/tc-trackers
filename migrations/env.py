@@ -16,12 +16,14 @@ target_metadata = Base.metadata
 
 
 def _url() -> str:
-    return (
+    url = (
         config.get_main_option("sqlalchemy.url")
         or os.environ.get("DATABASE_URL")
         or os.environ.get("TEST_DATABASE_URL")
-        or "postgresql+psycopg://localhost/tracker_test"
     )
+    if not url:
+        raise RuntimeError("Set DATABASE_URL (or TEST_DATABASE_URL for tests) before running Alembic.")
+    return url
 
 
 def run_migrations_offline() -> None:
