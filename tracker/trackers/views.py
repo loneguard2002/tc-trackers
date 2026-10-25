@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, time
 
 from flask import abort, flash, g, redirect, render_template, request, url_for
-from sqlalchemy import func, select
+from sqlalchemy import func, select, union_all
 
 from ..audit import record
 from ..auth import ROLE_ORDER, admin_required, current_user, login_required, require_tracker_role, visible_trackers
@@ -124,10 +124,23 @@ def _deployed_by_group(session, tracker: Tracker) -> dict[int, int]:
     }
 
 
+def _dated_rows(tracker: Tracker):
+    """Selects of ``week_ending`` for every kind of data that is tied to the tracker's week-ending day."""
+    return [
+        select(model.week_ending).where(model.tracker_id == tracker.id)
+        for model in (CompletionEntry, Week, ReportInput)
+    ]
+
+
 def _has_entries(session, tracker: Tracker) -> bool:
-    return (
-        session.scalar(select(CompletionEntry.id).where(CompletionEntry.tracker_id == tracker.id).limit(1)) is not None
-    )
+    """True when any completion entry, week (target or imported actual) or weekly input exists for the tracker."""
+    return any(session.scalar(query.limit(1)) is not None for query in _dated_rows(tracker))
+
+
+def _data_range(session, tracker: Tracker) -> tuple[date | None, date | None]:
+    """The earliest and latest week-ending that holds any entry, target, imported actual or weekly input."""
+    dates = union_all(*_dated_rows(tracker)).subquery()
+    return session.execute(select(func.min(dates.c.week_ending), func.max(dates.c.week_ending))).one()
 
 
 # --- Home ----------------------------------------------------------------------------------------------------
@@ -295,13 +308,9 @@ def settings(tracker_id: int):
     errors += schedule_errors
     values.update(schedule)
     if not errors:
-        low, high = db.execute(
-            select(func.min(CompletionEntry.week_ending), func.max(CompletionEntry.week_ending)).where(
-                CompletionEntry.tracker_id == tracker.id
-            )
-        ).one()
+        low, high = _data_range(db, tracker)
         if low is not None and (low < values["first_week_ending"] or high > values["last_week_ending"]):
-            errors.append("Entries exist outside the new week range. Widen the range to include them.")
+            errors.append("Data exists outside the new week range. Widen the range to include it.")
     if errors:
         return _render_settings(tracker, request.form, errors, status=400)
     changed = {}

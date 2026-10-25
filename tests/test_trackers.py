@@ -5,7 +5,7 @@ from datetime import date
 from sqlalchemy import select
 
 from tests.conftest import post
-from tracker.models import AuditLog, CompletionEntry, Group, Tracker, TrackerRole, Week
+from tracker.models import AuditLog, CompletionEntry, Group, ReportInput, Tracker, TrackerRole, Week
 from tracker.trackers import load_engine_inputs, tracker_summary
 
 SETTINGS = {
@@ -345,3 +345,55 @@ def test_schedule_settings_refused_when_archived(client, logged_in_admin, db, tr
     post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "schedule_enabled": "1"})
     db.refresh(tracker)
     assert not tracker.schedule_enabled
+
+
+def test_weekday_locked_by_target_only(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    db.add(Week(tracker_id=tracker.id, week_ending=date(2026, 9, 4), target=10))
+    db.commit()
+    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "week_ending_weekday": "3"})
+    assert response.status_code == 400
+    assert b"The week-ending day cannot change once entries exist." in response.data
+
+
+def test_weekday_locked_by_imported_actual_only(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    db.add(Week(tracker_id=tracker.id, week_ending=date(2026, 9, 4), imported_actual=5))
+    db.commit()
+    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "week_ending_weekday": "3"})
+    assert response.status_code == 400
+
+
+def test_weekday_locked_by_weekly_input_only(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    db.add(ReportInput(tracker_id=tracker.id, week_ending=date(2026, 9, 4), status="Green"))
+    db.commit()
+    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "week_ending_weekday": "3"})
+    assert response.status_code == 400
+    assert b"The week-ending day cannot change once entries exist." in response.data
+
+
+def test_range_check_includes_targets(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    db.add(Week(tracker_id=tracker.id, week_ending=date(2026, 12, 25), target=10))
+    db.commit()
+    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "last_week_ending": "2026-12-11"})
+    assert response.status_code == 400
+    assert b"outside the new week range" in response.data
+
+
+def test_range_check_includes_weekly_inputs(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    db.add(ReportInput(tracker_id=tracker.id, week_ending=date(2026, 12, 25), status="Amber"))
+    db.commit()
+    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "last_week_ending": "2026-12-11"})
+    assert response.status_code == 400
+    assert b"outside the new week range" in response.data
+
+
+def test_settings_save_when_data_is_inside_range(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    db.add(ReportInput(tracker_id=tracker.id, week_ending=date(2026, 9, 11), status="Amber"))
+    db.commit()
+    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "name": "Still fine"})
+    assert response.status_code == 302

@@ -70,7 +70,8 @@
   </form>
   {% if preview %}
   <h3>Subject: {{ preview.subject }}</h3>
-  <iframe title="Email preview" sandbox srcdoc="{{ preview.html }}" style="width: 100%; height: 520px; border: 1px solid var(--border); background: #fff;"></iframe>
+  <iframe title="Email preview" sandbox srcdoc="{{ preview.html }}" class="email-preview"></iframe>
+  <p class="muted">This preview approximates the email's styling; mail clients may differ slightly.</p>
   {% endif %}
   <form method="post" action="{{ url_for('mail.test_send', tracker_id=tracker.id, week=week.isoformat()) }}">
     {{ csrf_field(csrf_token()) }}<button class="button" type="submit">Send a test to me ({{ current_user.email }})</button>
