@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import sys
+import time
 from datetime import datetime, timezone
 
 import click
@@ -25,6 +28,8 @@ from .models import User
 from .report import bp as report_bp
 from .trackers import bp as trackers_bp
 from .trackers import home
+
+logger = logging.getLogger(__name__)
 
 ERROR_TITLES = {
     400: "Bad request",
@@ -143,3 +148,26 @@ def _register_cli(app: Flask) -> None:
         )
         db.commit()
         click.echo(f"Created administrator {email}.")
+
+    @app.cli.command("run-scheduler")
+    @click.option(
+        "--interval", default=60, show_default=True, type=click.IntRange(min=1), help="Seconds between cycles."
+    )
+    @click.option("--once", is_flag=True, help="Run a single cycle and exit.")
+    def run_scheduler(interval: int, once: bool) -> None:
+        """Send due weekly reports and retry queued sends, repeatedly."""
+        from .sched.runner import run_scheduler_cycle
+
+        while True:
+            try:
+                with app.app_context():  # a fresh session per cycle, closed on teardown; the SMTP layer shares it
+                    count = run_scheduler_cycle(get_session(), datetime.now(timezone.utc))
+                logger.info("Scheduler cycle finished: %s send(s) attempted", count)
+                click.echo(f"Scheduler cycle finished: {count} send(s) attempted.")
+            except Exception:
+                logger.exception("Scheduler cycle failed")
+                if once:
+                    sys.exit(1)
+            if once:
+                return
+            time.sleep(interval)

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, time
+from zoneinfo import ZoneInfo
 
 from ..engine.weeks import first_week_ending, week_endings
 
@@ -89,6 +91,35 @@ def validate_tracker_form(form: Mapping[str, str], *, locked_weekday: int | None
     if average is None or not 1 <= average <= 12:
         errors.append("The moving-average period must be between 1 and 12 weeks.")
     values["moving_average_weeks"] = average
+    return values, errors
+
+
+_SEND_TIME_RE = re.compile(r"([01]\d|2[0-3]):([0-5]\d)")
+
+
+def validate_schedule_form(
+    form: Mapping[str, str], *, current_time: time, current_timezone: str
+) -> tuple[dict, list[str]]:
+    """Validate the scheduled-sending fields. An absent send time or zone keeps its current value."""
+    errors: list[str] = []
+    values: dict = {"schedule_enabled": form.get("schedule_enabled") is not None}
+
+    raw_time = _text(form, "send_time")
+    send_time = current_time
+    if raw_time:
+        match = _SEND_TIME_RE.fullmatch(raw_time)
+        if match is None:
+            errors.append("Enter the send time as HH:MM, for example 17:00.")
+        else:
+            send_time = time(int(match.group(1)), int(match.group(2)))
+    values["send_time"] = send_time
+
+    zone = _text(form, "send_timezone") or current_timezone
+    try:
+        ZoneInfo(zone)
+    except (ValueError, OSError, KeyError):  # ZoneInfoNotFoundError is a KeyError; bad keys raise ValueError
+        errors.append(f"The time zone {zone!r} is not recognised. Use a name such as Europe/London.")
+    values["send_timezone"] = zone
     return values, errors
 
 

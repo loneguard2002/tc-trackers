@@ -102,24 +102,39 @@ def _report_and_pdf(session, tracker: Tracker, week_ending: date) -> tuple[Repor
 
 
 def send_report(
-    session, tracker: Tracker, week_ending: date, trigger: str, user_id: int | None, now: datetime
+    session,
+    tracker: Tracker,
+    week_ending: date,
+    trigger: str,
+    user_id: int | None,
+    now: datetime,
+    *,
+    claimed: ReportSend | None = None,
 ) -> ReportSend:
-    """Build and send the report for ``week_ending``; stores a ``ReportSend`` with the PDF and commits."""
+    """Build and send the report for ``week_ending``; stores a ``ReportSend`` with the PDF and commits.
+
+    With ``claimed`` (a scheduled send already inserted as ``sending``) that row is filled in rather than a new one.
+    """
     recipients = recipient_emails(session, tracker)
     if not recipients:
         raise ValueError(NO_RECIPIENTS_MESSAGE)
     report, pdf = _report_and_pdf(session, tracker, week_ending)
-    send = ReportSend(
-        tracker_id=tracker.id,
-        week_ending=report.week_ending,
-        trigger=trigger,
-        status="sending",
-        recipients=recipients,
-        pdf=pdf,
-        attempts=0,
-        created_by=user_id,
-    )
-    session.add(send)
+    if claimed is None:
+        send = ReportSend(
+            tracker_id=tracker.id,
+            week_ending=report.week_ending,
+            trigger=trigger,
+            status="sending",
+            recipients=recipients,
+            pdf=pdf,
+            attempts=0,
+            created_by=user_id,
+        )
+        session.add(send)
+    else:
+        send = claimed
+        send.recipients = recipients
+        send.pdf = pdf
     session.flush()
     _attempt(session, send, tracker, report, now, user_id)
     session.commit()

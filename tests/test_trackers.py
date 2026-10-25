@@ -318,3 +318,30 @@ def test_tracker_summary_uses_default_report_week(db, tracker_factory):
     early = tracker_summary(db, tracker, date(2026, 9, 1))
     assert early.report_week == date(2026, 9, 4)
     assert early.completed == 0
+
+
+def test_schedule_settings_saved_and_audited(client, logged_in_admin, db, tracker_factory):
+    from datetime import time
+
+    tracker = tracker_factory()
+    data = {**SETTINGS, "schedule_enabled": "1", "send_time": "08:30", "send_timezone": "Europe/Zurich"}
+    assert post(client, f"/trackers/{tracker.id}/settings", data).status_code == 302
+    db.refresh(tracker)
+    assert tracker.schedule_enabled and tracker.send_time == time(8, 30) and tracker.send_timezone == "Europe/Zurich"
+    changed = next(a for a in audit_actions(db, tracker.id) if a.action == "settings_updated").detail
+    assert {"schedule_enabled", "send_time", "send_timezone"} <= set(changed)
+
+
+def test_schedule_settings_reject_bad_time_and_zone(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    for bad in ({"send_time": "5pm"}, {"send_timezone": "Mars/Olympus"}):
+        assert post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **bad}).status_code == 400
+    db.refresh(tracker)
+    assert not tracker.schedule_enabled
+
+
+def test_schedule_settings_refused_when_archived(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory(status="archived")
+    post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "schedule_enabled": "1"})
+    db.refresh(tracker)
+    assert not tracker.schedule_enabled

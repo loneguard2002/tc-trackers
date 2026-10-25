@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 
 from flask import abort, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import func, select
@@ -17,6 +17,7 @@ from . import bp
 from .forms import (
     RAG_VALUES,
     validate_group_form,
+    validate_schedule_form,
     validate_snapshot_form,
     validate_tracker_form,
 )
@@ -186,6 +187,9 @@ def _form_from_tracker(t: Tracker) -> dict:
         "target_completion": t.target_completion.isoformat() if t.target_completion else "",
         "completed_before_first": str(t.completed_before_first),
         "moving_average_weeks": str(t.moving_average_weeks),
+        "schedule_enabled": "1" if t.schedule_enabled else "",
+        "send_time": t.send_time.strftime("%H:%M"),
+        "send_timezone": t.send_timezone,
     }
 
 
@@ -271,7 +275,7 @@ def _refuse_if_archived(tracker: Tracker, endpoint: str):
 
 
 def _jsonable(value):
-    return value.isoformat() if isinstance(value, date) else value
+    return value.isoformat() if isinstance(value, (date, time)) else value
 
 
 @bp.route("/trackers/<int:tracker_id>/settings", methods=["GET", "POST"])
@@ -285,6 +289,11 @@ def settings(tracker_id: int):
         return refused
     locked = tracker.week_ending_weekday if _has_entries(db, tracker) else None
     values, errors = validate_tracker_form(request.form, locked_weekday=locked)
+    schedule, schedule_errors = validate_schedule_form(
+        request.form, current_time=tracker.send_time, current_timezone=tracker.send_timezone
+    )
+    errors += schedule_errors
+    values.update(schedule)
     if not errors:
         low, high = db.execute(
             select(func.min(CompletionEntry.week_ending), func.max(CompletionEntry.week_ending)).where(

@@ -7,6 +7,10 @@
   <h2>Settings</h2>
   <form method="post" action="{{ url_for('trackers.settings', tracker_id=tracker.id) }}">
     {% include "trackers/_fields.html" %}
+    <h3>Scheduled sending</h3>
+    <div class="form-row"><label><input type="checkbox" name="schedule_enabled" value="1" {{ 'checked' if form.get('schedule_enabled') }}> Send the weekly report automatically</label></div>
+    <div class="form-row"><label for="send_time">Send time (HH:MM, 24-hour)</label><input id="send_time" name="send_time" value="{{ form.get('send_time', '17:00') }}" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" required></div>
+    <div class="form-row"><label for="send_timezone">Time zone (for example Europe/London)</label><input id="send_timezone" name="send_timezone" value="{{ form.get('send_timezone', 'Europe/London') }}" required></div>
     <button class="button primary" type="submit">Save settings</button>
   </form>
 </section>
