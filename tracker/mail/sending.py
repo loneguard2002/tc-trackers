@@ -1,7 +1,8 @@
 """Sending the report: stored sends, the retry backoff and the audit trail.
 
-Failed sends are queued and retried after 5, 15, 60 and 240 minutes. ``attempts`` counts failed attempts; the send
-becomes ``failed`` when the fourth attempt has failed. Passwords, tokens and message bodies are never audited.
+Delivery is the initial send plus 4 retries (5 attempts in total). Failed sends are queued and retried after 5, 15,
+60 and 240 minutes. ``attempts`` counts failed attempts; the send becomes ``failed`` when the fifth has failed.
+Passwords, tokens and message bodies are never audited.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from . import smtp
 from .compose import build_report_email, report_link
 
 BACKOFF_MINUTES = [5, 15, 60, 240]
-MAX_ATTEMPTS = len(BACKOFF_MINUTES)
+MAX_ATTEMPTS = len(BACKOFF_MINUTES) + 1  # the initial send plus 4 retries
 NO_RECIPIENTS_MESSAGE = "Add at least one recipient before sending."
 ERROR_LENGTH = 300
 

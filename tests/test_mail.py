@@ -168,9 +168,9 @@ def test_email_multiple_recipients_in_bcc(app):
 
 
 def test_backoff_schedule():
-    assert [sending.next_attempt_delay(n) for n in (1, 2, 3)] == [timedelta(minutes=m) for m in (5, 15, 60)]
+    assert [sending.next_attempt_delay(n) for n in (1, 2, 3, 4)] == [timedelta(minutes=m) for m in (5, 15, 60, 240)]
     assert sending.BACKOFF_MINUTES == [5, 15, 60, 240]
-    assert sending.next_attempt_delay(4) is None and sending.next_attempt_delay(9) is None
+    assert sending.next_attempt_delay(5) is None and sending.next_attempt_delay(9) is None
 
 
 # --- Pure: SMTP ---------------------------------------------------------------------------------------------
@@ -352,11 +352,11 @@ def test_send_report_failure_queues_with_backoff(app, db, tracker_with_recipient
     assert db.query(AuditLog).filter_by(action="report_send_queued").count() == 1
 
 
-def test_retry_queued_resends_and_fails_after_4(app, db, tracker_with_recipient, failing_mail, monkeypatch):
+def test_retry_queued_resends_and_fails_after_4_retries(app, db, tracker_with_recipient, failing_mail, monkeypatch):
     with app.app_context():
         send = sending.send_report(db, tracker_with_recipient, WEEK, "manual", None, NOW)
         assert sending.retry_queued(db, NOW + timedelta(minutes=4)) == 0  # not yet due
-        expected = [(2, 15), (3, 60)]
+        expected = [(2, 15), (3, 60), (4, 240)]
         later = NOW
         for attempts, minutes in expected:
             later = send.next_attempt_at
@@ -366,7 +366,7 @@ def test_retry_queued_resends_and_fails_after_4(app, db, tracker_with_recipient,
             assert send.next_attempt_at == later + timedelta(minutes=minutes)
         assert sending.retry_queued(db, send.next_attempt_at) == 1
         db.refresh(send)
-        assert (send.status, send.attempts, send.next_attempt_at) == ("failed", 4, None)
+        assert (send.status, send.attempts, send.next_attempt_at) == ("failed", 5, None)
         assert sending.retry_queued(db, NOW + timedelta(days=2)) == 0
     assert db.query(AuditLog).filter_by(action="report_send_failed").count() == 1
 
