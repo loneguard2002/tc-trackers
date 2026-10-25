@@ -17,6 +17,8 @@ The blueprint `render.yaml` defines two Docker services built from the same `Doc
    | `SMTP_CLIENT_SECRET` | Client secret (when OAuth is used for SMTP) |
    | `SSO_TENANT_ID`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET` | Single sign-on; enabled only when all three are set |
 
+   Optional variables: the three `SSO_*` variables when single sign-on is not used, and whichever of `SMTP_PASSWORD` or `SMTP_CLIENT_SECRET` the chosen SMTP authentication does not use. Leave them blank when Render prompts for them.
+
    `SESSION_COOKIE_SECURE` stays at its secure default (`true`); do not set it on Render. Never commit a secret value to the repository.
 4. Deploy. The pre-deploy command applies the migrations before the new web instance takes traffic.
 5. Create the first administrator from the web service shell: `flask --app "tracker.app:create_app()" create-admin EMAIL`.
@@ -36,13 +38,15 @@ The blueprint `render.yaml` defines two Docker services built from the same `Doc
   ```sql
   SELECT id, tracker_id, week_ending, trigger, status
   FROM report_sends
-  WHERE status = 'sending';
+  WHERE status = 'sending'
+    AND created_at < now() - interval '15 minutes';
   ```
 
-  Confirm no send is genuinely in progress (the worker is idle), mark the row as failed, then send manually from the tracker's email page:
+  Confirm no send is genuinely in progress (the worker is idle), mark the row as failed, then send manually. The age condition keeps the query from matching a send that is legitimately in progress, because the `sending` row is committed before the PDF and SMTP work begins from the tracker's email page:
 
   ```sql
-  UPDATE report_sends SET status = 'failed' WHERE id = <id from the check> AND status = 'sending';
+  UPDATE report_sends SET status = 'failed' WHERE id = <id from the check> AND status = 'sending'
+    AND created_at < now() - interval '15 minutes';
   ```
 
 ## Verification

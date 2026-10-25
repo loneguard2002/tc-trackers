@@ -9,7 +9,7 @@ services:
     plan: starter
     healthCheckPath: /healthz
     preDeployCommand: alembic upgrade head
-    envVars: &env_vars
+    envVars:
       - key: DATABASE_URL
         sync: false
       - key: FLASK_SECRET_KEY
@@ -33,4 +33,20 @@ services:
     dockerfilePath: ./Dockerfile
     plan: starter
     dockerCommand: flask --app "tracker.app:create_app()" run-scheduler --interval 60
-    envVars: *env_vars
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: FLASK_SECRET_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_CLIENT_SECRET
+        sync: false
+      - key: SSO_TENANT_ID
+        sync: false
+      - key: SSO_CLIENT_ID
+        sync: false
+      - key: SSO_CLIENT_SECRET
+        sync: false

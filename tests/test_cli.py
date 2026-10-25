@@ -36,7 +36,10 @@ def test_alembic_reads_database_url_from_the_environment(monkeypatch):
 def test_render_blueprint_defines_web_and_worker_without_secret_values():
     import yaml
 
-    blueprint = yaml.safe_load((ROOT / "render.yaml").read_text())
+    raw = (ROOT / "render.yaml").read_text()
+    uncommented = "\n".join(line.split("#", 1)[0] for line in raw.splitlines())
+    assert "&" not in uncommented and "*" not in uncommented  # no YAML anchors or aliases
+    blueprint = yaml.safe_load(raw)
     services = {service["name"]: service for service in blueprint["services"]}
     web, worker = services["tracker-web"], services["tracker-worker"]
     assert web["type"] == "web" and web["runtime"] == "docker"
@@ -140,3 +143,11 @@ def test_reset_password_refuses_single_sign_on_accounts(app, db):
     _local_user(db, email="s@example.com", password_hash=None, auth_source="sso", sso_subject="subject-1")
     result = app.test_cli_runner().invoke(args=["reset-password", "s@example.com", "--password", "new-password-456"])
     assert result.exit_code != 0 and "single sign-on" in result.output
+
+
+def test_stuck_send_queries_carry_an_age_guard():
+    for name in ("README.md", "docs/runbooks/deploy-render.md"):
+        text = (ROOT / name).read_text()
+        assert "created_at < now() - interval '15 minutes'" in text
+    runbook = (ROOT / "docs/runbooks/deploy-render.md").read_text()
+    assert runbook.count("interval '15 minutes'") == 2

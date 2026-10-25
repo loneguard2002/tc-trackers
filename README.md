@@ -31,9 +31,9 @@ Sign in as an administrator and open `/import`, or run `flask --app "tracker.app
 
 ## Deployment
 
-`render.yaml` defines the web service and the scheduler worker. See `docs/runbooks/deploy-render.md` for setup and operations, and `docs/runbooks/supabase-to-postgres.md` for the data cutover.
+`render.yaml` defines the web service and the scheduler worker. Its variables are all entered in the Render dashboard; the `SSO_*` variables and whichever of `SMTP_PASSWORD` or `SMTP_CLIENT_SECRET` is unused are optional and may be left blank when Render prompts for them. See `docs/runbooks/deploy-render.md` for setup and operations, and `docs/runbooks/supabase-to-postgres.md` for the data cutover.
 
 Operational notes:
 
 - If the scheduler worker is down for more than 24 hours past a tracker's send time, that week's automatic send is skipped; send it manually from the tracker's email page.
-- A crash mid-send can leave a `report_sends` row with status `sending` that blocks that week's scheduled send. Check with `SELECT id, tracker_id, week_ending FROM report_sends WHERE status = 'sending';`, mark the row `failed`, then send manually. The runbook has the full steps.
+- A crash mid-send can leave a `report_sends` row with status `sending` that blocks that week's scheduled send. Check with `SELECT id, tracker_id, week_ending FROM report_sends WHERE status = 'sending' AND created_at < now() - interval '15 minutes';`, mark the row `failed`, then send manually. The age condition avoids matching a send that is legitimately in progress, because the `sending` row is committed before the PDF and SMTP work begins. The runbook has the full steps.
