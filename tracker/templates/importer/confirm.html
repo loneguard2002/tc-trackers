@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% block content %}
+<h1>Confirm import</h1>
+{% if error %}<ul class="form-error"><li>{{ error }}</li></ul>{% endif %}
+<section class="card">
+  <h2>Settings</h2>
+  <ul>
+    <li>Weeks: {{ preview.settings.first_week_ending }} to {{ preview.settings.last_week_ending }} ({{ preview.weeks|length }} weeks, week-ending day {{ preview.settings.weekday }} where Monday is 0)</li>
+    <li>Target completion: {{ preview.settings.target_completion or 'none' }}</li>
+    <li>Quantity completed before the first week: {{ preview.settings.completed_before_first }}</li>
+    <li>Moving-average period: {{ preview.settings.moving_average_weeks }} weeks</li>
+  </ul>
+</section>
+<section class="card">
+  <h2>Groups ({{ preview.groups|length }})</h2>
+  <table>
+    <thead><tr><th>Name</th><th>Baseline</th><th>Starting figure</th><th>Ready, not complete</th><th>Planned completion</th><th>Status</th></tr></thead>
+    <tbody>{% for g in preview.groups %}
+      <tr><td>{{ g.name }}</td><td>{{ g.baseline }}</td><td>{{ g.starting_completed }}</td><td>{{ g.ready_not_complete }}</td><td>{{ g.planned_completion or '' }}</td><td>{{ g.rag or '' }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+</section>
+<section class="card">
+  <h2>Weekly history ({{ preview.weeks|length }})</h2>
+  <table>
+    <thead><tr><th>Week ending</th><th>Target</th><th>Actual</th></tr></thead>
+    <tbody>{% for w in preview.weeks %}
+      <tr><td>{{ w.week_ending }}</td><td>{{ '' if w.target is none else w.target }}</td><td>{{ '' if w.actual is none else w.actual }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+</section>
+<section class="card">
+  <h2>Risks and issues ({{ preview.risks|length }})</h2>
+  <ul>{% for r in preview.risks %}<li>{{ r.ref }}: {{ r.description }} ({{ r.status }}{% if r.rag %}, {{ r.rag }}{% endif %})</li>{% else %}<li>None</li>{% endfor %}</ul>
+  {% if preview.inputs %}<p>Latest report inputs for the week ending {{ preview.inputs.week_ending }} will also be imported.</p>{% endif %}
+</section>
+<section class="card">
+  <h2>Reconciliation</h2>
+  <p>Group starting figures total {{ preview.group_total }}. The quantity completed before the first week ({{ preview.settings.completed_before_first }}) plus the weekly actuals ({{ preview.weekly_total }}) total {{ preview.settings.completed_before_first + preview.weekly_total }}.</p>
+  {% if preview.mismatch == 0 %}<p>The figures agree.</p>{% else %}<p><strong>The figures differ by {{ preview.mismatch }}.</strong></p>{% endif %}
+</section>
+<section class="card">
+  <form method="post" action="{{ url_for('importer.confirm') }}">
+    {{ csrf_field(csrf_token()) }}
+    <input type="hidden" name="payload" value="{{ token }}">
+    <div class="form-row"><label for="name">Tracker name</label><input id="name" name="name" value="{{ form.get('name', '') }}" required></div>
+    <div class="form-row"><label for="unit_label">Unit being counted (for example, thin clients)</label><input id="unit_label" name="unit_label" value="{{ form.get('unit_label', '') }}"></div>
+    <div class="form-row"><label for="group_label">Grouping label (for example, Location)</label><input id="group_label" name="group_label" value="{{ form.get('group_label', '') }}"></div>
+    {% if preview.mismatch != 0 %}
+    <div class="form-row"><label><input type="checkbox" name="accept_mismatch" value="1" {{ 'checked' if form.get('accept_mismatch') == '1' }}> Import regardless of the difference of {{ preview.mismatch }}</label></div>
+    {% endif %}
+    <button class="button primary" type="submit">Create tracker</button>
+    <a class="button" href="{{ url_for('importer.upload') }}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

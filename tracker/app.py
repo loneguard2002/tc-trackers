@@ -23,6 +23,7 @@ from .config import load_config, validate_config
 from .db import get_session, init_db
 from .entries import bp as entries_bp
 from .formatting import register_filters
+from .importer import bp as importer_bp
 from .mail import bp as mail_bp
 from .models import User
 from .report import bp as report_bp
@@ -65,6 +66,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     app.register_blueprint(entries_bp)
     app.register_blueprint(report_bp)
     app.register_blueprint(mail_bp)
+    app.register_blueprint(importer_bp)
     if app.config["SSO_ENABLED"]:
         from .auth.sso import bp as sso_bp
 
@@ -171,3 +173,44 @@ def _register_cli(app: Flask) -> None:
             if once:
                 return
             time.sleep(interval)
+
+    @app.cli.command("import-workbook")
+    @click.argument("path", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--name", required=True, help="Name of the new tracker.")
+    @click.option(
+        "--weekday", default=4, show_default=True, type=click.IntRange(0, 6), help="Week-ending day, Monday=0."
+    )
+    @click.option("--unit-label", default="", help="The unit being counted.")
+    @click.option("--group-label", default="Location", show_default=True, help="The grouping label.")
+    @click.option("--owner", default=None, help="Email of the owner; defaults to the only administrator.")
+    @click.option("--accept-mismatch", is_flag=True, help="Import even when the reconciliation check differs.")
+    def import_workbook(
+        path: str, name: str, weekday: int, unit_label: str, group_label: str, owner: str | None, accept_mismatch: bool
+    ) -> None:
+        """Create a tracker from the existing tracking workbook (a one-time cutover)."""
+        from .importer import ImportError_, ImportMismatch, create_tracker_from_preview, read_workbook
+
+        db = get_session()
+        if owner:
+            user = db.query(User).filter(User.email == owner.strip().lower()).first()
+        else:
+            admins = db.query(User).filter(User.is_admin.is_(True), User.status == "active").all()
+            user = admins[0] if len(admins) == 1 else None
+        if user is None:
+            raise click.ClickException("Name the owner with --owner EMAIL (an existing user).")
+        try:
+            preview = read_workbook(path, weekday)
+            click.echo(
+                f"Read {len(preview.groups)} group(s), {len(preview.weeks)} week(s), {len(preview.risks)} risk(s). "
+                f"Group starting total {preview.group_total}; weekly actuals {preview.weekly_total}; "
+                f"difference {preview.mismatch}."
+            )
+            tracker = create_tracker_from_preview(db, preview, name, unit_label, group_label, user.id, accept_mismatch)
+        except ImportMismatch as exc:
+            db.rollback()
+            raise click.ClickException(f"{exc} Re-run with --accept-mismatch to import regardless.") from exc
+        except ImportError_ as exc:
+            db.rollback()
+            raise click.ClickException(str(exc)) from exc
+        db.commit()
+        click.echo(f"Imported tracker {tracker.id}.")
