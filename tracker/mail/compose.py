@@ -171,12 +171,15 @@ def build_report_email(
     return msg
 
 
+# A deliberately conservative address: no quotes, commas, semicolons, angle brackets or other header specials.
+_EMAIL_RE = re.compile(r"[a-z0-9._%+'-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+")
+
+
 def normalise_recipient(raw: str) -> tuple[str, str | None]:
-    """``(email, error)``: stripped, lower-cased, and checked for one ``@`` with non-empty parts and no whitespace."""
+    """``(email, error)``: stripped, lower-cased, and checked against a conservative address pattern."""
     email = (raw or "").strip().lower()
-    local, _, domain = email.partition("@")
-    if not email or email.count("@") != 1 or not local or not domain or re.search(r"\s", email):
-        return email, "Enter a valid email address."
     if len(email) > 254:
         return email, "The email address is too long."
+    if not _EMAIL_RE.fullmatch(email):
+        return email, "Enter a valid email address."
     return email, None

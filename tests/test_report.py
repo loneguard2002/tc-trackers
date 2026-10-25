@@ -300,7 +300,7 @@ def test_actual_series_uses_completed_weeks_only():
         assert xs == complete
 
 
-# --- Owner column and supporting figures (database-free) ---------------------------------------------------------------
+# --- Owner column and supporting figures (database-free) -----------------------------------------------------------
 
 
 def body_html(app, report):

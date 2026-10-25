@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from flask import current_app
 from sqlalchemy import select
@@ -96,8 +97,16 @@ def _attempt(session, send: ReportSend, tracker: Tracker, report: Report, now: d
     _audit(session, send, tracker, user_id)
 
 
-def _report_and_pdf(session, tracker: Tracker, week_ending: date) -> tuple[Report, bytes]:
-    report = build_report(session, tracker, week_ending, report_views.today())
+def report_today(trigger: str, send_timezone: str, now: datetime) -> date:
+    """The report's "today". A scheduled send uses the date in the tracker's send timezone at ``now`` (the worker runs
+    in UTC); other sends keep the application's usual ``today()``."""
+    if trigger == "scheduled":
+        return now.astimezone(ZoneInfo(send_timezone)).date()
+    return report_views.today()
+
+
+def _report_and_pdf(session, tracker: Tracker, week_ending: date, today: date | None = None) -> tuple[Report, bytes]:
+    report = build_report(session, tracker, week_ending, today or report_views.today())
     return report, html_to_pdf(render_print_html(report))
 
 
@@ -118,7 +127,7 @@ def send_report(
     recipients = recipient_emails(session, tracker)
     if not recipients:
         raise ValueError(NO_RECIPIENTS_MESSAGE)
-    report, pdf = _report_and_pdf(session, tracker, week_ending)
+    report, pdf = _report_and_pdf(session, tracker, week_ending, report_today(trigger, tracker.send_timezone, now))
     if claimed is None:
         send = ReportSend(
             tracker_id=tracker.id,
@@ -161,7 +170,8 @@ def _retry_one(session, send: ReportSend, now: datetime) -> None:
     send_id = send.id
     try:
         tracker = session.get(Tracker, send.tracker_id)
-        report = build_report(session, tracker, send.week_ending, report_views.today())
+        today = report_today(send.trigger, tracker.send_timezone, now)
+        report = build_report(session, tracker, send.week_ending, today)
         _attempt(session, send, tracker, report, now, send.created_by)
     except Exception as exc:
         logger.exception("Report send %s could not be retried", send_id)

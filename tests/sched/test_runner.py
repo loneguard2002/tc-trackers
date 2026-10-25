@@ -134,10 +134,10 @@ def test_build_exception_marks_failed_and_cycle_continues(app, db, scheduled, tr
     db.commit()
     original = sending._report_and_pdf
 
-    def broken(session, tracker, week_ending):
+    def broken(session, tracker, week_ending, *args):
         if tracker.id == scheduled.id:
             raise RuntimeError("render exploded")
-        return original(session, tracker, week_ending)
+        return original(session, tracker, week_ending, *args)
 
     monkeypatch.setattr(sending, "_report_and_pdf", broken)
     with app.app_context():

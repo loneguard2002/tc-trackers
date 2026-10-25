@@ -110,9 +110,19 @@ def test_default_subject_renders():
 # --- Pure: recipient validation -----------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("raw", ["", "  ", "a", "a@", "@b.com", "a@@b.com", "a b@c.com", "a@b c.com"])
+@pytest.mark.parametrize("raw",
+    [
+        "", "  ", "a", "a@", "@b.com", "a@@b.com", "a b@c.com", "a@b c.com", "a@b", "x,y@corp.com", "x;y@corp.com",
+        "<a@b.com>", '"a"@b.com', "a@b..com", "a@.b.com", "a@b.com.", "a@b.com,c@d.com", "a@b_c.com", "a\r\n@b.com",
+    ],
+)  # fmt: skip
 def test_recipient_rejected(raw):
     assert normalise_recipient(raw)[1] is not None
+
+
+@pytest.mark.parametrize("raw", ["a@b.com", "first.last+tag@sub.example.co.uk", "o'brien@example.com", "a_b%c@x-y.org"])
+def test_recipient_accepted(raw):
+    assert normalise_recipient(raw) == (raw, None)
 
 
 def test_recipient_normalised():
@@ -300,6 +310,23 @@ def test_deliver_requires_host_and_sender():
         smtp.deliver(simple_message(), cfg(smtp_host=""))
     with pytest.raises(smtp.MailError, match="sender"):
         smtp.deliver(simple_message(), cfg(smtp_from="", smtp_user=""))
+
+
+# --- Pure: the report's "today" -------------------------------------------------------------------------------
+
+
+def test_scheduled_send_uses_the_local_date_of_the_fire():
+    late_utc = datetime(2026, 9, 11, 23, 30, tzinfo=timezone.utc)  # already Saturday 12 September in Sydney
+    assert sending.report_today("scheduled", "Australia/Sydney", late_utc) == date(2026, 9, 12)
+    assert sending.report_today("scheduled", "Europe/London", late_utc) == date(2026, 9, 12)  # 00:30 BST
+    early_utc = datetime(2026, 9, 12, 0, 30, tzinfo=timezone.utc)
+    assert sending.report_today("scheduled", "America/New_York", early_utc) == date(2026, 9, 11)
+
+
+def test_manual_send_keeps_the_application_today(monkeypatch):
+    monkeypatch.setattr("tracker.report.views.today", lambda: date(2026, 1, 2))
+    now = datetime(2026, 9, 11, 23, 30, tzinfo=timezone.utc)
+    assert sending.report_today("manual", "Australia/Sydney", now) == date(2026, 1, 2)
 
 
 # --- Database: sending ---------------------------------------------------------------------------------------
@@ -564,3 +591,17 @@ def test_retry_queued_poison_row_does_not_block_next(app, db, tracker_with_recip
     assert poison.error.startswith("RuntimeError: template exploded")
     assert good.status == "sent" and len(sent) == 1
     assert db.query(AuditLog).filter_by(action="report_send_queued", entity_id=str(poison.id)).count() == 1
+
+
+def test_owner_manual_send_end_to_end(client, db, tracker_with_recipient, user_factory, grant, sent_messages):
+    owner = user_factory()
+    grant(owner, tracker_with_recipient, "owner")
+    sign_in(client, owner)
+    response = post(client, f"/trackers/{tracker_with_recipient.id}/mail/send?week=2026-09-11")
+    assert response.status_code == 302
+    send = db.query(ReportSend).one()
+    assert send.status == "sent" and send.trigger == "manual" and send.created_by == owner.id
+    assert send.recipients == ["a@example.com"] and send.pdf == b"%PDF-fake"
+    assert len(sent_messages) == 1 and sent_messages[0]["Bcc"] == "a@example.com"
+    assert db.query(AuditLog).filter_by(action="report_sent").count() == 1
+    assert "was sent" in client.get(response.headers["Location"]).get_data(as_text=True)
