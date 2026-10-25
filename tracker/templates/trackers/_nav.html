@@ -1,6 +1,6 @@
 <p>
   <a href="{{ url_for('report.view', tracker_id=tracker.id) }}">Report</a>
-  {% if g.role == 'owner' %} · <a href="{{ url_for('trackers.settings', tracker_id=tracker.id) }}">Settings</a>{% endif %}
+  {% if g.role == 'owner' %} · <a href="{{ url_for('trackers.settings', tracker_id=tracker.id) }}">Settings</a> · <a href="{{ url_for('mail.settings', tracker_id=tracker.id) }}">Email</a>{% endif %}
   · <a href="{{ url_for('trackers.groups', tracker_id=tracker.id) }}">{{ tracker.group_label or 'Groups' }}</a>
   {% if g.role in ('editor', 'owner') %}
   · <a href="{{ url_for('entries.list_entries', tracker_id=tracker.id) }}">Entries</a>
