@@ -57,7 +57,9 @@ def _page(tracker, week, preview=None, form=None, status: int = 200):
         render_template(
             "mail/settings.html",
             tracker=tracker,
-            recipients=db.scalars(select(Recipient).where(Recipient.tracker_id == tracker.id).order_by(Recipient.id)),
+            recipients=db.scalars(
+                select(Recipient).where(Recipient.tracker_id == tracker.id).order_by(Recipient.id)
+            ).all(),
             values=values,
             placeholders=PLACEHOLDERS,
             unknown=unknown_placeholders(values["subject"], values["body_html"]),

@@ -472,3 +472,95 @@ def test_archived_tracker_refuses_mail_posts(client, db, tracker_factory, user_f
     ):
         assert post(client, path, data).status_code == 302
     assert db.query(Recipient).count() == 0 and sent_messages == []
+
+
+# --- Fix round 1 ---------------------------------------------------------------------------------------------
+
+
+def render_settings(app, recipients):
+    from flask import g, render_template
+
+    tracker = SimpleNamespace(id=1, name="T", status="active", group_label="Site", unit_label="d")
+    user = SimpleNamespace(email="o@example.com", full_name="O", is_admin=True)
+    with app.test_request_context("/"):
+        g.role = "owner"
+        return render_template(
+            "mail/settings.html",
+            tracker=tracker,
+            recipients=recipients,
+            values={"subject": "s", "body_html": "<p>x</p>"},
+            placeholders=PLACEHOLDERS,
+            unknown=[],
+            custom=False,
+            weeks=[date(2026, 9, 4)],
+            week=date(2026, 9, 4),
+            preview=None,
+            recent=[],
+            current_user=user,
+        )
+
+
+def test_settings_page_shows_empty_recipient_state(app):
+    page = render_settings(app, [])
+    assert "No recipients yet." in page
+    assert "<th>Email</th>" not in page
+
+
+def test_settings_page_lists_recipients(app):
+    page = render_settings(app, [SimpleNamespace(id=1, email="a@example.com", name="")])
+    assert "a@example.com" in page and "No recipients yet." not in page
+
+
+def queue_send(db, tracker, week=WEEK, **overrides) -> ReportSend:
+    values = {
+        "tracker_id": tracker.id, "week_ending": week, "trigger": "manual", "status": "queued",
+        "recipients": ["a@example.com"], "pdf": b"%PDF-fake", "attempts": 1, "next_attempt_at": NOW,
+    }  # fmt: skip
+    values.update(overrides)
+    send = ReportSend(**values)
+    db.add(send)
+    db.commit()
+    return send
+
+
+def test_retry_queued_skips_rows_already_sent_by_another_worker(
+    app, db, tracker_with_recipient, sent_messages, monkeypatch
+):
+    """A row another worker finished after this one began must be re-read, not sent again."""
+    first = queue_send(db, tracker_with_recipient, WEEK)
+    second = queue_send(db, tracker_with_recipient, date(2026, 9, 18), next_attempt_at=NOW + timedelta(seconds=1))
+    original = sending._retry_one
+
+    def other_worker_wins(session, send, now):
+        if send.id == first.id:
+            session.execute(ReportSend.__table__.update().where(ReportSend.id == second.id).values(status="sent"))
+        original(session, send, now)
+
+    monkeypatch.setattr(sending, "_retry_one", other_worker_wins)
+    with app.app_context():
+        assert sending.retry_queued(db, NOW + timedelta(minutes=1)) == 1
+    assert len(sent_messages) == 1
+
+
+def test_retry_queued_poison_row_does_not_block_next(app, db, tracker_with_recipient, monkeypatch):
+    poison = queue_send(db, tracker_with_recipient, WEEK)
+    good = queue_send(db, tracker_with_recipient, date(2026, 9, 18), next_attempt_at=NOW + timedelta(seconds=1))
+    sent: list = []
+    monkeypatch.setattr(smtp, "send_message", sent.append)
+    real = sending.build_report_email
+
+    def explode_once(report, template, recipients, link, pdf, sender=""):
+        if report.week_ending == WEEK:
+            raise RuntimeError("template exploded")
+        return real(report, template, recipients, link, pdf, sender)
+
+    monkeypatch.setattr(sending, "build_report_email", explode_once)
+    with app.app_context():
+        assert sending.retry_queued(db, NOW + timedelta(minutes=1)) == 2
+    db.refresh(poison)
+    db.refresh(good)
+    assert (poison.status, poison.attempts) == ("queued", 2)
+    assert poison.next_attempt_at == NOW + timedelta(minutes=1) + timedelta(minutes=15)
+    assert poison.error.startswith("RuntimeError: template exploded")
+    assert good.status == "sent" and len(sent) == 1
+    assert db.query(AuditLog).filter_by(action="report_send_queued", entity_id=str(poison.id)).count() == 1

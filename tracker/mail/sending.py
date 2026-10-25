@@ -7,6 +7,7 @@ Passwords, tokens and message bodies are never audited.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
 
 from flask import current_app
@@ -19,6 +20,8 @@ from ..report.build import Report, build_report
 from ..report.render import html_to_pdf, render_print_html
 from . import smtp
 from .compose import build_report_email, report_link
+
+logger = logging.getLogger(__name__)
 
 BACKOFF_MINUTES = [5, 15, 60, 240]
 MAX_ATTEMPTS = len(BACKOFF_MINUTES) + 1  # the initial send plus 4 retries
@@ -35,7 +38,7 @@ def next_attempt_delay(attempts: int) -> timedelta | None:
     return timedelta(minutes=BACKOFF_MINUTES[attempts - 1])
 
 
-def error_text(exc: smtp.MailError) -> str:
+def error_text(exc: Exception) -> str:
     """The class of the underlying error and a short message; MailError messages never hold credentials."""
     return f"{type(exc.__cause__ or exc).__name__}: {str(exc)[:ERROR_LENGTH]}"
 
@@ -68,6 +71,15 @@ def _audit(session, send: ReportSend, tracker: Tracker, user_id: int | None) -> 
     )  # fmt: skip
 
 
+def _record_failure(send: ReportSend, exc: Exception, now: datetime) -> None:
+    """Count one failed attempt: store the error and either schedule the next retry or give up."""
+    send.attempts += 1
+    send.error = error_text(exc)
+    delay = next_attempt_delay(send.attempts)
+    send.status = "failed" if delay is None else "queued"
+    send.next_attempt_at = None if delay is None else now + delay
+
+
 def _attempt(session, send: ReportSend, tracker: Tracker, report: Report, now: datetime, user_id: int | None) -> None:
     """One delivery attempt for ``send``; updates its status and audits the outcome. The caller commits."""
     template = session.get(EmailTemplate, tracker.id)
@@ -75,11 +87,7 @@ def _attempt(session, send: ReportSend, tracker: Tracker, report: Report, now: d
     try:
         smtp.send_message(msg)
     except smtp.MailError as exc:
-        send.attempts += 1
-        send.error = error_text(exc)
-        delay = next_attempt_delay(send.attempts)
-        send.status = "failed" if delay is None else "queued"
-        send.next_attempt_at = None if delay is None else now + delay
+        _record_failure(send, exc, now)
     else:
         send.status = "sent"
         send.sent_at = now
@@ -118,20 +126,56 @@ def send_report(
     return send
 
 
-def retry_queued(session, now: datetime) -> int:
-    """Resend queued sends that are due, re-using the stored PDF. Returns the number of sends attempted."""
-    due = session.scalars(
+def _claim_due(session, now: datetime, skip: set[int]) -> ReportSend | None:
+    """Lock and return the next due queued send (``FOR UPDATE SKIP LOCKED``), re-checked against the database."""
+    query = (
         select(ReportSend)
         .where(ReportSend.status == "queued", ReportSend.next_attempt_at <= now)
         .order_by(ReportSend.next_attempt_at, ReportSend.id)
+        .limit(1)
         .with_for_update(skip_locked=True)
-    ).all()
-    for send in due:
+        .execution_options(populate_existing=True)
+    )
+    if skip:
+        query = query.where(ReportSend.id.not_in(skip))
+    return session.scalars(query).first()
+
+
+def _retry_one(session, send: ReportSend, now: datetime) -> None:
+    """Attempt ``send`` and commit. Any failure counts as a failed attempt, so one bad row cannot block the queue."""
+    send_id = send.id
+    try:
         tracker = session.get(Tracker, send.tracker_id)
         report = build_report(session, tracker, send.week_ending, report_views.today())
         _attempt(session, send, tracker, report, now, send.created_by)
-        session.commit()
-    return len(due)
+    except Exception as exc:
+        logger.exception("Report send %s could not be retried", send_id)
+        session.rollback()  # discards any half-made changes and releases the lock; take it again before recording
+        send = session.scalars(
+            select(ReportSend)
+            .where(ReportSend.id == send_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).one()
+        if send.status != "queued":
+            session.rollback()
+            return
+        _record_failure(send, exc, now)
+        _audit(session, send, session.get(Tracker, send.tracker_id), send.created_by)
+    session.commit()
+
+
+def retry_queued(session, now: datetime) -> int:
+    """Resend queued sends that are due, re-using the stored PDF. Returns the number of sends attempted.
+
+    One row at a time: claim it (``FOR UPDATE SKIP LOCKED``), send, commit, repeat, so a second worker never sends a
+    row this one holds and the lock is held for exactly the send it protects. Each row is tried at most once per call.
+    """
+    done: set[int] = set()
+    while (send := _claim_due(session, now, done)) is not None:
+        done.add(send.id)
+        _retry_one(session, send, now)
+    return len(done)
 
 
 def send_test(session, tracker: Tracker, week_ending: date, user: User, now: datetime) -> None:
