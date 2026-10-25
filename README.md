@@ -31,7 +31,7 @@ Sign in as an administrator and open `/import`, or run `flask --app "tracker.app
 
 ## Deployment
 
-`render.yaml` defines the web service and the scheduler worker. Its variables are all entered in the Render dashboard; the `SSO_*` variables and whichever of `SMTP_PASSWORD` or `SMTP_CLIENT_SECRET` is unused are optional and may be left blank when Render prompts for them. See `docs/runbooks/deploy-render.md` for setup and operations, and `docs/runbooks/supabase-to-postgres.md` for the data cutover.
+`render.yaml` defines the web service and the scheduler worker. Its variables are all entered in the Render dashboard; the `SSO_*` variables and whichever of `SMTP_PASSWORD` or `SMTP_CLIENT_SECRET` is unused are optional and may be left blank when Render prompts for them. The demo runs on Render with a Supabase database: `DATABASE_URL` is the Supabase session pooler connection string (port 5432, `postgresql+psycopg://` prefix; not the transaction pooler on port 6543), and no Render Postgres database is created. The one migration path is from Supabase to a Postgres server hosted by Tradition. See `docs/runbooks/deploy-render.md` for setup and operations, and `docs/runbooks/supabase-to-postgres.md` for the data move.
 
 Operational notes:
 

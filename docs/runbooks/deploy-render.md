@@ -4,13 +4,13 @@ The blueprint `render.yaml` defines two Docker services built from the same `Doc
 
 ## First deployment
 
-1. Create a Render Postgres database in the same region and copy its internal connection string, converted to the `postgresql+psycopg://` form.
+1. Do not provision a Render Postgres database. The demo keeps its data in the Supabase project; `DATABASE_URL` is the Supabase connection string, written with the `postgresql+psycopg://` prefix (the application also rewrites plain `postgres://` and `postgresql://` URLs to that form). Use the Supabase **session pooler** connection string (port 5432). Render may be unable to reach Supabase's direct connection when it is IPv6-only, which the session pooler avoids (verify in the Supabase dashboard whether the direct connection is IPv6-only for this project). Do not use the transaction pooler (port 6543): psycopg's prepared statements are not compatible with it (verify in the Supabase dashboard which port each connection string uses).
 2. In Render, create a Blueprint from this repository. Render prompts for every variable marked `sync: false`.
 3. Enter the variables on both services (the worker needs the same values as the web service):
 
    | Variable | Purpose |
    |---|---|
-   | `DATABASE_URL` | SQLAlchemy URL of the Render Postgres database |
+   | `DATABASE_URL` | Supabase session pooler connection string (port 5432), with the `postgresql+psycopg://` prefix |
    | `FLASK_SECRET_KEY` | At least 32 random characters; keep identical on both services |
    | `APP_URL` | Public base URL, used in sign-in links in emails |
    | `SMTP_PASSWORD` | SMTP password (when SMTP basic authentication is used) |
@@ -23,6 +23,8 @@ The blueprint `render.yaml` defines two Docker services built from the same `Doc
 4. Deploy. The pre-deploy command applies the migrations before the new web instance takes traffic.
 5. Create the first administrator from the web service shell: `flask --app "tracker.app:create_app()" create-admin EMAIL`.
 6. Check `/healthz`, the home page and a report PDF.
+7. Check that the image contains time zone data (the scheduler needs it), where Docker is available:
+   `docker run --rm <image> python -c "import zoneinfo; zoneinfo.ZoneInfo('Europe/London')"`. The `tzdata` package in `requirements.txt` supplies it if the base image does not.
 
 ## Routine operations
 
@@ -33,7 +35,7 @@ The blueprint `render.yaml` defines two Docker services built from the same `Doc
 ## Scheduler notes
 
 - **Worker outage.** If the scheduler worker is down for more than 24 hours past a tracker's send time, that week's automatic send is skipped. Send it manually from the tracker's email page.
-- **Crash during a send.** A crash part-way through a send can leave a `report_sends` row with status `sending`, which blocks that week's scheduled send. Check:
+- **Crash during a send.** A crash part-way through a send can leave a `report_sends` row with status `sending`, which blocks that week's scheduled send. Find candidates with:
 
   ```sql
   SELECT id, tracker_id, week_ending, trigger, status
@@ -42,12 +44,14 @@ The blueprint `render.yaml` defines two Docker services built from the same `Doc
     AND created_at < now() - interval '15 minutes';
   ```
 
-  Confirm no send is genuinely in progress (the worker is idle), mark the row as failed, then send manually. The age condition keeps the query from matching a send that is legitimately in progress, because the `sending` row is committed before the PDF and SMTP work begins from the tracker's email page:
+  The age condition keeps the query from matching a send that is legitimately in progress: the `sending` row is committed before the PDF and SMTP work begins. Confirm that the worker is idle and no send is genuinely in progress, then mark the row as failed:
 
   ```sql
   UPDATE report_sends SET status = 'failed' WHERE id = <id from the check> AND status = 'sending'
     AND created_at < now() - interval '15 minutes';
   ```
+
+  Then send the report manually from the tracker's email page.
 
 ## Verification
 
