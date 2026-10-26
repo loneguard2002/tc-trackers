@@ -31,7 +31,7 @@ def _get_user_or_404(user_id: int) -> User:
 def users():
     db = get_session()
     rows = db.scalars(select(User).order_by(User.status != "pending", User.full_name, User.id)).all()
-    return render_template("admin/users.html", users=rows, page_title="Users", current_page="admin")
+    return render_template("admin/users.html", users=rows, page_title="Users", current_page="users")
 
 
 @bp.post("/users")
@@ -171,5 +171,5 @@ def smtp():
         values=_smtp_values(db),
         modes=SMTP_AUTH_MODES,
         page_title="Email settings",
-        current_page="admin",
+        current_page="smtp",
     )
