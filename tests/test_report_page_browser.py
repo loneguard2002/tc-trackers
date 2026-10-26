@@ -97,27 +97,113 @@ def test_empty_tracker_renders_cleanly(page, live_server, seeded_empty):
     assert page.evaluate("window.__errors") == []
 
 
-def test_chart_without_any_values_says_no_data_yet(page, live_server, seeded):
-    empty = {
-        "planned_remaining": [None] * 4,
-        "actual_remaining": [None] * 4,
-        "forecast_remaining": [None] * 4,
-        "target": [None] * 4,
-        "actual": [None] * 4,
-        "cum_target": [None] * 4,
-        "cum_actual": [None] * 4,
+def empty_payload():
+    series = {
+        key: [None] * len(WEEKS)
+        for key in (
+            "planned_remaining",
+            "actual_remaining",
+            "forecast_remaining",
+            "target",
+            "actual",
+            "cum_target",
+            "cum_actual",
+        )
     }
-    payload = {
+    return {
         "unit_label": "devices",
         "palette": {"plan": "#888888", "actual": "#2c7be5", "forecast": "#d39e00"},
         "weeks": [w.isoformat() for w in WEEKS],
-        "series": empty,
+        "series": series,
     }
+
+
+def route_empty_payload(page):
     page.route(
-        "**/report/data.json*", lambda route: route.fulfill(content_type="application/json", body=json.dumps(payload))
+        "**/report/data.json*",
+        lambda route: route.fulfill(content_type="application/json", body=json.dumps(empty_payload())),
     )
+
+
+def test_chart_without_any_values_says_no_data_yet(page, live_server, seeded):
+    route_empty_payload(page)
     open_report(page, live_server, seeded)
     expect(page.locator(".chart-host-remaining")).to_have_attribute("data-empty", "true")
+
+
+@pytest.mark.parametrize(
+    ("name", "title"),
+    [("remaining", "Remaining"), ("weekly", "Weekly actual against target"), ("cumulative", "Cumulative completed")],
+)
+def test_each_chart_has_its_title(page, live_server, seeded, name, title):
+    open_report(page, live_server, seeded)
+    expect(page.locator(f".chart-host-{name} svg text", has_text=title).first).to_be_visible()
+
+
+def test_empty_chart_keeps_its_title(page, live_server, seeded):
+    route_empty_payload(page)
+    open_report(page, live_server, seeded)
+    host = page.locator(".chart-host-remaining")
+    expect(host.locator("svg text", has_text="No data yet").first).to_be_visible()
+    expect(host.locator("svg text", has_text="Remaining").first).to_be_visible()
+
+
+def test_wheel_over_a_chart_scrolls_the_page(page, live_server, seeded):
+    page.set_viewport_size({"width": 1300, "height": 600})
+    open_report(page, live_server, seeded)
+    page.locator(".chart-host-remaining").scroll_into_view_if_needed()
+    before = page.evaluate("window.scrollY")
+    page.locator(".chart-host-remaining").hover()
+    page.mouse.wheel(0, 300)
+    page.wait_for_timeout(400)
+    assert page.evaluate("window.scrollY") > before
+
+
+def test_every_week_has_a_dot(page, live_server, seeded):
+    open_report(page, live_server, seeded)
+    assert page.evaluate(
+        "['remaining', 'weekly', 'cumulative'].every(name => echarts.getInstanceByDom("
+        "document.querySelector('.chart-host-' + name)).getOption().series"
+        ".every(s => s.type !== 'line' || s.showAllSymbol === true))"
+    )
+
+
+def test_save_as_image_downloads_that_chart_only(page, live_server, seeded):
+    open_report(page, live_server, seeded)
+    # The toolbox icon is the small path in the chart's top-right corner.
+    icon = page.evaluate(
+        """(() => { const h = document.querySelector('.chart-host-remaining'); const hb = h.getBoundingClientRect();
+        const r = [...h.querySelectorAll('svg path')].map(p => p.getBoundingClientRect())
+          .find(r => r.right > hb.right - 60 && r.top < hb.top + 60 && r.width < 24 && r.height < 24);
+        return [r.left + r.width / 2, r.top + r.height / 2]; })()"""
+    )
+    with page.expect_download() as info:
+        page.mouse.click(icon[0], icon[1])
+    assert info.value.suggested_filename == "remaining.svg"
+    content = open(info.value.path(), encoding="utf-8").read()
+    assert "Remaining" in content and "Cumulative completed" not in content
+    assert 'fill="transparent"' not in content
+
+
+def test_charts_resize_when_the_sidebar_collapses(page, live_server, seeded):
+    page.set_viewport_size({"width": 1200, "height": 900})
+    open_report(page, live_server, seeded)
+    page.evaluate("localStorage.removeItem('tracker-sidebar')")
+    host = page.locator(".chart-host-remaining")
+    page.click("[data-sidebar-toggle]")
+    page.wait_for_timeout(700)
+    host_width = host.evaluate("el => el.clientWidth")
+    svg_width = host.locator("svg").first.evaluate("el => el.getBoundingClientRect().width")
+    assert abs(host_width - svg_width) <= 2
+
+
+def test_markup_in_the_unit_label_stays_text(page, live_server, seeded, db):
+    seeded.tracker.unit_label = "<b>devs</b>"
+    db.commit()
+    open_report(page, live_server, seeded)
+    host = page.locator(".chart-host-remaining")
+    assert host.locator("b").count() == 0
+    expect(host.locator("svg text", has_text="<b>devs</b>").first).to_be_visible()
 
 
 def test_failed_data_request_keeps_the_pictures(page, live_server, seeded):

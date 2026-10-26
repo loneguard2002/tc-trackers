@@ -188,8 +188,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 }
 
 /* Interactive report charts (report-charts.js); swatch colours match tracker/report/charts.py PALETTE. */
-.chart-host { width: 100%; height: 320px; }
-.report-charts .chart-host { height: 260px; }
+.chart-host { width: 100%; height: 340px; margin: 12px 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.report-charts .chart-host { height: 280px; margin: 0; }
 .chart-tooltip { font-size: 13px; line-height: 1.45; }
 .chart-tooltip-title { margin-bottom: 4px; font-weight: 700; }
 .chart-tooltip-row { display: flex; justify-content: space-between; gap: 12px; }

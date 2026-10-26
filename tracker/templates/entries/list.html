@@ -31,6 +31,7 @@
   {% endfor %}
   </tbody>
 </table>
+{% if capped %}<p class="muted">Showing the latest {{ list_limit }} entries only. Use the week or location filter to see older entries; Download CSV includes only the entries shown.</p>{% endif %}
 <p class="muted">To correct an entry, delete it and record it again.</p>
 {% else %}
 <section class="empty-state"><p>No entries match.</p></section>

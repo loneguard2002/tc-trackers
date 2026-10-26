@@ -40,6 +40,7 @@
       type: "line",
       data: values,
       showSymbol: true,
+      showAllSymbol: true,
       symbolSize: 6,
       connectNulls: false,
       itemStyle: { color: color },
@@ -78,6 +79,7 @@
     var p = data.palette;
     if (name === "remaining") {
       return {
+        title: "Remaining",
         yName: data.unit_label,
         bars: false,
         series: [
@@ -90,6 +92,7 @@
     }
     if (name === "weekly") {
       return {
+        title: "Weekly actual against target",
         yName: "",
         bars: true,
         series: [
@@ -100,6 +103,7 @@
       };
     }
     return {
+      title: "Cumulative completed",
       yName: "",
       bars: false,
       series: [
@@ -110,22 +114,51 @@
     };
   }
 
-  function buildOption(name, data) {
+  // Saves this chart alone (ECharts' own Save as image composes every connected chart into one picture).
+  function saveChart(entry) {
+    var link = document.createElement("a");
+    link.href = entry.chart.getDataURL({ type: "svg" });
+    link.download = entry.name + ".svg";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  function buildOption(name, data, entry) {
     var spec = chartSpec(name, data);
     var empty = spec.series.every(function (series) { return isEmpty(series.data); });
+    var titles = [{ text: spec.title, left: 8, top: 6, textStyle: { fontSize: 13, fontWeight: 600 } }];
+    if (empty) titles.push({ text: "No data yet", left: "center", top: "middle" });
     var option = {
-      backgroundColor: "transparent",
-      grid: { left: 16, right: 24, top: 44, bottom: 56, containLabel: true },
-      legend: { left: "center", top: 6 },
+      title: titles,
+      grid: { left: 16, right: 24, top: 64, bottom: 56, containLabel: true },
+      legend: { left: "center", top: 30 },
       tooltip: { trigger: "axis", className: "chart-tooltip", formatter: makeFormatter(data.weeks, spec.gap) },
-      toolbox: { right: 8, top: 4, feature: { saveAsImage: { title: "Save as image" } } },
-      dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 8 }],
+      toolbox: {
+        right: 8,
+        top: 4,
+        feature: {
+          myDownload: {
+            show: true,
+            title: "Save as image",
+            icon: "path://M12 3v12M7 10l5 5 5-5M4 20h16",
+            onclick: function () { saveChart(entry); }
+          }
+        }
+      },
+      // The slider zooms the dates. No "inside" zoom: in ECharts 6 it captures the mouse wheel even when limited to
+      // Ctrl, so the page would stop scrolling over a chart.
+      dataZoom: [{ type: "slider", height: 18, bottom: 8 }],
       xAxis: { type: "category", boundaryGap: spec.bars, data: data.weeks.map(shortDate) },
       yAxis: { type: "value", name: spec.yName, minInterval: 1 },
       series: spec.series
     };
-    if (empty) option.title = { text: "No data yet", left: "center", top: "middle" };
     return { option: option, empty: empty };
+  }
+
+  // The chart background is the theme's surface colour, so a saved picture is readable in either theme.
+  function surfaceColour() {
+    return getComputedStyle(document.documentElement).getPropertyValue("--surface").trim() || "#ffffff";
   }
 
   function currentTheme() {
@@ -137,6 +170,7 @@
     entry.chart = window.echarts.init(entry.host, theme === "dark" ? "dark" : null, { renderer: "svg" });
     entry.chart.group = "report";
     entry.chart.setOption(entry.built.option);
+    entry.chart.setOption({ backgroundColor: surfaceColour() });
     entry.host.dataset.theme = theme;
   }
 
@@ -149,7 +183,8 @@
       host.setAttribute("role", "img");
       host.setAttribute("aria-label", img.getAttribute("alt") || "");
       img.parentNode.replaceChild(host, img);
-      var entry = { host: host, built: buildOption(name, data), chart: null };
+      var entry = { name: name, host: host, built: null, chart: null };
+      entry.built = buildOption(name, data, entry);
       if (entry.built.empty) host.dataset.empty = "true";
       draw(entry);
       charts.push(entry);
@@ -163,9 +198,17 @@
       });
       window.echarts.connect("report");
     });
-    window.addEventListener("resize", function () {
-      charts.forEach(function (entry) { entry.chart.resize(); });
-    });
+    // Resize with the host, not just the window: collapsing the sidebar changes the width without a resize event.
+    if (window.ResizeObserver) {
+      var observer = new window.ResizeObserver(function () {
+        charts.forEach(function (entry) { entry.chart.resize(); });
+      });
+      charts.forEach(function (entry) { observer.observe(entry.host); });
+    } else {
+      window.addEventListener("resize", function () {
+        charts.forEach(function (entry) { entry.chart.resize(); });
+      });
+    }
   }
 
   document.addEventListener("DOMContentLoaded", function () {

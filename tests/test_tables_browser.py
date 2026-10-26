@@ -105,11 +105,18 @@ def test_csv_download(page, live_server, seeded):
     assert len(rows) == 4
 
 
+def assert_clean(page):
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
 def test_tables_raise_no_policy_errors(page, live_server, seeded):
     open_page(page, live_server, seeded, "entries")
+    page.locator(".tabulator-col[tabulator-field='c2'] .tabulator-header-filter input").click()
+    expect(page.locator(".tabulator-edit-list")).to_be_visible()
+    assert_clean(page)
     for path in ("risks", "report"):
         page.goto(f"{live_server}/trackers/{seeded.tracker.id}/{path}")
         page.wait_for_selector(".tabulator-row")
+        assert_clean(page)
     expect(page.locator(".report .tabulator")).to_have_count(2)
-    assert page.evaluate("window.__csp") == []
-    assert page.evaluate("window.__errors") == []

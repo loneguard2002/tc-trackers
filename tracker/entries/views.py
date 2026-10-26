@@ -62,9 +62,12 @@ def list_entries(tracker_id: int):
         query = query.where(CompletionEntry.week_ending == week)
     if group_id is not None:
         query = query.where(CompletionEntry.group_id == group_id)
+    # One row beyond the limit tells the page whether older entries were left out.
     entries = db.scalars(
-        query.order_by(CompletionEntry.entry_date.desc(), CompletionEntry.id.desc()).limit(LIST_LIMIT)
+        query.order_by(CompletionEntry.entry_date.desc(), CompletionEntry.id.desc()).limit(LIST_LIMIT + 1)
     ).all()
+    capped = len(entries) > LIST_LIMIT
+    entries = entries[:LIST_LIMIT]
     groups = _ordered_groups(db, tracker)
     return render_template(
         "entries/list.html",
@@ -75,6 +78,8 @@ def list_entries(tracker_id: int):
         selected_week=week,
         selected_group=group_id,
         format_date=format_date,
+        capped=capped,
+        list_limit=LIST_LIMIT,
         **_page(tracker, "Entries"),
     )
 

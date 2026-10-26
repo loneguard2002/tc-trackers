@@ -136,6 +136,18 @@ def test_entries_table_is_enhanced(client, db, tracker_factory, user_factory, gr
         assert asset in html
 
 
+def test_entries_list_says_when_it_is_capped(client, db, tracker_factory, user_factory, grant, monkeypatch):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    monkeypatch.setattr("tracker.entries.views.LIST_LIMIT", 2)
+    for day in ("2026-10-14", "2026-10-15"):
+        post(client, entry_url(tracker, "/new"), entry_form(group, day))
+    assert "Showing the latest" not in client.get(entry_url(tracker)).get_data(as_text=True)
+    post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-16"))
+    html = client.get(entry_url(tracker)).get_data(as_text=True)
+    assert "Showing the latest 2 entries only." in html
+    assert "Download CSV includes only the entries shown." in html
+
+
 def test_risks_table_is_enhanced(client, db, tracker_factory, user_factory, grant):
     tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
     post(client, f"/trackers/{tracker.id}/risks", {"description": "Supplier delay", "status": "Open", "rag": "Red"})
