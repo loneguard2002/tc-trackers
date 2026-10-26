@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, setting %}
+{% from "macros.html" import csrf_field, icon, tool_link %}
 {% block head_extra %}
 {% include "_table_assets.html" %}
 {% endblock %}
@@ -7,25 +7,34 @@
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
 {% set group_name = tracker.group_label or 'Group' %}
+{% set active = tracker.status == 'active' %}
 <div class="settings">
-  {% if not risk %}
   <section class="settings-section" aria-labelledby="section-register">
     <header class="settings-section-head has-action">
       <div>
         <h2 id="section-register">Risks</h2>
-        <p>The risk register. Open risks appear in the report's Top risks table, Red first, then by target date.</p>
+        <p>The risk register. Open risks appear in the report's Top risks table, Red first, then by target date. Closed risks stay here but drop off the report.</p>
       </div>
-      {% if tracker.status == 'active' %}<a class="button primary button-small" href="#add-risk">Add a risk</a>{% endif %}
+      {% if active %}<a class="button primary button-small" href="{{ url_for('entries.new_risk', tracker_id=tracker.id) }}">{{ icon('plus') }}Add a risk</a>{% endif %}
     </header>
     {% if risks %}
     <div class="section-body">
       <table class="table" data-table>
-        <thead><tr><th>Ref</th><th>Description</th><th data-filter="select">{{ group_name }}</th>
-          <th data-filter="select">Status</th><th data-filter="select">RAG</th><th data-html></th></tr></thead>
+        <thead><tr><th data-width="80">Ref</th><th data-min-width="220">Description</th><th data-filter="select" data-min-width="120">{{ group_name }}</th>
+          <th data-min-width="120">Owner</th><th data-filter="select" data-width="120">Status</th><th data-filter="select" data-width="100">RAG</th>
+          <th data-sort="date" data-filter="none" data-width="140">Target date</th><th data-html data-frozen data-width="{{ 88 if active else 52 }}"></th></tr></thead>
         <tbody>
         {% for r in risks %}
-        <tr><td>{{ r.ref }}</td><td>{{ r.description }}</td><td>{{ group_names.get(r.group_id, '') }}</td><td>{{ r.status }}</td><td>{{ r.rag or '' }}</td>
-          <td><a href="{{ url_for('entries.edit_risk', tracker_id=tracker.id, risk_id=r.id) }}">Edit</a></td></tr>
+        <tr><td>{{ r.ref }}</td><td>{{ r.description }}</td><td>{{ group_names.get(r.group_id, '') }}</td><td>{{ r.owner_role }}</td>
+          <td>{{ r.status }}</td><td>{{ r.rag or '' }}</td><td>{{ format_date(r.target_date) if r.target_date else '' }}</td>
+          <td><div class="row-tools">
+            {{ tool_link(url_for('entries.edit_risk', tracker_id=tracker.id, risk_id=r.id), 'edit', 'Edit risk ' ~ r.ref) }}
+            {% if active %}
+            <form method="post" action="{{ url_for('entries.delete_risk', tracker_id=tracker.id, risk_id=r.id) }}" data-confirm="Delete risk {{ r.ref }}? This cannot be undone. To keep it on record, set its status to Closed instead.">
+              {{ csrf_field(csrf_token()) }}<button class="tool-button is-danger" type="submit" title="Delete" aria-label="Delete risk {{ r.ref }}">{{ icon('trash') }}</button>
+            </form>
+            {% endif %}
+          </div></td></tr>
         {% endfor %}
         </tbody>
       </table>
@@ -34,58 +43,5 @@
     <p class="empty-note">No risks have been recorded.</p>
     {% endif %}
   </section>
-  {% endif %}
-
-  <form id="add-risk" method="post" action="{{ url_for('entries.edit_risk', tracker_id=tracker.id, risk_id=risk.id) if risk else url_for('entries.risks', tracker_id=tracker.id) }}">
-    {% include "entries/_errors.html" %}
-    {{ csrf_field(csrf_token()) }}
-    <section class="settings-section" aria-labelledby="section-risk">
-      <header class="settings-section-head">
-        <h2 id="section-risk">{{ 'Risk ' ~ risk.ref if risk else 'Add a risk' }}</h2>
-        <p>What the risk is, what it affects and who owns it.</p>
-      </header>
-      {% call setting('Reference', 'Leave blank to number it automatically: R1, R2 and so on.', 'ref') %}
-      <input id="ref" name="ref" value="{{ form.get('ref', '') }}" placeholder="Automatic" aria-describedby="ref-help">
-      {% endcall %}
-      {% call setting('Description', 'What could go wrong. Shown in the Top risks table on the report.', 'description') %}
-      <textarea id="description" name="description" rows="2" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
-      {% endcall %}
-      {% call setting('Impact', 'What happens to the work if the risk occurs.', 'impact') %}
-      <textarea id="impact" name="impact" rows="2" aria-describedby="impact-help">{{ form.get('impact', '') }}</textarea>
-      {% endcall %}
-      {% call setting(group_name, 'Optional. The ' ~ group_name|lower ~ ' the risk applies to.', 'group_id') %}
-      <select id="group_id" name="group_id" aria-describedby="group_id-help"><option value="">None</option>
-        {% for grp in groups %}<option value="{{ grp.id }}" {{ 'selected' if form.get('group_id')|string == grp.id|string }}>{{ grp.name }}</option>{% endfor %}</select>
-      {% endcall %}
-      {% call setting('Owner', 'The person or role responsible for it. Shown on the report.', 'owner_role') %}
-      <input id="owner_role" name="owner_role" value="{{ form.get('owner_role', '') }}" aria-describedby="owner_role-help">
-      {% endcall %}
-    </section>
-    <section class="settings-section" aria-labelledby="section-risk-status">
-      <header class="settings-section-head">
-        <h2 id="section-risk-status">Status and dates</h2>
-        <p>Where the risk stands. Keep these current so the report ranks it correctly.</p>
-      </header>
-      {% call setting('Status', 'Closed risks drop off the report but stay in the register.', 'status') %}
-      <select id="status" name="status" aria-describedby="status-help">{% for s in statuses %}<option {{ 'selected' if form.get('status', 'Open') == s }}>{{ s }}</option>{% endfor %}</select>
-      {% endcall %}
-      {% call setting('RAG', 'How serious the risk is. Red risks are listed first on the report.', 'rag') %}
-      <select id="rag" name="rag" aria-describedby="rag-help"><option value="">Not set</option>{% for r in rag_values %}<option {{ 'selected' if form.get('rag') == r }}>{{ r }}</option>{% endfor %}</select>
-      {% endcall %}
-      {% call setting('Raised on', 'When the risk was first identified.', 'raised_on') %}
-      <input id="raised_on" name="raised_on" type="date" value="{{ form.get('raised_on', '') }}" aria-describedby="raised_on-help">
-      {% endcall %}
-      {% call setting('Target date', 'When it should be resolved. Shown on the report; earlier dates rank higher.', 'target_date') %}
-      <input id="target_date" name="target_date" type="date" value="{{ form.get('target_date', '') }}" aria-describedby="target_date-help">
-      {% endcall %}
-      {% call setting('Latest update', 'The most recent progress note.', 'latest_update') %}
-      <textarea id="latest_update" name="latest_update" rows="2" aria-describedby="latest_update-help">{{ form.get('latest_update', '') }}</textarea>
-      {% endcall %}
-    </section>
-    <div class="settings-actions">
-      {% if risk %}<a class="button" href="{{ url_for('entries.risks', tracker_id=tracker.id) }}">Back to the register</a>{% endif %}
-      <button class="button primary" type="submit">Save</button>
-    </div>
-  </form>
 </div>
 {% endblock %}

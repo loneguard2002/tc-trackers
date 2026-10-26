@@ -392,9 +392,70 @@ def groups(tracker_id: int):
         groups=_ordered_groups(db, tracker),
         deployed=deployed,
         is_owner=g.role == "owner",
-        rag_values=RAG_VALUES,
         page_title=f"{tracker.name}: {tracker.group_label or 'Groups'}",
         current_page="trackers",
+    )
+
+
+@bp.route("/trackers/<int:tracker_id>/groups/new", methods=["GET", "POST"])
+@require_tracker_role("owner")
+def new_group(tracker_id: int):
+    tracker, db = g.tracker, get_session()
+    if request.method == "GET":
+        return _render_group_form(tracker, None, 0, {"starting_completed": "0"}, [], 200)
+    refused = _refuse_if_archived(tracker, "trackers.groups")
+    if refused:
+        return refused
+    errors = _create_group(db, tracker, request.form)
+    if errors:
+        return _render_group_form(tracker, None, 0, request.form, errors, 400)
+    return redirect(url_for("trackers.groups", tracker_id=tracker.id))
+
+
+@bp.route("/trackers/<int:tracker_id>/groups/<int:group_id>", methods=["GET", "POST"])
+@require_tracker_role("editor")
+def edit_group(tracker_id: int, group_id: int):
+    tracker, db = g.tracker, get_session()
+    group = db.get(Group, group_id)
+    if group is None or group.tracker_id != tracker.id:
+        abort(404)
+    done = group.starting_completed + _deployed_by_group(db, tracker).get(group.id, 0)
+    if request.method == "GET":
+        form = {
+            "name": group.name,
+            "baseline": str(group.baseline),
+            "starting_completed": str(group.starting_completed),
+            "ready_not_complete": str(group.ready_not_complete),
+            "planned_completion": group.planned_completion.isoformat() if group.planned_completion else "",
+            "rag": group.rag or "",
+            "comment": group.comment,
+        }
+        return _render_group_form(tracker, group, done, form, [], 200)
+    refused = _refuse_if_archived(tracker, "trackers.groups")
+    if refused:
+        return refused
+    errors = _update_group(db, tracker, group, request.form)
+    if errors:
+        return _render_group_form(tracker, group, done, request.form, errors, 400)
+    return redirect(url_for("trackers.groups", tracker_id=tracker.id))
+
+
+def _render_group_form(tracker: Tracker, group: Group | None, done: int, form, errors: list[str], status: int):
+    label = tracker.group_label or "Group"
+    return (
+        render_template(
+            "trackers/group_form.html",
+            tracker=tracker,
+            group=group,
+            done=done,
+            form=form,
+            errors=errors,
+            is_owner=g.role == "owner",
+            rag_values=RAG_VALUES,
+            page_title=f"{tracker.name}: {group.name if group else 'New ' + label.lower()}",
+            current_page="trackers",
+        ),
+        status,
     )
 
 
@@ -402,23 +463,15 @@ def _handle_group_action(db, tracker: Tracker) -> str | None:
     """Apply one group action; return an error message, or ``None`` after committing a change."""
     action = request.form.get("action", "")
     if action == "update":
-        return _update_group(db, tracker)
+        errors = _update_group(db, tracker, _group_or_404(db, tracker), request.form)
+        return errors[0] if errors else None
     _require_owner()
     if action == "create":
-        values, errors = validate_group_form(request.form)
-        if not errors and _name_taken(db, tracker, values["name"]):
-            errors.append("A group with that name already exists.")
-        if errors:
-            return errors[0]
-        order = db.scalar(select(func.max(Group.sort_order)).where(Group.tracker_id == tracker.id))
-        group = Group(tracker_id=tracker.id, sort_order=(order or 0) + 1, **values)
-        db.add(group)
-        db.flush()
-        _audit_group(db, tracker, "group_created", group, {"name": group.name, "baseline": group.baseline})
-        db.commit()
-        flash("Group added.", "success")
-        return None
+        errors = _create_group(db, tracker, request.form)
+        return errors[0] if errors else None
     group = _group_or_404(db, tracker)
+    if action == "delete":
+        return _delete_group(db, tracker, group)
     if action == "retire":
         deployed = group.starting_completed + _deployed_by_group(db, tracker).get(group.id, 0)
         if group.baseline - deployed > 0:
@@ -443,24 +496,48 @@ def _handle_group_action(db, tracker: Tracker) -> str | None:
     return None
 
 
-def _update_group(db, tracker: Tracker) -> str | None:
-    group = _group_or_404(db, tracker)
-    changes: dict[str, list] = {}
-    snapshot, errors = validate_snapshot_form(request.form)
+def _create_group(db, tracker: Tracker, form) -> list[str]:
+    values, errors = validate_group_form(form)
+    if not errors and _name_taken(db, tracker, values["name"]):
+        errors.append("A group with that name already exists.")
     if errors:
-        return errors[0]
+        return errors
+    order = db.scalar(select(func.max(Group.sort_order)).where(Group.tracker_id == tracker.id))
+    group = Group(tracker_id=tracker.id, sort_order=(order or 0) + 1, **values)
+    db.add(group)
+    db.flush()
+    _audit_group(db, tracker, "group_created", group, {"name": group.name, "baseline": group.baseline})
+    db.commit()
+    flash("Group added.", "success")
+    return []
+
+
+def _delete_group(db, tracker: Tracker, group: Group) -> str | None:
+    """Delete a group that has no completions; risks that named it keep their place with no group."""
+    used = db.scalar(select(func.count()).select_from(CompletionEntry).where(CompletionEntry.group_id == group.id))
+    if used:
+        return "This group has completions recorded, so it cannot be deleted. Retire it instead."
+    _audit_group(db, tracker, "group_deleted", group, {"name": group.name, "baseline": group.baseline})
+    db.delete(group)
+    db.commit()
+    flash("Group deleted.", "success")
+    return None
+
+
+def _update_group(db, tracker: Tracker, group: Group, form) -> list[str]:
+    changes: dict[str, list] = {}
+    snapshot, errors = validate_snapshot_form(form)
+    if errors:
+        return errors
     owner_values: dict = {}
     if g.role == "owner":
         owner_values, errors = validate_group_form(
-            {
-                **request.form,
-                "starting_completed": request.form.get("starting_completed", str(group.starting_completed)),
-            }
+            {**form, "starting_completed": form.get("starting_completed", str(group.starting_completed))}
         )
         if errors:
-            return errors[0]
+            return errors
         if _name_taken(db, tracker, owner_values["name"], exclude_id=group.id):
-            return "A group with that name already exists."
+            return ["A group with that name already exists."]
     baseline_change = None
     for field, new_value in {**snapshot, **owner_values}.items():
         old_value = getattr(group, field)
@@ -477,7 +554,7 @@ def _update_group(db, tracker: Tracker) -> str | None:
         _audit_group(db, tracker, "group_updated", group, changes)
     db.commit()
     flash("Group saved.", "success")
-    return None
+    return []
 
 
 # --- Roles ---------------------------------------------------------------------------------------------------

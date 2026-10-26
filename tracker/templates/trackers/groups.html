@@ -1,54 +1,72 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import csrf_field, icon, tool_link %}
 {% set label = tracker.group_label or 'Group' %}
+{% set manage = is_owner and tracker.status == 'active' %}
+{% macro group_action(group, action, icon_name, text, disabled=False, confirm=None, danger=False) -%}
+<form method="post" action="{{ url_for('trackers.groups', tracker_id=tracker.id) }}"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
+  {{ csrf_field(csrf_token()) }}<input type="hidden" name="group_id" value="{{ group.id }}"><input type="hidden" name="action" value="{{ action }}">
+  <button class="tool-button{{ ' is-danger' if danger }}" type="submit" title="{{ text }}" aria-label="{{ text }}: {{ group.name }}"{{ ' disabled' if disabled }}>{{ icon(icon_name) }}</button>
+</form>
+{%- endmacro %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
-{% for group in groups %}
-{% set done = group.starting_completed + deployed.get(group.id, 0) %}
-<section class="card">
-  <h2>{{ group.name }} {% if group.retired %}<span class="badge badge-muted">Retired</span>{% endif %}</h2>
-  <p>{{ done }} of {{ group.baseline }} {{ tracker.unit_label }} complete; {{ group.baseline - done }} remaining.</p>
-  <form method="post" action="{{ url_for('trackers.groups', tracker_id=tracker.id) }}">
-    {{ csrf_field(csrf_token()) }}
-    <input type="hidden" name="action" value="update"><input type="hidden" name="group_id" value="{{ group.id }}">
-    {% if is_owner %}
-    <div class="form-row"><label for="name-{{ group.id }}">{{ label }} name</label><input id="name-{{ group.id }}" name="name" value="{{ group.name }}" required></div>
-    <div class="form-row"><label for="baseline-{{ group.id }}">Baseline ({{ tracker.unit_label }} in scope)</label><input id="baseline-{{ group.id }}" name="baseline" type="number" min="0" value="{{ group.baseline }}" required></div>
-    <div class="form-row"><label for="start-{{ group.id }}">Starting completed figure</label><input id="start-{{ group.id }}" name="starting_completed" type="number" min="0" value="{{ group.starting_completed }}"></div>
+<div class="settings">
+  <section class="settings-section" aria-labelledby="section-groups">
+    <header class="settings-section-head has-action">
+      <div>
+        <h2 id="section-groups">{{ label|plural }}</h2>
+        <p>Each {{ label|lower }} has its own scope and status. They appear on the report in this order; retired {{ label|lower|plural }} drop off it.</p>
+      </div>
+      {% if manage %}<a class="button primary button-small" href="{{ url_for('trackers.new_group', tracker_id=tracker.id) }}">{{ icon('plus') }}Add a {{ label|lower }}</a>{% endif %}
+    </header>
+    {% if groups %}
+    <div class="section-table register">
+      <table class="table">
+        <thead><tr><th scope="col">Name</th><th scope="col" class="num hide-narrow">Baseline</th><th scope="col" class="num hide-narrow">Complete</th>
+          <th scope="col" class="num">Remaining</th><th scope="col" class="num hide-narrow">Ready</th><th scope="col" class="hide-narrow">Planned completion</th>
+          <th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody>
+        {% for group in groups %}
+        {% set done = group.starting_completed + deployed.get(group.id, 0) %}
+        <tr{% if group.retired %} class="is-retired"{% endif %}>
+          <td><a class="cell-title" href="{{ url_for('trackers.edit_group', tracker_id=tracker.id, group_id=group.id) }}">{{ group.name }}</a>
+            {% if group.retired %}<span class="badge badge-muted">Retired</span>{% endif %}
+            {% if group.comment %}<span class="cell-sub">{{ group.comment }}</span>{% endif %}</td>
+          <td class="num hide-narrow">{{ group.baseline }}</td>
+          <td class="num hide-narrow">{{ done }}</td>
+          <td class="num" data-label="Remaining">{{ group.baseline - done }}</td>
+          <td class="num hide-narrow">{{ group.ready_not_complete }}</td>
+          <td class="hide-narrow">{{ group.planned_completion.strftime('%d %b %Y') if group.planned_completion else '' }}</td>
+          <td>{% if group.rag %}<span class="rag-label"><span class="rag-dot rag-dot-{{ group.rag|lower }}" aria-hidden="true"></span>{{ group.rag }}</span>{% else %}<span class="muted">Not set</span>{% endif %}</td>
+          <td class="cell-actions"><div class="row-tools">
+            {% if manage %}
+            {{ group_action(group, 'up', 'arrow-up', 'Move up', disabled=loop.first) }}
+            {{ group_action(group, 'down', 'arrow-down', 'Move down', disabled=loop.last) }}
+            {% endif %}
+            {{ tool_link(url_for('trackers.edit_group', tracker_id=tracker.id, group_id=group.id), 'edit', 'Edit ' ~ group.name) }}
+            {% if manage %}
+            {% if group.retired %}
+            {{ group_action(group, 'unretire', 'restore', 'Reinstate') }}
+            {% else %}
+            {{ group_action(group, 'retire', 'archive', 'Retire') }}
+            {% endif %}
+            {% if group.id in deployed %}
+            <span class="tool-button is-disabled" title="Completions are recorded against it. Retire it instead." role="img" aria-label="Cannot delete {{ group.name }}: completions are recorded against it">{{ icon('trash') }}</span>
+            {% else %}
+            {{ group_action(group, 'delete', 'trash', 'Delete', confirm='Delete ' ~ group.name ~ '? This cannot be undone.', danger=True) }}
+            {% endif %}
+            {% endif %}
+          </div></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="section-foot-note">Retire a {{ label|lower }} once its remaining figure is zero. Only {{ label|lower|plural }} with no completions recorded can be deleted.</p>
+    {% else %}
+    <p class="empty-note">No {{ label|plural|lower }} have been added yet.</p>
     {% endif %}
-    <div class="form-row"><label for="ready-{{ group.id }}">Ready, not yet complete</label><input id="ready-{{ group.id }}" name="ready_not_complete" type="number" min="0" value="{{ group.ready_not_complete }}"></div>
-    <div class="form-row"><label for="planned-{{ group.id }}">Planned completion</label><input id="planned-{{ group.id }}" name="planned_completion" type="date" value="{{ group.planned_completion.isoformat() if group.planned_completion }}"></div>
-    <div class="form-row"><label for="rag-{{ group.id }}">Status</label>
-      <select id="rag-{{ group.id }}" name="rag"><option value="">Not set</option>
-        {% for r in rag_values %}<option {{ 'selected' if group.rag == r }}>{{ r }}</option>{% endfor %}</select></div>
-    <div class="form-row"><label for="comment-{{ group.id }}">Comment or exception</label><textarea id="comment-{{ group.id }}" name="comment" rows="2">{{ group.comment }}</textarea></div>
-    <button class="button primary" type="submit">Save</button>
-  </form>
-  {% if is_owner and tracker.status == 'active' %}
-  <div class="row-actions">
-    {% for act, text in (('up', 'Move up'), ('down', 'Move down'), ('unretire' if group.retired else 'retire', 'Reinstate' if group.retired else 'Retire')) %}
-    <form method="post" action="{{ url_for('trackers.groups', tracker_id=tracker.id) }}">
-      {{ csrf_field(csrf_token()) }}<input type="hidden" name="group_id" value="{{ group.id }}"><input type="hidden" name="action" value="{{ act }}">
-      <button class="button" type="submit">{{ text }}</button>
-    </form>
-    {% endfor %}
-  </div>
-  {% endif %}
-</section>
-{% else %}
-<section class="empty-state"><p>No {{ label|plural|lower }} have been added yet.</p></section>
-{% endfor %}
-{% if is_owner and tracker.status == 'active' %}
-<section class="card">
-  <h2>Add a {{ label|lower }}</h2>
-  <form method="post" action="{{ url_for('trackers.groups', tracker_id=tracker.id) }}">
-    {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="create">
-    <div class="form-row"><label for="new-name">Name</label><input id="new-name" name="name" required></div>
-    <div class="form-row"><label for="new-baseline">Baseline</label><input id="new-baseline" name="baseline" type="number" min="0" required></div>
-    <div class="form-row"><label for="new-start">Starting completed figure</label><input id="new-start" name="starting_completed" type="number" min="0" value="0"></div>
-    <button class="button primary" type="submit">Add</button>
-  </form>
-</section>
-{% endif %}
+  </section>
+</div>
 {% endblock %}

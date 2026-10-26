@@ -302,7 +302,7 @@ def risks(tracker_id: int):
         if not errors and values["ref"] and values["ref"] in existing:
             errors.append("That reference is already used.")
         if errors:
-            return _render_risks(tracker, db, context, request.form, errors, 400)
+            return _render_risk_form(tracker, None, context, request.form, errors, 400)
         values["ref"] = values["ref"] or next_risk_ref(existing)
         risk = Risk(tracker_id=tracker.id, **values)
         db.add(risk)
@@ -310,29 +310,35 @@ def risks(tracker_id: int):
             db.flush()
         except IntegrityError:
             db.rollback()
-            return _render_risks(tracker, db, context, request.form, ["That reference is already used."], 400)
+            return _render_risk_form(tracker, None, context, request.form, ["That reference is already used."], 400)
         _audit(db, tracker, "risk_created", "risk", risk.id, {"ref": risk.ref})
         db.commit()
         flash(f"Risk {risk.ref} added.", "success")
         return redirect(url_for("entries.risks", tracker_id=tracker.id))
-    return _render_risks(tracker, db, context, {}, [], 200)
-
-
-def _render_risks(tracker: Tracker, db, context: dict, form, errors: list[str], status: int):
     items = db.scalars(select(Risk).where(Risk.tracker_id == tracker.id).order_by(Risk.id)).all()
-    return (
-        render_template(
-            "entries/risks.html",
-            risks=items,
-            group_names={grp.id: grp.name for grp in context["groups"]},
-            form=form,
-            errors=errors,
-            risk=None,
-            **context,
-            **_page(tracker, "Risks"),
-        ),
-        status,
+    return render_template(
+        "entries/risks.html",
+        risks=items,
+        group_names={grp.id: grp.name for grp in context["groups"]},
+        format_date=format_date,
+        **_page(tracker, "Risks"),
     )
+
+
+@bp.get("/trackers/<int:tracker_id>/risks/new")
+@require_tracker_role("editor")
+def new_risk(tracker_id: int):
+    tracker, db = g.tracker, get_session()
+    return _render_risk_form(tracker, None, _risk_context(db, tracker), {}, [], 200)
+
+
+def _render_risk_form(tracker: Tracker, risk: Risk | None, context: dict, form, errors: list[str], status: int):
+    title = f"Risk {risk.ref}" if risk else "New risk"
+    return (
+        render_template("entries/risk_form.html", risk=risk, form=form, errors=errors, **context,
+                        **_page(tracker, title)),
+        status,
+    )  # fmt: skip
 
 
 @bp.route("/trackers/<int:tracker_id>/risks/<int:risk_id>", methods=["GET", "POST"])
@@ -345,11 +351,7 @@ def edit_risk(tracker_id: int, risk_id: int):
     context = _risk_context(db, tracker)
 
     def render(form, errors, status):
-        return (
-            render_template("entries/risks.html", risks=[], group_names={}, form=form, errors=errors, risk=item,
-                            **context, **_page(tracker, f"Risk {item.ref}")),
-            status,
-        )  # fmt: skip
+        return _render_risk_form(tracker, item, context, form, errors, status)
 
     if request.method == "GET":
         form = {
@@ -386,4 +388,21 @@ def edit_risk(tracker_id: int, risk_id: int):
         _audit(db, tracker, "risk_updated", "risk", item.id, changed)
     db.commit()
     flash(f"Risk {item.ref} saved.", "success")
+    return redirect(url_for("entries.risks", tracker_id=tracker.id))
+
+
+@bp.post("/trackers/<int:tracker_id>/risks/<int:risk_id>/delete")
+@require_tracker_role("editor")
+def delete_risk(tracker_id: int, risk_id: int):
+    tracker, db = g.tracker, get_session()
+    refused = _refuse_if_archived(tracker, "entries.risks")
+    if refused:
+        return refused
+    item = db.get(Risk, risk_id)
+    if item is None or item.tracker_id != tracker.id:
+        abort(404)
+    _audit(db, tracker, "risk_deleted", "risk", item.id, {"ref": item.ref, "description": item.description})
+    db.delete(item)
+    db.commit()
+    flash(f"Risk {item.ref} deleted.", "success")
     return redirect(url_for("entries.risks", tracker_id=tracker.id))

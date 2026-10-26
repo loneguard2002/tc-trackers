@@ -5,7 +5,7 @@ from datetime import date
 from sqlalchemy import select
 
 from tests.conftest import post
-from tracker.models import AuditLog, CompletionEntry, Group, ReportInput, Tracker, TrackerRole, Week
+from tracker.models import AuditLog, CompletionEntry, Group, ReportInput, Risk, Tracker, TrackerRole, Week
 from tracker.trackers import load_engine_inputs, tracker_summary
 
 SETTINGS = {
@@ -179,6 +179,89 @@ def test_editor_can_edit_snapshot_not_baseline(client, logged_in_user, db, track
         post(client, f"/trackers/{tracker.id}/groups", {"action": "create", "name": "X", "baseline": "1"}).status_code
         == 403
     )
+
+
+def test_groups_page_is_a_table_with_row_actions(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    first = make_group(db, tracker, baseline=10)
+    second = make_group(db, tracker, name="Site B", baseline=5)
+    add_entry(db, tracker, first, date(2026, 9, 1), 4, date(2026, 9, 4))
+    url = f"/trackers/{tracker.id}/groups"
+    html = client.get(url).get_data(as_text=True)
+    assert f'href="{url}/new"' in html
+    assert f'href="{url}/{first.id}"' in html and f'href="{url}/{second.id}"' in html
+    assert html.count('value="delete"') == 1  # Site A has completions, so only Site B can be deleted
+    assert "Cannot delete Site A" in html
+    assert 'name="baseline"' not in html  # editing has its own page
+
+
+def test_add_group_page(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    url = f"/trackers/{tracker.id}/groups/new"
+    page = client.get(url)
+    assert page.status_code == 200 and b'name="baseline"' in page.data
+    assert post(client, url, {"name": "Site A", "baseline": "-1"}).status_code == 400
+    assert post(client, url, {"name": "Site A", "baseline": "10", "starting_completed": "2"}).status_code == 302
+    group = db.scalars(select(Group)).one()
+    assert (group.name, group.baseline, group.starting_completed) == ("Site A", 10, 2)
+    response = post(client, url, {"name": "Site A", "baseline": "3"})
+    assert response.status_code == 400 and b"A group with that name already exists." in response.data
+
+
+def test_edit_group_page(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    group = make_group(db, tracker, baseline=10)
+    url = f"/trackers/{tracker.id}/groups/{group.id}"
+    page = client.get(url)
+    assert page.status_code == 200
+    assert b'value="Site A"' in page.data and b'aria-current="page"' in page.data
+    form = {"name": "Site Z", "baseline": "12", "starting_completed": "1", "ready_not_complete": "3", "rag": "Amber"}
+    assert post(client, url, {**form, "planned_completion": "not a date"}).status_code == 400
+    assert post(client, url, {**form, "planned_completion": "2026-11-06", "comment": "Late"}).status_code == 302
+    db.refresh(group)
+    assert (group.name, group.baseline, group.starting_completed, group.ready_not_complete) == ("Site Z", 12, 1, 3)
+    assert (group.rag, group.comment, group.planned_completion) == ("Amber", "Late", date(2026, 11, 6))
+    assert client.get(f"/trackers/{tracker.id}/groups/999999").status_code == 404
+
+
+def test_editor_edit_group_page_changes_status_only(client, logged_in_user, db, tracker_factory, grant):
+    tracker = tracker_factory()
+    grant(logged_in_user, tracker, "editor")
+    group = make_group(db, tracker, baseline=10)
+    url = f"/trackers/{tracker.id}/groups/{group.id}"
+    page = client.get(url)
+    assert page.status_code == 200 and b'name="baseline"' not in page.data
+    post(client, url, {"name": "Hacked", "baseline": "99", "ready_not_complete": "4", "rag": "Red"})
+    db.refresh(group)
+    assert (group.name, group.baseline, group.ready_not_complete, group.rag) == ("Site A", 10, 4, "Red")
+    assert client.get(f"/trackers/{tracker.id}/groups/new").status_code == 404
+    assert 'value="delete"' not in client.get(f"/trackers/{tracker.id}/groups").get_data(as_text=True)
+
+
+def test_delete_group(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    used = make_group(db, tracker, baseline=10)
+    unused = make_group(db, tracker, name="Site B", baseline=5)
+    add_entry(db, tracker, used, date(2026, 9, 1), 4, date(2026, 9, 4))
+    risk = Risk(tracker_id=tracker.id, ref="R1", group_id=unused.id)
+    db.add(risk)
+    db.commit()
+    url = f"/trackers/{tracker.id}/groups"
+    page = post(client, url, {"action": "delete", "group_id": used.id}, follow_redirects=True)
+    assert b"has completions recorded, so it cannot be deleted" in page.data
+    post(client, url, {"action": "delete", "group_id": unused.id})
+    db.expire_all()
+    assert [grp.name for grp in db.scalars(select(Group))] == ["Site A"]
+    assert db.get(Risk, risk.id).group_id is None
+    assert any(a.action == "group_deleted" for a in audit_actions(db, tracker.id))
+
+
+def test_editor_cannot_delete_group(client, logged_in_user, db, tracker_factory, grant):
+    tracker = tracker_factory()
+    grant(logged_in_user, tracker, "editor")
+    group = make_group(db, tracker, baseline=10)
+    assert post(client, f"/trackers/{tracker.id}/groups", {"action": "delete", "group_id": group.id}).status_code == 403
+    assert db.get(Group, group.id) is not None
 
 
 def test_viewer_cannot_open_groups(client, logged_in_user, db, tracker_factory, grant):

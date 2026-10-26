@@ -1,9 +1,12 @@
 // Sortable, filterable tables (Tabulator). Any <table data-table> is rebuilt from its own rows, so the server-drawn
 // table remains the page's content without JavaScript and in the PDF.
 //   <table data-table data-table-page-size="50" data-table-export="entries.csv">
-//   <th data-filter="text|select|none" data-sort="string|number|date|none" data-html>
+//   <th data-filter="text|select|none" data-sort="string|number|date|none" data-html data-width="120"
+//       data-min-width="200" data-frozen>
 // Plain cells are read as text and shown escaped; data-html cells (forms, links) keep their markup and are never
-// sorted, filtered or exported.
+// sorted, filtered or exported. data-width fixes a column's width in pixels and the others share the rest, none
+// narrower than its data-min-width; a narrow screen scrolls the table sideways. A data-frozen last column (row
+// actions) stays in view while it scrolls.
 (function () {
   "use strict";
 
@@ -41,8 +44,14 @@
     var column = {
       title: title,
       field: "c" + index,
+      vertAlign: "middle",
       titleFormatter: function () { return escapeHtml(title); }
     };
+    var width = parseInt(th.getAttribute("data-width") || "", 10);
+    var minWidth = parseInt(th.getAttribute("data-min-width") || "", 10);
+    if (width > 0) column.width = width;
+    if (minWidth > 0) column.minWidth = minWidth;
+    if (th.hasAttribute("data-frozen")) column.frozen = true;
     if (html) {
       column.formatter = "html";
       column.headerSort = false;
