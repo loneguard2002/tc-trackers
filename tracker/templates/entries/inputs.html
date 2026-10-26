@@ -1,23 +1,52 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import csrf_field, setting %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
-<h2>Weekly inputs</h2>
-<form method="get" class="form-inline">
-  <label for="week">Week ending</label>
-  <select id="week" name="week">{% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if w == week }}>{{ format_date(w) }}</option>{% endfor %}</select>
-  <button class="button" type="submit">Show</button>
-</form>
-{% include "entries/_errors.html" %}
-<form method="post" action="{{ url_for('entries.inputs', tracker_id=tracker.id, week=week.isoformat()) }}">
-  {{ csrf_field(csrf_token()) }}
-  <div class="form-row"><label for="status">Overall status</label>
-    <select id="status" name="status"><option value="">Not set</option>
-      {% for r in rag_values %}<option {{ 'selected' if form.get('status') == r }}>{{ r }}</option>{% endfor %}</select></div>
-  <div class="form-row"><label for="headline">Headline</label><textarea id="headline" name="headline" rows="3">{{ form.get('headline', '') }}</textarea></div>
-  <div class="form-row"><label for="decisions">Decisions or support needed</label><textarea id="decisions" name="decisions" rows="3">{{ form.get('decisions', '') }}</textarea></div>
-  <button class="button primary" type="submit">Save</button>
-</form>
-{% if row and row.prepared_by %}<p class="muted">Last prepared by {{ preparer.full_name if preparer else 'a former user' }}.</p>{% endif %}
+<div class="settings settings-narrow">
+  <div class="toolbar">
+    <form method="get">
+      <div class="toolbar-field">
+        <label for="week">Week ending</label>
+        <select id="week" name="week">{% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if w == week }}>{{ format_date(w) }}</option>{% endfor %}</select>
+      </div>
+      <button class="button" type="submit">Show</button>
+    </form>
+  </div>
+
+  <form method="post" action="{{ url_for('entries.inputs', tracker_id=tracker.id, week=week.isoformat()) }}">
+    {% include "entries/_errors.html" %}
+    {{ csrf_field(csrf_token()) }}
+    <section class="settings-section" aria-labelledby="section-inputs">
+      <header class="settings-section-head">
+        <h2 id="section-inputs">Weekly inputs for {{ format_date(week) }}</h2>
+        <p>The commentary at the top of this week's report and email. The figures are calculated from the entries.</p>
+      </header>
+      <div class="setting-row is-wide" role="radiogroup" aria-labelledby="status-label" aria-describedby="status-help">
+        <div class="setting-label">
+          <span class="setting-title" id="status-label">Overall status</span>
+          <p class="setting-help" id="status-help">The RAG rating in the report's status band and the email subject.</p>
+        </div>
+        <div class="setting-control">
+          <div class="segmented">
+            <label><input type="radio" name="status" value="" {{ 'checked' if not form.get('status') }}><span class="rag-dot" aria-hidden="true"></span>Not set</label>
+            {% for r in rag_values %}
+            <label><input type="radio" name="status" value="{{ r }}" {{ 'checked' if form.get('status') == r }}><span class="rag-dot rag-dot-{{ r|lower }}" aria-hidden="true"></span>{{ r }}</label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% call setting('Headline', 'One or two sentences on how the week went. Shown under the status on the report.', 'headline', 'is-wide') %}
+      <textarea id="headline" name="headline" rows="3" aria-describedby="headline-help">{{ form.get('headline', '') }}</textarea>
+      {% endcall %}
+      {% call setting('Decisions or support needed', 'Anything you need from readers. Shown as "Needed from you"; leave blank to show None.', 'decisions', 'is-wide') %}
+      <textarea id="decisions" name="decisions" rows="3" aria-describedby="decisions-help">{{ form.get('decisions', '') }}</textarea>
+      {% endcall %}
+    </section>
+    <div class="settings-actions">
+      {% if row and row.prepared_by %}<span class="settings-actions-note">Last prepared by {{ preparer.full_name if preparer else 'a former user' }}.</span>{% endif %}
+      <button class="button primary" type="submit">Save</button>
+    </div>
+  </form>
+</div>
 {% endblock %}

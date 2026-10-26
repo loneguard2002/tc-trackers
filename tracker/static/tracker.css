@@ -179,7 +179,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 
 .input-affix { display: flex; }
 .input-affix input { border-radius: var(--radius) 0 0 var(--radius); }
-.input-affix span { display: flex; align-items: center; padding: 0 12px; border: 1px solid var(--border); border-left: 0; border-radius: 0 var(--radius) var(--radius) 0; background: var(--bg); color: var(--muted); font-size: .875rem; }
+.input-affix input { flex: 1; min-width: 0; }
+.input-affix span { display: flex; align-items: center; white-space: nowrap; padding: 0 12px; border: 1px solid var(--border); border-left: 0; border-radius: 0 var(--radius) var(--radius) 0; background: var(--bg); color: var(--muted); font-size: .875rem; }
 
 .switch { position: relative; display: inline-flex; vertical-align: middle; }
 .switch input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
@@ -201,7 +202,94 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .settings-section-danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
 .settings-section-danger .settings-section-head h2 { color: var(--danger); }
 
+/* Other tracker pages built from settings sections: one column for forms, full width for tables. */
+.settings-narrow { max-width: 880px; }
+.settings form[id] { scroll-margin-top: calc(var(--topbar-height) + 16px); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.settings-section-head.has-action { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.section-body { padding: 16px 20px; }
+.section-body > .data-table.tabulator, .section-body > .table { margin-bottom: 0; }
+.section-note { margin: 10px 0 0; color: var(--muted); font-size: .75rem; }
+.settings-section-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+.settings-section-foot form { margin: 0; }
+.settings-section .setting-row.is-wide { grid-template-columns: minmax(0, 1fr); }
+.settings-actions-note { margin-right: auto; align-self: center; color: var(--muted); font-size: .8125rem; }
+.button-small { padding: 6px 12px; font-size: .875rem; }
+.button-quiet { border-color: transparent; background: transparent; color: var(--muted); }
+.button-quiet:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.code-input { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .8125rem; line-height: 1.5; }
+@container (min-width: 960px) {
+  .settings > form > .span-all { grid-column: 1 / -1; }
+}
+
+/* A strip of filters or a week picker above the content it controls. */
+.toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 20px; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.toolbar form { display: contents; }
+.toolbar-field { display: grid; gap: 4px; }
+.toolbar-field label { margin: 0; color: var(--muted); font-size: .75rem; font-weight: 600; }
+.toolbar-field select { width: auto; min-width: 180px; padding: 7px 10px; font-size: .9rem; }
+.toolbar-end { margin-left: auto; }
+
+/* Access: one row per person, with their role on the right. */
+.role-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 10px 0 0; }
+.role-legend div { padding: 8px 10px; border-radius: 8px; background: var(--bg); }
+.role-legend dt { font-size: .8125rem; font-weight: 700; }
+.role-legend dd { margin: 2px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.4; }
+.member-list { margin: 0; padding: 0; list-style: none; }
+.member { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 20px; }
+.member + .member { border-top: 1px solid var(--border); }
+.member-avatar { display: grid; flex: none; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: color-mix(in srgb, var(--primary) 14%, var(--surface)); color: var(--primary); font-size: 14px; font-weight: 700; }
+.member-who { flex: 1 1 220px; min-width: 0; }
+.member-name { display: block; font-weight: 600; }
+.member-email { display: block; color: var(--muted); font-size: .8125rem; overflow-wrap: anywhere; }
+.member-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.member-actions form { display: flex; align-items: center; gap: 8px; margin: 0; }
+.member-actions select { width: auto; padding: 6px 10px; font-size: .875rem; }
+.empty-note { margin: 0; padding: 16px 20px; color: var(--muted); font-size: .875rem; }
+
+/* Green / Amber / Red picker: radio buttons drawn as one segmented control. */
+.segmented { display: inline-flex; flex-wrap: nowrap; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.segmented label { position: relative; display: flex; align-items: center; gap: 6px; margin: 0; padding: 6px 12px; color: var(--muted); font-size: .875rem; font-weight: 600; cursor: pointer; }
+.segmented label + label { border-left: 1px solid var(--border); }
+.segmented input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.segmented label:has(input:checked) { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--text); }
+.segmented label:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.rag-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border); }
+.rag-dot-green { background: var(--success); } .rag-dot-amber { background: var(--warning); } .rag-dot-red { background: var(--danger); }
+
+/* Targets: one small field per week, grouped by month. */
+.target-month + .target-month { border-top: 1px solid var(--border); }
+.target-month h3 { margin: 0; padding: 12px 20px 0; color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.target-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px 12px; padding: 8px 20px 14px; }
+.target-cell label { margin: 0 0 3px; font-size: .8125rem; font-weight: 600; }
+.target-cell input { padding: 6px 10px; font-size: .9rem; }
+
+/* Email: placeholder reference and the recent-sends table. */
+.placeholder-help { margin-top: 8px; font-size: .8125rem; }
+.placeholder-help summary { color: var(--primary); font-weight: 600; cursor: pointer; }
+.placeholder-help dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 8px 0 0; }
+.placeholder-help dt code { font-size: .8125rem; }
+.placeholder-help dd { margin: 0; color: var(--muted); }
+.section-table { overflow-x: auto; }
+.section-table table { font-size: .875rem; }
+.section-table :is(th, td) { padding: 9px 12px; }
+.section-table :is(th, td):first-child { padding-left: 20px; }
+.section-table :is(th, td):last-child { padding-right: 20px; }
+.section-table tr:last-child td { border-bottom: 0; }
+.inline-form { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; align-items: end; gap: 10px; }
+.inline-form label { margin: 0 0 3px; font-size: .8125rem; font-weight: 600; }
+.inline-form input { padding: 7px 10px; font-size: .9rem; }
+.preview-week { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.preview-week select { width: auto; min-width: 200px; padding: 7px 10px; font-size: .9rem; }
+.preview-week label { margin: 0 0 3px; font-size: .8125rem; font-weight: 600; }
+.preview-subject { margin: 16px 0 8px; font-size: .9rem; }
+
 @media (max-width: 720px) {
+  .role-legend, .inline-form { grid-template-columns: 1fr; }
+  .member, .section-body { padding-left: 16px; padding-right: 16px; }
+  .toolbar-end { margin-left: 0; }
+  .segmented { display: flex; }
+  .segmented label { flex: 1; justify-content: center; gap: 5px; padding: 6px; font-size: .8125rem; white-space: nowrap; }
   .setting-row { grid-template-columns: 1fr; padding: 14px 16px; }
   .settings-section-head { padding: 14px 16px; }
   .setting-control-end { justify-content: flex-start; }

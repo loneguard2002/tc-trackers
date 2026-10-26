@@ -1,40 +1,72 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field %}
+{% macro role_form(u, button_label) -%}
+<form method="post" action="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">
+  {{ csrf_field(csrf_token()) }}<input type="hidden" name="user_id" value="{{ u.id }}">
+  <label class="sr-only" for="role-{{ u.id }}">Role for {{ u.full_name }}</label>
+  <select id="role-{{ u.id }}" name="role">
+    {% for r in roles %}<option value="{{ r }}" {{ 'selected' if current.get(u.id) == r }}>{{ r|title }}</option>{% endfor %}
+  </select>
+  <button class="button button-small" type="submit">{{ button_label }}</button>
+</form>
+{%- endmacro %}
+{% macro person(u) -%}
+<span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
+<span class="member-who"><span class="member-name">{{ u.full_name }}</span><span class="member-email">{{ u.email }}</span></span>
+{%- endmacro %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
-<section class="card">
-  <h2>Access</h2>
-  <table class="table">
-    <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
-    <tbody>
-    {% for u in users %}
-      <tr>
-        <td>{{ u.full_name }}</td><td>{{ u.email }}</td>
-        {% if u.is_admin %}
-        <td>Administrator (owner)</td><td></td>
-        {% else %}
-        <td>{{ current.get(u.id, 'No access')|title }}</td>
-        <td class="row-actions">
-          <form method="post" action="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">
-            {{ csrf_field(csrf_token()) }}<input type="hidden" name="user_id" value="{{ u.id }}">
-            <label class="sr-only" for="role-{{ u.id }}">Role for {{ u.full_name }}</label>
-            <select id="role-{{ u.id }}" name="role">
-              {% for r in roles %}<option value="{{ r }}" {{ 'selected' if current.get(u.id) == r }}>{{ r|title }}</option>{% endfor %}
-            </select>
-            <button class="button" type="submit">Set role</button>
-          </form>
-          {% if u.id in current %}
+{% set members = users|selectattr('is_admin')|list + users|rejectattr('is_admin')|selectattr('id', 'in', current)|list %}
+{% set others = users|rejectattr('is_admin')|rejectattr('id', 'in', current)|list %}
+<div class="settings settings-narrow">
+  <section class="settings-section" aria-labelledby="section-members">
+    <header class="settings-section-head">
+      <h2 id="section-members">Access</h2>
+      <p>Who can open this tracker and what they can do. Each role includes everything the one before it can do.</p>
+      <dl class="role-legend">
+        <div><dt>Viewer</dt><dd>Opens the report and downloads it.</dd></div>
+        <div><dt>Editor</dt><dd>Also records entries, weekly inputs, targets, {{ (tracker.group_label|plural if tracker.group_label else 'groups')|lower }} and risks.</dd></div>
+        <div><dt>Owner</dt><dd>Also changes settings and manages the weekly email.</dd></div>
+      </dl>
+    </header>
+    <ul class="member-list">
+      {% for u in members %}
+      <li class="member">
+        {{ person(u) }}
+        <div class="member-actions">
+          {% if u.is_admin %}
+          <span class="badge badge-info">Administrator (owner)</span>
+          {% else %}
+          {{ role_form(u, 'Set role') }}
           <form method="post" action="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">
             {{ csrf_field(csrf_token()) }}<input type="hidden" name="user_id" value="{{ u.id }}"><input type="hidden" name="role" value="remove">
-            <button class="button" type="submit">Remove access</button>
+            <button class="button button-small button-quiet" type="submit">Remove access</button>
           </form>
           {% endif %}
-        </td>
-        {% endif %}
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-</section>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="settings-section" aria-labelledby="section-add-people">
+    <header class="settings-section-head">
+      <h2 id="section-add-people">Add people</h2>
+      <p>Users who cannot open this tracker yet. Administrators have owner access everywhere, so they are not listed here.</p>
+    </header>
+    {% if others %}
+    <ul class="member-list">
+      {% for u in others %}
+      <li class="member">
+        {{ person(u) }}
+        <div class="member-actions">{{ role_form(u, 'Give access') }}</div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-note">Everyone already has access.</p>
+    {% endif %}
+  </section>
+</div>
 {% endblock %}

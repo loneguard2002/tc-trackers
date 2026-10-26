@@ -3,19 +3,35 @@
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
-<h2>Weekly targets</h2>
-<p class="muted">Leave a week blank to clear its target.</p>
-<form method="post" action="{{ url_for('entries.targets', tracker_id=tracker.id) }}">
-  {{ csrf_field(csrf_token()) }}
-  <table class="table">
-    <thead><tr><th>Week ending</th><th>Target ({{ tracker.unit_label }})</th></tr></thead>
-    <tbody>
-    {% for w in weeks %}
-    <tr><td><label for="target-{{ w.isoformat() }}">{{ format_date(w) }}</label></td>
-      <td><input id="target-{{ w.isoformat() }}" name="target-{{ w.isoformat() }}" type="number" min="0" step="1" value="{{ form.get('target-' ~ w.isoformat(), '') }}"></td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  <button class="button primary" type="submit">Save targets</button>
-</form>
+<div class="settings">
+  <form method="post" action="{{ url_for('entries.targets', tracker_id=tracker.id) }}">
+    {{ csrf_field(csrf_token()) }}
+    <section class="settings-section span-all" aria-labelledby="section-targets">
+      <header class="settings-section-head">
+        <h2 id="section-targets">Weekly targets</h2>
+        <p>The number you plan to finish each week{{ ' (' ~ tracker.unit_label ~ ')' if tracker.unit_label }}. Targets draw the plan line on the report charts. Leave a week blank to clear its target.</p>
+      </header>
+      {% set ns = namespace(month=None) %}
+      {% for w in weeks %}
+      {% set month = w.strftime('%B %Y') %}
+      {% if month != ns.month %}
+      {% if ns.month %}</div></div>{% endif %}
+      {% set ns.month = month %}
+      <div class="target-month" role="group" aria-labelledby="month-{{ w.strftime('%Y-%m') }}">
+        <h3 id="month-{{ w.strftime('%Y-%m') }}">{{ month }}</h3>
+        <div class="target-grid">
+      {% endif %}
+          <div class="target-cell">
+            <label for="target-{{ w.isoformat() }}">{{ format_date(w)[:6] }}<span class="sr-only"> {{ w.year }}</span></label>
+            <input id="target-{{ w.isoformat() }}" name="target-{{ w.isoformat() }}" type="number" min="0" step="1" inputmode="numeric" value="{{ form.get('target-' ~ w.isoformat(), '') }}">
+          </div>
+      {% if loop.last %}</div></div>{% endif %}
+      {% endfor %}
+    </section>
+    <div class="settings-actions">
+      <a class="button" href="{{ url_for('report.view', tracker_id=tracker.id) }}">Cancel</a>
+      <button class="button primary" type="submit">Save targets</button>
+    </div>
+  </form>
+</div>
 {% endblock %}

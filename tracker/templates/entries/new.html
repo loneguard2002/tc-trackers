@@ -1,20 +1,41 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import csrf_field, setting %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
-<h2>Record completions</h2>
-{% include "entries/_errors.html" %}
-{% if tracker.status == 'active' %}
-<form method="post" action="{{ url_for('entries.new_entry', tracker_id=tracker.id) }}">
-  {{ csrf_field(csrf_token()) }}
-  <div class="form-row"><label for="group_id">{{ tracker.group_label or 'Group' }}</label>
-    <select id="group_id" name="group_id" required><option value="">Choose</option>
-      {% for grp in groups %}<option value="{{ grp.id }}" {{ 'selected' if form.get('group_id')|string == grp.id|string }}>{{ grp.name }}</option>{% endfor %}</select></div>
-  <div class="form-row"><label for="entry_date">Date</label><input id="entry_date" name="entry_date" type="date" value="{{ form.get('entry_date', '') }}" required></div>
-  <div class="form-row"><label for="quantity">Quantity ({{ tracker.unit_label }})</label><input id="quantity" name="quantity" type="number" min="1" step="1" value="{{ form.get('quantity', '') }}" required></div>
-  <div class="form-row"><label for="note">Note</label><input id="note" name="note" value="{{ form.get('note', '') }}"></div>
-  <button class="button primary" type="submit">Record</button>
-</form>
-{% endif %}
+{% set group_word = (tracker.group_label or 'group')|lower %}
+<div class="settings settings-narrow">
+  {% if tracker.status == 'active' %}
+  <form method="post" action="{{ url_for('entries.new_entry', tracker_id=tracker.id) }}">
+    {% include "entries/_errors.html" %}
+    {{ csrf_field(csrf_token()) }}
+    <section class="settings-section" aria-labelledby="section-record">
+      <header class="settings-section-head">
+        <h2 id="section-record">Record completions</h2>
+        <p>Log work finished on a given day. It is added to that week's figures on the report straight away.</p>
+      </header>
+      {% call setting(tracker.group_label or 'Group', 'Where the work was done. Retired ' ~ group_word ~ 's are not listed.', 'group_id') %}
+      <select id="group_id" name="group_id" required aria-describedby="group_id-help"><option value="">Choose</option>
+        {% for grp in groups %}<option value="{{ grp.id }}" {{ 'selected' if form.get('group_id')|string == grp.id|string }}>{{ grp.name }}</option>{% endfor %}</select>
+      {% endcall %}
+      {% call setting('Date', 'The day the work was finished. It counts towards the week ending on or after this date.', 'entry_date') %}
+      <input id="entry_date" name="entry_date" type="date" value="{{ form.get('entry_date', '') }}" required aria-describedby="entry_date-help">
+      {% endcall %}
+      {% call setting('Quantity', 'How many were finished on that day, as a whole number of 1 or more.', 'quantity') %}
+      <div class="input-affix">
+        <input id="quantity" name="quantity" type="number" min="1" step="1" inputmode="numeric" value="{{ form.get('quantity', '') }}" required aria-describedby="quantity-help">
+        {% if tracker.unit_label %}<span aria-hidden="true">{{ tracker.unit_label }}</span>{% endif %}
+      </div>
+      {% endcall %}
+      {% call setting('Note', 'Optional. Shown in the entries list only, not on the report.', 'note') %}
+      <input id="note" name="note" value="{{ form.get('note', '') }}" aria-describedby="note-help">
+      {% endcall %}
+    </section>
+    <div class="settings-actions">
+      <a class="button" href="{{ url_for('entries.list_entries', tracker_id=tracker.id) }}">Back to entries</a>
+      <button class="button primary" type="submit">Record</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
 {% endblock %}

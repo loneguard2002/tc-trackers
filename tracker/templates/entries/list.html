@@ -6,34 +6,50 @@
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
-<h2>Entries</h2>
-<form method="get" class="form-inline">
-  <label for="week">Week ending</label>
-  <select id="week" name="week"><option value="">All weeks</option>
-    {% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if selected_week == w }}>{{ format_date(w) }}</option>{% endfor %}</select>
-  <label for="group">{{ tracker.group_label or 'Group' }}</label>
-  <select id="group" name="group"><option value="">All</option>
-    {% for grp in group_list %}<option value="{{ grp.id }}" {{ 'selected' if selected_group == grp.id }}>{{ grp.name }}</option>{% endfor %}</select>
-  <button class="button" type="submit">Filter</button>
-  {% if tracker.status == 'active' %}<a class="button primary" href="{{ url_for('entries.new_entry', tracker_id=tracker.id) }}">Record completions</a>{% endif %}
-</form>
-{% if entries %}
-<table class="table" data-table data-table-page-size="50" data-table-export="entries.csv">
-  <thead><tr><th data-sort="date" data-filter="none">Date</th><th data-sort="date" data-filter="none">Week ending</th>
-    <th data-filter="select">{{ tracker.group_label or 'Group' }}</th><th data-sort="number">Quantity</th><th>Note</th><th data-html></th></tr></thead>
-  <tbody>
-  {% for e in entries %}
-  <tr><td>{{ format_date(e.entry_date) }}</td><td>{{ format_date(e.week_ending) }}</td>
-    <td>{{ groups[e.group_id].name if e.group_id in groups else e.group_id }}</td><td>{{ e.quantity }}</td><td>{{ e.note }}</td>
-    <td>{% if tracker.status == 'active' %}
-      <form method="post" action="{{ url_for('entries.delete_entry', tracker_id=tracker.id, entry_id=e.id) }}">
-        {{ csrf_field(csrf_token()) }}<button class="button" type="submit">Delete</button></form>{% endif %}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% if capped %}<p class="muted">Showing the latest {{ list_limit }} entries only. Use the week or location filter to see older entries; Download CSV includes only the entries shown.</p>{% endif %}
-<p class="muted">To correct an entry, delete it and record it again.</p>
-{% else %}
-<section class="empty-state"><p>No entries match.</p></section>
-{% endif %}
+<div class="settings">
+  <div class="toolbar">
+    <form method="get">
+      <div class="toolbar-field">
+        <label for="week">Week ending</label>
+        <select id="week" name="week"><option value="">All weeks</option>
+          {% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if selected_week == w }}>{{ format_date(w) }}</option>{% endfor %}</select>
+      </div>
+      <div class="toolbar-field">
+        <label for="group">{{ tracker.group_label or 'Group' }}</label>
+        <select id="group" name="group"><option value="">All</option>
+          {% for grp in group_list %}<option value="{{ grp.id }}" {{ 'selected' if selected_group == grp.id }}>{{ grp.name }}</option>{% endfor %}</select>
+      </div>
+      <button class="button" type="submit">Filter</button>
+    </form>
+    {% if tracker.status == 'active' %}<a class="button primary toolbar-end" href="{{ url_for('entries.new_entry', tracker_id=tracker.id) }}">Record completions</a>{% endif %}
+  </div>
+
+  <section class="settings-section" aria-labelledby="section-entries">
+    <header class="settings-section-head">
+      <h2 id="section-entries">Entries</h2>
+      <p>Every completion recorded against this tracker, newest first. Sort or filter by column, or download the list as CSV.</p>
+    </header>
+    {% if entries %}
+    <div class="section-body">
+      <table class="table" data-table data-table-page-size="50" data-table-export="entries.csv">
+        <thead><tr><th data-sort="date" data-filter="none">Date</th><th data-sort="date" data-filter="none">Week ending</th>
+          <th data-filter="select">{{ tracker.group_label or 'Group' }}</th><th data-sort="number">Quantity</th><th>Note</th><th data-html></th></tr></thead>
+        <tbody>
+        {% for e in entries %}
+        <tr><td>{{ format_date(e.entry_date) }}</td><td>{{ format_date(e.week_ending) }}</td>
+          <td>{{ groups[e.group_id].name if e.group_id in groups else e.group_id }}</td><td>{{ e.quantity }}</td><td>{{ e.note }}</td>
+          <td>{% if tracker.status == 'active' %}
+            <form method="post" action="{{ url_for('entries.delete_entry', tracker_id=tracker.id, entry_id=e.id) }}">
+              {{ csrf_field(csrf_token()) }}<button class="button button-small button-quiet" type="submit">Delete</button></form>{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% if capped %}<p class="section-note">Showing the latest {{ list_limit }} entries only. Use the week or location filter to see older entries; Download CSV includes only the entries shown.</p>{% endif %}
+      <p class="section-note">To correct an entry, delete it and record it again.</p>
+    </div>
+    {% else %}
+    <p class="empty-note">No entries match.</p>
+    {% endif %}
+  </section>
+</div>
 {% endblock %}
