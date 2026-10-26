@@ -90,4 +90,84 @@
       syncThemeLabel();
     });
   }
+
+  // Section links (.subnav): underline the section in view. With sections in two columns, two share a row; a
+  // clicked link keeps the underline while the page scrolls to it and once it arrives.
+  var subnav = document.querySelector(".subnav");
+  if (subnav) {
+    var links = Array.prototype.slice.call(subnav.querySelectorAll("a[href^='#']"));
+    var targets = links.map(function (link) { return document.getElementById(link.getAttribute("href").slice(1)); });
+    var current = -1;
+    var settling = false;
+    var settleTimer = null;
+    var ticking = false;
+
+    var setCurrent = function (index) {
+      current = index;
+      links.forEach(function (link, i) {
+        if (i === index) {
+          link.setAttribute("aria-current", "location");
+        } else {
+          link.removeAttribute("aria-current");
+        }
+      });
+    };
+
+    // The row in view: the lowest row whose top has passed under the links, the last row once the page is scrolled
+    // to the bottom, or the first row before anything has passed.
+    var update = function () {
+      if (settling) return;
+      var line = subnav.getBoundingClientRect().bottom + 24;
+      var tops = targets.map(function (t) { return t ? Math.round(t.getBoundingClientRect().top) : Infinity; });
+      var present = tops.filter(isFinite);
+      if (!present.length) return;
+      var scrolledToBottom = window.scrollY > 0 &&
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      var passed = present.filter(function (top) { return top <= line; });
+      var rowTop;
+      if (scrolledToBottom) {
+        rowTop = Math.max.apply(null, present);
+      } else if (passed.length) {
+        rowTop = Math.max.apply(null, passed);
+      } else {
+        rowTop = Math.min.apply(null, present);
+      }
+      var row = [];
+      tops.forEach(function (top, i) { if (Math.abs(top - rowTop) <= 2) row.push(i); });
+      setCurrent(row.indexOf(current) !== -1 ? current : row[0]);
+    };
+
+    var settle = function () {
+      settling = false;
+      update();
+    };
+    // Hold the chosen link until the page stops scrolling (no scroll for 150 ms, or none starting within 300 ms).
+    var hold = function (index) {
+      setCurrent(index);
+      settling = true;
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(settle, 300);
+    };
+
+    links.forEach(function (link, i) {
+      link.addEventListener("click", function () { hold(i); });
+    });
+    window.addEventListener("scroll", function () {
+      if (settling) {
+        window.clearTimeout(settleTimer);
+        settleTimer = window.setTimeout(settle, 150);
+      } else if (!ticking) {
+        ticking = true;
+        window.requestAnimationFrame(function () { ticking = false; update(); });
+      }
+    }, { passive: true });
+    window.addEventListener("resize", update);
+
+    var linked = links.map(function (link) { return link.getAttribute("href"); }).indexOf(window.location.hash);
+    if (linked !== -1) {
+      hold(linked);
+    } else {
+      update();
+    }
+  }
 })();
