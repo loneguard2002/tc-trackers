@@ -1,10 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>New tracker</h1>
-<section class="card">
+<p class="page-lede">Set up what the tracker counts and the weeks it covers. Everything here can be changed later in Settings.</p>
+<div class="settings">
   <form method="post" action="{{ url_for('trackers.new') }}">
     {% include "trackers/_fields.html" %}
-    <button class="button primary" type="submit">Create tracker</button>
+    <div class="settings-actions">
+      <a class="button" href="{{ url_for('index') }}">Cancel</a>
+      <button class="button primary" type="submit">Create tracker</button>
+    </div>
   </form>
-</section>
+</div>
 {% endblock %}

@@ -63,6 +63,12 @@
   desktop.addEventListener("change", function () { setDrawer(false); });
   syncMenuButton();
 
+  // On narrow screens the tracker tabs scroll sideways; bring the current one into view.
+  var activeTab = document.querySelector(".tab.active");
+  if (activeTab && activeTab.parentNode.scrollWidth > activeTab.parentNode.clientWidth) {
+    activeTab.parentNode.scrollLeft = activeTab.offsetLeft - activeTab.parentNode.offsetLeft - 16;
+  }
+
   var themeButton = document.querySelector("[data-theme-toggle]");
   var themeLabel = document.querySelector("[data-theme-label]");
   function syncThemeLabel() {

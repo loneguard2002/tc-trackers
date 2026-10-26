@@ -21,6 +21,18 @@
 <span class="badge badge-{{ tone }}">{{ (state or 'UNKNOWN')|replace('_', ' ')|title }}</span>
 {%- endmacro %}
 
+{# One settings row: the label and a short explanation on the left, the control (the call body) on the right.
+   The control should carry aria-describedby="<for_id>-help" so the explanation is read with it. #}
+{% macro setting(label, help, for_id, row_class='') -%}
+<div class="setting-row{{ ' ' ~ row_class if row_class }}">
+  <div class="setting-label">
+    <label for="{{ for_id }}">{{ label }}</label>
+    {% if help %}<p class="setting-help" id="{{ for_id }}-help">{{ help }}</p>{% endif %}
+  </div>
+  <div class="setting-control">{{ caller() }}</div>
+</div>
+{%- endmacro %}
+
 {% macro csrf_field(token) -%}
 <input type="hidden" name="csrf_token" value="{{ token }}">
 {%- endmacro %}

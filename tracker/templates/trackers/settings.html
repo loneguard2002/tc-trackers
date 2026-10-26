@@ -1,26 +1,56 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import csrf_field, setting %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
-<section class="card">
-  <h2>Settings</h2>
+<div class="settings">
   <form method="post" action="{{ url_for('trackers.settings', tracker_id=tracker.id) }}">
     {% include "trackers/_fields.html" %}
-    <h3>Scheduled sending</h3>
-    <div class="form-row"><label><input type="checkbox" name="schedule_enabled" value="1" {{ 'checked' if form.get('schedule_enabled') }}> Send the weekly report automatically</label></div>
-    <div class="form-row"><label for="send_time">Send time (HH:MM, 24-hour)</label><input id="send_time" name="send_time" value="{{ form.get('send_time', '17:00') }}" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" required></div>
-    <div class="form-row"><label for="send_timezone">Time zone (for example Europe/London)</label><input id="send_timezone" name="send_timezone" value="{{ form.get('send_timezone', 'Europe/London') }}" required></div>
-    <button class="button primary" type="submit">Save settings</button>
+
+    <section class="settings-section" aria-labelledby="section-schedule">
+      <header class="settings-section-head">
+        <h2 id="section-schedule">Scheduled sending</h2>
+        <p>Email the weekly report to the recipients on the Email tab without anyone pressing send.</p>
+      </header>
+      {% call setting('Send automatically', 'When on, the report is emailed every week on the week-ending day.', 'schedule_enabled') %}
+      <span class="switch">
+        <input id="schedule_enabled" name="schedule_enabled" type="checkbox" role="switch" value="1" {{ 'checked' if form.get('schedule_enabled') }} aria-describedby="schedule_enabled-help">
+        <span class="switch-track" aria-hidden="true"></span>
+      </span>
+      {% endcall %}
+      {% call setting('Send time', 'The time of day the email goes out, in the time zone below.', 'send_time', 'schedule-detail') %}
+      <input id="send_time" name="send_time" type="time" value="{{ form.get('send_time', '17:00') }}" required aria-describedby="send_time-help">
+      {% endcall %}
+      {% call setting('Time zone', 'A region name such as Europe/London or Asia/Singapore. Suggestions appear as you type.', 'send_timezone', 'schedule-detail') %}
+      <input id="send_timezone" name="send_timezone" value="{{ form.get('send_timezone', 'Europe/London') }}" list="timezone-suggestions" autocomplete="off" spellcheck="false" required aria-describedby="send_timezone-help">
+      <datalist id="timezone-suggestions">
+        {% for zone in ['Europe/London', 'Europe/Zurich', 'Europe/Paris', 'Europe/Madrid', 'America/New_York', 'America/Chicago', 'America/Sao_Paulo', 'Asia/Dubai', 'Asia/Singapore', 'Asia/Hong_Kong', 'Asia/Tokyo', 'Australia/Sydney', 'UTC'] %}<option value="{{ zone }}">{% endfor %}
+      </datalist>
+      {% endcall %}
+    </section>
+
+    <div class="settings-actions">
+      <a class="button" href="{{ url_for('report.view', tracker_id=tracker.id) }}">Cancel</a>
+      <button class="button primary" type="submit">Save settings</button>
+    </div>
   </form>
-</section>
-{% if current_user and current_user.is_admin and tracker.status == 'active' %}
-<section class="card">
-  <h2>Archive</h2>
-  <p>An archived tracker keeps its history and stays viewable, but can no longer be changed.</p>
-  <form method="post" action="{{ url_for('trackers.archive', tracker_id=tracker.id) }}">
-    {{ csrf_field(csrf_token()) }}<button class="button danger" type="submit">Archive tracker</button>
-  </form>
-</section>
-{% endif %}
+
+  {% if current_user and current_user.is_admin and tracker.status == 'active' %}
+  <section class="settings-section settings-section-danger" aria-labelledby="section-archive">
+    <header class="settings-section-head">
+      <h2 id="section-archive">Archive</h2>
+      <p>Changes in this section cannot be undone from this page.</p>
+    </header>
+    <div class="setting-row">
+      <div class="setting-label">
+        <span class="setting-title">Archive this tracker</span>
+        <p class="setting-help">An archived tracker keeps its history and stays viewable, but can no longer be changed.</p>
+      </div>
+      <form class="setting-control setting-control-end" method="post" action="{{ url_for('trackers.archive', tracker_id=tracker.id) }}">
+        {{ csrf_field(csrf_token()) }}<button class="button danger" type="submit">Archive tracker</button>
+      </form>
+    </div>
+  </section>
+  {% endif %}
+</div>
 {% endblock %}

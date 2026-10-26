@@ -1,18 +1,65 @@
-{% from "macros.html" import csrf_field %}
-{% if errors %}<ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+{% from "macros.html" import csrf_field, setting %}
+{% if errors %}
+<div class="form-alert" role="alert">
+  <strong>Please correct the following:</strong>
+  <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
 {{ csrf_field(csrf_token()) }}
-<div class="form-row"><label for="name">Name</label><input id="name" name="name" value="{{ form.get('name', '') }}" required></div>
-<div class="form-row"><label for="unit_label">Unit being counted (for example, thin clients)</label><input id="unit_label" name="unit_label" value="{{ form.get('unit_label', '') }}"></div>
-<div class="form-row"><label for="group_label">Grouping label (for example, Location)</label><input id="group_label" name="group_label" value="{{ form.get('group_label', '') }}"></div>
-<div class="form-row"><label for="description">Description</label><textarea id="description" name="description" rows="3">{{ form.get('description', '') }}</textarea></div>
-<div class="form-row"><label for="week_ending_weekday">Week-ending day</label>
-  <select id="week_ending_weekday" name="week_ending_weekday">
+
+<section class="settings-section" aria-labelledby="section-general">
+  <header class="settings-section-head">
+    <h2 id="section-general">General</h2>
+    <p>How the tracker is named and what it counts.</p>
+  </header>
+  {% call setting('Name', 'Shown in the tracker list, at the top of the report and in email subjects.', 'name') %}
+  <input id="name" name="name" value="{{ form.get('name', '') }}" required aria-describedby="name-help">
+  {% endcall %}
+  {% call setting('Unit being counted', 'What one unit of progress is. Used in chart labels and progress figures.', 'unit_label') %}
+  <input id="unit_label" name="unit_label" value="{{ form.get('unit_label', '') }}" placeholder="For example, thin clients" aria-describedby="unit_label-help">
+  {% endcall %}
+  {% call setting('Grouping label', 'What the breakdown groups are called on the report. It also names the groups tab.', 'group_label') %}
+  <input id="group_label" name="group_label" value="{{ form.get('group_label', '') }}" placeholder="For example, Location" aria-describedby="group_label-help">
+  {% endcall %}
+  {% call setting('Description', 'A note for the people who maintain the tracker. It does not appear on the report or in emails.', 'description') %}
+  <textarea id="description" name="description" rows="3" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
+  {% endcall %}
+</section>
+
+<section class="settings-section" aria-labelledby="section-period">
+  <header class="settings-section-head">
+    <h2 id="section-period">Reporting period</h2>
+    <p>The weeks the tracker covers. Every entry and report is dated to a week-ending day.</p>
+  </header>
+  {% set weekday_help = 'The week-ending day cannot change once entries exist.' if weekday_locked else 'The day each reporting week closes. Scheduled emails are sent on this day.' %}
+  {% call setting('Week-ending day', weekday_help, 'week_ending_weekday', 'is-locked' if weekday_locked else '') %}
+  <select id="week_ending_weekday" name="week_ending_weekday" aria-describedby="week_ending_weekday-help">
     {% for n, day in weekdays %}<option value="{{ n }}" {{ 'selected' if form.get('week_ending_weekday') == n|string }}>{{ day }}</option>{% endfor %}
   </select>
-  {% if weekday_locked %}<small>The week-ending day cannot change once entries exist.</small>{% endif %}
-</div>
-<div class="form-row"><label for="start_date">First week-ending (any start date moves to the next week-ending day)</label><input id="start_date" name="start_date" type="date" value="{{ form.get('start_date', '') }}" required></div>
-<div class="form-row"><label for="last_week_ending">Last week-ending (at most 52 weeks after the first)</label><input id="last_week_ending" name="last_week_ending" type="date" value="{{ form.get('last_week_ending', '') }}" required></div>
-<div class="form-row"><label for="target_completion">Target completion date</label><input id="target_completion" name="target_completion" type="date" value="{{ form.get('target_completion', '') }}"></div>
-<div class="form-row"><label for="completed_before_first">Quantity completed before the first week</label><input id="completed_before_first" name="completed_before_first" type="number" min="0" value="{{ form.get('completed_before_first', '0') }}"></div>
-<div class="form-row"><label for="moving_average_weeks">Moving-average period (weeks, 1 to 12)</label><input id="moving_average_weeks" name="moving_average_weeks" type="number" min="1" max="12" value="{{ form.get('moving_average_weeks', '3') }}"></div>
+  {% endcall %}
+  {% call setting('First week-ending', 'Any date entered here moves forward to the next week-ending day.', 'start_date') %}
+  <input id="start_date" name="start_date" type="date" value="{{ form.get('start_date', '') }}" required aria-describedby="start_date-help">
+  {% endcall %}
+  {% call setting('Last week-ending', 'Must fall on the week-ending day, no more than 52 weeks after the first.', 'last_week_ending') %}
+  <input id="last_week_ending" name="last_week_ending" type="date" value="{{ form.get('last_week_ending', '') }}" required aria-describedby="last_week_ending-help">
+  {% endcall %}
+  {% call setting('Target completion', 'Optional. The forecast finish is compared with this date to judge whether the work is on track.', 'target_completion') %}
+  <input id="target_completion" name="target_completion" type="date" value="{{ form.get('target_completion', '') }}" aria-describedby="target_completion-help">
+  {% endcall %}
+</section>
+
+<section class="settings-section" aria-labelledby="section-forecast">
+  <header class="settings-section-head">
+    <h2 id="section-forecast">Progress and forecast</h2>
+    <p>Figures used to calculate progress and project the finish date.</p>
+  </header>
+  {% call setting('Completed before the first week', 'Units finished before tracking began. They count towards the cumulative total from the first week.', 'completed_before_first') %}
+  <input id="completed_before_first" name="completed_before_first" type="number" min="0" inputmode="numeric" value="{{ form.get('completed_before_first', '0') }}" aria-describedby="completed_before_first-help">
+  {% endcall %}
+  {% call setting('Moving-average period', 'How many recent weeks are averaged to estimate the weekly rate, from 1 to 12. A shorter period reacts faster to change.', 'moving_average_weeks') %}
+  <div class="input-affix">
+    <input id="moving_average_weeks" name="moving_average_weeks" type="number" min="1" max="12" inputmode="numeric" value="{{ form.get('moving_average_weeks', '3') }}" aria-describedby="moving_average_weeks-help">
+    <span aria-hidden="true">weeks</span>
+  </div>
+  {% endcall %}
+</section>

@@ -1,13 +1,20 @@
-<p>
-  <a href="{{ url_for('report.view', tracker_id=tracker.id) }}">Report</a>
-  {% if g.role == 'owner' %} · <a href="{{ url_for('trackers.settings', tracker_id=tracker.id) }}">Settings</a> · <a href="{{ url_for('mail.settings', tracker_id=tracker.id) }}">Email</a>{% endif %}
+{% macro tab(endpoint, label, also=()) -%}
+{% set active = request.endpoint == endpoint or request.endpoint in also %}
+<a class="tab{{ ' active' if active }}" href="{{ url_for(endpoint, tracker_id=tracker.id) }}"{% if active %} aria-current="page"{% endif %}>{{ label }}</a>
+{%- endmacro %}
+<nav class="tabs" aria-label="Tracker sections">
+  {{ tab('report.view', 'Report') }}
   {% if g.role in ('editor', 'owner') %}
-  · <a href="{{ url_for('trackers.groups', tracker_id=tracker.id) }}">{{ tracker.group_label|plural if tracker.group_label else 'Groups' }}</a>
-  · <a href="{{ url_for('entries.list_entries', tracker_id=tracker.id) }}">Entries</a>
-  · <a href="{{ url_for('entries.targets', tracker_id=tracker.id) }}">Targets</a>
-  · <a href="{{ url_for('entries.inputs', tracker_id=tracker.id) }}">Weekly inputs</a>
-  · <a href="{{ url_for('entries.risks', tracker_id=tracker.id) }}">Risks</a>
+  {{ tab('entries.list_entries', 'Entries', ('entries.new_entry',)) }}
+  {{ tab('entries.inputs', 'Weekly inputs') }}
+  {{ tab('entries.targets', 'Targets') }}
+  {{ tab('trackers.groups', tracker.group_label|plural if tracker.group_label else 'Groups') }}
+  {{ tab('entries.risks', 'Risks') }}
   {% endif %}
-  {% if current_user and current_user.is_admin %} · <a href="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">Access</a>{% endif %}
-</p>
+  {% if g.role == 'owner' %}
+  {{ tab('mail.settings', 'Email', ('mail.preview',)) }}
+  {{ tab('trackers.settings', 'Settings') }}
+  {% endif %}
+  {% if current_user and current_user.is_admin %}{{ tab('trackers.roles', 'Access') }}{% endif %}
+</nav>
 {% if tracker.status == 'archived' %}<p class="flash flash-danger">This tracker is archived.</p>{% endif %}
