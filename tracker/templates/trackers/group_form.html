@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field, setting %}
+{% set label = tracker.group_label or 'Group' %}
+{% set unit = tracker.unit_label %}
+{% block content %}
+<h1>{{ tracker.name }}</h1>
+{% include "trackers/_nav.html" %}
+<div class="settings settings-narrow">
+  <form method="post" action="{{ url_for('trackers.edit_group', tracker_id=tracker.id, group_id=group.id) if group else url_for('trackers.new_group', tracker_id=tracker.id) }}">
+    {% include "entries/_errors.html" %}
+    {{ csrf_field(csrf_token()) }}
+    <section class="settings-section" aria-labelledby="section-scope">
+      <header class="settings-section-head">
+        <h2 id="section-scope">{{ group.name if group else 'Add a ' ~ label|lower }}</h2>
+        {% if group %}
+        <p>{{ done }} of {{ group.baseline }}{{ ' ' ~ unit if unit }} complete; {{ group.baseline - done }} remaining.{% if not is_owner %} Only an owner can change the name, baseline and starting figure.{% endif %}</p>
+        {% else %}
+        <p>What the {{ label|lower }} is called and how much work is in its scope. You can set its status once it is added.</p>
+        {% endif %}
+      </header>
+      {% if is_owner %}
+      {% call setting('Name', 'Shown on the report and in the ' ~ label|lower ~ ' lists. Each name must be unique.', 'name') %}
+      <input id="name" name="name" value="{{ form.get('name', '') }}" required aria-describedby="name-help">
+      {% endcall %}
+      {% call setting('Baseline', 'The total amount of work in scope for this ' ~ label|lower ~ '.', 'baseline') %}
+      <div class="input-affix">
+        <input id="baseline" name="baseline" type="number" min="0" step="1" inputmode="numeric" value="{{ form.get('baseline', '') }}" required aria-describedby="baseline-help">
+        {% if unit %}<span aria-hidden="true">{{ unit }}</span>{% endif %}
+      </div>
+      {% endcall %}
+      {% call setting('Starting completed figure', 'Work already finished before the tracker started. Recorded completions are added to it.', 'starting_completed') %}
+      <div class="input-affix">
+        <input id="starting_completed" name="starting_completed" type="number" min="0" step="1" inputmode="numeric" value="{{ form.get('starting_completed', '0') }}" aria-describedby="starting_completed-help">
+        {% if unit %}<span aria-hidden="true">{{ unit }}</span>{% endif %}
+      </div>
+      {% endcall %}
+      {% endif %}
+    </section>
+
+    {% if group %}
+    <section class="settings-section" aria-labelledby="section-status">
+      <header class="settings-section-head">
+        <h2 id="section-status">Current status</h2>
+        <p>Where the {{ label|lower }} stands this week. Shown in the {{ label|lower }} table on the report.</p>
+      </header>
+      {% call setting('Ready, not yet complete', 'Work prepared and waiting to be finished.', 'ready_not_complete') %}
+      <div class="input-affix">
+        <input id="ready_not_complete" name="ready_not_complete" type="number" min="0" step="1" inputmode="numeric" value="{{ form.get('ready_not_complete', '0') }}" aria-describedby="ready_not_complete-help">
+        {% if unit %}<span aria-hidden="true">{{ unit }}</span>{% endif %}
+      </div>
+      {% endcall %}
+      {% call setting('Planned completion', 'When all the work in scope should be finished.', 'planned_completion') %}
+      <input id="planned_completion" name="planned_completion" type="date" value="{{ form.get('planned_completion', '') }}" aria-describedby="planned_completion-help">
+      {% endcall %}
+      <div class="setting-row is-wide" role="radiogroup" aria-labelledby="rag-label" aria-describedby="rag-help">
+        <div class="setting-label">
+          <span class="setting-title" id="rag-label">Status</span>
+          <p class="setting-help" id="rag-help">How the {{ label|lower }} is doing against its plan.</p>
+        </div>
+        <div class="setting-control">
+          <div class="segmented">
+            <label><input type="radio" name="rag" value="" {{ 'checked' if not form.get('rag') }}><span class="rag-dot" aria-hidden="true"></span>Not set</label>
+            {% for r in rag_values %}
+            <label><input type="radio" name="rag" value="{{ r }}" {{ 'checked' if form.get('rag') == r }}><span class="rag-dot rag-dot-{{ r|lower }}" aria-hidden="true"></span>{{ r }}</label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% call setting('Comment or exception', 'Anything the report reader should know, such as a delay and its cause.', 'comment', 'is-wide') %}
+      <textarea id="comment" name="comment" rows="3" aria-describedby="comment-help">{{ form.get('comment', '') }}</textarea>
+      {% endcall %}
+    </section>
+    {% endif %}
+
+    <div class="settings-actions">
+      <a class="button" href="{{ url_for('trackers.groups', tracker_id=tracker.id) }}">Cancel</a>
+      {% if tracker.status == 'active' %}<button class="button primary" type="submit">{{ 'Save' if group else 'Add ' ~ label|lower }}</button>{% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

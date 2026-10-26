@@ -8,8 +8,8 @@
   {{ tab('entries.list_entries', 'Entries', ('entries.new_entry',)) }}
   {{ tab('entries.inputs', 'Weekly inputs') }}
   {{ tab('entries.targets', 'Targets') }}
-  {{ tab('trackers.groups', tracker.group_label|plural if tracker.group_label else 'Groups') }}
-  {{ tab('entries.risks', 'Risks') }}
+  {{ tab('trackers.groups', tracker.group_label|plural if tracker.group_label else 'Groups', ('trackers.new_group', 'trackers.edit_group')) }}
+  {{ tab('entries.risks', 'Risks', ('entries.new_risk', 'entries.edit_risk')) }}
   {% endif %}
   {% if g.role == 'owner' %}
   {{ tab('mail.settings', 'Email', ('mail.preview',)) }}
