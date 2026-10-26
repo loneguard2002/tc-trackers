@@ -36,10 +36,12 @@
     var filter = th.getAttribute("data-filter") || "text";
     var sort = th.getAttribute("data-sort") || "string";
     // The title stays raw for the CSV header; on screen it is escaped, as Tabulator renders titles as HTML.
+    // Tabulator swaps an empty title for "&nbsp;", so the formatter escapes the page's own text instead.
+    var title = th.textContent.trim();
     var column = {
-      title: th.textContent.trim(),
+      title: title,
       field: "c" + index,
-      titleFormatter: function (cell) { return escapeHtml(cell.getValue()); }
+      titleFormatter: function () { return escapeHtml(title); }
     };
     if (html) {
       column.formatter = "html";
