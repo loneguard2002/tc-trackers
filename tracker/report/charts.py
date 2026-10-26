@@ -18,6 +18,7 @@ from ..engine.calc import COMPLETE, WeekRow
 PLAN = "#888888"
 ACTUAL = "#2c7be5"
 FORECAST = "#d39e00"
+PALETTE = {"plan": PLAN, "actual": ACTUAL, "forecast": FORECAST}
 FORMATS = {"svg": "svg", "png": "png"}
 SIZE = (7.0, 3.2)
 
@@ -37,6 +38,36 @@ def _series(rows: list[WeekRow], attr: str, include=None) -> tuple[list[date], l
 def actual_series(rows: list[WeekRow], attr: str) -> tuple[list[date], list[float]]:
     """The actual line: completed weeks only, so that a part-week figure never draws a flat segment."""
     return _series(rows, attr, include=lambda r: r.state == COMPLETE)
+
+
+def chart_series(rows: list[WeekRow]) -> dict[str, list[float | None]]:
+    """The values each chart draws, one per row (``None`` where no point is drawn), for the browser charts.
+
+    The inclusion rules match the matplotlib charts below: actual remaining and cumulative actual cover completed weeks
+    only, and the forecast runs from the last completed week and needs at least two points.
+    """
+
+    def column(attr: str, include=None) -> list[float | None]:
+        return [getattr(r, attr) if include is None or include(r) else None for r in rows]
+
+    def complete(row: WeekRow) -> bool:
+        return row.state == COMPLETE
+
+    last_complete = max((r.week_ending for r in rows if r.moving_average is not None), default=None)
+    forecast = column(
+        "forecast_remaining", include=lambda r: last_complete is not None and r.week_ending >= last_complete
+    )
+    if sum(v is not None for v in forecast) < 2:
+        forecast = [None] * len(rows)
+    return {
+        "planned_remaining": column("planned_remaining"),
+        "actual_remaining": column("actual_remaining", complete),
+        "forecast_remaining": forecast,
+        "target": column("target"),
+        "actual": column("actual"),
+        "cum_target": column("cum_target"),
+        "cum_actual": column("cum_actual", complete),
+    }
 
 
 def _render(fig: Figure, fmt: str) -> bytes:

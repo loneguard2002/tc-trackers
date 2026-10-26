@@ -14,7 +14,16 @@ from tracker.engine.calc import WeekRow, build_week_rows
 from tracker.formatting import fmt_dash, fmt_date, fmt_pct, fmt_plural, fmt_rate
 from tracker.models import CompletionEntry, Group, ReportInput, Risk, Week
 from tracker.report.build import build_report, default_report_week, select_top_risks
-from tracker.report.charts import cumulative_chart, remaining_chart, weekly_chart
+from tracker.report.chart_data import chart_payload
+from tracker.report.charts import (
+    PALETTE,
+    _series,
+    actual_series,
+    chart_series,
+    cumulative_chart,
+    remaining_chart,
+    weekly_chart,
+)
 
 STUB_USER = SimpleNamespace(is_admin=False, full_name="Test User")
 BADGE_IN_PROGRESS = '<span class="badge badge-info">In progress</span>'
@@ -45,6 +54,51 @@ def test_charts_render_with_no_rows_and_with_all_none():
 def test_chart_rejects_unknown_format():
     with pytest.raises(ValueError):
         weekly_chart(sample_rows(), "gif")
+
+
+def _points(rows, values):
+    return [(r.week_ending, v) for r, v in zip(rows, values) if v is not None]
+
+
+def test_chart_series_aligns_with_rows():
+    rows = sample_rows()
+    series = chart_series(rows)
+    assert set(series) == {
+        "planned_remaining",
+        "actual_remaining",
+        "forecast_remaining",
+        "target",
+        "actual",
+        "cum_target",
+        "cum_actual",
+    }
+    assert all(len(values) == len(rows) for values in series.values())
+
+
+def test_chart_series_matches_the_matplotlib_series():
+    rows = sample_rows()
+    series = chart_series(rows)
+    for key in ("planned_remaining", "target", "actual", "cum_target"):
+        assert _points(rows, series[key]) == list(zip(*_series(rows, key)))
+    for key in ("actual_remaining", "cum_actual"):
+        assert _points(rows, series[key]) == list(zip(*actual_series(rows, key)))
+
+
+def test_chart_series_forecast_starts_at_the_last_complete_week():
+    rows = sample_rows()
+    forecast = chart_series(rows)["forecast_remaining"]
+    last_complete = max(i for i, r in enumerate(rows) if r.moving_average is not None)
+    assert all(v is None for v in forecast[:last_complete])
+    assert forecast[last_complete] == rows[last_complete].forecast_remaining
+
+
+def test_chart_payload_shape():
+    rows = sample_rows()
+    payload = chart_payload(SimpleNamespace(unit_label="devices"), rows)
+    assert payload["palette"] == {"plan": "#888888", "actual": "#2c7be5", "forecast": "#d39e00"} == PALETTE
+    assert payload["weeks"] == [w.isoformat() for w in WEEKS]
+    assert payload["unit_label"] == "devices"
+    assert payload["series"] == chart_series(rows)
 
 
 def test_formatting_filters():

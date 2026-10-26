@@ -5,13 +5,14 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from flask import Response, abort, g, render_template, request
+from flask import Response, abort, g, jsonify, render_template, request
 
 from ..auth import require_tracker_role
 from ..db import get_session
 from ..engine.weeks import week_endings
 from . import bp
-from .build import build_report
+from .build import build_report, compute_position
+from .chart_data import chart_payload
 from .render import html_to_pdf, html_to_png, render_print_html
 
 
@@ -47,6 +48,15 @@ def view(tracker_id: int):
         page_title=f"{tracker.name} report",
         current_page="trackers",
     )
+
+
+@bp.get("/trackers/<int:tracker_id>/report/data.json")
+@require_tracker_role("viewer")
+def chart_data(tracker_id: int):
+    """The weekly series behind the interactive charts, for the same week as the report page."""
+    tracker = g.tracker
+    position = compute_position(get_session(), tracker, _requested_week(tracker), today())
+    return jsonify(chart_payload(tracker, position.rows))
 
 
 def _slug(name: str) -> str:
