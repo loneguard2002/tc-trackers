@@ -137,17 +137,25 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tab:hover { color: var(--text); border-bottom-color: var(--border); }
 .tab.active { color: var(--text); border-bottom-color: var(--primary); }
 
-/* Settings forms: label and explanation on the left, compact control on the right */
-.settings { max-width: 880px; }
+/* Settings forms: sections in two columns when there is room; in each row, label and explanation on the left,
+   compact control on the right. The container query follows the sidebar, which changes the width without a resize. */
+.settings { max-width: 1280px; container-type: inline-size; }
 .page-lede { max-width: 880px; margin: 0 0 20px; color: var(--muted); }
 .settings-section { margin-bottom: 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
-.settings-section-head { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+@container (min-width: 960px) {
+  .settings > form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
+  .settings > form > .settings-section { margin-bottom: 0; }
+  .settings > form > :is(.form-alert, .settings-actions) { grid-column: 1 / -1; margin-bottom: 0; }
+  .settings > form + .settings-section { margin-top: 20px; }
+  .settings > form .setting-row { grid-template-columns: minmax(0, 1fr) minmax(0, 240px); gap: 6px 20px; }
+}
+.settings-section-head { padding: 14px 20px; border-bottom: 1px solid var(--border); }
 .settings-section-head h2 { margin: 0; font-size: 1rem; }
-.settings-section-head p { margin: 2px 0 0; color: var(--muted); font-size: .875rem; }
-.setting-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 8px 32px; align-items: start; padding: 14px 20px; }
+.settings-section-head p { margin: 2px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.4; }
+.setting-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 8px 32px; align-items: start; padding: 12px 20px; }
 .setting-row + .setting-row { border-top: 1px solid var(--border); }
 .setting-label label, .setting-title { display: block; margin: 0; font-size: .9rem; font-weight: 600; }
-.setting-help { margin: 2px 0 0; color: var(--muted); font-size: .8125rem; line-height: 1.45; }
+.setting-help { margin: 2px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.4; }
 .setting-row.is-locked .setting-help { color: var(--warning); }
 .setting-control { margin: 0; }
 .setting-control :where(input, select, textarea) { padding: 7px 10px; font-size: .9rem; }
