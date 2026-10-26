@@ -7,7 +7,7 @@
 {% endif %}
 {{ csrf_field(csrf_token()) }}
 
-<section class="settings-section" aria-labelledby="section-general">
+<section class="settings-section" id="general" aria-labelledby="section-general">
   <header class="settings-section-head">
     <h2 id="section-general">General</h2>
     <p>How the tracker is named and what it counts.</p>
@@ -26,7 +26,7 @@
   {% endcall %}
 </section>
 
-<section class="settings-section" aria-labelledby="section-period">
+<section class="settings-section" id="reporting-period" aria-labelledby="section-period">
   <header class="settings-section-head">
     <h2 id="section-period">Reporting period</h2>
     <p>The weeks the tracker covers. Every entry and report is dated to a week-ending day.</p>
@@ -48,7 +48,7 @@
   {% endcall %}
 </section>
 
-<section class="settings-section" aria-labelledby="section-forecast">
+<section class="settings-section" id="progress-forecast" aria-labelledby="section-forecast">
   <header class="settings-section-head">
     <h2 id="section-forecast">Progress and forecast</h2>
     <p>Figures used to calculate progress and project the finish date.</p>

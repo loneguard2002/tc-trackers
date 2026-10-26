@@ -3,11 +3,17 @@
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
+<nav class="subnav" aria-label="Settings sections">
+  <a href="#general">General</a>
+  <a href="#reporting-period">Reporting period</a>
+  <a href="#progress-forecast">Progress and forecast</a>
+  <a href="#schedule">Scheduled sending</a>
+</nav>
 <div class="settings">
   <form method="post" action="{{ url_for('trackers.settings', tracker_id=tracker.id) }}">
     {% include "trackers/_fields.html" %}
 
-    <section class="settings-section" aria-labelledby="section-schedule">
+    <section class="settings-section" id="schedule" aria-labelledby="section-schedule">
       <header class="settings-section-head">
         <h2 id="section-schedule">Scheduled sending</h2>
         <p>Email the weekly report to the recipients on the Email tab without anyone pressing send.</p>

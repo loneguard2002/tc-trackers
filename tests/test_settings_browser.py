@@ -55,3 +55,37 @@ def test_descriptions_use_a_small_font(page, owner_page):
     section_text, field_help, label = sizes
     assert section_text <= 12.5 and field_help <= 12.5
     assert label - field_help >= 2
+
+
+SECTION_LINKS = [
+    ("General", "general"),
+    ("Reporting period", "reporting-period"),
+    ("Progress and forecast", "progress-forecast"),
+    ("Scheduled sending", "schedule"),
+]
+
+
+def test_section_links_point_at_the_four_sections(page, owner_page):
+    owner_page()
+    links = page.locator("nav[aria-label='Settings sections'] a")
+    assert links.all_inner_texts() == [label for label, _ in SECTION_LINKS]
+    for (_, anchor), href in zip(SECTION_LINKS, [a.get_attribute("href") for a in links.all()], strict=True):
+        assert href == f"#{anchor}"
+        assert page.locator(f"section.settings-section#{anchor}").count() == 1
+
+
+def test_section_link_scrolls_the_section_clear_of_the_top_bar(page, owner_page):
+    page.set_viewport_size({"width": 900, "height": 700})
+    owner_page()
+    page.click("nav[aria-label='Settings sections'] a[href='#schedule']")
+    page.wait_for_function("location.hash === '#schedule'")
+    page.wait_for_timeout(800)
+    top = page.evaluate("document.getElementById('schedule').getBoundingClientRect().top")
+    topbar = page.evaluate("document.querySelector('.topbar').getBoundingClientRect().bottom")
+    assert topbar <= top < 700
+
+
+def test_new_tracker_page_has_no_section_links(page, live_server, user_factory):
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(f"{live_server}/trackers/new")
+    assert page.locator("nav[aria-label='Settings sections']").count() == 0
