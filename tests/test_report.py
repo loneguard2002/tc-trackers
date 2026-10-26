@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import re
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -24,6 +25,7 @@ from tracker.report.charts import (
     remaining_chart,
     weekly_chart,
 )
+from tracker.report.render import render_print_html
 
 STUB_USER = SimpleNamespace(is_admin=False, full_name="Test User")
 BADGE_IN_PROGRESS = '<span class="badge badge-info">In progress</span>'
@@ -256,6 +258,16 @@ def test_report_page_in_progress_badge_and_bad_week(client, db, small_tracker, v
     assert BADGE_IN_PROGRESS not in past.get_data(as_text=True)
 
 
+def test_report_page_points_charts_at_the_selected_week(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    week = WEEKS[1].isoformat()
+    html = client.get(f"/trackers/{small_tracker.id}/report?week={week}").get_data(as_text=True)
+    assert f'data-chart-data="/trackers/{small_tracker.id}/report/data.json?week={week}"' in html
+    assert "vendor/echarts-6.1.0.min.js" in html and "report-charts.js" in html
+    for name in ("remaining", "weekly", "cumulative"):
+        assert f'data-chart="{name}"' in html
+
+
 def test_report_page_empty_tracker(client, small_tracker, viewer):
     page = client.get(f"/trackers/{small_tracker.id}/report")
     assert page.status_code == 200
@@ -428,3 +440,17 @@ def test_supporting_figures_in_print_html(app):
     with app.app_context():
         html = render_print_html(report)
     assert "Supporting figures" in html and "Programme Lead" in html
+
+
+def test_print_html_loads_no_chart_scripts(app):
+    report, _ = synthetic_report()
+    with app.test_request_context("/"):
+        html = render_print_html(report)
+    assert 'data-chart="remaining"' in html
+    assert "<script" not in html
+
+
+def test_tooltip_swatches_match_palette():
+    css = (Path(__file__).resolve().parent.parent / "tracker" / "static" / "tracker.css").read_text(encoding="utf-8")
+    for key in ("plan", "actual", "forecast"):
+        assert re.search(rf"\.chart-swatch-{key}\s*{{[^}}]*background:\s*{PALETTE[key]}", css), key

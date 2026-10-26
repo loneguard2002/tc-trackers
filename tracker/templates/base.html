@@ -14,6 +14,7 @@
   <script src="{{ url_for('static', filename='theme-init.js', v=app_version) }}"></script>
   <link href="{{ url_for('static', filename='tracker.css', v=app_version) }}" rel="stylesheet">
   <script src="{{ url_for('static', filename='tracker.js', v=app_version) }}" defer></script>
+  {% block head_extra %}{% endblock %}
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>

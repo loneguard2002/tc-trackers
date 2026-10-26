@@ -187,4 +187,16 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
   .settings-actions .button { flex: 1; text-align: center; }
 }
 
+/* Interactive report charts (report-charts.js); swatch colours match tracker/report/charts.py PALETTE. */
+.chart-host { width: 100%; height: 320px; }
+.report-charts .chart-host { height: 260px; }
+.chart-tooltip { font-size: 13px; line-height: 1.45; }
+.chart-tooltip-title { margin-bottom: 4px; font-weight: 700; }
+.chart-tooltip-row { display: flex; justify-content: space-between; gap: 12px; }
+.chart-tooltip-gap { margin-top: 4px; font-weight: 600; }
+.chart-swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; }
+.chart-swatch-plan { background: #888888; }
+.chart-swatch-actual { background: #2c7be5; }
+.chart-swatch-forecast { background: #d39e00; }
+
 .email-preview { width: 100%; height: 520px; border: 1px solid var(--border); background: #fff; }

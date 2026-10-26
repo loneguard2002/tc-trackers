@@ -1,4 +1,5 @@
 import os
+import threading
 from datetime import date
 from pathlib import Path
 
@@ -174,3 +175,50 @@ def pytest_collection_modifyitems(config, items):
         skip = pytest.mark.skip(reason="Playwright Chromium is not installed")
         for item in browser_items:
             item.add_marker(skip)
+
+
+# --- Live server and browser (Playwright) ------------------------------------------------------------------------
+
+
+@pytest.fixture
+def live_server(app, _db_engine):
+    """The application served on a free local port in a background thread, for browser tests."""
+    from werkzeug.serving import make_server
+
+    server = make_server("127.0.0.1", 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+@pytest.fixture
+def browser():
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        chromium = playwright.chromium.launch()
+        try:
+            yield chromium
+        finally:
+            chromium.close()
+
+
+@pytest.fixture
+def page(browser):
+    context = browser.new_context()
+    try:
+        yield context.new_page()
+    finally:
+        context.close()
+
+
+def browser_sign_in(page, base_url: str, user: User) -> None:
+    page.goto(f"{base_url}/login")
+    page.fill("input[name=email]", user.email)
+    page.fill("input[name=password]", TEST_PASSWORD)
+    page.click("button[type=submit]")
+    page.wait_for_load_state("networkidle")

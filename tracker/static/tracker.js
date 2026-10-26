@@ -81,6 +81,7 @@
     themeButton.addEventListener("click", function () {
       var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
       root.setAttribute("data-theme", next);
+      document.dispatchEvent(new CustomEvent("tracker:themechange", { detail: { theme: next } }));
       try {
         window.localStorage.setItem("tracker-theme", next);
       } catch (_) {

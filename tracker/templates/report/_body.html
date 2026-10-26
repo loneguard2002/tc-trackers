@@ -18,7 +18,7 @@
     <p><strong>Needed from you:</strong> {{ r.inputs.decisions if r.inputs and r.inputs.decisions else 'None' }}</p>
   </section>
 
-  <img class="report-chart" alt="Remaining {{ t.unit_label }}: plan, actual and forecast" src="{{ r.charts.remaining|data_uri(mime) }}">
+  <img class="report-chart" data-chart="remaining" alt="Remaining {{ t.unit_label }}: plan, actual and forecast" src="{{ r.charts.remaining|data_uri(mime) }}">
 
   <section class="report-figures">
     <div class="report-figure"><span class="muted">Completed</span>
@@ -73,8 +73,8 @@
       </tbody>
     </table>
     <div class="report-charts">
-      <img class="report-chart" alt="Weekly actual against target" src="{{ r.charts.weekly|data_uri(mime) }}">
-      <img class="report-chart" alt="Cumulative completed" src="{{ r.charts.cumulative|data_uri(mime) }}">
+      <img class="report-chart" data-chart="weekly" alt="Weekly actual against target" src="{{ r.charts.weekly|data_uri(mime) }}">
+      <img class="report-chart" data-chart="cumulative" alt="Cumulative completed" src="{{ r.charts.cumulative|data_uri(mime) }}">
     </div>
   </section>
 </article>

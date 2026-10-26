@@ -1,4 +1,8 @@
 {% extends "base.html" %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='vendor/echarts-6.1.0.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='report-charts.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
 {% include "trackers/_nav.html" %}
 <form method="get" action="{{ url_for('report.view', tracker_id=report.tracker.id) }}" class="report-week">
@@ -11,5 +15,7 @@
   <a class="button" href="{{ url_for('report.export_pdf', tracker_id=report.tracker.id, week=report.week_ending.isoformat()) }}">Download PDF</a>
   <a class="button" href="{{ url_for('report.export_png', tracker_id=report.tracker.id, week=report.week_ending.isoformat()) }}">Download PNG</a>
 </form>
+<div class="report-live" data-chart-data="{{ url_for('report.chart_data', tracker_id=report.tracker.id, week=report.week_ending.isoformat()) }}">
 {% include "report/_body.html" %}
+</div>
 {% endblock %}
