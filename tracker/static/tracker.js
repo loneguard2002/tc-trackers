@@ -91,6 +91,13 @@
     });
   }
 
+  // Forms marked data-confirm ask before they submit, as deletes cannot be undone. The listener sits on the document
+  // because tables.js redraws table rows after this runs.
+  document.addEventListener("submit", function (event) {
+    var message = event.target.getAttribute("data-confirm");
+    if (message && !window.confirm(message)) event.preventDefault();
+  });
+
   // Section links (.subnav): underline the section in view and outline that section. With sections in two columns,
   // two share a row; a clicked link keeps the underline while the page scrolls to it and once it arrives.
   var subnav = document.querySelector(".subnav");

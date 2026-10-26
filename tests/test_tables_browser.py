@@ -120,3 +120,21 @@ def test_tables_raise_no_policy_errors(page, live_server, seeded):
         page.wait_for_selector(".tabulator-row")
         assert_clean(page)
     expect(page.locator(".report .tabulator")).to_have_count(2)
+
+
+def test_risk_delete_asks_first(page, live_server, seeded):
+    open_page(page, live_server, seeded, "risks")
+    messages = []
+
+    def answer(dialog, accept):
+        messages.append(dialog.message)
+        dialog.accept() if accept else dialog.dismiss()
+
+    page.once("dialog", lambda dialog: answer(dialog, False))
+    page.get_by_role("button", name="Delete risk R1").click()
+    expect(page.locator(".tabulator-row")).to_have_count(1)
+    page.once("dialog", lambda dialog: answer(dialog, True))
+    page.get_by_role("button", name="Delete risk R1").click()
+    expect(page.get_by_text("Risk R1 deleted.")).to_be_visible()
+    assert messages[0].startswith("Delete risk R1?")
+    assert_clean(page)

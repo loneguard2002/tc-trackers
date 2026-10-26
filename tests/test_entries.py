@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from tests.conftest import post
 from tracker.engine.calc import group_positions
-from tracker.models import AuditLog, CompletionEntry, Group, ReportInput, Risk, Week
+from tracker.models import AuditLog, CompletionEntry, Group, ReportInput, Risk, TrackerRole, Week
 from tracker.trackers import load_engine_inputs
 
 OUTSIDE = "That date is outside this tracker&#39;s weeks (04 Sep 2026 to 25 Dec 2026)."
@@ -233,6 +233,56 @@ def test_risk_edit_and_validation(client, db, tracker_factory, user_factory, gra
     assert client.get(f"{url}/{risk.id}").status_code == 200
 
 
+def test_risk_register_links_to_add_edit_and_delete(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    url = f"/trackers/{tracker.id}/risks"
+    post(client, url, {"description": "Supply delay"})
+    risk = db.scalars(select(Risk)).one()
+    html = client.get(url).get_data(as_text=True)
+    assert f'href="{url}/new"' in html
+    assert f'href="{url}/{risk.id}"' in html
+    assert f'action="{url}/{risk.id}/delete"' in html and "data-confirm=" in html
+    assert 'name="description"' not in html  # the form has its own page
+    new_page = client.get(f"{url}/new")
+    assert new_page.status_code == 200 and b'name="description"' in new_page.data
+    assert b'aria-current="page">Risks<' in new_page.data
+
+
+def test_risk_form_errors_render_on_the_form_page(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    response = post(client, f"/trackers/{tracker.id}/risks", {"description": "x", "status": "Done"})
+    assert response.status_code == 400
+    assert b"Please correct the following" in response.data and b'name="description"' in response.data
+
+
+def test_risk_delete(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    url = f"/trackers/{tracker.id}/risks"
+    post(client, url, {"description": "Supply delay"})
+    risk_id = db.scalars(select(Risk.id)).one()
+    assert post(client, f"{url}/{risk_id}/delete").status_code == 302
+    db.expire_all()
+    assert db.scalars(select(Risk)).all() == []
+    deleted = db.scalars(select(AuditLog).where(AuditLog.action == "risk_deleted")).one()
+    assert deleted.detail == {"ref": "R1", "description": "Supply delay"}
+    assert post(client, f"{url}/{risk_id}/delete").status_code == 404
+
+
+def test_risk_delete_needs_editor_and_same_tracker(client, db, tracker_factory, user_factory, grant):
+    tracker, user, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    other = tracker_factory(name="Other")
+    risk = Risk(tracker_id=tracker.id, ref="R1")
+    elsewhere = Risk(tracker_id=other.id, ref="R1")
+    db.add_all([risk, elsewhere])
+    db.commit()
+    assert post(client, f"/trackers/{tracker.id}/risks/{elsewhere.id}/delete").status_code == 404
+    db.get(TrackerRole, (user.id, tracker.id)).role = "viewer"
+    db.commit()
+    assert post(client, f"/trackers/{tracker.id}/risks/{risk.id}/delete").status_code == 404
+    db.expire_all()
+    assert len(db.scalars(select(Risk)).all()) == 2
+
+
 def test_duplicate_risk_ref_rejected(client, db, tracker_factory, user_factory, grant):
     tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
     url = f"/trackers/{tracker.id}/risks"
@@ -274,6 +324,7 @@ def test_archived_tracker_refuses_every_post(client, db, tracker_factory, user_f
         (f"{base}/inputs?week=2026-10-16", {"headline": "x"}),
         (f"{base}/risks", {"description": "x"}),
         (f"{base}/risks/{risk.id}", {"description": "x"}),
+        (f"{base}/risks/{risk.id}/delete", {}),
     ]
     for url, data in posts:
         response = post(client, url, data, follow_redirects=True)
