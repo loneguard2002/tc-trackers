@@ -18,6 +18,12 @@ ROOT = Path(__file__).resolve().parent.parent
 _state: dict = {}
 
 
+@pytest.fixture(autouse=True)
+def _ignore_local_env_file(monkeypatch):
+    """Keep a developer's untracked .env (for example SESSION_COOKIE_SECURE=false) out of the configuration tests."""
+    monkeypatch.setattr("tracker.config.load_dotenv", lambda *args, **kwargs: False)
+
+
 @pytest.fixture
 def app():
     return create_app(
