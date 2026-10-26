@@ -27,7 +27,7 @@ def _render_upload(error: str | None = None, weekday: int = 4, status: int = 200
             weekday=weekday,
             weekdays=list(enumerate(WEEKDAYS)),
             page_title="Import workbook",
-            current_page="admin",
+            current_page="import",
         ),
         status,
     )
@@ -42,7 +42,7 @@ def _render_confirm(preview: ImportPreview, token: str, form, error: str | None 
             form=form,
             error=error,
             page_title="Confirm import",
-            current_page="admin",
+            current_page="import",
         ),
         status,
     )

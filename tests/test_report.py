@@ -11,7 +11,7 @@ import pytest
 from report_helpers import FRIDAY, WEEKS, sample_rows, synthetic_report
 
 from tracker.engine.calc import WeekRow, build_week_rows
-from tracker.formatting import fmt_dash, fmt_date, fmt_pct, fmt_rate
+from tracker.formatting import fmt_dash, fmt_date, fmt_pct, fmt_plural, fmt_rate
 from tracker.models import CompletionEntry, Group, ReportInput, Risk, Week
 from tracker.report.build import build_report, default_report_week, select_top_risks
 from tracker.report.charts import cumulative_chart, remaining_chart, weekly_chart
@@ -54,8 +54,26 @@ def test_formatting_filters():
     assert fmt_date(None) == "–" and fmt_dash("") == "–" and fmt_dash(0) == "0"
 
 
+@pytest.mark.parametrize(
+    ("label", "expected"),
+    [
+        ("Location", "Locations"),
+        ("Locations", "Locations"),
+        ("Country", "Countries"),
+        ("Day", "Days"),
+        ("Branch", "Branches"),
+        ("Box", "Boxes"),
+        ("SITE", "SITES"),
+        (" Desk ", "Desks"),
+        ("", ""),
+    ],
+)
+def test_plural_filter(label, expected):
+    assert fmt_plural(label) == expected
+
+
 def test_filters_registered_in_app(app):
-    assert {"pct", "rate", "fdate", "dash", "data_uri"} <= set(app.jinja_env.filters)
+    assert {"pct", "rate", "fdate", "dash", "data_uri", "plural"} <= set(app.jinja_env.filters)
 
 
 def test_csp_allows_data_images(client):

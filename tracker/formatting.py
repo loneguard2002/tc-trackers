@@ -33,12 +33,26 @@ def fmt_data_uri(data: bytes, mime: str = "image/svg+xml") -> str:
     return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
 
+def fmt_plural(label: str) -> str:
+    """A singular label in the plural, for example ``Location`` to ``Locations`` and ``Country`` to ``Countries``."""
+    label = label.strip()
+    lower = label.lower()
+    if not label or lower.endswith("s"):
+        return label
+    if lower.endswith("y") and lower[-2:-1] not in ("a", "e", "i", "o", "u"):
+        return label[:-1] + ("IES" if label.isupper() else "ies")
+    if lower.endswith(("x", "z", "ch", "sh")):
+        return label + ("ES" if label.isupper() else "es")
+    return label + ("S" if label.isupper() else "s")
+
+
 FILTERS = {
     "pct": fmt_pct,
     "rate": fmt_rate,
     "fdate": fmt_date,
     "dash": fmt_dash,
     "data_uri": fmt_data_uri,
+    "plural": fmt_plural,
 }
 
 

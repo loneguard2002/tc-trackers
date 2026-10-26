@@ -37,7 +37,7 @@
   {% endif %}
 </section>
 {% else %}
-<section class="empty-state"><p>No {{ label|lower }}s have been added yet.</p></section>
+<section class="empty-state"><p>No {{ label|plural|lower }} have been added yet.</p></section>
 {% endfor %}
 {% if is_owner and tracker.status == 'active' %}
 <section class="card">
