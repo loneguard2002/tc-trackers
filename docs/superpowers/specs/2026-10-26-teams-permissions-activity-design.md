@@ -33,6 +33,7 @@ The capacity app (`Documents\GitHub\capacity`) solves the same problem with team
 5. Permission sets: named, created and edited by administrators from a fixed list of permissions, and held by teams or by individual users. Sets held by a team apply to that team's own members only.
 6. User management features from the capacity app: create local users and reset local passwords from the Users screen, keep Entra display names in step at each sign-in, and show each user's effective access.
 7. An activity log as in the capacity app: before and after values, the user affected, an Activity screen with filters, and an optional retention period.
+8. Progress entries can be corrected in place (section 7.1), instead of being deleted and recorded again.
 
 ### Non-goals
 
@@ -160,6 +161,17 @@ The Administration heading appears when at least one link does. The home page's 
 - **Home page**: each tracker card shows its team's name when it has one.
 - **Entra display name**: at each Entra sign-in, if the name from Microsoft differs from the stored name, the stored name is updated and the change is logged.
 
+### 7.1 Correcting a progress entry
+
+Today a wrong entry must be deleted and recorded again (the entries page says so). The owner does not want that. Each row on the entries page gains an **Edit** action:
+
+- **Who:** anyone who can record entries on the tracker, that is editors and owners by any route (section 6.1).
+- **What can change:** the date, the location (the tracker's grouping label), the quantity and the note.
+- **Checks:** the same as for a new entry (`check_entry_date` and `parse_quantity` in `tracker/entries/forms.py`). The week ending is recalculated from the new date. An entry may keep a location that has been retired since it was recorded; moving it to another location requires one that is not retired.
+- **Archived trackers:** edits are refused, as adding and deleting are today.
+- **Activity log:** one `entry_updated` entry with the changed fields before and after (for example quantity 12 → 15), committed with the change.
+- **Delete stays** for entries recorded by mistake. The note "To correct an entry, delete it and record it again" is replaced by the Edit action.
+
 ## 8. Activity log
 
 ### 8.1 What is logged
@@ -170,6 +182,7 @@ Existing actions stay as they are; `target_user_id` is filled in wherever a user
 - **Users**: `user_created` (with source: local, Entra or command line), `user_approved`, `user_disabled`, `user_enabled`, `password_reset` (no password or hash), `user_admin_changed` (before and after), `user_name_synced` (before and after).
 - **Teams**: `team_created`, `team_renamed`, `team_moved` (parent before and after), `team_deleted`; `team_member_added`, `team_member_role_changed` (before and after), `team_member_removed`.
 - **Trackers**: `tracker_team_changed` (team before and after); `role_set` and `role_removed` (existing, now with `target_user_id`).
+- **Progress entries**: `entry_created` and `entry_deleted` (existing); `entry_updated` (changed fields before and after).
 - **Permission sets**: `permission_set_created`, `permission_set_renamed`, `permission_set_deleted`, `permission_set_permissions_changed` (permission lists before and after), `permission_set_holder_added`, `permission_set_holder_removed`.
 - **Settings and housekeeping**: `smtp_settings_updated` (existing; names of changed keys only), `audit_retention_changed` (before and after), `audit_pruned` (number of entries removed and the cutoff date).
 - **Email**: the existing report send actions (`report_sent`, `report_send_queued`, `report_send_failed`, `report_test_sent`) stay as they are.
@@ -218,6 +231,13 @@ Database tests (run against Postgres, as for the rest of the suite):
   - the filters and paging;
   - retention pruning and its own entry.
 - **Upgrade:** the migration on a copy of today's schema leaves every existing user's visible trackers unchanged.
+- **Entry edits:**
+  - editors and owners can edit and viewers cannot;
+  - each field change is checked as for a new entry, and the week ending is recalculated;
+  - a retired location can be kept but not chosen;
+  - edits are refused on archived trackers;
+  - one `entry_updated` entry records the before and after values;
+  - the report figures follow the corrected entry.
 
 Tests that need no database:
 
@@ -234,6 +254,7 @@ Tests that need no database:
 - Groups of trackers are dropped.
 - Audit logging follows the capacity app. Entries are kept indefinitely by default, and the retention period is to be confirmed with Compliance.
 - Approach A (section 4).
+- Progress entries are corrected in place, not deleted and recorded again (section 7.1).
 
 ## 12. Calls made by Claude (please check)
 
@@ -252,6 +273,7 @@ Tests that need no database:
 13. Archiving stays administrator-only; archived trackers count for access read-only, block team deletion, and can still change team.
 14. Attempts refused by the sign-in throttle are not logged individually.
 15. Old audit entries keep their stored shapes, and the Activity screen reads both.
+16. An edited entry may keep a location that has since been retired, so old figures can still be corrected; Delete stays for entries recorded by mistake.
 
 ## 13. Left to the builder
 
