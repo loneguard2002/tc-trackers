@@ -397,7 +397,7 @@ def body_html(app, report):
 def test_top_risks_show_owner_role(app):
     report, _ = synthetic_report()
     html = body_html(app, report)
-    assert "<th>Owner</th>" in html and "Programme Lead" in html
+    assert '<th data-filter="select">Owner</th>' in html and "Programme Lead" in html
 
 
 def test_supporting_figures_are_shown(app):

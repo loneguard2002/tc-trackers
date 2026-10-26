@@ -127,6 +127,22 @@ def test_entry_list_filters(client, db, tracker_factory, user_factory, grant):
     assert b"first batch" in page and b"second batch" not in page
 
 
+def test_entries_table_is_enhanced(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    post(client, entry_url(tracker, "/new"), entry_form(group))
+    html = client.get(entry_url(tracker)).get_data(as_text=True)
+    assert 'data-table data-table-page-size="50" data-table-export="entries.csv"' in html
+    for asset in ("vendor/tabulator-6.6.1.min.js", "vendor/tabulator-6.6.1.min.css", "tables.js"):
+        assert asset in html
+
+
+def test_risks_table_is_enhanced(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    post(client, f"/trackers/{tracker.id}/risks", {"description": "Supplier delay", "status": "Open", "rag": "Red"})
+    html = client.get(f"/trackers/{tracker.id}/risks").get_data(as_text=True)
+    assert '<table class="table" data-table>' in html and "tables.js" in html
+
+
 def test_targets_saved_per_week(client, db, tracker_factory, user_factory, grant):
     tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
     db.add(Week(tracker_id=tracker.id, week_ending=date(2026, 9, 4), target=3, imported_actual=9))

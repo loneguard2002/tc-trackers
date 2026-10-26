@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field %}
+{% block head_extra %}
+{% include "_table_assets.html" %}
+{% endblock %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
@@ -15,8 +18,9 @@
   {% if tracker.status == 'active' %}<a class="button primary" href="{{ url_for('entries.new_entry', tracker_id=tracker.id) }}">Record completions</a>{% endif %}
 </form>
 {% if entries %}
-<table class="table">
-  <thead><tr><th>Date</th><th>Week ending</th><th>{{ tracker.group_label or 'Group' }}</th><th>Quantity</th><th>Note</th><th></th></tr></thead>
+<table class="table" data-table data-table-page-size="50" data-table-export="entries.csv">
+  <thead><tr><th data-sort="date" data-filter="none">Date</th><th data-sort="date" data-filter="none">Week ending</th>
+    <th data-filter="select">{{ tracker.group_label or 'Group' }}</th><th data-sort="number">Quantity</th><th>Note</th><th data-html></th></tr></thead>
   <tbody>
   {% for e in entries %}
   <tr><td>{{ format_date(e.entry_date) }}</td><td>{{ format_date(e.week_ending) }}</td>

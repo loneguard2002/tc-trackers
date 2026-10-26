@@ -33,8 +33,9 @@
     <h2>Top risks</h2>
     <p class="muted">{{ r.open_risks }} open, {{ r.red_risks }} Red</p>
     {% if r.top_risks %}
-    <table>
-      <thead><tr><th>Ref</th><th>Risk</th><th>Owner</th><th>Status</th><th>RAG</th><th>Target date</th></tr></thead>
+    <table data-table>
+      <thead><tr><th>Ref</th><th>Risk</th><th data-filter="select">Owner</th><th data-filter="select">Status</th>
+        <th data-filter="select">RAG</th><th data-sort="date" data-filter="none">Target date</th></tr></thead>
       <tbody>
         {% for risk in r.top_risks %}
         <tr><td>{{ risk.ref }}</td><td>{{ risk.description|dash }}</td><td>{{ risk.owner_role|dash }}</td><td>{{ risk.status }}</td>
@@ -59,9 +60,11 @@
         <dd>{% if dvt is none %}–{% elif dvt > 0 %}{{ dvt }} day{{ '' if dvt == 1 else 's' }} late{% elif dvt < 0 %}{{ -dvt }} day{{ '' if dvt == -1 else 's' }} early{% else %}On target{% endif %}</dd></div>
       <div><dt>Next week's target</dt><dd>{{ h.next_week_target|dash }}</dd></div>
     </dl>
-    <table>
-      <thead><tr><th>{{ t.group_label or 'Group' }}</th><th>Scope</th><th>Done</th><th>Remaining</th><th>Complete</th>
-        <th>Ready</th><th>Planned</th><th>RAG</th><th>Comment</th></tr></thead>
+    <table data-table>
+      <thead><tr><th data-filter="select">{{ t.group_label or 'Group' }}</th><th data-sort="number" data-filter="none">Scope</th>
+        <th data-sort="number" data-filter="none">Done</th><th data-sort="number" data-filter="none">Remaining</th>
+        <th data-sort="number" data-filter="none">Complete</th><th data-sort="number" data-filter="none">Ready</th>
+        <th data-sort="date" data-filter="none">Planned</th><th data-filter="select">RAG</th><th>Comment</th></tr></thead>
       <tbody>
         {% for gp in r.groups if not gp.retired %}
         <tr><td>{{ gp.name }}</td><td>{{ gp.baseline }}</td><td>{{ gp.deployed }}</td><td>{{ gp.remaining }}</td>

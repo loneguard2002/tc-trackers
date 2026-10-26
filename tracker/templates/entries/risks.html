@@ -1,13 +1,17 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field %}
+{% block head_extra %}
+{% include "_table_assets.html" %}
+{% endblock %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
 {% if not risk %}
 <h2>Risks</h2>
 {% if risks %}
-<table class="table">
-  <thead><tr><th>Ref</th><th>Description</th><th>{{ tracker.group_label or 'Group' }}</th><th>Status</th><th>RAG</th><th></th></tr></thead>
+<table class="table" data-table>
+  <thead><tr><th>Ref</th><th>Description</th><th data-filter="select">{{ tracker.group_label or 'Group' }}</th>
+    <th data-filter="select">Status</th><th data-filter="select">RAG</th><th data-html></th></tr></thead>
   <tbody>
   {% for r in risks %}
   <tr><td>{{ r.ref }}</td><td>{{ r.description }}</td><td>{{ group_names.get(r.group_id, '') }}</td><td>{{ r.status }}</td><td>{{ r.rag or '' }}</td>

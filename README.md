@@ -25,6 +25,10 @@ A generic Flask and Postgres application for tracking progress against defined t
 
 The CI workflow is kept in `ci/github-ci.yml`; after cloning, move it to `.github/workflows/ci.yml`.
 
+## Front-end libraries
+
+The live report page draws its charts with Apache ECharts 6.1.0 (Apache-2.0), and the report, Risks and Entries tables use Tabulator 6.6.1 (MIT). Both are stored in `tracker/static/vendor/` with their licence files, because the Content Security Policy allows scripts from the application only. To update one, run `npm pack <name>@<version>`, copy the `dist` file and the licence into `tracker/static/vendor/`, and change the version in the file name and in the templates that load it (`report/page.html` and `_table_assets.html`). The PDF, PNG and email keep the matplotlib charts.
+
 ## Importing the existing workbook
 
 Sign in as an administrator and open `/import`, or run `flask --app "tracker.app:create_app()" import-workbook PATH --name NAME --weekday N [--owner EMAIL]`. The import reports a reconciliation check; `--accept-mismatch` imports regardless.
