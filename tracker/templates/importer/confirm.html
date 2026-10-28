@@ -1,57 +1,134 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import csrf_field, setting %}
+{% set s = preview.settings %}
 {% block content %}
 <h1>Confirm import</h1>
-{% if error %}<ul class="form-error"><li>{{ error }}</li></ul>{% endif %}
-<section class="card">
-  <h2>Settings</h2>
-  <ul>
-    <li>Weeks: {{ preview.settings.first_week_ending }} to {{ preview.settings.last_week_ending }} ({{ preview.weeks|length }} weeks, week-ending day {{ preview.settings.weekday }} where Monday is 0)</li>
-    <li>Target completion: {{ preview.settings.target_completion or 'none' }}</li>
-    <li>Quantity completed before the first week: {{ preview.settings.completed_before_first }}</li>
-    <li>Moving-average period: {{ preview.settings.moving_average_weeks }} weeks</li>
-  </ul>
-</section>
-<section class="card">
-  <h2>Groups ({{ preview.groups|length }})</h2>
-  <table>
-    <thead><tr><th>Name</th><th>Baseline</th><th>Starting figure</th><th>Ready, not complete</th><th>Planned completion</th><th>Status</th></tr></thead>
-    <tbody>{% for g in preview.groups %}
-      <tr><td>{{ g.name }}</td><td>{{ g.baseline }}</td><td>{{ g.starting_completed }}</td><td>{{ g.ready_not_complete }}</td><td>{{ g.planned_completion or '' }}</td><td>{{ g.rag or '' }}</td></tr>
-    {% endfor %}</tbody>
-  </table>
-</section>
-<section class="card">
-  <h2>Weekly history ({{ preview.weeks|length }})</h2>
-  <table>
-    <thead><tr><th>Week ending</th><th>Target</th><th>Actual</th></tr></thead>
-    <tbody>{% for w in preview.weeks %}
-      <tr><td>{{ w.week_ending }}</td><td>{{ '' if w.target is none else w.target }}</td><td>{{ '' if w.actual is none else w.actual }}</td></tr>
-    {% endfor %}</tbody>
-  </table>
-</section>
-<section class="card">
-  <h2>Risks and issues ({{ preview.risks|length }})</h2>
-  <ul>{% for r in preview.risks %}<li>{{ r.ref }}: {{ r.description }} ({{ r.status }}{% if r.rag %}, {{ r.rag }}{% endif %})</li>{% else %}<li>None</li>{% endfor %}</ul>
-  {% if preview.inputs %}<p>Latest report inputs for the week ending {{ preview.inputs.week_ending }} will also be imported.</p>{% endif %}
-</section>
-<section class="card">
-  <h2>Reconciliation</h2>
-  <p>Group starting figures total {{ preview.group_total }}. The quantity completed before the first week ({{ preview.settings.completed_before_first }}) plus the weekly actuals ({{ preview.weekly_total }}) total {{ preview.settings.completed_before_first + preview.weekly_total }}.</p>
-  {% if preview.mismatch == 0 %}<p>The figures agree.</p>{% else %}<p><strong>The figures differ by {{ preview.mismatch }}.</strong></p>{% endif %}
-</section>
-<section class="card">
+<p class="page-lede">Step 2 of 2: check what was read from the workbook, then name the tracker and create it. Nothing has been saved yet.</p>
+<div class="settings">
+  {% if error %}<div class="form-alert" role="alert"><strong>The tracker was not created.</strong><ul class="form-error"><li>{{ error }}</li></ul></div>{% endif %}
+
+  <div class="stat-band import-summary">
+    <div class="stat"><span class="stat-label">Weeks</span><span class="stat-value">{{ preview.weeks|length }}</span>
+      <span class="stat-sub">{{ s.first_week_ending|fdate }} to {{ s.last_week_ending|fdate }}</span></div>
+    <div class="stat"><span class="stat-label">{{ (form.get('group_label') or 'Group')|plural }}</span><span class="stat-value">{{ preview.groups|length }}</span>
+      <span class="stat-sub">{{ preview.group_total|num }} completed to date</span></div>
+    <div class="stat"><span class="stat-label">Risks and issues</span><span class="stat-value">{{ preview.risks|length }}</span>
+      <span class="stat-sub">{{ 'Latest report inputs included' if preview.inputs else 'No report inputs' }}</span></div>
+    <div class="stat"><span class="stat-label">Reconciliation</span>
+      {% if preview.mismatch == 0 %}<span class="stat-value">Agrees</span><span class="stat-sub tone-success">The figures match</span>
+      {% else %}<span class="stat-value">Differs</span><span class="stat-sub tone-danger">By {{ preview.mismatch|abs|num }}</span>{% endif %}</div>
+  </div>
+
+  <section class="settings-section" aria-labelledby="section-read">
+    <header class="settings-section-head">
+      <h2 id="section-read">Settings read from the workbook</h2>
+      <p>These become the new tracker's settings. You can change them afterwards on its Settings tab.</p>
+    </header>
+    <dl class="key-values">
+      <div><dt>Reporting weeks</dt><dd>{{ s.first_week_ending|fdate }} to {{ s.last_week_ending|fdate }}, ending on {{ weekdays[s.weekday] }}s</dd></div>
+      <div><dt>Target completion</dt><dd>{{ s.target_completion|fdate if s.target_completion else 'None' }}</dd></div>
+      <div><dt>Completed before the first week</dt><dd>{{ s.completed_before_first|num }}</dd></div>
+      <div><dt>Moving-average period</dt><dd>{{ s.moving_average_weeks }} weeks</dd></div>
+    </dl>
+  </section>
+
+  <section class="settings-section" aria-labelledby="section-reconcile">
+    <header class="settings-section-head">
+      <h2 id="section-reconcile">Reconciliation</h2>
+      <p>The starting figures of the {{ (form.get('group_label') or 'group')|lower|plural }} should equal everything completed before and during the weeks.</p>
+    </header>
+    <dl class="key-values">
+      <div><dt>{{ (form.get('group_label') or 'Group') }} starting figures</dt><dd>{{ preview.group_total|num }}</dd></div>
+      <div><dt>Completed before the first week</dt><dd>{{ s.completed_before_first|num }}</dd></div>
+      <div><dt>Weekly actuals</dt><dd>{{ preview.weekly_total|num }}</dd></div>
+      <div><dt>Before and during the weeks</dt><dd>{{ (s.completed_before_first + preview.weekly_total)|num }}</dd></div>
+      <div><dt>Result</dt><dd>{% if preview.mismatch == 0 %}<span class="badge badge-success">The figures agree</span>{% else %}<span class="badge badge-danger">The figures differ by {{ preview.mismatch|abs|num }}</span>{% endif %}</dd></div>
+    </dl>
+  </section>
+
+  <section class="settings-section" aria-labelledby="section-groups">
+    <header class="settings-section-head">
+      <h2 id="section-groups">{{ (form.get('group_label') or 'Group')|plural }} ({{ preview.groups|length }})</h2>
+      <p>Each row becomes a {{ (form.get('group_label') or 'group')|lower }} with its scope and current status.</p>
+    </header>
+    <div class="section-table">
+      <table class="table">
+        <thead><tr><th scope="col">Name</th><th scope="col" class="num">Baseline</th><th scope="col" class="num">Starting figure</th>
+          <th scope="col" class="num">Ready</th><th scope="col">Planned completion</th><th scope="col">Status</th></tr></thead>
+        <tbody>{% for g in preview.groups %}
+          <tr><td>{{ g.name }}</td><td class="num">{{ g.baseline|num }}</td><td class="num">{{ g.starting_completed|num }}</td>
+            <td class="num">{{ g.ready_not_complete|num }}</td><td>{{ g.planned_completion|fdate if g.planned_completion else '' }}</td>
+            <td>{% if g.rag %}<span class="rag-label"><span class="rag-dot rag-dot-{{ g.rag|lower }}" aria-hidden="true"></span>{{ g.rag }}</span>{% endif %}</td></tr>
+        {% endfor %}</tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="settings-section" aria-labelledby="section-weeks">
+    <header class="settings-section-head">
+      <h2 id="section-weeks">Weekly history ({{ preview.weeks|length }})</h2>
+      <p>The target and actual for each week. Actuals are imported as weekly totals, not as individual entries.</p>
+    </header>
+    <div class="section-table section-scroll" tabindex="0" aria-label="Weekly history">
+      <table class="table">
+        <thead><tr><th scope="col">Week ending</th><th scope="col" class="num">Target</th><th scope="col" class="num">Actual</th></tr></thead>
+        <tbody>{% for w in preview.weeks %}
+          <tr><td>{{ w.week_ending|fdate }}</td><td class="num">{{ '' if w.target is none else w.target|num }}</td><td class="num">{{ '' if w.actual is none else w.actual|num }}</td></tr>
+        {% endfor %}</tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="settings-section" aria-labelledby="section-risks">
+    <header class="settings-section-head">
+      <h2 id="section-risks">Risks and issues ({{ preview.risks|length }})</h2>
+      <p>{% if preview.inputs %}The latest report inputs, for the week ending {{ preview.inputs.week_ending|fdate }}, are imported too.{% else %}The workbook has no report inputs to import.{% endif %}</p>
+    </header>
+    {% if preview.risks %}
+    <div class="section-table">
+      <table class="table">
+        <thead><tr><th scope="col">Ref</th><th scope="col">Description</th><th scope="col">Status</th><th scope="col">RAG</th></tr></thead>
+        <tbody>{% for r in preview.risks %}
+          <tr><td>{{ r.ref }}</td><td>{{ r.description }}</td><td>{{ r.status }}</td>
+            <td>{% if r.rag %}<span class="rag-label"><span class="rag-dot rag-dot-{{ r.rag|lower }}" aria-hidden="true"></span>{{ r.rag }}</span>{% endif %}</td></tr>
+        {% endfor %}</tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-note">None.</p>
+    {% endif %}
+  </section>
+
   <form method="post" action="{{ url_for('importer.confirm') }}">
     {{ csrf_field(csrf_token()) }}
     <input type="hidden" name="payload" value="{{ token }}">
-    <div class="form-row"><label for="name">Tracker name</label><input id="name" name="name" value="{{ form.get('name', '') }}" required></div>
-    <div class="form-row"><label for="unit_label">Unit being counted (for example, thin clients)</label><input id="unit_label" name="unit_label" value="{{ form.get('unit_label', '') }}"></div>
-    <div class="form-row"><label for="group_label">Grouping label (for example, Location)</label><input id="group_label" name="group_label" value="{{ form.get('group_label', '') }}"></div>
-    {% if preview.mismatch != 0 %}
-    <div class="form-row"><label><input type="checkbox" name="accept_mismatch" value="1" {{ 'checked' if form.get('accept_mismatch') == '1' }}> Import regardless of the difference of {{ preview.mismatch }}</label></div>
-    {% endif %}
-    <button class="button primary" type="submit">Create tracker</button>
-    <a class="button" href="{{ url_for('importer.upload') }}">Cancel</a>
+    <section class="settings-section span-all" aria-labelledby="section-new">
+      <header class="settings-section-head">
+        <h2 id="section-new">New tracker</h2>
+        <p>Name the tracker and say what it counts. You become its owner.</p>
+      </header>
+      {% call setting('Tracker name', 'Shown on the Trackers page, the report and the email.', 'name') %}
+      <input id="name" name="name" value="{{ form.get('name', '') }}" required aria-describedby="name-help">
+      {% endcall %}
+      {% call setting('Unit being counted', 'What one completion is, for example thin clients. Shown next to the figures.', 'unit_label') %}
+      <input id="unit_label" name="unit_label" value="{{ form.get('unit_label', '') }}" aria-describedby="unit_label-help">
+      {% endcall %}
+      {% call setting('Grouping label', 'What the groups are called, for example Location. It also names the groups tab.', 'group_label') %}
+      <input id="group_label" name="group_label" value="{{ form.get('group_label', '') }}" aria-describedby="group_label-help">
+      {% endcall %}
+      {% if preview.mismatch != 0 %}
+      {% call setting('Import regardless', 'The figures differ by ' ~ preview.mismatch|abs|num ~ '. Turn this on to import them as they are.', 'accept_mismatch') %}
+      <span class="switch">
+        <input id="accept_mismatch" name="accept_mismatch" type="checkbox" role="switch" value="1" {{ 'checked' if form.get('accept_mismatch') == '1' }} aria-describedby="accept_mismatch-help">
+        <span class="switch-track" aria-hidden="true"></span>
+      </span>
+      {% endcall %}
+      {% endif %}
+    </section>
+    <div class="settings-actions">
+      <a class="button" href="{{ url_for('importer.upload') }}">Cancel</a>
+      <button class="button primary" type="submit">Create tracker</button>
+    </div>
   </form>
-</section>
+</div>
 {% endblock %}

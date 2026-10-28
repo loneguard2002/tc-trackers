@@ -1,18 +1,30 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import csrf_field, setting %}
 {% block content %}
 <h1>Import workbook</h1>
-<section class="card">
-  <p>Create a new tracker from the existing tracking workbook (.xlsx, up to 1 MB). The workbook is read once; nothing is saved until you confirm the preview on the next page.</p>
-  {% if error %}<ul class="form-error"><li>{{ error }}</li></ul>{% endif %}
+<p class="page-lede">Create a new tracker from an existing tracking workbook. Step 1 of 2: read the workbook. Nothing is saved until you confirm the preview on the next page.</p>
+<div class="settings settings-narrow">
   <form method="post" action="{{ url_for('importer.preview') }}" enctype="multipart/form-data">
+    {% if error %}<div class="form-alert" role="alert"><strong>The workbook could not be read.</strong><ul class="form-error"><li>{{ error }}</li></ul></div>{% endif %}
     {{ csrf_field(csrf_token()) }}
-    <div class="form-row"><label for="workbook">Workbook</label><input id="workbook" name="workbook" type="file" accept=".xlsx" required></div>
-    <div class="form-row"><label for="weekday">Week-ending day</label>
-      <select id="weekday" name="weekday">
+    <section class="settings-section span-all" aria-labelledby="section-workbook">
+      <header class="settings-section-head">
+        <h2 id="section-workbook">Workbook</h2>
+        <p>The file is read once and checked; the next page shows what will be imported.</p>
+      </header>
+      {% call setting('Workbook file', 'An .xlsx file of up to 1 MB in the standard tracking layout.', 'workbook') %}
+      <input id="workbook" name="workbook" type="file" accept=".xlsx" required aria-describedby="workbook-help">
+      {% endcall %}
+      {% call setting('Week-ending day', 'The day each reporting week ends. Each report date in the workbook counts towards the week ending on this day.', 'weekday') %}
+      <select id="weekday" name="weekday" aria-describedby="weekday-help">
         {% for n, day in weekdays %}<option value="{{ n }}" {{ 'selected' if weekday == n }}>{{ day }}</option>{% endfor %}
-      </select></div>
-    <button class="button primary" type="submit">Read workbook</button>
+      </select>
+      {% endcall %}
+    </section>
+    <div class="settings-actions">
+      <a class="button" href="{{ url_for('index') }}">Cancel</a>
+      <button class="button primary" type="submit">Read workbook</button>
+    </div>
   </form>
-</section>
+</div>
 {% endblock %}

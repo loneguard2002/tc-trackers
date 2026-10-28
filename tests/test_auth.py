@@ -144,6 +144,15 @@ def test_admin_user_list_renders(client, logged_in_admin, user_factory):
     assert response.status_code == 200 and b"Waiting Person" in response.data
 
 
+def test_admin_user_list_offers_actions_per_person(client, logged_in_admin, user_factory):
+    pending = user_factory(full_name="Waiting Person", status="pending")
+    html = client.get("/admin/users").get_data(as_text=True)
+    assert f'action="/admin/users/{pending.id}/approve"' in html
+    assert "1 awaiting approval" in html
+    assert 'data-confirm="Disable Waiting Person?' in html
+    assert f'action="/admin/users/{logged_in_admin.id}/disable"' not in html  # never your own account
+
+
 def test_non_admin_cannot_open_admin(client, logged_in_user):
     assert client.get("/admin/users").status_code == 403
     assert client.get("/admin/smtp").status_code == 403

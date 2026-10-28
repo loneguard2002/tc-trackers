@@ -41,6 +41,7 @@ def _render_confirm(preview: ImportPreview, token: str, form, error: str | None 
             token=token,
             form=form,
             error=error,
+            weekdays=WEEKDAYS,
             page_title="Confirm import",
             current_page="import",
         ),
