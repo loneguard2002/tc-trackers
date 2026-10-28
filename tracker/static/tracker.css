@@ -138,7 +138,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tab.active { color: var(--text); border-bottom-color: var(--primary); }
 
 /* Links to the sections of a long page, under the tabs. The row stays pinned below the fixed top bar while the page
-   scrolls, and tracker.js underlines the section in view; a linked section lands clear of both bars. */
+   scrolls; tracker.js underlines the link of the section in view and outlines that section (.is-current). A linked
+   section lands clear of both bars. */
 :root { --subnav-height: 42px; }
 .subnav { position: sticky; top: var(--topbar-height); z-index: 20; display: flex; align-items: center; gap: 24px; height: var(--subnav-height); margin: -24px 0 20px; border-bottom: 1px solid var(--border); background: var(--bg); box-shadow: -8px 0 0 var(--bg), 8px 0 0 var(--bg); overflow-x: auto; scrollbar-width: none; }
 .subnav::-webkit-scrollbar { display: none; }
@@ -146,7 +147,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .subnav a:hover { color: var(--text); }
 .subnav a[aria-current="location"] { color: var(--text); text-decoration: underline 2px var(--primary); text-underline-offset: 6px; }
 .settings-section { scroll-margin-top: calc(var(--topbar-height) + var(--subnav-height) + 16px); }
-.settings-section:target { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent); }
+.settings-section.is-current { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent); }
 @media (prefers-reduced-motion: no-preference) {
   :root:has(.subnav) { scroll-behavior: smooth; }
 }
