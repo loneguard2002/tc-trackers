@@ -4,11 +4,15 @@
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
 {% set group_name = tracker.group_label or 'Group' %}
+<nav class="subnav" aria-label="Risk sections">
+  <a href="#risk-details">{{ 'Risk ' ~ risk.ref if risk else 'Add a risk' }}</a>
+  <a href="#risk-status">Status and dates</a>
+</nav>
 <div class="settings">
   <form method="post" action="{{ url_for('entries.edit_risk', tracker_id=tracker.id, risk_id=risk.id) if risk else url_for('entries.risks', tracker_id=tracker.id) }}">
     {% include "entries/_errors.html" %}
     {{ csrf_field(csrf_token()) }}
-    <section class="settings-section" aria-labelledby="section-risk">
+    <section class="settings-section" id="risk-details" aria-labelledby="section-risk">
       <header class="settings-section-head">
         <h2 id="section-risk">{{ 'Risk ' ~ risk.ref if risk else 'Add a risk' }}</h2>
         <p>What the risk is, what it affects and who owns it.</p>
@@ -30,7 +34,7 @@
       <input id="owner_role" name="owner_role" value="{{ form.get('owner_role', '') }}" aria-describedby="owner_role-help">
       {% endcall %}
     </section>
-    <section class="settings-section" aria-labelledby="section-risk-status">
+    <section class="settings-section" id="risk-status" aria-labelledby="section-risk-status">
       <header class="settings-section-head">
         <h2 id="section-risk-status">Status and dates</h2>
         <p>Where the risk stands. Keep these current so the report ranks it correctly.</p>
