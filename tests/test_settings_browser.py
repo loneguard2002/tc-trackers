@@ -161,3 +161,28 @@ def test_bookmarked_section_is_underlined(page, live_server, tracker_factory, us
     page.goto(f"{live_server}/trackers/{tracker.id}/settings#schedule")
     page.wait_for_timeout(1200)
     assert current_link(page) == ["Scheduled sending"]
+
+
+def outlined_sections(page):
+    return page.evaluate("[...document.querySelectorAll('.settings-section.is-current')].map(s => s.id)")
+
+
+def test_first_section_is_outlined_on_load(page, owner_page):
+    page.set_viewport_size({"width": 1600, "height": 700})
+    owner_page()
+    assert outlined_sections(page) == ["general"]
+    colours = page.evaluate(
+        "['general', 'reporting-period'].map(id => getComputedStyle(document.getElementById(id)).borderTopColor)"
+    )
+    assert colours[0] != colours[1]
+
+
+def test_outline_moves_with_the_underline(page, owner_page):
+    page.set_viewport_size({"width": 1600, "height": 700})
+    owner_page()
+    page.click(f"{SUBNAV} a[href='#schedule']")
+    page.wait_for_timeout(1500)
+    assert outlined_sections(page) == ["schedule"]
+    page.evaluate("window.scrollTo(0, 0)")
+    page.wait_for_timeout(400)
+    assert outlined_sections(page) == ["general"]

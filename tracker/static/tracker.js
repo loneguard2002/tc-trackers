@@ -91,8 +91,8 @@
     });
   }
 
-  // Section links (.subnav): underline the section in view. With sections in two columns, two share a row; a
-  // clicked link keeps the underline while the page scrolls to it and once it arrives.
+  // Section links (.subnav): underline the section in view and outline that section. With sections in two columns,
+  // two share a row; a clicked link keeps the underline while the page scrolls to it and once it arrives.
   var subnav = document.querySelector(".subnav");
   if (subnav) {
     var links = Array.prototype.slice.call(subnav.querySelectorAll("a[href^='#']"));
@@ -110,6 +110,7 @@
         } else {
           link.removeAttribute("aria-current");
         }
+        if (targets[i]) targets[i].classList.toggle("is-current", i === index);
       });
     };
 
