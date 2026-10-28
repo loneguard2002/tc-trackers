@@ -1,38 +1,149 @@
 {% extends "base.html" %}
-{% block content %}
-<h1>Trackers</h1>
-{% if current_user and current_user.is_admin %}
-<p><a class="button primary" href="{{ url_for('trackers.new') }}">New tracker</a>
-  {% if show_archived %}<a class="button" href="{{ url_for('index') }}">Hide archived</a>
-  {% else %}<a class="button" href="{{ url_for('index', archived=1) }}">Show archived</a>{% endif %}</p>
+{% from "macros.html" import bar, icon, rag_dot, rag_tone %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='home.js', v=app_version) }}" defer></script>
+{% endblock %}
+
+{% macro forecast_fact(h) -%}
+{% set dvt = h.forecast_vs_target_days %}
+{% if h.verdict == 'Complete' %}<span class="fact-value">Complete</span>
+{% elif not h.forecast_completion %}<span class="fact-value">–</span><span class="fact-sub">{{ 'Target ' ~ (h.target_completion|fdate) if h.target_completion else 'No target date' }}</span>
+{% else %}<span class="fact-value {{ '' if dvt is none else ('tone-danger' if dvt > 0 else 'tone-success') }}">{{ h.forecast_completion|fdate }}</span>
+<span class="fact-sub">{% if dvt is none %}No target date{% elif dvt > 0 %}{{ (dvt / 7)|round(0, 'ceil')|int }} wk after target {{ h.target_completion|fdate }}{% elif dvt <= -7 %}{{ (-dvt / 7)|round(0, 'floor')|int }} wk before target {{ h.target_completion|fdate }}{% else %}On target {{ h.target_completion|fdate }}{% endif %}</span>
 {% endif %}
+{%- endmacro %}
+
+{% macro week_fact(c) -%}
+{% set h = c.headline %}
+{% if h.this_week_actual is none or h.this_week_target is none %}
+<span class="fact-value">{{ h.this_week_actual|dash }}</span><span class="fact-sub">{{ 'Starts ' ~ (c.starts|fdate) if c.starts else 'No target this week' }}</span>
+{% else %}{% set gap = h.this_week_actual - h.this_week_target %}
+<span class="fact-value">{{ h.this_week_actual|num }} <span class="muted">/ {{ h.this_week_target|num }}</span></span>
+<span class="fact-sub {{ 'tone-danger' if gap < 0 else 'tone-success' }}">{% if gap == 0 %}On target{% else %}{{ '+' if gap > 0 else '−' }}{{ gap|abs }} against target{% endif %}</span>
+{% endif %}
+{%- endmacro %}
+
+{% macro last_entry_text(c) -%}
+{% if c.starts %}Starts {{ c.starts|fdate }}{% elif not c.last_entry %}No entries yet{% else %}{% set days = (today - c.last_entry).days %}Last entry {{ c.last_entry|fdate }} · {{ 'today' if days == 0 else ('yesterday' if days == 1 else days ~ ' days ago') }}{% endif %}
+{%- endmacro %}
+
+{% block content %}
+<div class="home-head">
+  <div>
+    <h1>Trackers</h1>
+    <p class="muted">{{ cards|length }} tracker{{ '' if cards|length == 1 else 's' }} you can open{{ ', including archived' if show_archived }}</p>
+  </div>
+  {% if current_user and current_user.is_admin %}
+  <div class="home-actions">
+    {% if show_archived %}<a class="button" href="{{ url_for('index') }}">Hide archived</a>
+    {% else %}<a class="button" href="{{ url_for('index', archived=1) }}">Show archived</a>{% endif %}
+    <a class="button primary" href="{{ url_for('trackers.new') }}">{{ icon('plus') }}New tracker</a>
+  </div>
+  {% endif %}
+</div>
+
 {% if not cards %}
 <section class="empty-state">
   <p>{{ 'There are no trackers yet.' if current_user and current_user.is_admin else 'You have not been given access to any trackers.' }}</p>
 </section>
 {% else %}
-<div class="card-grid">
+{% set filters = [
+  ('all', 'All', None, cards|length),
+  ('red', 'Red', 'Red', cards|selectattr('status', 'equalto', 'Red')|list|length),
+  ('amber', 'Amber', 'Amber', cards|selectattr('status', 'equalto', 'Amber')|list|length),
+  ('green', 'Green', 'Green', cards|selectattr('status', 'equalto', 'Green')|list|length),
+  ('none', 'Not set', '', cards|rejectattr('status')|list|length),
+  ('behind', 'Behind target', None, cards|selectattr('behind')|list|length),
+  ('inputs', 'Commentary missing', None, cards|selectattr('inputs_missing')|list|length),
+] %}
+<div class="home-tools" data-home-tools hidden>
+  <div class="chips" role="group" aria-label="Show trackers">
+    {% for key, label, dot, count in filters if key == 'all' or count %}
+    <button class="chip" type="button" data-filter="{{ key }}" aria-pressed="{{ 'true' if key == 'all' else 'false' }}">
+      {%- if dot is not none %}{{ rag_dot(dot or none) }}{% endif %}{{ label }}<span class="chip-count">{{ count }}</span></button>
+    {% endfor %}
+  </div>
+  <div class="home-tools-right">
+    <label for="home-sort">Sort</label>
+    <select id="home-sort" data-home-sort>
+      <option value="attention">Needs attention first</option>
+      <option value="name">Name</option>
+      <option value="target">Target date</option>
+    </select>
+    <div class="toggle" role="group" aria-label="Layout">
+      <button type="button" data-layout="cards" aria-pressed="true">Cards</button>
+      <button type="button" data-layout="list" aria-pressed="false">List</button>
+    </div>
+  </div>
+</div>
+
+<div class="tracker-cards" data-home-cards>
   {% for c in cards %}
-  {% set t = c.tracker %}{% set h = c.headline %}
-  <section class="card">
-    <h2><a href="{{ url_for('trackers.view', tracker_id=t.id) }}">{{ t.name }}</a></h2>
-    <p>
-      <span class="badge badge-{{ {'Red': 'danger', 'Amber': 'warning', 'Green': 'success'}.get(c.status, 'muted') }}">{{ c.status or 'Not set' }}</span>
-      <span class="muted">{{ h.verdict }}</span>
-      {% if t.status == 'archived' %}<span class="badge badge-muted">Archived</span>{% endif %}
-    </p>
-    <dl>
-      <dt>Complete</dt>
-      <dd>{% if h.pct_complete is not none %}{{ h.pct_complete|pct }}{% else %}Not available{% endif %}
-        ({{ h.completed }} of {{ h.total_scope }} {{ t.unit_label }})</dd>
-      <dt>Forecast completion</dt>
-      <dd>{{ h.forecast_completion|fdate if h.forecast_completion else 'No forecast yet' }}
-        {% if h.target_completion %}against a target of {{ h.target_completion|fdate }}{% endif %}</dd>
-      <dt>Last entry</dt>
-      <dd>{{ c.last_entry|fdate if c.last_entry else 'No entries yet' }}</dd>
+  {% set t = c.tracker %}{% set h = c.headline %}{% set tone = rag_tone(c.status) %}
+  {% set dvt = h.forecast_vs_target_days %}
+  {% set can_edit = c.role in ('editor', 'owner') and t.status == 'active' %}
+  <article class="tracker-card tracker-card-{{ tone }}{{ ' is-archived' if t.status == 'archived' }}" data-card
+    data-status="{{ tone }}" data-behind="{{ 'true' if c.behind else 'false' }}" data-inputs="{{ 'true' if c.inputs_missing else 'false' }}"
+    data-name="{{ t.name|lower }}" data-target="{{ h.target_completion.isoformat() if h.target_completion else '9999-12-31' }}" data-attention="{{ c.attention }}">
+    <header class="tracker-card-head">
+      <h2 class="tracker-card-title"><a href="{{ url_for('report.view', tracker_id=t.id) }}">{{ t.name }}</a>
+        {% if c.role %}<span class="role-tag">{{ c.role|capitalize }}</span>{% endif %}
+        {% if t.status == 'archived' %}<span class="role-tag">Archived</span>{% endif %}</h2>
+      <p class="tracker-card-status">{{ rag_dot(c.status) }}<span><span class="status-word">{{ c.status or 'Not set' }}</span>: <span class="{{ '' if dvt is none else ('tone-danger' if dvt > 0 else 'tone-success') }}">{{ h.verdict }}</span></span></p>
+    </header>
+    <div class="tracker-card-progress">
+      <div class="tracker-card-total">
+        <span class="total-pct">{{ h.pct_complete|pct if h.pct_complete is not none else '0%' }}<small>complete</small></span>
+        <span class="total-count"><strong>{{ h.completed|num }}</strong> of {{ h.total_scope|num }} {{ t.unit_label }}</span>
+        {{ bar(h.completed, h.total_scope, label=(h.pct_complete|pct) ~ ' complete') }}
+      </div>
+      <div class="tracker-card-spark">
+        {% if c.spark %}{% set s = c.spark %}
+        <svg class="spark" viewBox="0 0 320 84" preserveAspectRatio="none" role="img" aria-label="Last {{ s.weeks }} weeks: actual against target">
+          {% for b in s.bars %}<rect class="spark-bar{{ ' is-low' if b.low }}" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.width }}" height="{{ b.height }}"/>{% endfor %}
+          {% if s.target %}<path class="spark-target" d="{{ s.target }}" vector-effect="non-scaling-stroke"/>{% endif %}
+        </svg>
+        <p class="spark-key"><span><i class="key key-on"></i>On target<i class="key key-low"></i>Below<i class="key key-target"></i>Target</span>
+          <span>Latest week <strong>{{ s.actual|dash }}</strong> / {{ s.goal|dash }}</span></p>
+        {% else %}<p class="spark-empty">{{ 'Starts ' ~ (c.starts|fdate) ~ '.' if c.starts else 'No completed weeks yet, so there is no weekly chart.' }}</p>{% endif %}
+      </div>
+    </div>
+    <dl class="tracker-card-facts">
+      <div><dt>Forecast</dt><dd>{{ forecast_fact(h) }}</dd></div>
+      <div><dt>This week</dt><dd>{{ week_fact(c) }}</dd></div>
+      <div><dt>Red risks</dt><dd><span class="fact-value{{ ' tone-danger' if c.red_risks }}">{{ c.red_risks }}</span><span class="fact-sub">{{ c.open_risks }} open in all</span></dd></div>
     </dl>
-  </section>
+    <footer class="tracker-card-foot">
+      <span>{{ last_entry_text(c) }}</span>
+      {% if c.inputs_missing %}<span class="flag">Commentary for {{ h.report_week|fdate }} missing</span>{% endif %}
+      {% if c.entry_stale and c.last_entry %}<span class="flag">No entry for over a week</span>{% endif %}
+      <span class="tracker-card-links"><a href="{{ url_for('report.view', tracker_id=t.id) }}">Report</a>
+        {% if can_edit %}<a href="{{ url_for('entries.new_entry', tracker_id=t.id) }}">Record completions</a>{% endif %}</span>
+    </footer>
+  </article>
   {% endfor %}
 </div>
+
+<div class="tracker-list" data-home-list hidden>
+  <table>
+    <thead><tr><th>Status</th><th>Tracker</th><th>Progress</th><th>This week</th><th>Forecast</th><th>Red risks</th><th>Last entry</th></tr></thead>
+    <tbody>
+      {% for c in cards %}
+      {% set t = c.tracker %}{% set h = c.headline %}{% set tone = rag_tone(c.status) %}
+      <tr class="tracker-row tracker-row-{{ tone }}" data-card data-status="{{ tone }}" data-behind="{{ 'true' if c.behind else 'false' }}" data-inputs="{{ 'true' if c.inputs_missing else 'false' }}"
+        data-name="{{ t.name|lower }}" data-target="{{ h.target_completion.isoformat() if h.target_completion else '9999-12-31' }}" data-attention="{{ c.attention }}">
+        <td class="tracker-row-status"><span class="rag-label">{{ rag_dot(c.status) }}{{ c.status or 'Not set' }}</span></td>
+        <td><a class="cell-title" href="{{ url_for('report.view', tracker_id=t.id) }}">{{ t.name }}</a><span class="cell-sub">{{ h.verdict }}{{ ' · Archived' if t.status == 'archived' }}</span></td>
+        <td class="tracker-row-progress">{{ bar(h.completed, h.total_scope, label=(h.pct_complete|pct) ~ ' complete') }}<span class="cell-sub">{{ h.pct_complete|pct }} · {{ h.completed|num }} of {{ h.total_scope|num }}</span></td>
+        <td>{{ h.this_week_actual|dash }} / {{ h.this_week_target|dash }}</td>
+        <td class="tracker-row-forecast">{{ forecast_fact(h) }}</td>
+        <td class="{{ 'tone-danger' if c.red_risks }}"><strong>{{ c.red_risks }}</strong></td>
+        <td>{{ last_entry_text(c) }}{% if c.inputs_missing %}<span class="cell-sub flag">Commentary missing</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="empty-note" data-home-empty hidden>No trackers match this filter.</p>
 {% endif %}
 {% endblock %}

@@ -12,7 +12,7 @@ import pytest
 from report_helpers import FRIDAY, WEEKS, sample_rows, synthetic_report
 
 from tracker.engine.calc import WeekRow, build_week_rows
-from tracker.formatting import fmt_dash, fmt_date, fmt_pct, fmt_plural, fmt_rate
+from tracker.formatting import fmt_dash, fmt_date, fmt_num, fmt_pct, fmt_plural, fmt_rate
 from tracker.models import CompletionEntry, Group, ReportInput, Risk, Week
 from tracker.report.build import build_report, default_report_week, select_top_risks
 from tracker.report.chart_data import chart_payload
@@ -302,11 +302,49 @@ def test_home_shows_weekly_status_from_latest_input(client, db, small_tracker, v
     db.add(ReportInput(tracker_id=small_tracker.id, week_ending=WEEKS[1], status="Green"))
     db.commit()
     html = client.get("/").get_data(as_text=True)
-    assert 'badge-success">Green</span>' in html
-    assert 'badge-danger">Red</span>' not in html
+    assert "tracker-card tracker-card-green" in html
+    assert "tracker-card-red" not in html
 
 
 # --- Template rendering without a database ----------------------------------------------------------------------
+
+
+def test_fmt_num_adds_thousands_separators():
+    assert fmt_num(1170) == "1,170" and fmt_num(0) == "0" and fmt_num(None) == "–"
+
+
+def test_report_page_steps_between_weeks(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    html = client.get(f"/trackers/{small_tracker.id}/report?week={WEEKS[1].isoformat()}").get_data(as_text=True)
+    base = f"/trackers/{small_tracker.id}/report"
+    assert f'href="{base}?week={WEEKS[0].isoformat()}" rel="prev"' in html
+    assert f'href="{base}?week={WEEKS[2].isoformat()}" rel="next"' in html
+    first = client.get(f"{base}?week={WEEKS[0].isoformat()}").get_data(as_text=True)
+    assert 'rel="prev"' not in first and 'aria-disabled="true"' in first
+
+
+def test_report_shows_status_colour_risk_stripes_and_group_bars(client, db, small_tracker, viewer):
+    group = seed(db, small_tracker)
+    group.rag, group.planned_completion, group.comment = "Amber", date(2026, 12, 4), "Waiting on stock"
+    db.add(ReportInput(tracker_id=small_tracker.id, week_ending=WEEKS[1], status="Red"))
+    db.add(
+        Risk(
+            tracker_id=small_tracker.id,
+            ref="R1",
+            description="Late stock",
+            rag="Red",
+            group_id=group.id,
+            target_date=date(2026, 9, 1),
+        )
+    )
+    db.commit()
+    html = client.get(f"/trackers/{small_tracker.id}/report?week={WEEKS[1].isoformat()}").get_data(as_text=True)
+    flat = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
+    assert "report-band report-band-red" in html and "top-risk top-risk-red" in html
+    assert "Late stock" in flat and "Site A" in flat and "target 01 Sep 2026, passed" in flat
+    assert "planned 04 Dec 2026 · Waiting on stock" in flat
+    assert 'class="bar-fill" width="20.00"' in html
+    assert "All locations 20 of 100 · 20%" in flat
 
 
 def test_report_page_template_renders_without_database(app):
@@ -384,7 +422,7 @@ def test_actual_series_uses_completed_weeks_only():
         assert xs == complete
 
 
-# --- Owner column and supporting figures (database-free) -----------------------------------------------------------
+# --- Top risks and headline figures (database-free) -------------------------------------------------------------
 
 
 def body_html(app, report):
@@ -394,20 +432,25 @@ def body_html(app, report):
         return render_template("report/_body.html", report=report)
 
 
+def flat_text(html: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).replace("&#39;", "'")
+
+
 def test_top_risks_show_owner_role(app):
     report, _ = synthetic_report()
     html = body_html(app, report)
-    assert '<th data-filter="select">Owner</th>' in html and "Programme Lead" in html
+    assert '<p class="top-risk-meta">Programme Lead' in html
 
 
-def test_supporting_figures_are_shown(app):
+def test_headline_figures_carry_their_comparisons(app):
     report, _ = synthetic_report()
     h = report.headline
-    html = body_html(app, report)
-    assert "Supporting figures" in html
-    for label in ("Weeks left to target", "Required rate", "Forecast against target", "Next week's target"):
-        assert label in html.replace("&#39;", "'")
-    assert h.weeks_left is not None and f"<dd>{h.weeks_left}</dd>" in html
+    text = flat_text(body_html(app, report))
+    assert f"{fmt_rate(h.required_rate)} a week needed" in text
+    assert f"Next week: {h.next_week_target}" in text
+    assert h.weeks_left is not None and f"{h.weeks_left} weeks to {fmt_date(h.target_completion)}" in text
+    dvt = h.forecast_vs_target_days
+    assert f"{abs(dvt)} days {'after' if dvt > 0 else 'before'} target" in text
 
 
 def test_data_check_warning_when_totals_differ(app):
@@ -420,7 +463,7 @@ def test_data_check_warning_when_totals_differ(app):
     assert "Data check:" not in body_html(app, good)
 
 
-def test_supporting_figures_render_with_missing_values(app):
+def test_headline_figures_render_with_missing_values(app):
     import dataclasses
 
     report, _ = synthetic_report()
@@ -430,16 +473,17 @@ def test_supporting_figures_render_with_missing_values(app):
             report.headline, weeks_left=None, required_rate=None, forecast_vs_target_days=None, next_week_target=None
         ),
     )
-    assert "Supporting figures" in body_html(app, sparse)
+    text = flat_text(body_html(app, sparse))
+    assert "No required rate" in text and "Next week: –" in text and "weeks to" not in text
 
 
-def test_supporting_figures_in_print_html(app):
+def test_headline_figures_in_print_html(app):
     from tracker.report.render import render_print_html
 
     report, _ = synthetic_report()
     with app.app_context():
         html = render_print_html(report)
-    assert "Supporting figures" in html and "Programme Lead" in html
+    assert "a week needed" in html and "Programme Lead" in html
 
 
 def test_print_html_loads_no_chart_scripts(app):

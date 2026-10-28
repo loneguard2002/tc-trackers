@@ -1,22 +1,30 @@
 {% extends "base.html" %}
+{% from "macros.html" import icon %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='vendor/echarts-6.1.0.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='report-charts.js', v=app_version) }}" defer></script>
-{% include "_table_assets.html" %}
 {% endblock %}
 {% block content %}
 {% include "trackers/_nav.html" %}
-<form method="get" action="{{ url_for('report.view', tracker_id=report.tracker.id) }}" class="report-week">
-  <label>Week ending
-    <select name="week">
-      {% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if w == report.week_ending }}>{{ w|fdate }}</option>{% endfor %}
-    </select>
-  </label>
-  <button class="button" type="submit">Show</button>
-  <a class="button" href="{{ url_for('report.export_pdf', tracker_id=report.tracker.id, week=report.week_ending.isoformat()) }}">Download PDF</a>
-  <a class="button" href="{{ url_for('report.export_png', tracker_id=report.tracker.id, week=report.week_ending.isoformat()) }}">Download PNG</a>
+{% set tid = report.tracker.id %}{% set wk = report.week_ending %}
+{% set ns = namespace(prev=none, next=none) %}
+{% for w in weeks %}{% if w < wk %}{% set ns.prev = w %}{% elif w > wk and ns.next is none %}{% set ns.next = w %}{% endif %}{% endfor %}
+<form method="get" action="{{ url_for('report.view', tracker_id=tid) }}" class="report-week">
+  {% if ns.prev %}<a class="button button-small" href="{{ url_for('report.view', tracker_id=tid, week=ns.prev.isoformat()) }}" rel="prev">{{ icon('chevron-left') }}Previous</a>
+  {% else %}<span class="button button-small is-disabled" aria-disabled="true">{{ icon('chevron-left') }}Previous</span>{% endif %}
+  <label class="sr-only" for="report-week">Week ending</label>
+  <select id="report-week" name="week" data-autosubmit>
+    {% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if w == wk }}>{{ w|fdate }}</option>{% endfor %}
+  </select>
+  <button class="button button-small" type="submit" data-autosubmit-fallback>Show</button>
+  {% if ns.next %}<a class="button button-small" href="{{ url_for('report.view', tracker_id=tid, week=ns.next.isoformat()) }}" rel="next">Next{{ icon('chevron-right') }}</a>
+  {% else %}<span class="button button-small is-disabled" aria-disabled="true">Next{{ icon('chevron-right') }}</span>{% endif %}
+  <span class="report-week-downloads">
+    <a class="button button-small" href="{{ url_for('report.export_pdf', tracker_id=tid, week=wk.isoformat()) }}">{{ icon('download') }}Download PDF</a>
+    <a class="button button-small" href="{{ url_for('report.export_png', tracker_id=tid, week=wk.isoformat()) }}">{{ icon('download') }}Download PNG</a>
+  </span>
 </form>
-<div class="report-live" data-chart-data="{{ url_for('report.chart_data', tracker_id=report.tracker.id, week=report.week_ending.isoformat()) }}">
+<div class="report-live" data-chart-data="{{ url_for('report.chart_data', tracker_id=tid, week=wk.isoformat()) }}">
 {% include "report/_body.html" %}
 </div>
 {% endblock %}

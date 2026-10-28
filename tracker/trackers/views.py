@@ -8,11 +8,19 @@ from flask import abort, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import func, select, union_all
 
 from ..audit import record
-from ..auth import ROLE_ORDER, admin_required, current_user, login_required, require_tracker_role, visible_trackers
+from ..auth import (
+    ROLE_ORDER,
+    admin_required,
+    current_user,
+    login_required,
+    require_tracker_role,
+    user_role,
+    visible_trackers,
+)
 from ..db import get_session
-from ..engine.calc import GroupInput, Headline
+from ..engine.calc import COMPLETE, GroupInput, Headline, WeekRow
 from ..engine.weeks import week_endings
-from ..models import CompletionEntry, Group, ReportInput, Tracker, TrackerRole, User, Week
+from ..models import CompletionEntry, Group, ReportInput, Risk, Tracker, TrackerRole, User, Week
 from . import bp
 from .forms import (
     RAG_VALUES,
@@ -146,26 +154,113 @@ def _data_range(session, tracker: Tracker) -> tuple[date | None, date | None]:
 # --- Home ----------------------------------------------------------------------------------------------------
 
 
+SPARK_WEEKS = 8
+SPARK_WIDTH, SPARK_HEIGHT, SPARK_HEADROOM = 320, 84, 6
+STATUS_ATTENTION = {"Red": 0, "Amber": 2, "Green": 3}
+
+
+def spark_chart(rows: list[WeekRow]) -> dict | None:
+    """Bars and target segments for the home card's chart of the last completed weeks (SVG user units)."""
+    done = [r for r in rows if r.state == COMPLETE][-SPARK_WEEKS:]
+    if not done:
+        return None
+    peak = max([r.actual or 0 for r in done] + [r.target or 0 for r in done]) or 1
+    scale = (SPARK_HEIGHT - SPARK_HEADROOM) / (peak * 1.05)
+    step = SPARK_WIDTH / len(done)
+    bars, target = [], []
+    for i, row in enumerate(done):
+        actual = row.actual or 0
+        height = actual * scale
+        bars.append(
+            {
+                "x": round(i * step + 4, 1),
+                "y": round(SPARK_HEIGHT - height, 1),
+                "width": round(step - 8, 1),
+                "height": round(height, 1),
+                "low": row.target is not None and actual < row.target,
+            }
+        )
+        if row.target is not None:
+            y = round(SPARK_HEIGHT - row.target * scale, 1)
+            target.append(f"M{round(i * step + 1, 1)},{y} H{round((i + 1) * step - 1, 1)}")
+    last = done[-1]
+    return {"bars": bars, "target": " ".join(target), "weeks": len(done), "actual": last.actual, "goal": last.target}
+
+
+def _risk_counts(session, tracker_ids: list[int]) -> dict[int, tuple[int, int]]:
+    """Open and open-Red risk counts per tracker."""
+    counts: dict[int, tuple[int, int]] = {}
+    for tracker_id, rag in session.execute(
+        select(Risk.tracker_id, Risk.rag).where(Risk.tracker_id.in_(tracker_ids), Risk.status != "Closed")
+    ):
+        open_, red = counts.get(tracker_id, (0, 0))
+        counts[tracker_id] = (open_ + 1, red + (rag == "Red"))
+    return counts
+
+
+def _written_weeks(session, tracker_ids: list[int]) -> set[tuple[int, date]]:
+    """(tracker id, week-ending) for every week whose commentary has a status or a headline."""
+    return set(
+        session.execute(
+            select(ReportInput.tracker_id, ReportInput.week_ending).where(
+                ReportInput.tracker_id.in_(tracker_ids),
+                (ReportInput.status.is_not(None)) | (ReportInput.headline != ""),
+            )
+        ).all()
+    )
+
+
 @login_required
 def home():
+    from ..report.build import compute_position  # local import: the report package imports this module
+
     db = get_session()
     user = current_user()
     show_archived = request.args.get("archived") == "1"
     trackers = [t for t in visible_trackers(db, user) if show_archived or t.status == "active"]
-    last_entries = _last_entry_dates(db, [t.id for t in trackers])
-    statuses = _latest_statuses(db, [t.id for t in trackers])
+    ids = [t.id for t in trackers]
+    last_entries = _last_entry_dates(db, ids)
+    statuses = _latest_statuses(db, ids)
+    risks = _risk_counts(db, ids)
+    written = _written_weeks(db, ids)
     today = date.today()
-    cards = [
-        {
+    cards = []
+    for t in trackers:
+        position = compute_position(db, t, None, today)
+        headline = position.headline
+        live = t.status == "active" and t.first_week_ending <= today
+        last_entry = last_entries.get(t.id)
+        dvt = headline.forecast_vs_target_days
+        status = statuses.get(t.id)
+        card = {
             "tracker": t,
-            "headline": tracker_summary(db, t, today),
-            "last_entry": last_entries.get(t.id),
-            "status": statuses.get(t.id),
+            "headline": headline,
+            "last_entry": last_entry,
+            "status": status,
+            "role": user_role(db, user, t.id),
+            "open_risks": risks.get(t.id, (0, 0))[0],
+            "red_risks": risks.get(t.id, (0, 0))[1],
+            "starts": t.first_week_ending if t.first_week_ending > today else None,
+            "inputs_missing": live and (t.id, headline.report_week) not in written,
+            "entry_stale": live and (last_entry is None or (today - last_entry).days > 7),
+            "behind": dvt is not None and dvt > 0,
+            "spark": spark_chart(position.rows),
         }
-        for t in trackers
-    ]
+        card["attention"] = (
+            (10 if t.status != "active" else 0)
+            + STATUS_ATTENTION.get(status, 4)
+            - (1 if card["behind"] else 0)
+            - (0.5 if card["inputs_missing"] else 0)
+        )
+        cards.append(card)
+    cards.sort(key=lambda c: (c["attention"], c["tracker"].name.lower()))
     return render_template(
-        "home.html", cards=cards, show_archived=show_archived, page_title="Trackers", current_page="trackers"
+        "home.html",
+        cards=cards,
+        show_archived=show_archived,
+        today=today,
+        page_title="Trackers",
+        current_page="trackers",
     )
 
 
