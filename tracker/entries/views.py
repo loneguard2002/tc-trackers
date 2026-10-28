@@ -11,9 +11,10 @@ from sqlalchemy.exc import IntegrityError
 from ..audit import record
 from ..auth import current_user, require_tracker_role
 from ..db import get_session
-from ..engine.weeks import week_endings
+from ..engine.calc import COMPLETE
+from ..engine.weeks import in_progress_week, week_endings
 from ..models import CompletionEntry, Group, ReportInput, Risk, Tracker, User, Week
-from ..report.build import default_report_week
+from ..report.build import compute_position, default_report_week
 from ..trackers.forms import RAG_VALUES, parse_date
 from ..trackers.views import _jsonable, _ordered_groups, _refuse_if_archived
 from . import bp
@@ -209,11 +210,25 @@ def targets(tracker_id: int):
 
 
 def _render_targets(tracker: Tracker, weeks: list[date], rows: dict, form, status: int):
+    today = date.today()
+    position = compute_position(get_session(), tracker, None, today)
+    actuals = {r.week_ending: r.actual for r in position.rows if r.state == COMPLETE}
+    saved = {w: r.target for w, r in rows.items() if r.target is not None}
+    planned = sum(saved.values())
+    past = [w for w in weeks if w in actuals]
     return (
         render_template(
             "entries/targets.html",
             weeks=weeks,
             form=form,
+            actuals=actuals,
+            current_week=in_progress_week(today, tracker.week_ending_weekday),
+            scope=position.headline.total_scope,
+            planned=planned,
+            unplanned=position.headline.total_scope - tracker.completed_before_first - planned,
+            done_to_date=sum(actuals[w] or 0 for w in past),
+            planned_to_date=sum(saved.get(w, 0) for w in past),
+            last_planned=max(saved) if saved else None,
             format_date=format_date,
             **_page(tracker, "Weekly targets"),
         ),
@@ -263,7 +278,13 @@ def inputs(tracker_id: int):
 
 
 def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[str], status: int):
-    preparer = get_session().get(User, row.prepared_by) if row and row.prepared_by else None
+    db = get_session()
+    today = date.today()
+    preparer = db.get(User, row.prepared_by) if row and row.prepared_by else None
+    saved = {r.week_ending: r for r in db.scalars(select(ReportInput).where(ReportInput.tracker_id == tracker.id))}
+    index = weeks.index(week)
+    previous = saved.get(weeks[index - 1]) if index else None
+    risks = list(db.scalars(select(Risk).where(Risk.tracker_id == tracker.id, Risk.status != "Closed")))
     return (
         render_template(
             "entries/inputs.html",
@@ -274,6 +295,16 @@ def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[
             form=form,
             errors=errors,
             rag_values=RAG_VALUES,
+            saved=saved,
+            previous=previous if previous and (previous.status or previous.headline or previous.decisions) else None,
+            prev_week=weeks[index - 1] if index else None,
+            next_week=weeks[index + 1] if index + 1 < len(weeks) else None,
+            latest_week=default_report_week(tracker, today),
+            current_week=in_progress_week(today, tracker.week_ending_weekday),
+            today=today,
+            headline=compute_position(db, tracker, week, today).headline,
+            red_risks=sum(1 for r in risks if r.rag == "Red"),
+            overdue_risks=sum(1 for r in risks if r.target_date and r.target_date < min(week, today)),
             format_date=format_date,
             **_page(tracker, "Weekly inputs"),
         ),
