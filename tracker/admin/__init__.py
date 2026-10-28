@@ -34,6 +34,19 @@ def users():
     return render_template("admin/users.html", users=rows, page_title="Users", current_page="users")
 
 
+def _render_new_user(form, errors: list[str], status: int):
+    return (
+        render_template("admin/user_form.html", form=form, errors=errors, page_title="New user", current_page="users"),
+        status,
+    )
+
+
+@bp.get("/users/new")
+@admin_required
+def new_user():
+    return _render_new_user({}, [], 200)
+
+
 @bp.post("/users")
 @admin_required
 def create_user():
@@ -46,8 +59,7 @@ def create_user():
     else:
         error = validate_new_password(password)
     if error:
-        flash(error, "danger")
-        return redirect(url_for("admin.users"))
+        return _render_new_user(request.form, [error], 400)
     db = get_session()
     user = User(
         email=email, full_name=full_name, password_hash=hash_password(password), auth_source="local", status="active"
@@ -57,8 +69,7 @@ def create_user():
         db.flush()
     except IntegrityError:
         db.rollback()
-        flash("A user with that email address already exists.", "danger")
-        return redirect(url_for("admin.users"))
+        return _render_new_user(request.form, ["A user with that email address already exists."], 400)
     record(
         db,
         user_id=current_user().id,

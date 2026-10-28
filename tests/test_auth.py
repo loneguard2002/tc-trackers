@@ -138,6 +138,24 @@ def test_admin_creates_active_local_user(client, logged_in_admin, db):
     assert created.status == "active" and created.auth_source == "local" and created.password_hash
 
 
+def test_add_user_has_its_own_page(client, logged_in_admin, db, user_factory):
+    assert 'href="/admin/users/new"' in client.get("/admin/users").get_data(as_text=True)
+    page = client.get("/admin/users/new")
+    assert page.status_code == 200 and b'name="password"' in page.data
+    short = post(client, "/admin/users", {"email": "kept@example.com", "full_name": "Kept Name", "password": "short"})
+    assert short.status_code == 400
+    assert b"Please correct the following" in short.data
+    assert b'value="Kept Name"' in short.data and b'value="kept@example.com"' in short.data
+    taken = user_factory()
+    form = {"email": taken.email, "full_name": "Someone", "password": "a long enough password"}
+    duplicate = post(client, "/admin/users", form)
+    assert duplicate.status_code == 400 and b"A user with that email address already exists." in duplicate.data
+
+
+def test_non_admin_cannot_open_add_user(client, logged_in_user):
+    assert client.get("/admin/users/new").status_code == 403
+
+
 def test_admin_user_list_renders(client, logged_in_admin, user_factory):
     user_factory(status="pending", full_name="Waiting Person")
     response = client.get("/admin/users")
