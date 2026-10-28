@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, icon, setting %}
+{% from "macros.html" import csrf_field, icon %}
 {% macro user_action(endpoint, u, text, extra=None, confirm=None) -%}
 <form method="post" action="{{ url_for(endpoint, user_id=u.id) }}"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
   {{ csrf_field(csrf_token()) }}{% if extra %}<input type="hidden" name="{{ extra[0] }}" value="{{ extra[1] }}">{% endif %}
@@ -16,7 +16,7 @@
         <h2 id="section-users">People</h2>
         <p>Everyone who can sign in. {% if pending %}<strong>{{ pending|length }} awaiting approval</strong>, listed first. {% endif %}Access to each tracker is given on that tracker's Access tab.</p>
       </div>
-      <a class="button primary button-small" href="#add-user">{{ icon('plus') }}Add a user</a>
+      <a class="button primary button-small" href="{{ url_for('admin.new_user') }}">{{ icon('plus') }}Add a user</a>
     </header>
     <div class="section-table register">
       <table class="table">
@@ -46,27 +46,5 @@
     </div>
     <p class="section-foot-note">Administrators manage users, email settings and imports, and have owner access to every tracker. You cannot disable your own account or remove your own administrator role.</p>
   </section>
-
-  <form id="add-user" method="post" action="{{ url_for('admin.create_user') }}">
-    {{ csrf_field(csrf_token()) }}
-    <section class="settings-section span-all" aria-labelledby="section-add-user">
-      <header class="settings-section-head">
-        <h2 id="section-add-user">Add a user</h2>
-        <p>Creates an account that signs in with a password. People who sign in with Microsoft get an account on their first sign-in and appear above, awaiting approval.</p>
-      </header>
-      {% call setting('Full name', 'Shown in the app and on the reports they prepare.', 'new-name') %}
-      <input id="new-name" name="full_name" autocomplete="off" required aria-describedby="new-name-help">
-      {% endcall %}
-      {% call setting('Email address', 'They sign in with this address. It must not already be in use.', 'new-email') %}
-      <input id="new-email" name="email" type="email" autocomplete="off" required aria-describedby="new-email-help">
-      {% endcall %}
-      {% call setting('Initial password', 'At least 12 characters. Share it with them securely.', 'new-password') %}
-      <input id="new-password" name="password" type="password" autocomplete="new-password" minlength="12" required aria-describedby="new-password-help">
-      {% endcall %}
-      <div class="settings-section-foot">
-        <button class="button primary" type="submit">Create user</button>
-      </div>
-    </section>
-  </form>
 </div>
 {% endblock %}
