@@ -289,6 +289,58 @@ def test_home_shows_last_entry_date_and_percent(client, logged_in_user, db, trac
     assert b"25%" in page.data
 
 
+def test_home_card_flags_missing_commentary_and_counts_red_risks(client, logged_in_user, db, tracker_factory, grant):
+    tracker = tracker_factory(name="Flagged")
+    grant(logged_in_user, tracker, "editor")
+    group = make_group(db, tracker, baseline=40)
+    add_entry(db, tracker, group, date(2026, 9, 3), 10, date(2026, 9, 4))
+    db.add_all(
+        [
+            Risk(tracker_id=tracker.id, ref="R1", description="a", rag="Red"),
+            Risk(tracker_id=tracker.id, ref="R2", description="b", rag="Red", status="Closed"),
+            Risk(tracker_id=tracker.id, ref="R3", description="c", rag="Amber"),
+        ]
+    )
+    db.commit()
+    html = client.get("/").get_data(as_text=True)
+    assert "Commentary for" in html and "missing" in html
+    assert '<span class="role-tag">Editor</span>' in html
+    assert '<span class="fact-value tone-danger">1</span><span class="fact-sub">2 open in all</span>' in html
+    assert f'href="/trackers/{tracker.id}/entries/new"' in html
+    assert 'class="spark"' in html
+
+
+def test_home_card_for_a_viewer_has_no_record_link(client, logged_in_user, tracker_factory, grant):
+    tracker = tracker_factory(name="Read only")
+    grant(logged_in_user, tracker, "viewer")
+    html = client.get("/").get_data(as_text=True)
+    assert f'href="/trackers/{tracker.id}/entries/new"' not in html
+    assert '<span class="role-tag">Viewer</span>' in html
+
+
+def test_home_card_for_a_tracker_not_started_yet(client, logged_in_user, tracker_factory, grant):
+    tracker = tracker_factory(name="Later", first_week_ending=date(2099, 1, 2), last_week_ending=date(2099, 3, 27))
+    grant(logged_in_user, tracker, "viewer")
+    html = client.get("/").get_data(as_text=True)
+    assert "Starts 02 Jan 2099" in html and "Commentary for" not in html and 'class="spark"' not in html
+
+
+def test_spark_chart_takes_the_last_completed_weeks_and_marks_short_weeks():
+    from tracker.engine.calc import build_week_rows
+    from tracker.engine.weeks import week_endings
+    from tracker.trackers.views import SPARK_WEEKS, spark_chart
+
+    weeks = week_endings(date(2026, 9, 4), date(2026, 11, 6))
+    targets = {w: 10 for w in weeks}
+    actuals = {w: (5 if i % 2 else 12) for i, w in enumerate(weeks)}
+    rows = build_week_rows(weeks, targets, actuals, 200, 0, 3, weeks[-1], 4)
+    chart = spark_chart(rows)
+    assert len(chart["bars"]) == SPARK_WEEKS and chart["weeks"] == SPARK_WEEKS
+    assert [b["low"] for b in chart["bars"]] == [i % 2 == 1 for i in range(2, 10)]
+    assert chart["target"].count("M") == SPARK_WEEKS
+    assert spark_chart(build_week_rows(weeks, targets, {}, 200, 0, 3, date(2026, 9, 1), 4)) is None
+
+
 def test_archived_tracker_hidden_from_home_but_reachable(client, logged_in_admin, db, tracker_factory):
     tracker = tracker_factory(name="Old tracker")
     assert post(client, f"/trackers/{tracker.id}/archive").status_code == 302

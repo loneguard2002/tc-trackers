@@ -1,9 +1,12 @@
-{#- Self-contained report markup (layout B, "answer first"). Used unchanged by the live page, PDF, PNG and email.
-    Expects ``report``; ``chart_mime`` defaults to SVG. -#}
+{#- Self-contained report markup (layout B, "answer first"). Used unchanged by the live page, PDF and PNG.
+    Expects ``report``; ``chart_mime`` defaults to SVG. Container queries stack the columns at A4 width. -#}
+{% from "macros.html" import bar, rag_dot, rag_tone %}
 {% set r = report %}{% set t = r.tracker %}{% set h = r.headline %}
 {% set mime = chart_mime|default('image/svg+xml') %}
 {% set status = r.inputs.status if r.inputs and r.inputs.status else None %}
-{% set tone = {'Red': 'red', 'Amber': 'amber', 'Green': 'green'}.get(status, 'none') %}
+{% set tone = rag_tone(status) %}
+{% set group_name = t.group_label or 'Group' %}
+{% set group_names = {} %}{% for gp in r.groups %}{% set _ = group_names.update({gp.group_id: gp.name}) %}{% endfor %}
 <article class="report">
   <div class="report-title">
     <h1>{{ t.name }}: week ending {{ r.week_ending|fdate }}</h1>
@@ -11,73 +14,99 @@
   </div>
 
   <section class="report-band report-band-{{ tone }}">
-    <p class="report-status">{{ status or 'Not set' }}: {{ h.verdict }}</p>
+    <p class="report-status">{{ rag_dot(status) }}<span><span class="report-status-word">{{ status or 'Not set' }}</span>: {{ h.verdict }}</span></p>
     <p>Forecast completion {{ h.forecast_completion|fdate }} against a target of {{ h.target_completion|fdate }}
       {%- if h.planned_completion %} (planned {{ h.planned_completion|fdate }}){% endif -%}.</p>
     {% if r.inputs and r.inputs.headline %}<p>{{ r.inputs.headline }}</p>{% endif %}
     <p><strong>Needed from you:</strong> {{ r.inputs.decisions if r.inputs and r.inputs.decisions else 'None' }}</p>
   </section>
 
-  <img class="report-chart" data-chart="remaining" alt="Remaining {{ t.unit_label }}: plan, actual and forecast" src="{{ r.charts.remaining|data_uri(mime) }}">
-
-  <section class="report-figures">
-    <div class="report-figure"><span class="muted">Completed</span>
-      <strong>{{ h.completed }} of {{ h.total_scope }}</strong> {{ h.pct_complete|pct }} of scope</div>
-    <div class="report-figure"><span class="muted">This week</span>
-      <strong>{{ h.this_week_actual|dash }}</strong> against a target of {{ h.this_week_target|dash }}</div>
-    <div class="report-figure"><span class="muted">Rate ({{ t.moving_average_weeks }} wk)</span>
-      <strong>{{ h.forecast_rate|rate }}</strong> per week</div>
+  {% set dvt = h.forecast_vs_target_days %}
+  <section class="stat-band report-figures" aria-label="Headline figures">
+    <div class="stat"><span class="stat-label">Completed</span>
+      <span class="stat-value">{{ h.completed|num }} <small>of {{ h.total_scope|num }}</small></span>
+      <span class="stat-sub">{{ h.pct_complete|pct }} · {{ h.remaining|num }} left</span>
+      {{ bar(h.completed, h.total_scope, label=(h.pct_complete|pct) ~ ' complete') }}</div>
+    <div class="stat"><span class="stat-label">This week</span>
+      <span class="stat-value">{{ h.this_week_actual|dash }} <small>of {{ h.this_week_target|dash }} target</small></span>
+      {% if h.this_week_actual is not none and h.this_week_target is not none %}
+      {% set gap = h.this_week_actual - h.this_week_target %}
+      <span class="stat-sub {{ 'tone-danger' if gap < 0 else 'tone-success' }}">{% if gap == 0 %}On target{% else %}{{ '+' if gap > 0 else '−' }}{{ gap|abs }} against target{% endif %}</span>
+      {% else %}<span class="stat-sub">No target for this week</span>{% endif %}
+      <span class="stat-sub">Next week: {{ h.next_week_target|dash }}</span></div>
+    <div class="stat"><span class="stat-label">Rate ({{ t.moving_average_weeks }} wk)</span>
+      <span class="stat-value">{{ h.forecast_rate|rate }} <small>a week</small></span>
+      {% if h.required_rate is not none %}
+      <span class="stat-sub {{ 'tone-success' if h.forecast_rate is not none and h.forecast_rate >= h.required_rate else 'tone-danger' }}">{{ h.required_rate|rate }} a week needed</span>
+      {% else %}<span class="stat-sub">No required rate</span>{% endif %}</div>
+    <div class="stat"><span class="stat-label">Forecast</span>
+      <span class="stat-value">{{ h.forecast_completion|fdate }}</span>
+      <span class="stat-sub {{ '' if dvt is none else ('tone-danger' if dvt > 0 else 'tone-success') }}">
+        {%- if dvt is none %}{{ 'No target date' if not h.target_completion else 'No forecast yet' }}
+        {%- elif dvt > 0 %}{{ dvt }} day{{ '' if dvt == 1 else 's' }} after target
+        {%- elif dvt < 0 %}{{ -dvt }} day{{ '' if dvt == -1 else 's' }} before target
+        {%- else %}On the target date{% endif %}</span>
+      {% if h.weeks_left is not none %}<span class="stat-sub">{{ h.weeks_left }} week{{ '' if h.weeks_left == 1 else 's' }} to {{ h.target_completion|fdate }}</span>{% endif %}</div>
   </section>
 
-  <section class="report-risks">
-    <h2>Top risks</h2>
-    <p class="muted">{{ r.open_risks }} open, {{ r.red_risks }} Red</p>
-    {% if r.top_risks %}
-    <table data-table>
-      <thead><tr><th>Ref</th><th>Risk</th><th data-filter="select">Owner</th><th data-filter="select">Status</th>
-        <th data-filter="select">RAG</th><th data-sort="date" data-filter="none">Target date</th></tr></thead>
-      <tbody>
+  <section class="report-panel report-panel-chart">
+    <img class="report-chart" data-chart="remaining" alt="Remaining {{ t.unit_label }}: plan, actual and forecast" src="{{ r.charts.remaining|data_uri(mime) }}">
+  </section>
+
+  <div class="report-columns">
+    <section class="report-panel report-risks" aria-labelledby="report-risks-title">
+      <header class="report-panel-head">
+        <h2 id="report-risks-title">Top risks</h2>
+        <p>{{ r.open_risks }} open, {{ r.red_risks }} Red{% if r.top_risks|length < r.open_risks %}. The {{ r.top_risks|length }} most serious are shown{% endif %}.</p>
+      </header>
+      {% if r.top_risks %}
+      <ul class="top-risks">
         {% for risk in r.top_risks %}
-        <tr><td>{{ risk.ref }}</td><td>{{ risk.description|dash }}</td><td>{{ risk.owner_role|dash }}</td><td>{{ risk.status }}</td>
-          <td>{{ risk.rag|dash }}</td><td>{{ risk.target_date|fdate }}</td></tr>
+        <li class="top-risk top-risk-{{ rag_tone(risk.rag) }}">
+          <span class="rag-pill">{{ rag_dot(risk.rag) }}{{ risk.rag or 'Not set' }}</span>
+          <div>
+            <p class="top-risk-title"><strong>{{ risk.ref }}</strong> {{ risk.description|dash }}</p>
+            <p class="top-risk-meta">{{ risk.owner_role|dash }}
+              {%- if group_names.get(risk.group_id) %} · {{ group_names.get(risk.group_id) }}{% endif %} · {{ risk.status }} ·
+              {% if risk.target_date %}{% if risk.target_date < r.week_ending %}<span class="tone-danger">target {{ risk.target_date|fdate }}, passed</span>{% else %}target {{ risk.target_date|fdate }}{% endif %}{% else %}no target date{% endif %}</p>
+          </div>
+        </li>
         {% endfor %}
-      </tbody>
-    </table>
-    {% else %}<p>No open risks.</p>{% endif %}
-  </section>
+      </ul>
+      {% else %}<p class="report-empty">No open risks.</p>{% endif %}
+    </section>
 
-  <section class="report-details">
-    <h2>Details</h2>
-    {% if not h.totals_check_ok %}
-    <p class="flash flash-danger report-check">Data check: the tracker total does not match the sum of the groups.</p>
-    {% endif %}
-    <h3>Supporting figures</h3>
-    {% set dvt = h.forecast_vs_target_days %}
-    <dl class="report-supporting">
-      <div><dt>Weeks left to target</dt><dd>{{ h.weeks_left|dash }}</dd></div>
-      <div><dt>Required rate</dt><dd>{{ h.required_rate|rate }} per week</dd></div>
-      <div><dt>Forecast against target</dt>
-        <dd>{% if dvt is none %}–{% elif dvt > 0 %}{{ dvt }} day{{ '' if dvt == 1 else 's' }} late{% elif dvt < 0 %}{{ -dvt }} day{{ '' if dvt == -1 else 's' }} early{% else %}On target{% endif %}</dd></div>
-      <div><dt>Next week's target</dt><dd>{{ h.next_week_target|dash }}</dd></div>
-    </dl>
-    <table data-table>
-      <thead><tr><th data-filter="select">{{ t.group_label or 'Group' }}</th><th data-sort="number" data-filter="none">Scope</th>
-        <th data-sort="number" data-filter="none">Done</th><th data-sort="number" data-filter="none">Remaining</th>
-        <th data-sort="number" data-filter="none">Complete</th><th data-sort="number" data-filter="none">Ready</th>
-        <th data-sort="date" data-filter="none">Planned</th><th data-filter="select">RAG</th><th>Comment</th></tr></thead>
-      <tbody>
-        {% for gp in r.groups if not gp.retired %}
-        <tr><td>{{ gp.name }}</td><td>{{ gp.baseline }}</td><td>{{ gp.deployed }}</td><td>{{ gp.remaining }}</td>
-          <td>{{ gp.pct_complete|pct }}</td><td>{{ gp.ready_not_complete }}</td><td>{{ gp.planned_completion|fdate }}</td>
-          <td>{{ gp.rag|dash }}</td><td>{{ gp.comment|dash }}</td></tr>
-        {% else %}
-        <tr><td colspan="9">No groups yet.</td></tr>
+    {% set live = r.groups|rejectattr('retired')|list %}
+    <section class="report-panel report-groups" aria-labelledby="report-groups-title">
+      <header class="report-panel-head">
+        <h2 id="report-groups-title">Progress by {{ group_name|lower }}</h2>
+        <p>Completed against each {{ group_name|lower }}'s scope.</p>
+      </header>
+      {% if not h.totals_check_ok %}
+      <p class="flash flash-danger report-check">Data check: the tracker total does not match the sum of the groups.</p>
+      {% endif %}
+      {% if live %}
+      <ul class="group-progress">
+        {% for gp in live %}
+        <li>
+          <div class="group-progress-head">{% if gp.rag %}{{ rag_dot(gp.rag) }}{% endif %}<strong>{{ gp.name }}</strong>
+            <span class="group-progress-num"><strong>{{ gp.deployed|num }}</strong> of {{ gp.baseline|num }} · {{ gp.pct_complete|pct }}</span></div>
+          {{ bar(gp.deployed, gp.baseline, extra=gp.ready_not_complete, label=gp.name ~ ': ' ~ (gp.pct_complete|pct) ~ ' complete') }}
+          <p class="group-progress-meta">{{ gp.remaining|num }} left
+            {%- if gp.ready_not_complete %} · {{ gp.ready_not_complete|num }} ready, not yet complete{% endif %}
+            {%- if gp.planned_completion %} · planned {{ gp.planned_completion|fdate }}{% endif %}
+            {%- if gp.comment %} · {{ gp.comment }}{% endif %}</p>
+        </li>
         {% endfor %}
-      </tbody>
-    </table>
-    <div class="report-charts">
-      <img class="report-chart" data-chart="weekly" alt="Weekly actual against target" src="{{ r.charts.weekly|data_uri(mime) }}">
-      <img class="report-chart" data-chart="cumulative" alt="Cumulative completed" src="{{ r.charts.cumulative|data_uri(mime) }}">
-    </div>
+      </ul>
+      {% set done = live|sum(attribute='deployed') %}{% set scope = live|sum(attribute='baseline') %}
+      <p class="group-progress-total"><span>All {{ group_name|plural|lower }}</span><span>{{ done|num }} of {{ scope|num }} · {{ (done / scope if scope else none)|pct }}</span></p>
+      {% else %}<p class="report-empty">No {{ group_name|plural|lower }} yet.</p>{% endif %}
+    </section>
+  </div>
+
+  <section class="report-panel report-charts">
+    <img class="report-chart" data-chart="weekly" alt="Weekly actual against target" src="{{ r.charts.weekly|data_uri(mime) }}">
+    <img class="report-chart" data-chart="cumulative" alt="Cumulative completed" src="{{ r.charts.cumulative|data_uri(mime) }}">
   </section>
 </article>

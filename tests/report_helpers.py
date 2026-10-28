@@ -36,7 +36,13 @@ def synthetic_report(in_progress: bool = False):
         id=1, name="Stub tracker", unit_label="devices", group_label="Site", moving_average_weeks=3, status="active"
     )
     risk = SimpleNamespace(
-        ref="R1", description="d", owner_role="Programme Lead", status="In progress", rag="Red", target_date=None
+        ref="R1",
+        description="d",
+        owner_role="Programme Lead",
+        status="In progress",
+        rag="Red",
+        target_date=None,
+        group_id=None,
     )
     charts = {
         "remaining": remaining_chart(rows, "devices"),

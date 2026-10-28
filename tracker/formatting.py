@@ -23,6 +23,11 @@ def fmt_date(value: date | None) -> str:
     return MISSING if value is None else f"{value.day:02d} {value.strftime('%b %Y')}"
 
 
+def fmt_num(value: int | float | None) -> str:
+    """A whole number with thousands separators, for example ``1,170``."""
+    return MISSING if value is None else f"{round(value):,d}"
+
+
 def fmt_dash(value) -> str:
     """Any value, with ``None`` and empty strings shown as the missing-value dash."""
     return MISSING if value is None or value == "" else str(value)
@@ -48,6 +53,7 @@ def fmt_plural(label: str) -> str:
 
 FILTERS = {
     "pct": fmt_pct,
+    "num": fmt_num,
     "rate": fmt_rate,
     "fdate": fmt_date,
     "dash": fmt_dash,

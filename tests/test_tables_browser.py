@@ -115,11 +115,13 @@ def test_tables_raise_no_policy_errors(page, live_server, seeded):
     page.locator(".tabulator-col[tabulator-field='c2'] .tabulator-header-filter input").click()
     expect(page.locator(".tabulator-edit-list")).to_be_visible()
     assert_clean(page)
-    for path in ("risks", "report"):
-        page.goto(f"{live_server}/trackers/{seeded.tracker.id}/{path}")
-        page.wait_for_selector(".tabulator-row")
-        assert_clean(page)
-    expect(page.locator(".report .tabulator")).to_have_count(2)
+    page.goto(f"{live_server}/trackers/{seeded.tracker.id}/risks")
+    page.wait_for_selector(".tabulator-row")
+    assert_clean(page)
+    page.goto(f"{live_server}/trackers/{seeded.tracker.id}/report")
+    page.wait_for_selector(".chart-host")
+    assert_clean(page)
+    expect(page.locator(".report .tabulator")).to_have_count(0)
 
 
 def test_risk_delete_asks_first(page, live_server, seeded):

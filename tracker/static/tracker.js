@@ -179,3 +179,18 @@
     }
   }
 })();
+
+// A <select data-autosubmit> submits its form when changed; its form's [data-autosubmit-fallback] button is then
+// hidden, because it is only needed without JavaScript.
+(function () {
+  "use strict";
+
+  Array.prototype.forEach.call(document.querySelectorAll("select[data-autosubmit]"), function (select) {
+    var form = select.form;
+    if (!form) return;
+    select.addEventListener("change", function () { form.submit(); });
+    Array.prototype.forEach.call(form.querySelectorAll("[data-autosubmit-fallback]"), function (button) {
+      button.hidden = true;
+    });
+  });
+})();
