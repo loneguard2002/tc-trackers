@@ -1,43 +1,72 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import csrf_field, icon, setting %}
+{% macro user_action(endpoint, u, text, extra=None, confirm=None) -%}
+<form method="post" action="{{ url_for(endpoint, user_id=u.id) }}"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
+  {{ csrf_field(csrf_token()) }}{% if extra %}<input type="hidden" name="{{ extra[0] }}" value="{{ extra[1] }}">{% endif %}
+  <button class="button button-small{{ ' button-quiet' if confirm }}" type="submit">{{ text }}</button>
+</form>
+{%- endmacro %}
 {% block content %}
 <h1>Users</h1>
-<section class="card">
-  <table class="table">
-    <thead><tr><th>Name</th><th>Email</th><th>Sign-in</th><th>Status</th><th>Administrator</th><th>Actions</th></tr></thead>
-    <tbody>
-    {% for u in users %}
-      <tr>
-        <td>{{ u.full_name }}</td>
-        <td>{{ u.email }}</td>
-        <td>{{ 'Microsoft' if u.auth_source == 'sso' else 'Local' }}</td>
-        <td><span class="badge badge-{{ {'active': 'success', 'pending': 'info'}.get(u.status, 'muted') }}">{{ u.status|title }}</span></td>
-        <td>{{ 'Yes' if u.is_admin else 'No' }}</td>
-        <td class="row-actions">
-          {% if u.status != 'active' %}
-          <form method="post" action="{{ url_for('admin.approve', user_id=u.id) }}">{{ csrf_field(csrf_token()) }}<button class="button" type="submit">{{ 'Approve' if u.status == 'pending' else 'Re-enable' }}</button></form>
-          {% endif %}
-          {% if u.status != 'disabled' and u.id != current_user.id %}
-          <form method="post" action="{{ url_for('admin.disable', user_id=u.id) }}">{{ csrf_field(csrf_token()) }}<button class="button" type="submit">Disable</button></form>
-          {% endif %}
-          {% if u.id != current_user.id %}
-          <form method="post" action="{{ url_for('admin.set_admin', user_id=u.id) }}">{{ csrf_field(csrf_token()) }}<input type="hidden" name="is_admin" value="{{ '0' if u.is_admin else '1' }}"><button class="button" type="submit">{{ 'Remove administrator' if u.is_admin else 'Make administrator' }}</button></form>
-          {% endif %}
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-</section>
-<section class="card">
-  <h2>Add a local user</h2>
-  <form method="post" action="{{ url_for('admin.create_user') }}">
+{% set pending = users|selectattr('status', 'equalto', 'pending')|list %}
+<div class="settings">
+  <section class="settings-section" aria-labelledby="section-users">
+    <header class="settings-section-head has-action">
+      <div>
+        <h2 id="section-users">People</h2>
+        <p>Everyone who can sign in. {% if pending %}<strong>{{ pending|length }} awaiting approval</strong>, listed first. {% endif %}Access to each tracker is given on that tracker's Access tab.</p>
+      </div>
+      <a class="button primary button-small" href="#add-user">{{ icon('plus') }}Add a user</a>
+    </header>
+    <div class="section-table register">
+      <table class="table">
+        <thead><tr><th scope="col">Name</th><th scope="col" class="hide-narrow">Sign-in</th><th scope="col">Status</th>
+          <th scope="col" class="hide-narrow">Role</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody>
+        {% for u in users %}
+        <tr>
+          <td><div class="member-cell">
+            <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
+            <span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
+          </div></td>
+          <td class="hide-narrow">{{ 'Microsoft' if u.auth_source == 'sso' else 'Password' }}</td>
+          <td><span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(u.status, 'muted') }}">{{ u.status|title }}</span></td>
+          <td class="hide-narrow">{% if u.is_admin %}<span class="badge badge-info">Administrator</span>{% else %}<span class="muted">User</span>{% endif %}</td>
+          <td class="cell-actions"><div class="row-tools row-tools-text">
+            {% if u.status != 'active' %}{{ user_action('admin.approve', u, 'Approve' if u.status == 'pending' else 'Re-enable') }}{% endif %}
+            {% if u.id != current_user.id %}
+            {{ user_action('admin.set_admin', u, 'Remove administrator' if u.is_admin else 'Make administrator', ('is_admin', '0' if u.is_admin else '1')) }}
+            {% if u.status != 'disabled' %}{{ user_action('admin.disable', u, 'Disable', confirm='Disable ' ~ u.full_name ~ '? They will no longer be able to sign in.') }}{% endif %}
+            {% endif %}
+          </div></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="section-foot-note">Administrators manage users, email settings and imports, and have owner access to every tracker. You cannot disable your own account or remove your own administrator role.</p>
+  </section>
+
+  <form id="add-user" method="post" action="{{ url_for('admin.create_user') }}">
     {{ csrf_field(csrf_token()) }}
-    <div class="form-row"><label for="new-name">Full name</label><input id="new-name" name="full_name" required></div>
-    <div class="form-row"><label for="new-email">Email address</label><input id="new-email" name="email" type="email" required></div>
-    <div class="form-row"><label for="new-password">Initial password (at least 12 characters)</label><input id="new-password" name="password" type="password" autocomplete="new-password" minlength="12" required></div>
-    <button class="button primary" type="submit">Create user</button>
+    <section class="settings-section span-all" aria-labelledby="section-add-user">
+      <header class="settings-section-head">
+        <h2 id="section-add-user">Add a user</h2>
+        <p>Creates an account that signs in with a password. People who sign in with Microsoft get an account on their first sign-in and appear above, awaiting approval.</p>
+      </header>
+      {% call setting('Full name', 'Shown in the app and on the reports they prepare.', 'new-name') %}
+      <input id="new-name" name="full_name" autocomplete="off" required aria-describedby="new-name-help">
+      {% endcall %}
+      {% call setting('Email address', 'They sign in with this address. It must not already be in use.', 'new-email') %}
+      <input id="new-email" name="email" type="email" autocomplete="off" required aria-describedby="new-email-help">
+      {% endcall %}
+      {% call setting('Initial password', 'At least 12 characters. Share it with them securely.', 'new-password') %}
+      <input id="new-password" name="password" type="password" autocomplete="new-password" minlength="12" required aria-describedby="new-password-help">
+      {% endcall %}
+      <div class="settings-section-foot">
+        <button class="button primary" type="submit">Create user</button>
+      </div>
+    </section>
   </form>
-</section>
-<p><a href="{{ url_for('admin.smtp') }}">Email settings</a></p>
+</div>
 {% endblock %}

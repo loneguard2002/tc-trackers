@@ -1,22 +1,52 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import csrf_field, setting %}
 {% block content %}
 <h1>Email settings</h1>
-<section class="card">
+<p class="page-lede">The mail server every tracker uses to send its weekly report. Each tracker's recipients and template are set on its own Email tab.</p>
+<div class="settings">
   <form method="post" action="{{ url_for('admin.smtp') }}">
     {{ csrf_field(csrf_token()) }}
-    <div class="form-row"><label for="smtp_host">SMTP host</label><input id="smtp_host" name="smtp_host" value="{{ values.smtp_host }}"></div>
-    <div class="form-row"><label for="smtp_port">SMTP port</label><input id="smtp_port" name="smtp_port" inputmode="numeric" value="{{ values.smtp_port }}"></div>
-    <div class="form-row"><label for="smtp_auth">Authentication</label>
-      <select id="smtp_auth" name="smtp_auth">
+    <section class="settings-section" aria-labelledby="section-server">
+      <header class="settings-section-head">
+        <h2 id="section-server">Mail server</h2>
+        <p>Where reports are sent from. Ask your messaging team for these details.</p>
+      </header>
+      {% call setting('SMTP host', 'The server name, for example smtp.office365.com.', 'smtp_host') %}
+      <input id="smtp_host" name="smtp_host" value="{{ values.smtp_host }}" autocomplete="off" spellcheck="false" aria-describedby="smtp_host-help">
+      {% endcall %}
+      {% call setting('SMTP port', 'Port 465 encrypts from the start. Other ports, such as 587, switch to encryption when the server offers it.', 'smtp_port') %}
+      <input id="smtp_port" name="smtp_port" inputmode="numeric" value="{{ values.smtp_port }}" autocomplete="off" aria-describedby="smtp_port-help">
+      {% endcall %}
+      {% call setting('From address', 'The sender recipients see. Leave blank to send from the SMTP user.', 'smtp_from') %}
+      <input id="smtp_from" name="smtp_from" value="{{ values.smtp_from }}" autocomplete="off" aria-describedby="smtp_from-help">
+      {% endcall %}
+    </section>
+
+    <section class="settings-section" aria-labelledby="section-auth">
+      <header class="settings-section-head">
+        <h2 id="section-auth">Authentication</h2>
+        <p>How the app signs in to the server. Credentials are only sent over an encrypted connection.</p>
+      </header>
+      {% call setting('Method', 'none: no sign-in. plain: user name and password. xoauth2: Microsoft 365 with an app registration.', 'smtp_auth') %}
+      <select id="smtp_auth" name="smtp_auth" aria-describedby="smtp_auth-help">
         {% for mode in modes %}<option value="{{ mode }}" {{ 'selected' if values.smtp_auth == mode }}>{{ mode }}</option>{% endfor %}
-      </select></div>
-    <div class="form-row"><label for="smtp_user">SMTP user</label><input id="smtp_user" name="smtp_user" value="{{ values.smtp_user }}"></div>
-    <div class="form-row"><label for="smtp_from">From address</label><input id="smtp_from" name="smtp_from" value="{{ values.smtp_from }}"></div>
-    <div class="form-row"><label for="smtp_tenant_id">Tenant ID (xoauth2)</label><input id="smtp_tenant_id" name="smtp_tenant_id" value="{{ values.smtp_tenant_id }}"></div>
-    <div class="form-row"><label for="smtp_client_id">Client ID (xoauth2)</label><input id="smtp_client_id" name="smtp_client_id" value="{{ values.smtp_client_id }}"></div>
-    <p>The SMTP password and client secret are never stored here. Set them as the environment variables <code>SMTP_PASSWORD</code> and <code>SMTP_CLIENT_SECRET</code>.</p>
-    <button class="button primary" type="submit">Save</button>
+      </select>
+      {% endcall %}
+      {% call setting('SMTP user', 'The account that signs in, for plain and xoauth2. Usually the sending mailbox.', 'smtp_user') %}
+      <input id="smtp_user" name="smtp_user" value="{{ values.smtp_user }}" autocomplete="off" spellcheck="false" aria-describedby="smtp_user-help">
+      {% endcall %}
+      {% call setting('Tenant ID', 'xoauth2 only. The Microsoft Entra tenant of the app registration.', 'smtp_tenant_id') %}
+      <input id="smtp_tenant_id" name="smtp_tenant_id" value="{{ values.smtp_tenant_id }}" autocomplete="off" spellcheck="false" class="code-input" aria-describedby="smtp_tenant_id-help">
+      {% endcall %}
+      {% call setting('Client ID', 'xoauth2 only. The application (client) ID of the app registration.', 'smtp_client_id') %}
+      <input id="smtp_client_id" name="smtp_client_id" value="{{ values.smtp_client_id }}" autocomplete="off" spellcheck="false" class="code-input" aria-describedby="smtp_client_id-help">
+      {% endcall %}
+      <p class="section-foot-note">The SMTP password and the client secret are never stored here. Set them as the environment variables <code>SMTP_PASSWORD</code> and <code>SMTP_CLIENT_SECRET</code>.</p>
+    </section>
+
+    <div class="settings-actions span-all">
+      <button class="button primary" type="submit">Save</button>
+    </div>
   </form>
-</section>
+</div>
 {% endblock %}

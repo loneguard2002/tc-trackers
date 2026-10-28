@@ -101,6 +101,20 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 
 /* Authentication and administration */
 .auth-card { max-width: 26rem; margin: 3rem auto; }
+.auth-panel { max-width: 400px; margin: 6vh auto 0; padding: 32px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: 0 10px 30px rgba(7, 26, 61, .08); }
+.auth-head { margin-bottom: 20px; text-align: center; }
+.auth-head h1 { margin: 12px 0 4px; font-size: 1.5rem; }
+.auth-head p { margin: 0; color: var(--muted); font-size: .875rem; }
+.auth-mark { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--primary); color: var(--primary-text); font-weight: 800; letter-spacing: .02em; }
+.auth-form { display: grid; gap: 14px; }
+.auth-field label { margin-bottom: 5px; font-size: .875rem; }
+.auth-submit, .auth-sso { display: block; width: 100%; padding: 10px 14px; font-weight: 600; text-align: center; }
+.auth-submit { margin-top: 4px; }
+.auth-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--muted); font-size: .8125rem; }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+.auth-note { margin: 20px 0 0; color: var(--muted); font-size: .8125rem; text-align: center; }
+.auth-panel .form-alert { margin-bottom: 16px; }
+@media (max-width: 480px) { .auth-panel { margin-top: 0; padding: 24px 20px; } }
 .flash { padding: 0.6rem 0.9rem; border-radius: 6px; border: 1px solid currentColor; }
 .flash-danger { color: var(--danger); }
 .flash-success { color: var(--success); }
@@ -424,6 +438,22 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .button .icon { width: 16px; height: 16px; margin: -2px 6px -2px -2px; vertical-align: middle; }
 .section-foot-note { margin: 0; padding: 10px 20px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: .75rem; }
 
+/* Users and import preview. */
+.member-cell { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.row-tools-text { gap: 4px; flex-wrap: wrap; }
+.row-tools-text .button-small { padding: 5px 10px; font-size: .8125rem; white-space: nowrap; }
+.import-summary { margin-bottom: 20px; }
+.key-values { display: grid; margin: 0; }
+.key-values div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; padding: 10px 20px; }
+.key-values div + div { border-top: 1px solid var(--border); }
+.key-values dt { color: var(--muted); font-size: .875rem; }
+.key-values dd { margin: 0; font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.section-scroll { max-height: 360px; overflow-y: auto; }
+.section-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
+.section-scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+input[type="file"] { padding: 6px; font-size: .875rem; }
+input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+
 /* Email: placeholder reference and the recent-sends table. */
 .placeholder-help { margin-top: 8px; font-size: .8125rem; }
 .placeholder-help summary { color: var(--primary); font-weight: 600; cursor: pointer; }
@@ -457,6 +487,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
   .register td[data-label]::before { content: attr(data-label) " "; color: var(--muted); }
   .register .cell-actions { width: auto; margin-left: auto; }
   .register.section-table :is(thead, td.hide-narrow) { display: none; }
+  .key-values div { grid-template-columns: 1fr; gap: 2px; padding: 10px 16px; }
   .segmented { display: flex; }
   .segmented label { flex: 1; justify-content: center; gap: 5px; padding: 6px; font-size: .8125rem; white-space: nowrap; }
   .setting-row { grid-template-columns: 1fr; padding: 14px 16px; }
