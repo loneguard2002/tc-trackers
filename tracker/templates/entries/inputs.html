@@ -1,26 +1,53 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, setting %}
+{% from "macros.html" import csrf_field, icon, rag_dot, rag_tone, setting %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='inputs.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
-<div class="settings settings-narrow">
-  <div class="toolbar">
-    <form method="get">
-      <div class="toolbar-field">
-        <label for="week">Week ending</label>
-        <select id="week" name="week">{% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if w == week }}>{{ format_date(w) }}</option>{% endfor %}</select>
+{% set h = headline %}
+<div class="inputs-page">
+  <section class="settings-section week-picker" aria-labelledby="week-title">
+    <header class="week-picker-head">
+      <div>
+        <h2 id="week-title">Week ending {{ format_date(week) }}</h2>
+        <p class="muted">
+          {%- if week == current_week %}This week is still in progress.
+          {%- elif week > today %}A future week; figures appear once entries arrive.
+          {%- elif row and row.prepared_by %}Last prepared by {{ preparer.full_name if preparer else 'a former user' }}.
+          {%- else %}Nobody has written this week up yet.{% endif %}</p>
       </div>
-      <button class="button" type="submit">Show</button>
-    </form>
-  </div>
+      <nav class="week-picker-steps" aria-label="Step through weeks">
+        {% if prev_week %}<a class="button button-small" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=prev_week.isoformat()) }}" rel="prev">{{ icon('chevron-left') }}Previous</a>
+        {% else %}<span class="button button-small is-disabled" aria-disabled="true">{{ icon('chevron-left') }}Previous</span>{% endif %}
+        <a class="button button-small" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=latest_week.isoformat()) }}">Latest week</a>
+        {% if next_week %}<a class="button button-small" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=next_week.isoformat()) }}" rel="next">Next{{ icon('chevron-right') }}</a>
+        {% else %}<span class="button button-small is-disabled" aria-disabled="true">Next{{ icon('chevron-right') }}</span>{% endif %}
+      </nav>
+    </header>
+    <nav class="week-strip" aria-label="Choose a week" data-week-strip>
+      {% for w in weeks %}
+      {% set entry = saved.get(w) %}{% set written = entry and (entry.status or entry.headline) %}
+      {% set future = w > today and w != current_week %}
+      <a class="week-chip{{ ' is-future' if future }}" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=w.isoformat()) }}"{% if w == week %} aria-current="page"{% endif %}
+        aria-label="Week ending {{ format_date(w) }}: {{ (entry.status or 'written, status not set') if written else 'not written yet' }}">
+        <span class="week-chip-month">{{ w.strftime('%b') if loop.first or weeks[loop.index0 - 1].month != w.month else '' }}</span>
+        <span class="week-chip-day">{{ w.day }}</span>
+        {{ rag_dot(entry.status if written else none) }}
+      </a>
+      {% endfor %}
+    </nav>
+    <p class="week-strip-key"><span>{{ rag_dot('Green') }}Status set</span><span>{{ rag_dot(none) }}Not written yet</span><span><span class="rag-dot rag-dot-future" aria-hidden="true"></span>Future week</span></p>
+  </section>
 
-  <form method="post" action="{{ url_for('entries.inputs', tracker_id=tracker.id, week=week.isoformat()) }}">
+  <form class="inputs-layout" method="post" action="{{ url_for('entries.inputs', tracker_id=tracker.id, week=week.isoformat()) }}" data-inputs-form>
     {% include "entries/_errors.html" %}
     {{ csrf_field(csrf_token()) }}
     <section class="settings-section" aria-labelledby="section-inputs">
       <header class="settings-section-head">
-        <h2 id="section-inputs">Weekly inputs for {{ format_date(week) }}</h2>
-        <p>The commentary at the top of this week's report and email. The figures are calculated from the entries.</p>
+        <h2 id="section-inputs">Commentary</h2>
+        <p>Shown at the top of this week's report and email. The figures are calculated from the entries.</p>
       </header>
       <div class="setting-row is-wide" role="radiogroup" aria-labelledby="status-label" aria-describedby="status-help">
         <div class="setting-label">
@@ -29,22 +56,73 @@
         </div>
         <div class="setting-control">
           <div class="segmented">
-            <label><input type="radio" name="status" value="" {{ 'checked' if not form.get('status') }}><span class="rag-dot" aria-hidden="true"></span>Not set</label>
+            <label><input type="radio" name="status" value="" {{ 'checked' if not form.get('status') }}>{{ rag_dot(none) }}Not set</label>
             {% for r in rag_values %}
-            <label><input type="radio" name="status" value="{{ r }}" {{ 'checked' if form.get('status') == r }}><span class="rag-dot rag-dot-{{ r|lower }}" aria-hidden="true"></span>{{ r }}</label>
+            <label><input type="radio" name="status" value="{{ r }}" {{ 'checked' if form.get('status') == r }}>{{ rag_dot(r) }}{{ r }}</label>
             {% endfor %}
           </div>
         </div>
       </div>
       {% call setting('Headline', 'One or two sentences on how the week went. Shown under the status on the report.', 'headline', 'is-wide') %}
-      <textarea id="headline" name="headline" rows="3" aria-describedby="headline-help">{{ form.get('headline', '') }}</textarea>
+      <textarea id="headline" name="headline" rows="3" aria-describedby="headline-help" data-counted>{{ form.get('headline', '') }}</textarea>
+      <span class="field-counter" data-counter hidden></span>
       {% endcall %}
       {% call setting('Decisions or support needed', 'Anything you need from readers. Shown as "Needed from you"; leave blank to show None.', 'decisions', 'is-wide') %}
       <textarea id="decisions" name="decisions" rows="3" aria-describedby="decisions-help">{{ form.get('decisions', '') }}</textarea>
       {% endcall %}
+      {% if previous %}
+      <div class="copy-last" data-copy-last hidden
+        data-status="{{ previous.status or '' }}" data-headline="{{ previous.headline }}" data-decisions="{{ previous.decisions }}">
+        <span>Last week: {{ rag_dot(previous.status) }} {{ previous.status or 'Not set' }}{% if previous.headline %} · “{{ previous.headline|truncate(80) }}”{% endif %}</span>
+        <button class="button button-small" type="button" data-copy-button>Use last week's text</button>
+      </div>
+      {% endif %}
+      <div class="band-preview" aria-live="polite">
+        <p class="band-preview-label">At the top of the report</p>
+        {% set status = form.get('status') or none %}
+        <div class="report-band report-band-{{ rag_tone(status) }}" data-band>
+          <p class="report-status"><span class="rag-dot rag-dot-{{ rag_tone(status) }}" aria-hidden="true" data-band-dot></span><span><span class="report-status-word" data-band-word>{{ status or 'Not set' }}</span>: {{ h.verdict }}</span></p>
+          <p>Forecast completion {{ format_date(h.forecast_completion) if h.forecast_completion else '–' }} against a target of {{ format_date(h.target_completion) if h.target_completion else '–' }}.</p>
+          <p data-band-headline{% if not form.get('headline') %} hidden{% endif %}>{{ form.get('headline', '') }}</p>
+          <p><strong>Needed from you:</strong> <span data-band-decisions>{{ form.get('decisions') or 'None' }}</span></p>
+        </div>
+      </div>
     </section>
+
+    <aside class="settings-section inputs-figures" aria-labelledby="figures-title">
+      <header class="settings-section-head">
+        <h2 id="figures-title">This week's figures</h2>
+        <p>From the entries, as the report will show them.</p>
+      </header>
+      {% set dvt = h.forecast_vs_target_days %}
+      <dl class="figure-grid">
+        <div><dt>Done this week</dt>
+          <dd><span class="figure-value">{{ h.this_week_actual|dash }} <small>of {{ h.this_week_target|dash }} target</small></span>
+          {% if h.this_week_actual is not none and h.this_week_target is not none %}{% set gap = h.this_week_actual - h.this_week_target %}
+          <span class="figure-sub {{ 'tone-danger' if gap < 0 else 'tone-success' }}">{% if gap == 0 %}On target{% else %}{{ '+' if gap > 0 else '−' }}{{ gap|abs }} against target{% endif %}</span>
+          {% else %}<span class="figure-sub">No actual or target yet</span>{% endif %}</dd></div>
+        <div><dt>Completed</dt>
+          <dd><span class="figure-value">{{ h.completed|num }} <small>{{ h.pct_complete|pct }}</small></span><span class="figure-sub">{{ h.remaining|num }} of {{ h.total_scope|num }} left</span></dd></div>
+        <div><dt>Rate ({{ tracker.moving_average_weeks }} wk)</dt>
+          <dd><span class="figure-value">{{ h.forecast_rate|rate }} <small>a week</small></span><span class="figure-sub">{{ (h.required_rate|rate ~ ' a week needed') if h.required_rate is not none else 'No required rate' }}</span></dd></div>
+        <div><dt>Forecast</dt>
+          <dd><span class="figure-value">{{ format_date(h.forecast_completion) if h.forecast_completion else '–' }}</span><span class="figure-sub">{{ ('Target ' ~ format_date(h.target_completion)) if h.target_completion else 'No target date' }}</span></dd></div>
+        <div><dt>Next week's target</dt>
+          <dd><span class="figure-value">{{ h.next_week_target|dash }}</span><span class="figure-sub">{{ ('Week ending ' ~ format_date(next_week)) if next_week else 'Last week of the tracker' }}</span></dd></div>
+        <div><dt>Last week's status</dt>
+          <dd><span class="figure-value figure-status">{% if prev_week and saved.get(prev_week) and saved.get(prev_week).status %}{{ rag_dot(saved.get(prev_week).status) }}{{ saved.get(prev_week).status }}{% else %}–{% endif %}</span>
+          <span class="figure-sub">{{ ('Week ending ' ~ format_date(prev_week)) if prev_week else 'First week of the tracker' }}</span></dd></div>
+      </dl>
+      <p class="figure-verdict {{ '' if dvt is none else ('tone-danger' if dvt > 0 else 'tone-success') }}">{{ h.verdict }}</p>
+      <p class="figure-risks">
+        <span class="rag-pill">{{ rag_dot('Red' if red_risks else none) }}{{ red_risks }} Red</span>
+        {% if overdue_risks %}<span class="rag-pill tone-danger">{{ overdue_risks }} past target date</span>{% endif %}
+        <a href="{{ url_for('entries.risks', tracker_id=tracker.id) }}">Open risks</a>
+      </p>
+    </aside>
+
     <div class="settings-actions">
-      {% if row and row.prepared_by %}<span class="settings-actions-note">Last prepared by {{ preparer.full_name if preparer else 'a former user' }}.</span>{% endif %}
+      <span class="settings-actions-note" data-dirty-note>{% if row and row.prepared_by %}Last prepared by {{ preparer.full_name if preparer else 'a former user' }}.{% endif %}</span>
       <button class="button primary" type="submit">Save</button>
     </div>
   </form>

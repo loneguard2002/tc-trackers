@@ -1,37 +1,95 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import bar, csrf_field %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='targets.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
-<div class="settings">
-  <form method="post" action="{{ url_for('entries.targets', tracker_id=tracker.id) }}">
-    {{ csrf_field(csrf_token()) }}
-    <section class="settings-section span-all" aria-labelledby="section-targets">
-      <header class="settings-section-head">
-        <h2 id="section-targets">Weekly targets</h2>
-        <p>The number you plan to finish each week{{ ' (' ~ tracker.unit_label ~ ')' if tracker.unit_label }}. Targets draw the plan line on the report charts. Leave a week blank to clear its target.</p>
-      </header>
+{% set unit = tracker.unit_label or 'units' %}
+{% set target = tracker.target_completion %}
+<form class="targets-page" method="post" action="{{ url_for('entries.targets', tracker_id=tracker.id) }}" data-targets-form
+  data-scope="{{ scope }}" data-before="{{ tracker.completed_before_first }}" data-done="{{ done_to_date }}" data-unit="{{ unit }}"
+  data-target="{{ target.isoformat() if target else '' }}" data-current="{{ current_week.isoformat() if current_week else '' }}">
+  {{ csrf_field(csrf_token()) }}
+
+  <section class="stat-band" aria-label="Plan summary">
+    <div class="stat"><span class="stat-label">Scope</span>
+      <span class="stat-value">{{ scope|num }} <small>{{ unit }}</small></span>
+      <span class="stat-sub">{{ tracker.completed_before_first|num }} completed before the first week</span></div>
+    <div class="stat"><span class="stat-label">Planned</span>
+      <span class="stat-value"><span data-stat="planned">{{ planned|num }}</span> <small data-stat="planned-pct">{{ ((tracker.completed_before_first + planned) / scope if scope else none)|pct }}</small></span>
+      <span class="stat-sub {{ 'tone-warning' if unplanned > 0 else ('tone-danger' if unplanned < 0 else 'tone-success') }}" data-stat="planned-sub">
+        {%- if unplanned > 0 %}{{ unplanned|num }} {{ unit }} not yet planned{% elif unplanned < 0 %}{{ (-unplanned)|num }} more than the scope{% else %}The plan covers the full scope{% endif %}</span>
+      <span data-stat="planned-bar">{{ bar(tracker.completed_before_first + planned, scope, label='Share of the scope planned') }}</span></div>
+    <div class="stat"><span class="stat-label">To date</span>
+      {% set diff = done_to_date - planned_to_date %}
+      <span class="stat-value">{{ done_to_date|num }} <small>of <span data-stat="todate-planned">{{ planned_to_date|num }}</span> planned</small></span>
+      <span class="stat-sub {{ 'tone-danger' if diff < 0 else 'tone-success' }}" data-stat="todate-sub">
+        {%- if not actuals %}No completed weeks yet{% elif diff < 0 %}{{ (-diff)|num }} behind plan{% elif diff > 0 %}{{ diff|num }} ahead of plan{% else %}On plan{% endif %}</span>
+      <span class="stat-sub">{{ actuals|length }} completed week{{ '' if actuals|length == 1 else 's' }}</span></div>
+    <div class="stat"><span class="stat-label">Plan finishes</span>
+      <span class="stat-value" data-stat="finish">{{ format_date(last_planned) if last_planned else 'No plan' }}</span>
+      <span class="stat-sub" data-stat="finish-sub">
+        {%- if not last_planned %}Enter targets below{% elif unplanned > 0 %}Last planned week; the scope is not covered yet{% elif target and last_planned > target %}{{ (last_planned - target).days }} days after the {{ format_date(target) }} target{% elif target %}On or before the {{ format_date(target) }} target{% else %}No target completion date{% endif %}</span></div>
+  </section>
+
+  <section class="report-panel targets-charts" data-targets-charts hidden>
+    <div class="targets-chart">
+      <h2>Weekly target and actual</h2>
+      <p class="chart-key"><span><i class="key key-target-bar"></i>Target</span><span><i class="key key-on"></i>Actual</span></p>
+      <svg class="plot" viewBox="0 0 640 210" role="img" aria-label="Weekly targets and actuals" data-chart="weekly"></svg>
+    </div>
+    <div class="targets-chart">
+      <h2>Cumulative plan against scope</h2>
+      <p class="chart-key"><span><i class="key key-line"></i>Plan</span><span><i class="key key-line-actual"></i>Actual</span><span><i class="key key-dash"></i>Scope</span></p>
+      <svg class="plot" viewBox="0 0 440 210" role="img" aria-label="Cumulative plan against scope" data-chart="cumulative"></svg>
+    </div>
+  </section>
+
+  <section class="settings-section" aria-labelledby="section-targets">
+    <header class="settings-section-head">
+      <h2 id="section-targets">Weekly targets</h2>
+      <p>The number you plan to finish each week ({{ unit }}). Targets draw the plan line on the report charts. Leave a week blank to clear its target.</p>
+    </header>
+    <div class="fill-tools" data-fill-tools hidden>
+      <label for="fill-value">Fill blank upcoming weeks with</label>
+      <input id="fill-value" type="number" min="0" step="1" inputmode="numeric" value="">
+      <button class="button button-small" type="button" data-fill-blank>Fill</button>
+      <span class="fill-tools-sep" aria-hidden="true"></span>
+      <button class="button button-small" type="button" data-spread>Spread the unplanned {{ unit }}</button>
+      <span class="muted" data-spread-hint></span>
+    </div>
+    <div class="target-months">
       {% set ns = namespace(month=None) %}
       {% for w in weeks %}
       {% set month = w.strftime('%B %Y') %}
       {% if month != ns.month %}
-      {% if ns.month %}</div></div>{% endif %}
+      {% if ns.month %}</tbody></table></div>{% endif %}
       {% set ns.month = month %}
       <div class="target-month" role="group" aria-labelledby="month-{{ w.strftime('%Y-%m') }}">
-        <h3 id="month-{{ w.strftime('%Y-%m') }}">{{ month }}</h3>
-        <div class="target-grid">
+        <div class="target-month-head"><h3 id="month-{{ w.strftime('%Y-%m') }}">{{ month }}</h3><span data-month-total="{{ w.strftime('%Y-%m') }}"></span></div>
+        <table class="target-table">
+          <thead><tr><th>Week</th><th>Target</th><th>Actual</th><th><span aria-hidden="true">+/−</span><span class="sr-only">Difference</span></th></tr></thead>
+          <tbody>
       {% endif %}
-          <div class="target-cell">
-            <label for="target-{{ w.isoformat() }}">{{ format_date(w)[:6] }}<span class="sr-only"> {{ w.year }}</span></label>
-            <input id="target-{{ w.isoformat() }}" name="target-{{ w.isoformat() }}" type="number" min="0" step="1" inputmode="numeric" value="{{ form.get('target-' ~ w.isoformat(), '') }}">
-          </div>
-      {% if loop.last %}</div></div>{% endif %}
+          {% set past = w in actuals %}
+          <tr class="{{ 'is-past' if past }}{{ ' is-current' if w == current_week }}">
+            <td><label for="target-{{ w.isoformat() }}">{{ format_date(w)[:6] }}<span class="sr-only"> {{ w.year }}</span></label>{% if w == current_week %}<span class="tag">This week</span>{% endif %}</td>
+            <td><input id="target-{{ w.isoformat() }}" name="target-{{ w.isoformat() }}" type="number" min="0" step="1" inputmode="numeric"
+              value="{{ form.get('target-' ~ w.isoformat(), '') }}" data-week="{{ w.isoformat() }}" data-month="{{ w.strftime('%Y-%m') }}"{% if past %} data-actual="{{ actuals[w] or 0 }}"{% endif %}></td>
+            <td class="num">{{ actuals[w]|num if past else '–' }}</td>
+            <td class="num target-diff" data-diff></td>
+          </tr>
+      {% if loop.last %}</tbody></table></div>{% endif %}
       {% endfor %}
-    </section>
-    <div class="settings-actions">
-      <a class="button" href="{{ url_for('report.view', tracker_id=tracker.id) }}">Cancel</a>
-      <button class="button primary" type="submit">Save targets</button>
     </div>
-  </form>
-</div>
+  </section>
+
+  <div class="settings-actions">
+    <span class="settings-actions-note" data-dirty-note>Targets are saved for every week at once.</span>
+    <button class="button" type="reset">Discard changes</button>
+    <button class="button primary" type="submit">Save targets</button>
+  </div>
+</form>
 {% endblock %}

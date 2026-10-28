@@ -193,6 +193,34 @@ def test_inputs_record_prepared_by(client, db, tracker_factory, user_factory, gr
     assert row.status is None and row.headline == "Revised" and row.updated_at > first_stamp
 
 
+def test_targets_page_summarises_the_plan(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    db.add_all(
+        [
+            Week(tracker_id=tracker.id, week_ending=date(2026, 9, 4), target=10),
+            Week(tracker_id=tracker.id, week_ending=date(2026, 9, 11), target=15),
+        ]
+    )
+    db.commit()
+    html = client.get(f"/trackers/{tracker.id}/targets").get_data(as_text=True)
+    scope = group.baseline
+    assert '<span data-stat="planned">25</span>' in html
+    assert f"{scope - 25} devices not yet planned" in html
+    assert 'data-week="2026-09-04"' in html and "targets.js" in html
+
+
+def test_inputs_page_shows_the_week_figures_and_previous_week(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    db.add(ReportInput(tracker_id=tracker.id, week_ending=date(2026, 10, 9), status="Green", headline="Good week"))
+    db.add(Risk(tracker_id=tracker.id, ref="R1", description="d", rag="Red"))
+    db.commit()
+    html = client.get(f"/trackers/{tracker.id}/inputs?week=2026-10-16").get_data(as_text=True)
+    assert "Nobody has written this week up yet." in html
+    assert "data-copy-last hidden" in html and 'data-headline="Good week"' in html
+    assert "1 Red</span>" in html and "Week ending 09 Oct 2026" in html
+    assert f'href="/trackers/{tracker.id}/inputs?week=2026-10-09" rel="prev"' in html
+
+
 def test_inputs_week_outside_tracker_is_404(client, db, tracker_factory, user_factory, grant):
     tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
     assert client.get(f"/trackers/{tracker.id}/inputs?week=2030-01-04").status_code == 404
