@@ -201,6 +201,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .report-week select { width: auto; min-width: 11rem; padding: 6px 10px; }
 .report-week .button { display: inline-flex; align-items: center; gap: 4px; }
 .report-week-downloads { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+/* The PDF and PNG previews (report-view.js): the report on a white sheet in the light colours, as wide as the PDF's
+   A4 page inside its 14 mm margins, or as the 1100px PNG. */
+.report-live.is-paper { color-scheme: light; --bg: #fff; --surface: #fff; --text: #14213d; --muted: #5d6b83; --border: #dde4ee;
+  --primary: #1260d0; --primary-text: #fff; --success: #087553; --warning: #9a5b00; --danger: #b8283f; --info: #1260d0;
+  margin-inline: auto; border-radius: 4px; background: #fff; color: var(--text); box-shadow: 0 10px 30px -12px rgba(7, 26, 61, .45); }
+.report-live.is-pdf { max-width: 210mm; padding: 14mm; }
+.report-live.is-png { max-width: 1100px; padding: 20px; }
+.report-live.is-paper .report { max-width: none; }
 
 /* Trackers home: one card per tracker, with its status colour on the left edge. */
 .home-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 16px; }

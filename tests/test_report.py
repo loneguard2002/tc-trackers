@@ -14,7 +14,7 @@ from report_helpers import FRIDAY, WEEKS, sample_rows, synthetic_report
 from tracker.engine.calc import WeekRow, build_week_rows
 from tracker.formatting import fmt_dash, fmt_date, fmt_num, fmt_pct, fmt_plural, fmt_rate
 from tracker.models import CompletionEntry, Group, ReportInput, Risk, Week
-from tracker.report.build import build_report, default_report_week, select_top_risks
+from tracker.report.build import build_report, current_report_week, default_report_week, select_top_risks
 from tracker.report.chart_data import chart_payload
 from tracker.report.charts import (
     PALETTE,
@@ -160,6 +160,29 @@ def test_default_report_week_pure():
     assert default_report_week(tracker, date(2027, 1, 1)) == WEEKS[-1]
 
 
+def test_current_report_week_is_the_week_in_progress():
+    tracker = SimpleNamespace(first_week_ending=WEEKS[0], last_week_ending=WEEKS[-1])
+    assert current_report_week(tracker, date(2026, 9, 12)) == WEEKS[2]  # Saturday after week 2 ends
+    assert current_report_week(tracker, WEEKS[1]) == WEEKS[1]  # the week-ending day itself
+    assert current_report_week(tracker, date(2026, 9, 1)) == WEEKS[0]
+    assert current_report_week(tracker, date(2027, 1, 1)) == WEEKS[-1]
+
+
+def test_weekly_chart_draws_the_week_in_progress_paler():
+    rows = sample_rows()  # as of 12 Sep: the week ending 18 Sep is in progress
+    assert any(r.state == "in_progress" and r.actual is not None for r in rows)
+    assert b"opacity: 0.4" in weekly_chart(rows, "svg")
+    complete_only = [r for r in rows if r.state != "in_progress"]
+    assert b"opacity: 0.4" not in weekly_chart(complete_only, "svg")
+
+
+def test_chart_payload_marks_the_week_in_progress():
+    rows = sample_rows()
+    payload = chart_payload(SimpleNamespace(unit_label="devices"), rows)
+    assert payload["in_progress"] == [r.state == "in_progress" for r in rows]
+    assert payload["in_progress"].count(True) == 1
+
+
 # --- Database-backed -----------------------------------------------------------------------------------------
 
 
@@ -256,6 +279,23 @@ def test_report_page_in_progress_badge_and_bad_week(client, db, small_tracker, v
     assert future.status_code == 200 and BADGE_IN_PROGRESS in future.get_data(as_text=True)
     past = client.get(f"{base}?week={WEEKS[0].isoformat()}")
     assert BADGE_IN_PROGRESS not in past.get_data(as_text=True)
+
+
+def test_report_page_opens_on_the_week_in_progress(client, db, small_tracker, viewer, monkeypatch):
+    seed(db, small_tracker)
+    monkeypatch.setattr("tracker.report.views.today", lambda: date(2026, 9, 14))
+    html = client.get(f"/trackers/{small_tracker.id}/report").get_data(as_text=True)
+    assert f"week ending {fmt_date(WEEKS[2])}" in html and BADGE_IN_PROGRESS in html
+    assert f"data.json?week={WEEKS[2].isoformat()}" in html and f"report.pdf?week={WEEKS[2].isoformat()}" in html
+    data = client.get(f"/trackers/{small_tracker.id}/report/data.json").get_json()
+    assert data["in_progress"] == [False, False, True, False]
+
+
+def test_report_page_has_the_preview_switch(client, db, small_tracker, viewer):
+    html = client.get(f"/trackers/{small_tracker.id}/report").get_data(as_text=True)
+    assert "data-report-view hidden" in html and "report-view.js" in html
+    for view in ("screen", "pdf", "png"):
+        assert f'data-view="{view}"' in html
 
 
 def test_report_page_points_charts_at_the_selected_week(client, db, small_tracker, viewer):

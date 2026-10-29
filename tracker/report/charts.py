@@ -13,7 +13,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.dates import DateFormatter
 from matplotlib.figure import Figure
 
-from ..engine.calc import COMPLETE, WeekRow
+from ..engine.calc import COMPLETE, IN_PROGRESS, WeekRow
 
 PLAN = "#888888"
 ACTUAL = "#2c7be5"
@@ -124,15 +124,18 @@ def remaining_chart(rows: list[WeekRow], unit_label: str, fmt: str = "svg") -> b
 
 
 def weekly_chart(rows: list[WeekRow], fmt: str = "svg") -> bytes:
-    """Weekly actual (blue bars) against the weekly target (dashed grey)."""
+    """Weekly actual (blue bars; the week in progress paler) against the weekly target (dashed grey)."""
     fig, ax = _new_figure("Weekly actual against target")
     tx, ty = _series(rows, "target")
-    bx, by = _series(rows, "actual")
+    bx, by = _series(rows, "actual", include=lambda r: r.state != IN_PROGRESS)
+    px, py = _series(rows, "actual", include=lambda r: r.state == IN_PROGRESS)
     if bx:
         ax.bar(bx, by, width=5, color=ACTUAL, label="Actual")
+    if px:
+        ax.bar(px, py, width=5, color=ACTUAL, alpha=0.4, label="This week so far")
     if tx:
         ax.plot(tx, ty, color=PLAN, linestyle="--", linewidth=1.6, marker="o", markersize=3, label="Target")
-    return _finish(fig, ax, bool(tx or bx), fmt)
+    return _finish(fig, ax, bool(tx or bx or px), fmt)
 
 
 def cumulative_chart(rows: list[WeekRow], fmt: str = "svg") -> bytes:

@@ -77,3 +77,10 @@ def test_risk_form_validation():
     assert validate_risk_form({"status": "Done"}, [])[1]
     assert validate_risk_form({"rag": "Pink"}, [])[1]
     assert validate_risk_form({"target_date": "nope"}, [])[1]
+
+
+def test_entry_date_refuses_the_future():
+    today = date(2026, 10, 14)
+    assert check_entry_date(today, 4, FIRST, LAST, today=today) == (date(2026, 10, 16), None)
+    week, error = check_entry_date(date(2026, 10, 15), 4, FIRST, LAST, today=today)
+    assert week is None and error == "The date cannot be after today (14 Oct 2026). Record work once it is finished."

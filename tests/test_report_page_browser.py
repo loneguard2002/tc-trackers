@@ -85,9 +85,9 @@ def test_charts_follow_the_theme(page, live_server, seeded):
     start = page.evaluate("document.documentElement.getAttribute('data-theme')")
     other = "dark" if start == "light" else "light"
     page.click("[data-theme-toggle]")
-    expect(page.locator(".chart-host-remaining")).to_have_attribute("data-theme", other)
+    expect(page.locator(".chart-host-remaining")).to_have_attribute("data-chart-theme", other)
     page.click("[data-theme-toggle]")
-    expect(page.locator(".chart-host-remaining")).to_have_attribute("data-theme", start)
+    expect(page.locator(".chart-host-remaining")).to_have_attribute("data-chart-theme", start)
 
 
 def test_empty_tracker_renders_cleanly(page, live_server, seeded_empty):
@@ -223,3 +223,41 @@ def test_page_without_javascript_keeps_the_pictures(browser, live_server, seeded
         expect(page.locator("img[data-chart]")).to_have_count(3)
     finally:
         context.close()
+
+
+def test_preview_switch_shows_the_pdf_and_png_widths(page, live_server, seeded):
+    page.set_viewport_size({"width": 1600, "height": 1000})
+    open_report(page, live_server, seeded)
+    report = page.locator(".report-live")
+    switch = page.locator("[data-report-view]")
+    expect(switch).to_be_visible()
+    screen_width = report.bounding_box()["width"]
+
+    switch.get_by_role("button", name="PDF").click()
+    expect(report).to_have_class("report-live is-pdf is-paper")
+    expect(switch.get_by_role("button", name="PDF")).to_have_attribute("aria-pressed", "true")
+    assert round(report.bounding_box()["width"]) == 794  # an A4 page at 96 dpi
+    # At A4 width the two charts stack, as in the PDF.
+    weekly, cumulative = page.locator(".chart-host-weekly"), page.locator(".chart-host-cumulative")
+    expect(cumulative).to_be_visible()
+    assert cumulative.bounding_box()["y"] > weekly.bounding_box()["y"]
+
+    switch.get_by_role("button", name="PNG").click()
+    assert round(report.bounding_box()["width"]) == 1100
+
+    switch.get_by_role("button", name="Screen").click()
+    expect(report).to_have_class("report-live")
+    assert report.bounding_box()["width"] == screen_width
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
+
+
+def test_preview_is_light_in_the_dark_theme(page, live_server, seeded):
+    page.add_init_script("localStorage.setItem('tracker-theme', 'dark')")
+    open_report(page, live_server, seeded)
+    page.locator("[data-report-view]").get_by_role("button", name="PDF").click()
+    background = page.locator(".report-live").evaluate("e => getComputedStyle(e).backgroundColor")
+    assert background == "rgb(255, 255, 255)"
+    weekly = page.locator(".chart-host-weekly")
+    expect(weekly).to_have_attribute("data-chart-theme", "light")
+    assert weekly.evaluate("e => getComputedStyle(e).backgroundColor") == "rgb(255, 255, 255)"
+    assert weekly.locator("svg > rect").first.get_attribute("fill") == "#fff"

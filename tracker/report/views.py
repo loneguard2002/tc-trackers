@@ -11,7 +11,7 @@ from ..auth import require_tracker_role
 from ..db import get_session
 from ..engine.weeks import week_endings
 from . import bp
-from .build import build_report, compute_position
+from .build import build_report, compute_position, current_report_week
 from .chart_data import chart_payload
 from .render import html_to_pdf, html_to_png, render_print_html
 
@@ -34,11 +34,16 @@ def _requested_week(tracker) -> date | None:
     return week
 
 
+def _report_week(tracker) -> date:
+    """The requested week, or the week in progress: the page, its chart data and its downloads agree."""
+    return _requested_week(tracker) or current_report_week(tracker, today())
+
+
 @bp.get("/trackers/<int:tracker_id>/report")
 @require_tracker_role("viewer")
 def view(tracker_id: int):
     tracker = g.tracker
-    report = build_report(get_session(), tracker, _requested_week(tracker), today())
+    report = build_report(get_session(), tracker, _report_week(tracker), today())
     weeks = week_endings(tracker.first_week_ending, tracker.last_week_ending)
     return render_template(
         "report/page.html",
@@ -55,7 +60,7 @@ def view(tracker_id: int):
 def chart_data(tracker_id: int):
     """The weekly series behind the interactive charts, for the same week as the report page."""
     tracker = g.tracker
-    position = compute_position(get_session(), tracker, _requested_week(tracker), today())
+    position = compute_position(get_session(), tracker, _report_week(tracker), today())
     return jsonify(chart_payload(tracker, position.rows))
 
 
@@ -65,7 +70,7 @@ def _slug(name: str) -> str:
 
 def _export(tracker_id: int, extension: str, convert, mimetype: str) -> Response:
     tracker = g.tracker
-    report = build_report(get_session(), tracker, _requested_week(tracker), today())
+    report = build_report(get_session(), tracker, _report_week(tracker), today())
     data = convert(render_print_html(report))
     filename = f"{_slug(tracker.name)}-week-ending-{report.week_ending.isoformat()}.{extension}"
     response = Response(data, mimetype=mimetype)

@@ -51,6 +51,16 @@ def default_report_week(tracker: Tracker, today: date) -> date:
     return passed[-1] if passed else weeks[0]
 
 
+def current_report_week(tracker: Tracker, today: date) -> date:
+    """The week ``today`` falls in (the earliest week-ending on or after it), or the last week once the tracker ends.
+
+    The live report opens here so that this week's entries show at once; the email keeps ``default_report_week``.
+    """
+    weeks = week_endings(tracker.first_week_ending, tracker.last_week_ending)
+    upcoming = [w for w in weeks if w >= today]
+    return upcoming[0] if upcoming else weeks[-1]
+
+
 def compute_position(session, tracker: Tracker, week_ending: date | None, today: date) -> Position:
     """Run the engine for ``week_ending`` (default: the default report week); entries are cut off at ``as_of``."""
     if week_ending is None:
