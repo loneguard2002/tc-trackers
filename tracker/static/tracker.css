@@ -741,3 +741,88 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
   .group-table td.group-comment:empty, .group-table .group-total :is(th, td):empty { display: none; }
   .group-table tr.group-total { border-top: 2px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
 }
+
+/* Settings: a line under each section saying what the settings mean now, a timeline of the weeks covered, day
+   buttons for the week-ending day, and a stepper for the moving-average period. */
+.live-line { margin: 0; padding: 12px 20px; border-top: 1px dashed var(--border); background: color-mix(in srgb, var(--primary) 4%, var(--surface)); color: var(--muted); font-size: .8125rem; line-height: 1.5; border-radius: 0 0 var(--radius) var(--radius); }
+.live-line strong { color: var(--text); }
+.live-line strong.tone-danger { color: var(--danger); } .live-line strong.tone-success { color: var(--success); }
+.field-help.is-locked { display: flex; align-items: center; gap: 6px; color: var(--warning); }
+.field-help.is-locked .icon { width: 14px; height: 14px; flex: none; }
+.segmented-days label { justify-content: center; min-width: 3.1rem; }
+.segmented label:has(input:disabled) { cursor: not-allowed; }
+.segmented label:has(input:disabled:not(:checked)) { opacity: .45; }
+.period-timeline { margin-top: 2px; }
+.timeline { display: block; width: 100%; height: 46px; overflow: visible; }
+.timeline-week { fill: color-mix(in srgb, var(--text) 10%, transparent); }
+.timeline-done { fill: color-mix(in srgb, var(--primary) 70%, var(--surface)); }
+.timeline-now { fill: var(--primary); }
+.timeline-mark { stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.timeline-mark.is-today { stroke: var(--text); }
+.timeline-mark.is-target { stroke: var(--danger); stroke-dasharray: 3 2; }
+.timeline-label { font-size: 10px; font-weight: 600; }
+.timeline-label.is-today { fill: var(--text); } .timeline-label.is-target { fill: var(--danger); }
+.timeline-ends { display: flex; justify-content: space-between; margin: 4px 0 0; color: var(--muted); font-size: .75rem; }
+.stepper { display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.stepper input { width: 4.2rem; border: 0; border-radius: 0; text-align: center; }
+.stepper-button { width: 36px; border: 0; background: color-mix(in srgb, var(--text) 5%, var(--surface)); color: var(--text); font: inherit; font-size: 1.1rem; font-weight: 600; cursor: pointer; }
+.stepper-button:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); }
+.stepper-button:disabled { color: var(--muted); opacity: .5; cursor: not-allowed; }
+.stepper-unit { display: flex; align-items: center; padding: 0 12px; border-left: 1px solid var(--border); background: color-mix(in srgb, var(--text) 5%, var(--surface)); color: var(--muted); font-size: .875rem; }
+.switch-row { display: inline-flex; align-items: center; gap: 10px; margin: 0; font-weight: 600; cursor: pointer; }
+.schedule-detail { transition: opacity .15s; }
+.settings-section:has(#schedule_enabled:not(:checked)) .schedule-detail { opacity: .5; }
+.archive-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin: 0; padding: 16px 20px; }
+.archive-text { flex: 1 1 280px; }
+.archive-text p { margin: 2px 0 0; color: var(--muted); font-size: .8125rem; }
+.confirm-box { flex: 1 1 100%; display: grid; gap: 10px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border)); border-radius: var(--radius); background: color-mix(in srgb, var(--danger) 6%, var(--surface)); font-size: .875rem; }
+.confirm-box p { margin: 0; }
+.confirm-box-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.button.danger-solid, .confirm-box .button.danger { background: var(--danger); color: var(--surface); }
+.settings-section:has(> .live-line) { display: flex; flex-direction: column; }
+.settings-section > .live-line { margin-top: auto; }
+
+/* Email: the editor and sending on the left, a preview that stays in view on the right. */
+.email-page { max-width: 1400px; container-type: inline-size; }
+.email-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.email-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-content: start; min-width: 0; }
+.email-main > .settings-section, .email-side .settings-section { margin: 0; }
+.email-side { min-width: 0; }
+@container (min-width: 1040px) {
+  .email-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .email-side { position: sticky; top: calc(var(--topbar-height) + 64px); }
+}
+.recipient-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 14px 20px 4px; list-style: none; }
+.recipient-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 3px 4px 3px 12px; border: 1px solid var(--border); border-radius: 999px; background: color-mix(in srgb, var(--text) 3%, var(--surface)); font-size: .8125rem; }
+.recipient-chip form { margin: 0; }
+.recipient-who { min-width: 0; overflow-wrap: anywhere; }
+.recipient-who span { color: var(--muted); }
+.recipient-remove { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.recipient-remove .icon { width: 14px; height: 14px; }
+.recipient-remove:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+.recipient-add { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 12px 20px 16px; }
+.recipient-add input { flex: 1 1 180px; padding: 7px 10px; font-size: .875rem; }
+.placeholder-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.placeholder-chip { padding: 3px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .75rem; cursor: pointer; }
+.placeholder-chip:hover { border-color: var(--primary); color: var(--primary); }
+.warn-box { margin: 10px 0 0; padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border)); border-radius: var(--radius); background: color-mix(in srgb, var(--warning) 8%, var(--surface)); color: var(--warning); font-size: .8125rem; font-weight: 600; }
+.schedule-state { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0; padding: 14px 20px 0; font-size: .8125rem; }
+.send-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; padding: 14px 20px 18px; }
+.send-row form { margin: 0; }
+.send-all { display: contents; }
+.send-row .confirm-box { flex-basis: 100%; }
+.status-sent { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); color: var(--success); }
+.status-failed { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); color: var(--danger); }
+.status-queued { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); color: var(--warning); }
+.status-sending { border-color: color-mix(in srgb, var(--info) 45%, var(--border)); color: var(--info); }
+.send-error { max-width: 28ch; color: var(--muted); font-size: .8125rem; overflow-wrap: anywhere; }
+.preview-week { flex: none; }
+.preview-week select { width: auto; max-width: 15rem; padding: 6px 10px; font-size: .875rem; }
+.mail-frame { margin: 16px 20px 20px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.mail-head { padding: 10px 14px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
+.mail-subject { margin: 0; font-size: .9rem; font-weight: 700; overflow-wrap: anywhere; }
+.mail-meta { margin: 2px 0 0; color: var(--muted); font-size: .75rem; }
+.mail-frame .email-preview { display: block; width: 100%; height: 560px; border: 0; border-radius: 0; background: #fff; }
+.mail-attachment { display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; overflow-wrap: anywhere; }
+.mail-attachment .icon { width: 14px; height: 14px; flex: none; }
+.button:disabled { opacity: .5; cursor: not-allowed; }

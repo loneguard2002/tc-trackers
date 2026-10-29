@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, time
+from datetime import date, datetime, time, timezone
 
 from flask import abort, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import func, select, union_all
@@ -18,9 +18,9 @@ from ..auth import (
     visible_trackers,
 )
 from ..db import get_session
-from ..engine.calc import COMPLETE, GroupInput, Headline, WeekRow
+from ..engine.calc import COMPLETE, GroupInput, Headline, WeekRow, build_headline, build_week_rows, group_positions
 from ..engine.weeks import week_endings
-from ..models import CompletionEntry, Group, ReportInput, Risk, Tracker, TrackerRole, User, Week
+from ..models import CompletionEntry, Group, Recipient, ReportInput, Risk, Tracker, TrackerRole, User, Week
 from . import bp
 from .forms import (
     RAG_VALUES,
@@ -328,6 +328,53 @@ def new():
     return _render_settings(None, _defaults_form(), [])
 
 
+MOVING_AVERAGE_RANGE = range(1, 13)
+
+
+def _settings_live(db, tracker: Tracker) -> dict:
+    """Figures for the line under each settings section: the report's totals, the weekly rate and forecast for every
+    moving-average period (so the line can follow the period as it is changed), and the next scheduled send."""
+    from ..report.build import default_report_week
+    from ..sched.runner import next_send
+
+    today = date.today()
+    week = default_report_week(tracker, today)
+    as_of = min(week, today)
+    weeks, targets, actuals, group_inputs, entry_totals = load_engine_inputs(db, tracker, as_of)
+    positions = group_positions(group_inputs, entry_totals)
+    scope = sum(p.baseline for p in positions)
+    headline = None
+    forecasts = {}
+    for weeks_averaged in MOVING_AVERAGE_RANGE:
+        rows = build_week_rows(
+            weeks,
+            targets,
+            actuals,
+            scope,
+            tracker.completed_before_first,
+            weeks_averaged,
+            as_of,
+            tracker.week_ending_weekday,
+        )
+        result = build_headline(rows, positions, tracker.completed_before_first, tracker.target_completion, week)
+        if weeks_averaged == tracker.moving_average_weeks:
+            headline = result
+        complete = [r.actual for r in rows if r.state == COMPLETE and r.week_ending <= week]
+        forecasts[weeks_averaged] = {
+            "rate": round(result.forecast_rate, 1) if result.forecast_rate is not None else None,
+            "forecast": result.forecast_completion.isoformat() if result.forecast_completion else None,
+            "window": complete[-weeks_averaged:],
+        }
+    recipients = db.scalar(select(func.count()).select_from(Recipient).where(Recipient.tracker_id == tracker.id))
+    return {
+        "headline": headline,
+        "forecasts": forecasts,
+        "today": today,
+        "next_send": next_send(tracker, datetime.now(timezone.utc)),
+        "recipients": recipients,
+    }
+
+
 def _render_settings(tracker: Tracker | None, form, errors: list[str], status: int = 200):
     template = "trackers/settings.html" if tracker is not None else "trackers/new.html"
     locked = tracker is not None and _has_entries(get_session(), tracker)
@@ -339,6 +386,7 @@ def _render_settings(tracker: Tracker | None, form, errors: list[str], status: i
             errors=errors,
             weekdays=list(enumerate(WEEKDAYS)),
             weekday_locked=locked,
+            live=_settings_live(get_session(), tracker) if tracker is not None else None,
             page_title="New tracker" if tracker is None else f"{tracker.name} settings",
             current_page="trackers",
         ),

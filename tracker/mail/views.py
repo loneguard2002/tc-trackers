@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from flask import current_app, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import delete, select
@@ -21,7 +23,9 @@ from .compose import (
     DEFAULT_BODY,
     DEFAULT_SUBJECT,
     PLACEHOLDERS,
+    attachment_name,
     normalise_recipient,
+    placeholder_context,
     preview_chart_src,
     render_email_html,
     unknown_placeholders,
@@ -43,7 +47,41 @@ def _audit(tracker, action: str, entity_id, detail: dict) -> None:
     )  # fmt: skip
 
 
-def _page(tracker, week, preview=None, form=None, status: int = 200):
+# Stands in for the message body in the preview shell, which the page fills as the template is edited.
+BODY_MARK = "<!--tracker-email-body-->"
+_STYLE_ATTR = re.compile(r"""\sstyle=("[^"]*"|'[^']*')""")
+
+
+def _for_preview(page: str) -> str:
+    """The email as the preview frame shows it: the frame follows the page's Content Security Policy, which blocks
+    inline styles, so they are dropped and the same rules come from a stylesheet instead."""
+    sheet = f'<link rel="stylesheet" href="{url_for("static", filename="email-preview.css")}">'
+    return _STYLE_ATTR.sub("", page).replace('<html lang="en-GB">', '<html lang="en-GB">' + sheet, 1)
+
+
+def _preview(tracker, week, values: dict) -> dict:
+    """The preview for ``week`` with the template as shown on the page, plus what the page needs to redraw it as the
+    template changes: the placeholder values and the email around the body."""
+    db = get_session()
+    report = build_report(db, tracker, week, report_views.today())
+    link = make_link(current_app.config["APP_URL"], tracker.id, week)
+    chart = preview_chart_src(report)
+    shown = SimpleNamespace(subject=values["subject"], body_html=values["body_html"])
+    subject, page = render_email_html(report, shown, link, chart)
+    _, shell = render_email_html(report, SimpleNamespace(subject="", body_html=BODY_MARK), link, chart)
+    return {
+        "subject": subject,
+        "html": _for_preview(page),
+        "shell": _for_preview(shell),
+        "mark": BODY_MARK,
+        "context": placeholder_context(report, link),
+        "attachment": attachment_name(report),
+    }
+
+
+def _page(tracker, week, form=None, status: int = 200):
+    from ..sched.runner import next_send
+
     db = get_session()
     template = db.get(EmailTemplate, tracker.id)
     values = form or {
@@ -66,8 +104,9 @@ def _page(tracker, week, preview=None, form=None, status: int = 200):
             custom=template is not None,
             weeks=week_endings(tracker.first_week_ending, tracker.last_week_ending),
             week=week,
-            preview=preview,
+            preview=_preview(tracker, week, values),
             recent=recent,
+            next_send=next_send(tracker, datetime.now(timezone.utc)) if tracker.schedule_enabled else None,
             page_title=f"{tracker.name} email",
             current_page="trackers",
         ),
@@ -143,12 +182,7 @@ def settings(tracker_id: int):
 @bp.get("/trackers/<int:tracker_id>/mail/preview")
 @require_tracker_role("owner")
 def preview(tracker_id: int):
-    tracker, db = g.tracker, get_session()
-    week = _week(tracker)
-    report = build_report(db, tracker, week, report_views.today())
-    link = make_link(current_app.config["APP_URL"], tracker.id, week)
-    subject, page = render_email_html(report, db.get(EmailTemplate, tracker.id), link, preview_chart_src(report))
-    return _page(tracker, week, preview={"subject": subject, "html": page})
+    return _page(g.tracker, _week(g.tracker))
 
 
 @bp.post("/trackers/<int:tracker_id>/mail/test")

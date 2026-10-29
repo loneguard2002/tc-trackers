@@ -45,6 +45,23 @@ def due_week_ending(tracker: Tracker, now_utc: datetime) -> date | None:
     return week_ending
 
 
+def next_send(tracker: Tracker, now_utc: datetime) -> datetime | None:
+    """The next scheduled send, in the tracker's time zone, or ``None`` once the last week-ending has passed. Pure."""
+    now = now_utc.astimezone(timezone.utc).replace(tzinfo=None)
+    start = max(now, datetime.combine(tracker.first_week_ending - timedelta(days=1), datetime.min.time()))
+    fires = next_occurrences(
+        "cron", {"expr": cron_for(tracker)}, tracker.send_timezone, start, start + timedelta(days=8)
+    )
+    zone = ZoneInfo(tracker.send_timezone)
+    for fire in fires:
+        local = fire.replace(tzinfo=timezone.utc).astimezone(zone)
+        if local.date() > tracker.last_week_ending:
+            return None
+        if local.date() >= tracker.first_week_ending:
+            return local
+    return None
+
+
 def due_sends(session, now_utc: datetime) -> list[tuple[int, date]]:
     """``(tracker_id, week_ending)`` pairs that are due and have no scheduled ``ReportSend`` yet."""
     trackers = session.scalars(

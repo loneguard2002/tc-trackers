@@ -1,0 +1,4 @@
+/* The email preview on the Email tab. The page's Content Security Policy also governs the preview frame, so the
+   email's inline styles are dropped there and this sheet gives the preview the same look (mail/email_body.html). */
+body { margin: 14px; font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 14px; line-height: 1.5; background: #fff; }
+img { max-width: 100%; height: auto; }

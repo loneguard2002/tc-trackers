@@ -1,10 +1,14 @@
 """Trackers, settings, groups, roles and the home page (database required)."""
 
-from datetime import date
+import html as html_lib
+import json
+import re
+from datetime import date, time, timedelta
 
 from sqlalchemy import select
 
 from tests.conftest import post
+from tracker.engine.weeks import week_ending_for
 from tracker.models import AuditLog, CompletionEntry, Group, ReportInput, Risk, Tracker, TrackerRole, Week
 from tracker.trackers import load_engine_inputs, tracker_summary
 
@@ -95,6 +99,42 @@ def test_settings_refuse_range_excluding_entries(client, logged_in_admin, db, tr
     response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "last_week_ending": "2026-12-11"})
     assert response.status_code == 400
     assert b"outside the new week range" in response.data
+
+
+def test_settings_page_lines_follow_the_tracker(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    group = make_group(db, tracker, baseline=100)
+    add_entry(db, tracker, group, date(2026, 9, 1), 10, date(2026, 9, 4))
+    add_entry(db, tracker, group, date(2026, 9, 8), 20, date(2026, 9, 11))
+    html = client.get(f"/trackers/{tracker.id}/settings").get_data(as_text=True)
+    assert "Reads as <strong>30 of 100 <span data-live-unit>devices</span></strong>" in html
+    assert "<strong data-live-groups>Locations</strong>" in html
+    # Entries exist, so the day buttons are locked and the saved day is sent in a hidden field.
+    assert 'value="4" checked disabled' in html and '<input type="hidden" name="week_ending_weekday" value="4">' in html
+    forecasts = json.loads(html_lib.unescape(re.search(r'data-forecasts="([^"]*)"', html).group(1)))
+    assert sorted(forecasts, key=int) == [str(n) for n in range(1, 13)]
+    # Each period averages at most that many complete weeks, oldest first, starting from the recorded 10 and 20.
+    assert all(len(forecasts[str(n)]["window"]) <= n for n in range(1, 13))
+    assert forecasts["12"]["window"][:2] == [10, 20]
+    assert "Off. The report goes out only when someone sends it from the Email tab." in html
+
+
+def test_settings_page_names_the_next_send(client, logged_in_admin, db, tracker_factory):
+    first = week_ending_for(date.today() - timedelta(days=14), 4)
+    tracker = tracker_factory(
+        first_week_ending=first,
+        last_week_ending=first + timedelta(weeks=8),
+        schedule_enabled=True,
+        send_time=time(9, 30),
+        send_timezone="Europe/Zurich",
+    )
+    html = client.get(f"/trackers/{tracker.id}/settings").get_data(as_text=True)
+    assert "Next send: <strong>" in html and "at 09:30</strong> (Europe/Zurich) to 0 recipients" in html
+
+
+def test_new_tracker_page_has_no_live_lines(client, logged_in_admin):
+    html = client.get("/trackers/new").get_data(as_text=True)
+    assert 'name="week_ending_weekday" value="4" checked' in html and "live-line" not in html
 
 
 def test_editor_cannot_open_settings(client, logged_in_user, db, tracker_factory, grant):

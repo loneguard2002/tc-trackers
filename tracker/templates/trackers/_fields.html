@@ -1,4 +1,6 @@
-{% from "macros.html" import csrf_field, setting %}
+{#- The tracker's own fields, shared by New tracker and Settings. ``live`` (Settings only) carries the figures for the
+    line under each section, which settings.js keeps up to date as the fields change. -#}
+{% from "macros.html" import csrf_field, field, icon %}
 {% if errors %}
 <div class="form-alert" role="alert">
   <strong>Please correct the following:</strong>
@@ -6,24 +8,33 @@
 </div>
 {% endif %}
 {{ csrf_field(csrf_token()) }}
+{% set unit = form.get('unit_label') or 'units' %}
 
 <section class="settings-section" id="general" aria-labelledby="section-general">
   <header class="settings-section-head">
     <h2 id="section-general">General</h2>
     <p>How the tracker is named and what it counts.</p>
   </header>
-  {% call setting('Name', 'Shown in the tracker list, at the top of the report and in email subjects.', 'name') %}
-  <input id="name" name="name" value="{{ form.get('name', '') }}" required aria-describedby="name-help">
-  {% endcall %}
-  {% call setting('Unit being counted', 'What one unit of progress is. Used in chart labels and progress figures.', 'unit_label') %}
-  <input id="unit_label" name="unit_label" value="{{ form.get('unit_label', '') }}" placeholder="For example, thin clients" aria-describedby="unit_label-help">
-  {% endcall %}
-  {% call setting('Grouping label', 'What the breakdown groups are called on the report. It also names the groups tab.', 'group_label') %}
-  <input id="group_label" name="group_label" value="{{ form.get('group_label', '') }}" placeholder="For example, Location" aria-describedby="group_label-help">
-  {% endcall %}
-  {% call setting('Description', 'A note for the people who maintain the tracker. It does not appear on the report or in emails.', 'description') %}
-  <textarea id="description" name="description" rows="3" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
-  {% endcall %}
+  <div class="field-stack">
+    {% call field('Name', 'Shown in the tracker list, at the top of the report and in email subjects.', 'name') %}
+    <input id="name" name="name" value="{{ form.get('name', '') }}" required aria-describedby="name-help">
+    {% endcall %}
+    <div class="field-pair">
+      {% call field('Unit being counted', 'One unit of progress, used in chart labels and figures.', 'unit_label') %}
+      <input id="unit_label" name="unit_label" value="{{ form.get('unit_label', '') }}" placeholder="For example, thin clients" aria-describedby="unit_label-help">
+      {% endcall %}
+      {% call field('Grouping label', 'What the groups are called. It also names the groups tab.', 'group_label') %}
+      <input id="group_label" name="group_label" value="{{ form.get('group_label', '') }}" placeholder="For example, Location" aria-describedby="group_label-help">
+      {% endcall %}
+    </div>
+    {% call field('Description', 'A note for the people who maintain the tracker. Not shown on the report or in emails.', 'description') %}
+    <textarea id="description" name="description" rows="2" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
+    {% endcall %}
+  </div>
+  {% if live %}
+  <p class="live-line" data-live="general" data-completed="{{ live.headline.completed }}" data-scope="{{ live.headline.total_scope }}" aria-live="polite">
+    Reads as <strong>{{ live.headline.completed|num }} of {{ live.headline.total_scope|num }} <span data-live-unit>{{ unit }}</span></strong> on the report, and the groups tab is called <strong data-live-groups>{{ (form.get('group_label') or 'Group')|plural }}</strong>.</p>
+  {% endif %}
 </section>
 
 <section class="settings-section" id="reporting-period" aria-labelledby="section-period">
@@ -31,21 +42,36 @@
     <h2 id="section-period">Reporting period</h2>
     <p>The weeks the tracker covers. Every entry and report is dated to a week-ending day.</p>
   </header>
-  {% set weekday_help = 'The week-ending day cannot change once entries exist.' if weekday_locked else 'The day each reporting week closes. Scheduled emails are sent on this day.' %}
-  {% call setting('Week-ending day', weekday_help, 'week_ending_weekday', 'is-locked' if weekday_locked else '') %}
-  <select id="week_ending_weekday" name="week_ending_weekday" aria-describedby="week_ending_weekday-help">
-    {% for n, day in weekdays %}<option value="{{ n }}" {{ 'selected' if form.get('week_ending_weekday') == n|string }}>{{ day }}</option>{% endfor %}
-  </select>
-  {% endcall %}
-  {% call setting('First week-ending', 'Any date entered here moves forward to the next week-ending day.', 'start_date') %}
-  <input id="start_date" name="start_date" type="date" value="{{ form.get('start_date', '') }}" required aria-describedby="start_date-help">
-  {% endcall %}
-  {% call setting('Last week-ending', 'Must fall on the week-ending day, no more than 52 weeks after the first.', 'last_week_ending') %}
-  <input id="last_week_ending" name="last_week_ending" type="date" value="{{ form.get('last_week_ending', '') }}" required aria-describedby="last_week_ending-help">
-  {% endcall %}
-  {% call setting('Target completion', 'Optional. The forecast finish is compared with this date to judge whether the work is on track.', 'target_completion') %}
-  <input id="target_completion" name="target_completion" type="date" value="{{ form.get('target_completion', '') }}" aria-describedby="target_completion-help">
-  {% endcall %}
+  <div class="field-stack">
+    {% set chosen = form.get('week_ending_weekday', '4')|string %}
+    <div class="field" role="radiogroup" aria-labelledby="weekday-label" aria-describedby="weekday-help">
+      <span class="field-label" id="weekday-label">Week-ending day</span>
+      <p class="field-help{{ ' is-locked' if weekday_locked }}" id="weekday-help">
+        {%- if weekday_locked %}{{ icon('lock') }}The week-ending day cannot change once entries exist.{% else %}The day each reporting week closes. Scheduled emails are sent on this day.{% endif %}</p>
+      <div class="segmented segmented-days">
+        {% for n, day in weekdays %}
+        <label title="{{ day }}"><input type="radio" name="week_ending_weekday" value="{{ n }}" {{ 'checked' if chosen == n|string }}{{ ' disabled' if weekday_locked }}><span aria-hidden="true">{{ day[:3] }}</span><span class="sr-only">{{ day }}</span></label>
+        {% endfor %}
+      </div>
+      {% if weekday_locked %}<input type="hidden" name="week_ending_weekday" value="{{ chosen }}">{% endif %}
+    </div>
+    <div class="field-pair">
+      {% call field('First week-ending', 'Any date moves forward to the next week-ending day.', 'start_date') %}
+      <input id="start_date" name="start_date" type="date" value="{{ form.get('start_date', '') }}" required aria-describedby="start_date-help">
+      {% endcall %}
+      {% call field('Last week-ending', 'On the week-ending day, at most 52 weeks after the first.', 'last_week_ending') %}
+      <input id="last_week_ending" name="last_week_ending" type="date" value="{{ form.get('last_week_ending', '') }}" required aria-describedby="last_week_ending-help">
+      {% endcall %}
+    </div>
+    {% call field('Target completion', 'Optional. The forecast finish is compared with this date to judge whether the work is on track.', 'target_completion', 'field-short') %}
+    <input id="target_completion" name="target_completion" type="date" value="{{ form.get('target_completion', '') }}" aria-describedby="target_completion-help">
+    {% endcall %}
+    <div class="period-timeline" data-timeline hidden>
+      <svg class="timeline" viewBox="0 0 600 46" preserveAspectRatio="none" role="img" aria-label="The tracker's weeks"></svg>
+      <p class="timeline-ends"><span data-timeline-first></span><span data-timeline-last></span></p>
+    </div>
+  </div>
+  {% if live %}<p class="live-line" data-live="period" data-today="{{ live.today.isoformat() }}" aria-live="polite" hidden></p>{% endif %}
 </section>
 
 <section class="settings-section" id="progress-forecast" aria-labelledby="section-forecast">
@@ -53,13 +79,29 @@
     <h2 id="section-forecast">Progress and forecast</h2>
     <p>Figures used to calculate progress and project the finish date.</p>
   </header>
-  {% call setting('Completed before the first week', 'Units finished before tracking began. They count towards the cumulative total from the first week.', 'completed_before_first') %}
-  <input id="completed_before_first" name="completed_before_first" type="number" min="0" inputmode="numeric" value="{{ form.get('completed_before_first', '0') }}" aria-describedby="completed_before_first-help">
-  {% endcall %}
-  {% call setting('Moving-average period', 'How many recent weeks are averaged to estimate the weekly rate, from 1 to 12. A shorter period reacts faster to change.', 'moving_average_weeks') %}
-  <div class="input-affix">
-    <input id="moving_average_weeks" name="moving_average_weeks" type="number" min="1" max="12" inputmode="numeric" value="{{ form.get('moving_average_weeks', '3') }}" aria-describedby="moving_average_weeks-help">
-    <span aria-hidden="true">weeks</span>
+  <div class="field-stack">
+    {% call field('Completed before the first week', 'Units finished before tracking began. They count towards the cumulative total from the first week.', 'completed_before_first', 'field-short') %}
+    <div class="input-affix">
+      <input id="completed_before_first" name="completed_before_first" type="number" min="0" inputmode="numeric" value="{{ form.get('completed_before_first', '0') }}" aria-describedby="completed_before_first-help">
+      <span aria-hidden="true" data-live-unit>{{ unit }}</span>
+    </div>
+    {% endcall %}
+    {% call field('Moving-average period', 'How many recent weeks are averaged to estimate the weekly rate, from 1 to 12. A shorter period reacts faster to change.', 'moving_average_weeks') %}
+    <div class="stepper" data-stepper>
+      <button class="stepper-button" type="button" data-step="-1" aria-label="One week fewer" hidden>−</button>
+      <input id="moving_average_weeks" name="moving_average_weeks" type="number" min="1" max="12" inputmode="numeric" value="{{ form.get('moving_average_weeks', '3') }}" aria-describedby="moving_average_weeks-help">
+      <button class="stepper-button" type="button" data-step="1" aria-label="One week more" hidden>+</button>
+      <span class="stepper-unit" aria-hidden="true">weeks</span>
+    </div>
+    {% endcall %}
   </div>
-  {% endcall %}
+  {% if live %}
+  {% set h = live.headline %}
+  {% set window = live.forecasts[tracker.moving_average_weeks].window %}
+  <p class="live-line" data-live="forecast" data-forecasts="{{ live.forecasts|tojson|forceescape }}" data-target="{{ tracker.target_completion.isoformat() if tracker.target_completion else '' }}"
+    data-before="{{ tracker.completed_before_first }}" aria-live="polite">
+    {%- if h.forecast_rate is none %}No complete weeks yet, so there is no rate or forecast.
+    {%- else %}Rate now <strong>{{ h.forecast_rate|rate }} a week</strong>, the average of the last {{ window|length }} week{{ '' if window|length == 1 else 's' }} ({{ window|join(', ') }}).
+      {%- if h.forecast_completion %} Forecast completion <strong>{{ h.forecast_completion|fdate }}</strong>.{% endif %}{% endif %}</p>
+  {% endif %}
 </section>

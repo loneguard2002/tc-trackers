@@ -49,7 +49,7 @@ def test_actions_and_archive_span_the_full_width(page, owner_page):
 def test_descriptions_use_a_small_font(page, owner_page):
     owner_page()
     sizes = page.evaluate(
-        "['.settings-section-head p', '.setting-help', '.setting-label label']"
+        "['.settings-section-head p', '.field-help', '.field > label']"
         ".map(s => parseFloat(getComputedStyle(document.querySelector(s)).fontSize))"
     )
     section_text, field_help, label = sizes

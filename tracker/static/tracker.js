@@ -98,6 +98,40 @@
     if (message && !window.confirm(message)) event.preventDefault();
   });
 
+  // Forms marked data-inline-confirm ask in the page instead: the [data-ask] button reveals [data-confirm-box], whose
+  // [data-confirm-yes] submits and [data-confirm-no] (or Escape) puts the button back. form.submit() skips the submit
+  // event, so the data-confirm dialog kept as the no-script fallback does not ask a second time.
+  document.querySelectorAll("form[data-inline-confirm]").forEach(function (form) {
+    var ask = form.querySelector("[data-ask]");
+    var box = form.querySelector("[data-confirm-box]");
+    if (!ask || !box) return;
+    var close = function () {
+      box.hidden = true;
+      ask.hidden = false;
+    };
+    ask.addEventListener("click", function (event) {
+      event.preventDefault();
+      document.querySelectorAll("form[data-inline-confirm] [data-confirm-box]:not([hidden])").forEach(function (open) {
+        open.hidden = true;
+        open.closest("form").querySelector("[data-ask]").hidden = false;
+      });
+      ask.hidden = true;
+      box.hidden = false;
+      box.querySelector("[data-confirm-no]").focus();
+    });
+    box.querySelector("[data-confirm-yes]").addEventListener("click", function () { form.submit(); });
+    box.querySelector("[data-confirm-no]").addEventListener("click", function () {
+      close();
+      ask.focus();
+    });
+    box.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        close();
+        ask.focus();
+      }
+    });
+  });
+
   // Section links (.subnav): underline the section in view and outline that section. With sections in two columns,
   // two share a row; a clicked link keeps the underline while the page scrolls to it and once it arrives.
   var subnav = document.querySelector(".subnav");

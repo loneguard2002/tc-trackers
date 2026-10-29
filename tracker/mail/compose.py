@@ -142,6 +142,11 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "tracker"
 
 
+def attachment_name(report: Report) -> str:
+    """The PDF's file name, as attached to the email."""
+    return f"{_slug(report.tracker.name)}-week-ending-{report.week_ending.isoformat()}.pdf"
+
+
 def build_report_email(
     report: Report,
     template: EmailTemplate | None,
@@ -166,8 +171,7 @@ def build_report_email(
     msg.add_alternative(page, subtype="html")
     chart = remaining_chart(report.rows, report.tracker.unit_label, "png")
     msg.get_payload()[1].add_related(chart, "image", "png", cid=f"<{CHART_CID}>", disposition="inline")
-    filename = f"{_slug(report.tracker.name)}-week-ending-{report.week_ending.isoformat()}.pdf"
-    msg.add_attachment(pdf, maintype="application", subtype="pdf", filename=filename)
+    msg.add_attachment(pdf, maintype="application", subtype="pdf", filename=attachment_name(report))
     return msg
 
 
