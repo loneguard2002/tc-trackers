@@ -18,8 +18,8 @@
       <select id="group_id" name="group_id" required aria-describedby="group_id-help"><option value="">Choose</option>
         {% for grp in groups %}<option value="{{ grp.id }}" {{ 'selected' if form.get('group_id')|string == grp.id|string }}>{{ grp.name }}</option>{% endfor %}</select>
       {% endcall %}
-      {% call setting('Date', 'The day the work was finished. It counts towards the week ending on or after this date.', 'entry_date') %}
-      <input id="entry_date" name="entry_date" type="date" value="{{ form.get('entry_date', '') }}" required aria-describedby="entry_date-help">
+      {% call setting('Date', 'The day the work was finished, today or earlier. It counts towards the week ending on or after this date.', 'entry_date') %}
+      <input id="entry_date" name="entry_date" type="date" value="{{ form.get('entry_date', '') }}" max="{{ today.isoformat() }}" required aria-describedby="entry_date-help">
       {% endcall %}
       {% call setting('Quantity', 'How many were finished on that day, as a whole number of 1 or more.', 'quantity') %}
       <div class="input-affix">

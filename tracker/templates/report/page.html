@@ -3,6 +3,7 @@
 {% block head_extra %}
   <script src="{{ url_for('static', filename='vendor/echarts-6.1.0.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='report-charts.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='report-view.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% block content %}
 {% include "trackers/_nav.html" %}
@@ -20,6 +21,12 @@
   {% if ns.next %}<a class="button button-small" href="{{ url_for('report.view', tracker_id=tid, week=ns.next.isoformat()) }}" rel="next">Next{{ icon('chevron-right') }}</a>
   {% else %}<span class="button button-small is-disabled" aria-disabled="true">Next{{ icon('chevron-right') }}</span>{% endif %}
   <span class="report-week-downloads">
+    {#- Shown by report-view.js: previews the report as the PDF (an A4 page) or the PNG will lay it out. -#}
+    <span class="toggle" role="group" aria-label="Preview" data-report-view hidden>
+      <button type="button" data-view="screen" aria-pressed="true">Screen</button>
+      <button type="button" data-view="pdf" aria-pressed="false">PDF</button>
+      <button type="button" data-view="png" aria-pressed="false">PNG</button>
+    </span>
     <a class="button button-small" href="{{ url_for('report.export_pdf', tracker_id=tid, week=wk.isoformat()) }}">{{ icon('download') }}Download PDF</a>
     <a class="button button-small" href="{{ url_for('report.export_png', tracker_id=tid, week=wk.isoformat()) }}">{{ icon('download') }}Download PNG</a>
   </span>

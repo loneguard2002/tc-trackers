@@ -28,13 +28,20 @@ def parse_quantity(value: str | None) -> tuple[int | None, str | None]:
     return int(text), None
 
 
-def check_entry_date(entry_date: date | None, weekday: int, first: date, last: date) -> tuple[date | None, str | None]:
-    """Return the week-ending for ``entry_date`` or an error when it falls outside the tracker's weeks."""
+def check_entry_date(
+    entry_date: date | None, weekday: int, first: date, last: date, today: date | None = None
+) -> tuple[date | None, str | None]:
+    """Return the week-ending for ``entry_date``, or an error when it is outside the tracker's weeks or after ``today``.
+
+    A future date is refused because the report would leave the entry out until that day, so it would seem lost.
+    """
     if entry_date is None:
         return None, "Enter a valid date."
     week_ending = week_ending_for(entry_date, weekday)
     if week_ending < first or week_ending > last:
         return None, f"That date is outside this tracker's weeks ({format_date(first)} to {format_date(last)})."
+    if today is not None and entry_date > today:
+        return None, f"The date cannot be after today ({format_date(today)}). Record work once it is finished."
     return week_ending, None
 
 

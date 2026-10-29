@@ -165,7 +165,14 @@ def entries_csv(tracker_id: int):
 
 def _render_new(tracker: Tracker, groups: list[Group], form, errors: list[str], status: int = 200):
     return (
-        render_template("entries/new.html", groups=groups, form=form, errors=errors, **_page(tracker, "New entry")),
+        render_template(
+            "entries/new.html",
+            groups=groups,
+            form=form,
+            errors=errors,
+            today=date.today(),
+            **_page(tracker, "New entry"),
+        ),
         status,
     )
 
@@ -192,6 +199,7 @@ def new_entry(tracker_id: int):
         tracker.week_ending_weekday,
         tracker.first_week_ending,
         tracker.last_week_ending,
+        today=date.today(),
     )
     if date_error:
         errors.append(date_error)

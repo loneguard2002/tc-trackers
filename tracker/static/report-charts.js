@@ -48,6 +48,14 @@
     };
   }
 
+  // The week in progress is a part-week figure: its bar is paler and its tooltip says "so far".
+  function weeklyBars(values, inProgress) {
+    return values.map(function (value, i) {
+      if (!inProgress || !inProgress[i] || value === null || value === undefined) return value;
+      return { value: value, partWeek: true, itemStyle: { opacity: 0.4 } };
+    });
+  }
+
   // The gap line: on Remaining an actual above plan is behind; on Cumulative an actual below plan is behind.
   function gapText(plan, actual, higherIsBehind) {
     if (plan === null || plan === undefined || actual === null || actual === undefined) return "";
@@ -64,8 +72,9 @@
       var html = '<div class="chart-tooltip-title">Week ending ' + longDate(weeks[index]) + "</div>";
       params.forEach(function (p) {
         if (p.value === null || p.value === undefined || p.value === "-") return;
+        var name = p.seriesName + (p.data && p.data.partWeek ? " so far" : "");
         html += '<div class="chart-tooltip-row"><span><span class="chart-swatch chart-swatch-' +
-          (SWATCH[p.seriesId] || "plan") + '"></span>' + p.seriesName + "</span><strong>" +
+          (SWATCH[p.seriesId] || "plan") + '"></span>' + name + "</span><strong>" +
           formatValue(p.seriesId, p.value) + "</strong></div>";
       });
       var text = gap ? gap(index) : "";
@@ -96,7 +105,8 @@
         yName: "",
         bars: true,
         series: [
-          { id: "actual", name: "Actual", type: "bar", data: s.actual, barMaxWidth: 28, itemStyle: { color: p.actual } },
+          { id: "actual", name: "Actual", type: "bar", data: weeklyBars(s.actual, data.in_progress), barMaxWidth: 28,
+            itemStyle: { color: p.actual } },
           lineSeries("target", "Target", s.target, p.plan, "dashed")
         ],
         gap: null
@@ -156,22 +166,25 @@
     return { option: option, empty: empty };
   }
 
-  // The chart background is the theme's surface colour, so a saved picture is readable in either theme.
-  function surfaceColour() {
-    return getComputedStyle(document.documentElement).getPropertyValue("--surface").trim() || "#ffffff";
+  // The chart background is the surface colour around the chart, so a saved picture is readable in either theme.
+  function surfaceColour(host) {
+    return getComputedStyle(host).getPropertyValue("--surface").trim() || "#ffffff";
   }
 
-  function currentTheme() {
+  // The PDF and PNG previews (report-view.js) are always light, whatever the page theme.
+  function currentTheme(host) {
+    if (host.closest(".is-paper")) return "light";
     return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
   }
 
   function draw(entry) {
-    var theme = currentTheme();
+    var theme = currentTheme(entry.host);
     entry.chart = window.echarts.init(entry.host, theme === "dark" ? "dark" : null, { renderer: "svg" });
     entry.chart.group = "report";
     entry.chart.setOption(entry.built.option);
-    entry.chart.setOption({ backgroundColor: surfaceColour() });
-    entry.host.dataset.theme = theme;
+    entry.chart.setOption({ backgroundColor: surfaceColour(entry.host) });
+    // Not "data-theme": the style sheet's [data-theme="dark"] rule would give the host the dark colours.
+    entry.host.dataset.chartTheme = theme;
   }
 
   function start(container, data) {
@@ -191,13 +204,15 @@
     });
     window.echarts.connect("report");
 
-    document.addEventListener("tracker:themechange", function () {
+    function redraw() {
       charts.forEach(function (entry) {
         entry.chart.dispose();
         draw(entry);
       });
       window.echarts.connect("report");
-    });
+    }
+    document.addEventListener("tracker:themechange", redraw);
+    document.addEventListener("tracker:reportview", redraw);
     // Resize with the host, not just the window: collapsing the sidebar changes the width without a resize event.
     if (window.ResizeObserver) {
       var observer = new window.ResizeObserver(function () {

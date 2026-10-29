@@ -1,6 +1,6 @@
 """Data entry routes: completions, targets, weekly inputs, risks (database required)."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import select
 
@@ -39,6 +39,26 @@ def test_entry_assigned_to_week_ending(client, db, tracker_factory, user_factory
     assert response.status_code == 302
     entry = db.scalars(select(CompletionEntry)).one()
     assert entry.week_ending == date(2026, 10, 16) and entry.created_by == user.id
+
+
+def test_entry_dated_in_the_future_is_refused(client, db, tracker_factory, user_factory, grant):
+    friday = date.today() - timedelta(days=(date.today().weekday() - 4) % 7)  # weeks around today, ending Fridays
+    tracker, _, group = setup_editor(
+        db,
+        tracker_factory,
+        user_factory,
+        grant,
+        client,
+        first_week_ending=friday - timedelta(weeks=4),
+        last_week_ending=friday + timedelta(weeks=4),
+    )
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    response = post(client, entry_url(tracker, "/new"), entry_form(group, tomorrow))
+    assert response.status_code == 400
+    assert "The date cannot be after today" in response.get_data(as_text=True)
+    assert db.scalars(select(CompletionEntry)).first() is None
+    form = client.get(entry_url(tracker, "/new")).get_data(as_text=True)
+    assert f'max="{date.today().isoformat()}"' in form
 
 
 def test_entries_same_group_week_add_up(client, db, tracker_factory, user_factory, grant):
