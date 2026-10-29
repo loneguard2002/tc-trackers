@@ -195,6 +195,31 @@ def test_groups_page_is_a_table_with_row_actions(client, logged_in_admin, db, tr
     assert 'name="baseline"' not in html  # editing has its own page
 
 
+def test_groups_page_shows_progress_totals_and_retired_apart(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    first = make_group(db, tracker, baseline=10, rag="Red", ready_not_complete=2)
+    make_group(db, tracker, name="Site B", baseline=30)
+    make_group(db, tracker, name="Old site", baseline=0, retired=True)
+    add_entry(db, tracker, first, date(2026, 9, 1), 4, date(2026, 9, 4))
+    html = client.get(f"/trackers/{tracker.id}/groups").get_data(as_text=True)
+    current, retired = html.split("Retired locations (1)")
+    assert "rag-dot rag-dot-red" in current and "4 of 10" in current
+    assert '<th scope="row">All locations</th>' in current and "4 of 40" in current
+    assert "Old site" in retired and "Old site" not in current
+    assert "Retire once nothing remains" in current  # both active groups still have work left
+
+
+def test_move_skips_retired_groups(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    first = make_group(db, tracker, sort_order=1)
+    make_group(db, tracker, name="Retired", baseline=0, retired=True, sort_order=2)
+    make_group(db, tracker, name="Site C", sort_order=3)
+    post(client, f"/trackers/{tracker.id}/groups", {"action": "down", "group_id": first.id})
+    db.expire_all()
+    names = [g.name for g in db.scalars(select(Group).order_by(Group.sort_order, Group.id)) if not g.retired]
+    assert names == ["Site C", "Site A"]
+
+
 def test_add_group_page(client, logged_in_admin, db, tracker_factory):
     tracker = tracker_factory()
     url = f"/trackers/{tracker.id}/groups/new"

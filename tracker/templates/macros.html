@@ -22,6 +22,7 @@
   {% elif name == 'download' %}<path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/>
   {% elif name == 'chevron-left' %}<path d="m15 6-6 6 6 6"/>
   {% elif name == 'chevron-right' %}<path d="m9 6 6 6-6 6"/>
+  {% elif name == 'search' %}<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
   {% else %}<circle cx="12" cy="12" r="9"/>{% endif %}
 </svg>
 {%- endmacro %}
@@ -58,6 +59,16 @@
     {% if help %}<p class="setting-help" id="{{ for_id }}-help">{{ help }}</p>{% endif %}
   </div>
   <div class="setting-control">{{ caller() }}</div>
+</div>
+{%- endmacro %}
+
+{# One stacked field: the label, a short explanation, then the control (the call body). For forms laid out in
+   columns, where the side-by-side settings row would be too narrow. #}
+{% macro field(label, help, for_id, row_class='') -%}
+<div class="field{{ ' ' ~ row_class if row_class }}">
+  <label for="{{ for_id }}">{{ label }}</label>
+  {% if help %}<p class="field-help" id="{{ for_id }}-help">{{ help }}</p>{% endif %}
+  {{ caller() }}
 </div>
 {%- endmacro %}
 

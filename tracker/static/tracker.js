@@ -91,8 +91,8 @@
     });
   }
 
-  // Forms marked data-confirm ask before they submit, as deletes cannot be undone. The listener sits on the document
-  // because tables.js redraws table rows after this runs.
+  // Forms marked data-confirm ask before they submit, as deletes cannot be undone. The listener sits on the document,
+  // so it also covers forms added to the page later.
   document.addEventListener("submit", function (event) {
     var message = event.target.getAttribute("data-confirm");
     if (message && !window.confirm(message)) event.preventDefault();
