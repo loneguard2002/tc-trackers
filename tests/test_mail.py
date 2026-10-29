@@ -487,6 +487,22 @@ def test_owner_saves_template_and_preview_flags_unknown(client, db, tracker_fact
     assert "Subject: Hi" in preview and "srcdoc" in preview
 
 
+def test_email_page_shows_the_preview_and_asks_before_sending(client, db, tracker_factory, user_factory, grant):
+    tracker, owner = tracker_factory(), user_factory()
+    grant(owner, tracker, "owner")
+    sign_in(client, owner)
+    db.add(Recipient(tracker_id=tracker.id, email="a@example.com", name="Ann"))
+    db.commit()
+    html = client.get(f"/trackers/{tracker.id}/mail?week=2026-09-11").get_data(as_text=True)
+    assert "srcdoc=" in html and "data-shell=" in html and "data-context=" in html
+    # The preview frame follows the page's policy: inline styles are dropped and a stylesheet stands in for them.
+    assert "email-preview.css" in html and "style=&#34;" not in html
+    assert "test-tracker-week-ending-2026-09-11.pdf" in html
+    assert "Send to 1 recipient…" in html and "data-inline-confirm" in html
+    assert "<strong>Ann</strong> <span>a@example.com</span>" in html
+    assert "Automatic sending is off" in html
+
+
 def test_archived_tracker_refuses_mail_posts(client, db, tracker_factory, user_factory, grant, sent_messages):
     tracker, owner = tracker_factory(status="archived"), user_factory()
     grant(owner, tracker, "owner")
@@ -507,7 +523,9 @@ def test_archived_tracker_refuses_mail_posts(client, db, tracker_factory, user_f
 def render_settings(app, recipients):
     from flask import g, render_template
 
-    tracker = SimpleNamespace(id=1, name="T", status="active", group_label="Site", unit_label="d")
+    tracker = SimpleNamespace(
+        id=1, name="T", status="active", group_label="Site", unit_label="d", schedule_enabled=False, send_timezone="UTC"
+    )
     user = SimpleNamespace(email="o@example.com", full_name="O", is_admin=True)
     with app.test_request_context("/"):
         g.role = "owner"
@@ -523,6 +541,7 @@ def render_settings(app, recipients):
             week=date(2026, 9, 4),
             preview=None,
             recent=[],
+            next_send=None,
             current_user=user,
         )
 

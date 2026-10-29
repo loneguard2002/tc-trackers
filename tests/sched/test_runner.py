@@ -150,3 +150,24 @@ def test_build_exception_marks_failed_and_cycle_continues(app, db, scheduled, tr
     assert (
         db.scalars(select(AuditLog).where(AuditLog.action == "report_send_failed")).one().detail["status"] == "failed"
     )
+
+
+def test_next_send_is_the_coming_fire_in_local_time(scheduled):
+    upcoming = runner.next_send(scheduled, datetime(2026, 10, 14, 9, 0, tzinfo=timezone.utc))
+    assert (upcoming.date(), upcoming.strftime("%H:%M"), str(upcoming.tzinfo)) == (FIRE, "17:00", "Europe/London")
+
+
+def test_next_send_is_none_after_the_last_week(scheduled):
+    assert runner.next_send(scheduled, datetime(2026, 12, 26, 9, 0, tzinfo=timezone.utc)) is None
+
+
+def test_next_send_waits_for_the_first_week(tracker_factory):
+    tracker = tracker_factory(
+        first_week_ending=date(2027, 1, 8),
+        last_week_ending=date(2027, 3, 5),
+        schedule_enabled=True,
+        send_time=time(9, 0),
+        send_timezone="Asia/Singapore",
+    )
+    upcoming = runner.next_send(tracker, datetime(2026, 10, 14, tzinfo=timezone.utc))
+    assert (upcoming.date(), upcoming.strftime("%H:%M")) == (date(2027, 1, 8), "09:00")

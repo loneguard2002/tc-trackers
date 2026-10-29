@@ -1,5 +1,5 @@
-// Entries: the quick-add form names the week a date counts towards, and delete asks for confirmation in the row
-// itself. Without JavaScript the form still records and delete falls back to the data-confirm dialog.
+// Entries: the quick-add form names the week a date counts towards. Without JavaScript the form still records.
+// (Delete asks in the row itself through tracker.js's data-inline-confirm.)
 (function () {
   "use strict";
 
@@ -42,33 +42,4 @@
     input.addEventListener("input", showWeek);
     showWeek();
   }
-
-  function reset(box) {
-    box.hidden = true;
-    box.parentNode.querySelector("[data-ask]").hidden = false;
-  }
-
-  document.querySelectorAll("form[data-inline-confirm]").forEach(function (del) {
-    var ask = del.querySelector("[data-ask]");
-    var box = del.querySelector("[data-confirm-box]");
-    ask.addEventListener("click", function (event) {
-      event.preventDefault();
-      document.querySelectorAll("[data-confirm-box]:not([hidden])").forEach(reset);
-      ask.hidden = true;
-      box.hidden = false;
-      box.querySelector("[data-confirm-no]").focus();
-    });
-    // form.submit() skips the submit event, so the data-confirm dialog does not ask a second time.
-    box.querySelector("[data-confirm-yes]").addEventListener("click", function () { del.submit(); });
-    box.querySelector("[data-confirm-no]").addEventListener("click", function () {
-      reset(box);
-      ask.focus();
-    });
-    box.addEventListener("keydown", function (event) {
-      if (event.key === "Escape") {
-        reset(box);
-        ask.focus();
-      }
-    });
-  });
 })();

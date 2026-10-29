@@ -1,125 +1,173 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, setting %}
+{% from "macros.html" import csrf_field, field, icon, rag_dot %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='email.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
+{% set count = recipients|length %}
+{% set people = count ~ ' recipient' ~ ('' if count == 1 else 's') %}
 <nav class="subnav" aria-label="Email sections">
   <a href="#recipients">Recipients</a>
   <a href="#template">Email template</a>
-  <a href="#preview">Preview and send</a>
+  <a href="#sending">Sending</a>
   <a href="#recent">Recent sends</a>
+  <a href="#preview">Preview</a>
 </nav>
-<div class="settings settings-narrow">
-  <section class="settings-section" id="recipients" aria-labelledby="section-recipients">
-    <header class="settings-section-head">
-      <h2 id="section-recipients">Recipients</h2>
-      <p>Recipients receive the report by blind copy. They need a role on the tracker to open the link.</p>
-    </header>
-    {% if recipients %}
-    <ul class="member-list">
-      {% for r in recipients %}
-      <li class="member">
-        <span class="member-avatar" aria-hidden="true">{{ (r.name or r.email)[:1]|upper }}</span>
-        <span class="member-who"><span class="member-name">{{ r.name or r.email }}</span>{% if r.name %}<span class="member-email">{{ r.email }}</span>{% endif %}</span>
-        <form class="member-actions" method="post" action="{{ url_for('mail.settings', tracker_id=tracker.id) }}">
-          {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="remove_recipient">
-          <input type="hidden" name="recipient_id" value="{{ r.id }}">
-          <button class="button button-small button-quiet" type="submit">Remove<span class="sr-only"> {{ r.email }}</span></button>
-        </form>
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}<p class="empty-note">No recipients yet.</p>{% endif %}
-    <form class="settings-section-foot inline-form" method="post" action="{{ url_for('mail.settings', tracker_id=tracker.id) }}">
-      {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="add_recipient">
-      <div><label for="email">Email address</label><input id="email" name="email" type="email" required placeholder="name@example.com"></div>
-      <div><label for="name">Name (optional)</label><input id="name" name="name"></div>
-      <button class="button" type="submit">Add recipient</button>
-    </form>
-  </section>
-
-  <section class="settings-section" id="template" aria-labelledby="section-template">
-    <header class="settings-section-head">
-      <h2 id="section-template">Email template</h2>
-      <p>The subject and message sent with the report. The PDF is attached and the chart is shown in the message.</p>
-    </header>
-    {% if unknown %}<div class="section-body"><p class="flash flash-danger">Unknown placeholders will be sent as written: {{ unknown|join(', ') }}.</p></div>{% endif %}
-    <form id="template-form" method="post" action="{{ url_for('mail.settings', tracker_id=tracker.id) }}">
-      {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="save_template">
-      {% call setting('Subject', 'Placeholders in double braces, such as the tracker name or status, are filled in for each week.', 'subject', 'is-wide') %}
-      <input id="subject" name="subject" value="{{ values.subject }}" maxlength="300" required aria-describedby="subject-help">
-      {% endcall %}
-      {% call setting('Body (HTML)', 'The message as HTML. Keep the report link placeholder so readers can open the live report.', 'body_html', 'is-wide') %}
-      <textarea class="code-input" id="body_html" name="body_html" rows="12" required aria-describedby="body_html-help">{{ values.body_html }}</textarea>
-      <details class="placeholder-help">
-        <summary>Placeholders</summary>
-        <dl>
-          {% for name, description in placeholders.items() %}
-          <dt><code>{% raw %}{{{% endraw %}{{ name }}{% raw %}}}{% endraw %}</code></dt><dd>{{ description }}</dd>
-          {% endfor %}
-        </dl>
-      </details>
-      {% endcall %}
-    </form>
-    {% if custom %}
-    <form id="reset-template-form" method="post" action="{{ url_for('mail.settings', tracker_id=tracker.id) }}">
-      {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="reset_template">
-    </form>
-    {% endif %}
-    <div class="settings-section-foot">
-      {% if custom %}<button class="button button-quiet" type="submit" form="reset-template-form">Reset to default</button>{% endif %}
-      <button class="button primary" type="submit" form="template-form">Save template</button>
-    </div>
-  </section>
-
-  <section class="settings-section" id="preview" aria-labelledby="section-preview">
-    <header class="settings-section-head">
-      <h2 id="section-preview">Preview and send</h2>
-      <p>Check the email for any week, send yourself a test, or send it to every recipient now.</p>
-    </header>
-    <div class="section-body">
-      <form class="preview-week" method="get" action="{{ url_for('mail.preview', tracker_id=tracker.id) }}">
-        <div><label for="week">Week ending</label>
-          <select id="week" name="week">
-            {% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if w == week }}>{{ w|fdate }}</option>{% endfor %}
-          </select></div>
-        <button class="button" type="submit">Preview</button>
-      </form>
-      {% if preview %}
-      <h3 class="preview-subject">Subject: {{ preview.subject }}</h3>
-      <iframe title="Email preview" sandbox srcdoc="{{ preview.html }}" class="email-preview"></iframe>
-      <p class="section-note">This preview approximates the email's styling; mail clients may differ slightly.</p>
-      {% endif %}
-    </div>
-    <div class="settings-section-foot">
-      <form method="post" action="{{ url_for('mail.test_send', tracker_id=tracker.id, week=week.isoformat()) }}">
-        {{ csrf_field(csrf_token()) }}<button class="button" type="submit">Send a test to me ({{ current_user.email }})</button>
-      </form>
-      <form method="post" action="{{ url_for('mail.send_now', tracker_id=tracker.id, week=week.isoformat()) }}">
-        {{ csrf_field(csrf_token()) }}<button class="button primary" type="submit">Send to all recipients now (week ending {{ week|fdate }})</button>
-      </form>
-    </div>
-  </section>
-
-  <section class="settings-section" id="recent" aria-labelledby="section-recent">
-    <header class="settings-section-head">
-      <h2 id="section-recent">Recent sends</h2>
-      <p>The last ten sends, newest first, with any error and when the next attempt is due.</p>
-    </header>
-    {% if recent %}
-    <div class="section-table">
-      <table class="table">
-        <thead><tr><th>Week ending</th><th>Trigger</th><th>Status</th><th>Recipients</th><th>Attempts</th><th>Next attempt</th><th>Error</th></tr></thead>
-        <tbody>
-        {% for s in recent %}
-          {% set tone = {'sent': 'success', 'failed': 'danger', 'queued': 'warning', 'sending': 'info'}.get(s.status, 'muted') %}
-          <tr><td>{{ s.week_ending|fdate }}</td><td>{{ s.trigger|capitalize }}</td><td><span class="badge badge-{{ tone }}">{{ s.status|capitalize }}</span></td><td>{{ s.recipients|length }}</td>
-            <td>{{ s.attempts }}</td><td>{{ s.next_attempt_at.strftime('%d %b %Y %H:%M') if s.next_attempt_at else '–' }}</td><td>{{ s.error|dash }}</td></tr>
+<div class="email-page">
+<div class="email-layout">
+  <div class="email-main">
+    <section class="settings-section" id="recipients" aria-labelledby="section-recipients">
+      <header class="settings-section-head">
+        <h2 id="section-recipients">Recipients</h2>
+        <p>{{ people }}, sent by blind copy. They need a role on the tracker to open the report link.</p>
+      </header>
+      {% if recipients %}
+      <ul class="recipient-chips">
+        {% for r in recipients %}
+        <li class="recipient-chip">
+          <span class="recipient-who">{% if r.name %}<strong>{{ r.name }}</strong> <span>{{ r.email }}</span>{% else %}<strong>{{ r.email }}</strong>{% endif %}</span>
+          <form method="post" action="{{ url_for('mail.settings', tracker_id=tracker.id) }}">
+            {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="remove_recipient">
+            <input type="hidden" name="recipient_id" value="{{ r.id }}">
+            <button class="recipient-remove" type="submit" title="Remove" aria-label="Remove {{ r.email }}">{{ icon('close') }}</button>
+          </form>
+        </li>
         {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}<p class="empty-note">Nothing has been sent yet.</p>{% endif %}
-  </section>
+      </ul>
+      {% else %}<p class="empty-note">No recipients yet.</p>{% endif %}
+      <form class="recipient-add" method="post" action="{{ url_for('mail.settings', tracker_id=tracker.id) }}">
+        {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="add_recipient">
+        <label class="sr-only" for="email">Email address</label>
+        <input id="email" name="email" type="email" required placeholder="name@example.com">
+        <label class="sr-only" for="name">Name (optional)</label>
+        <input id="name" name="name" placeholder="Name (optional)">
+        <button class="button" type="submit">Add</button>
+      </form>
+    </section>
+
+    <section class="settings-section" id="template" aria-labelledby="section-template">
+      <header class="settings-section-head">
+        <h2 id="section-template">Email template</h2>
+        <p>The subject and message sent with the report. The PDF is attached and the chart is shown under the message.</p>
+      </header>
+      <form id="template-form" class="field-stack" method="post" action="{{ url_for('mail.settings', tracker_id=tracker.id) }}" data-template-form>
+        {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="save_template">
+        {% call field('Subject', '', 'subject') %}
+        <input id="subject" name="subject" value="{{ values.subject }}" maxlength="300" required>
+        {% endcall %}
+        {% call field('Body (HTML)', 'Keep the report link placeholder so readers can open the live report.', 'body_html') %}
+        <textarea class="code-input" id="body_html" name="body_html" rows="11" required aria-describedby="body_html-help">{{ values.body_html }}</textarea>
+        {% endcall %}
+        <div class="field">
+          <span class="field-label" id="placeholders-label">Insert a placeholder</span>
+          <div class="placeholder-chips" role="group" aria-labelledby="placeholders-label" data-placeholder-chips hidden>
+            {% for name, description in placeholders.items() %}<button class="placeholder-chip" type="button" data-insert="{{ name }}" title="{{ description }}">{{ name }}</button>{% endfor %}
+          </div>
+          <details class="placeholder-help" data-placeholder-help>
+            <summary>Placeholders</summary>
+            <dl>
+              {% for name, description in placeholders.items() %}
+              <dt><code>{% raw %}{{{% endraw %}{{ name }}{% raw %}}}{% endraw %}</code></dt><dd>{{ description }}</dd>
+              {% endfor %}
+            </dl>
+          </details>
+          <p class="warn-box" data-unknown data-known="{{ placeholders.keys()|join(' ') }}"{% if not unknown %} hidden{% endif %}>
+            {%- if unknown %}Unknown placeholders will be sent as written: {{ unknown|join(', ') }}.{% endif %}</p>
+        </div>
+      </form>
+      {% if custom %}
+      <form id="reset-template-form" method="post" action="{{ url_for('mail.settings', tracker_id=tracker.id) }}">
+        {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="reset_template">
+      </form>
+      {% endif %}
+      <div class="settings-section-foot">
+        <span class="settings-actions-note" data-dirty-note></span>
+        {% if custom %}<button class="button button-quiet" type="submit" form="reset-template-form">Reset to default</button>{% endif %}
+        <button class="button primary" type="submit" form="template-form">Save template</button>
+      </div>
+    </section>
+
+    <section class="settings-section" id="sending" aria-labelledby="section-sending">
+      <header class="settings-section-head">
+        <h2 id="section-sending">Sending</h2>
+        <p>Send yourself a test, or send the report for the week ending {{ week|fdate }} to everyone now.</p>
+      </header>
+      <p class="schedule-state">
+        <span class="rag-pill">{{ rag_dot('Green' if tracker.schedule_enabled else none) }}Automatic sending is {{ 'on' if tracker.schedule_enabled else 'off' }}</span>
+        <span class="muted">{% if tracker.schedule_enabled and next_send %}Next send {{ next_send.strftime('%a %d %b %Y at %H:%M') }} ({{ tracker.send_timezone }}).
+          {%- elif tracker.schedule_enabled %}The last week-ending has passed, so nothing more will be sent.
+          {%- else %}The report goes out only when someone sends it here.{% endif %}</span>
+        {% if g.role == 'owner' %}<a href="{{ url_for('trackers.settings', tracker_id=tracker.id) }}#schedule">Change in Settings</a>{% endif %}
+      </p>
+      <div class="send-row">
+        <form method="post" action="{{ url_for('mail.test_send', tracker_id=tracker.id, week=week.isoformat()) }}">
+          {{ csrf_field(csrf_token()) }}<button class="button" type="submit">Send a test to me<span class="sr-only"> ({{ current_user.email }})</span></button>
+        </form>
+        <form class="send-all" method="post" action="{{ url_for('mail.send_now', tracker_id=tracker.id, week=week.isoformat()) }}"
+          data-confirm="Email the report for the week ending {{ week|fdate }} to {{ people }} now? It cannot be recalled." data-inline-confirm>
+          {{ csrf_field(csrf_token()) }}
+          <button class="button" type="submit" data-ask{{ ' disabled' if not count }}>Send to {{ people }}…</button>
+          <div class="confirm-box" data-confirm-box hidden>
+            <p>This emails the report for <strong>week ending {{ week|fdate }}</strong> to <strong>{{ people }}</strong> now. It cannot be recalled.</p>
+            <div class="confirm-box-actions">
+              <button class="button danger" type="button" data-confirm-yes>Send now</button>
+              <button class="button" type="button" data-confirm-no>Cancel</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="settings-section" id="recent" aria-labelledby="section-recent">
+      <header class="settings-section-head">
+        <h2 id="section-recent">Recent sends</h2>
+        <p>The last ten sends, newest first, with any error and when the next attempt is due.</p>
+      </header>
+      {% if recent %}
+      <div class="section-table">
+        <table class="table">
+          <thead><tr><th>Week ending</th><th>Trigger</th><th>Status</th><th class="num">Recipients</th><th>Attempts</th><th>Next attempt</th><th>Error</th></tr></thead>
+          <tbody>
+          {% for s in recent %}
+            <tr><td>{{ s.week_ending|fdate }}</td><td>{{ s.trigger|capitalize }}</td><td><span class="status-pill status-{{ s.status }}">{{ s.status|capitalize }}</span></td><td class="num">{{ s.recipients|length }}</td>
+              <td>{{ s.attempts }}</td><td>{{ s.next_attempt_at.strftime('%d %b %Y %H:%M') if s.next_attempt_at else '–' }}</td><td class="send-error">{{ s.error|dash }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<p class="empty-note">Nothing has been sent yet.</p>{% endif %}
+    </section>
+  </div>
+
+  <aside class="email-side">
+    <section class="settings-section email-preview-section" id="preview" aria-labelledby="section-preview">
+      <header class="settings-section-head has-action">
+        <div>
+          <h2 id="section-preview">Preview</h2>
+          <p>As recipients will see it. Mail clients may differ slightly.</p>
+        </div>
+        <form class="preview-week" method="get" action="{{ url_for('mail.settings', tracker_id=tracker.id) }}">
+          <label class="sr-only" for="week">Week ending</label>
+          <select id="week" name="week" data-autosubmit>
+            {% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if w == week }}>Week ending {{ w|fdate }}</option>{% endfor %}
+          </select>
+          <button class="button button-small" type="submit" data-autosubmit-fallback>Preview</button>
+        </form>
+      </header>
+      {% if preview %}
+      <div class="mail-frame" data-preview data-mark="{{ preview.mark }}" data-shell="{{ preview.shell }}" data-context="{{ preview.context|tojson|forceescape }}">
+        <div class="mail-head">
+          <p class="mail-subject" data-preview-subject>Subject: {{ preview.subject }}</p>
+          <p class="mail-meta">Bcc: {{ people }} · from Progress Tracker</p>
+        </div>
+        <iframe title="Email preview" sandbox srcdoc="{{ preview.html }}" class="email-preview" data-preview-frame></iframe>
+        <p class="mail-attachment">{{ icon('attach') }}{{ preview.attachment }}</p>
+      </div>
+      {% endif %}
+    </section>
+  </aside>
+</div>
 </div>
 {% endblock %}
