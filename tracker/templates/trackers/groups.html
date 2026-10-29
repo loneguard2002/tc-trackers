@@ -1,16 +1,60 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, icon, tool_link %}
+{% from "macros.html" import bar, csrf_field, icon, rag_dot, tool_link %}
 {% set label = tracker.group_label or 'Group' %}
 {% set manage = is_owner and tracker.status == 'active' %}
-{% macro group_action(group, action, icon_name, text, disabled=False, confirm=None, danger=False) -%}
+{% macro group_action(group, action, icon_name, text, disabled=False, confirm=None, danger=False, why=None) -%}
 <form method="post" action="{{ url_for('trackers.groups', tracker_id=tracker.id) }}"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
   {{ csrf_field(csrf_token()) }}<input type="hidden" name="group_id" value="{{ group.id }}"><input type="hidden" name="action" value="{{ action }}">
-  <button class="tool-button{{ ' is-danger' if danger }}" type="submit" title="{{ text }}" aria-label="{{ text }}: {{ group.name }}"{{ ' disabled' if disabled }}>{{ icon(icon_name) }}</button>
+  <button class="tool-button{{ ' is-danger' if danger }}" type="submit" title="{{ why or text }}" aria-label="{{ text }}: {{ group.name }}{{ ' (' ~ why ~ ')' if why and disabled }}"{{ ' disabled' if disabled }}>{{ icon(icon_name) }}</button>
 </form>
+{%- endmacro %}
+{% macro group_row(group, first=False, last=False) -%}
+{% set done = group.starting_completed + deployed.get(group.id, 0) %}
+{% set remaining = group.baseline - done %}
+<tr{% if group.retired %} class="is-retired"{% endif %}>
+  <td class="group-name">
+    <span class="group-name-line">{{ rag_dot(group.rag) }}<a class="cell-title" href="{{ url_for('trackers.edit_group', tracker_id=tracker.id, group_id=group.id) }}">{{ group.name }}</a></span>
+    <span class="sr-only">Status: {{ group.rag or 'not set' }}.</span>
+  </td>
+  <td class="group-progress-cell">
+    <span class="group-progress-line">{{ bar(done, group.baseline, extra=group.ready_not_complete, label=done ~ ' of ' ~ group.baseline ~ ' complete') }}
+      <span class="group-pct">{{ (done / group.baseline if group.baseline else none)|pct }}</span></span>
+    <span class="cell-sub">{{ done|num }} of {{ group.baseline|num }}</span>
+  </td>
+  <td class="num" data-label="Remaining:">{{ remaining|num }}</td>
+  <td class="num" data-label="Ready:">{% if group.ready_not_complete %}{{ group.ready_not_complete|num }}{% else %}<span class="muted">–</span>{% endif %}</td>
+  <td data-label="Planned:">{% if group.planned_completion %}{{ group.planned_completion.strftime('%d %b %Y') }}{% else %}<span class="muted">Not set</span>{% endif %}</td>
+  <td class="group-comment">{{ group.comment }}</td>
+  <td class="cell-actions"><div class="row-tools">
+    {% if manage and not group.retired %}
+    {{ group_action(group, 'up', 'arrow-up', 'Move up', disabled=first) }}
+    {{ group_action(group, 'down', 'arrow-down', 'Move down', disabled=last) }}
+    {% endif %}
+    {{ tool_link(url_for('trackers.edit_group', tracker_id=tracker.id, group_id=group.id), 'edit', 'Edit ' ~ group.name) }}
+    {% if manage %}
+    {% if group.retired %}
+    {{ group_action(group, 'unretire', 'restore', 'Reinstate') }}
+    {% else %}
+    {{ group_action(group, 'retire', 'archive', 'Retire', disabled=remaining > 0, why='Retire once nothing remains' if remaining > 0 else none) }}
+    {% endif %}
+    {% if group.id in deployed %}
+    <span class="tool-button is-disabled" title="Completions are recorded against it, so it cannot be deleted. Retire it instead." role="img" aria-label="Cannot delete {{ group.name }}: completions are recorded against it">{{ icon('trash') }}</span>
+    {% else %}
+    {{ group_action(group, 'delete', 'trash', 'Delete', confirm='Delete ' ~ group.name ~ '? This cannot be undone.', danger=True) }}
+    {% endif %}
+    {% endif %}
+  </div></td>
+</tr>
+{%- endmacro %}
+{% macro head() -%}
+<thead><tr><th scope="col">{{ label }}</th><th scope="col">Progress</th><th scope="col" class="num">Remaining</th><th scope="col" class="num">Ready</th>
+  <th scope="col">Planned completion</th><th scope="col">Comment</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
 {%- endmacro %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
+{% set current = groups|rejectattr('retired')|list %}
+{% set retired = groups|selectattr('retired')|list %}
 <div class="settings">
   <section class="settings-section" aria-labelledby="section-groups">
     <header class="settings-section-head has-action">
@@ -20,53 +64,51 @@
       </div>
       {% if manage %}<a class="button primary button-small" href="{{ url_for('trackers.new_group', tracker_id=tracker.id) }}">{{ icon('plus') }}Add a {{ label|lower }}</a>{% endif %}
     </header>
-    {% if groups %}
-    <div class="section-table register">
+    {% if current %}
+    <div class="section-table register group-table">
       <table class="table">
-        <thead><tr><th scope="col">Name</th><th scope="col" class="num hide-narrow">Baseline</th><th scope="col" class="num hide-narrow">Complete</th>
-          <th scope="col" class="num">Remaining</th><th scope="col" class="num hide-narrow">Ready</th><th scope="col" class="hide-narrow">Planned completion</th>
-          <th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        {{ head() }}
         <tbody>
-        {% for group in groups %}
-        {% set done = group.starting_completed + deployed.get(group.id, 0) %}
-        <tr{% if group.retired %} class="is-retired"{% endif %}>
-          <td><a class="cell-title" href="{{ url_for('trackers.edit_group', tracker_id=tracker.id, group_id=group.id) }}">{{ group.name }}</a>
-            {% if group.retired %}<span class="badge badge-muted">Retired</span>{% endif %}
-            {% if group.comment %}<span class="cell-sub">{{ group.comment }}</span>{% endif %}</td>
-          <td class="num hide-narrow">{{ group.baseline }}</td>
-          <td class="num hide-narrow">{{ done }}</td>
-          <td class="num" data-label="Remaining">{{ group.baseline - done }}</td>
-          <td class="num hide-narrow">{{ group.ready_not_complete }}</td>
-          <td class="hide-narrow">{{ group.planned_completion.strftime('%d %b %Y') if group.planned_completion else '' }}</td>
-          <td>{% if group.rag %}<span class="rag-label"><span class="rag-dot rag-dot-{{ group.rag|lower }}" aria-hidden="true"></span>{{ group.rag }}</span>{% else %}<span class="muted">Not set</span>{% endif %}</td>
-          <td class="cell-actions"><div class="row-tools">
-            {% if manage %}
-            {{ group_action(group, 'up', 'arrow-up', 'Move up', disabled=loop.first) }}
-            {{ group_action(group, 'down', 'arrow-down', 'Move down', disabled=loop.last) }}
-            {% endif %}
-            {{ tool_link(url_for('trackers.edit_group', tracker_id=tracker.id, group_id=group.id), 'edit', 'Edit ' ~ group.name) }}
-            {% if manage %}
-            {% if group.retired %}
-            {{ group_action(group, 'unretire', 'restore', 'Reinstate') }}
-            {% else %}
-            {{ group_action(group, 'retire', 'archive', 'Retire') }}
-            {% endif %}
-            {% if group.id in deployed %}
-            <span class="tool-button is-disabled" title="Completions are recorded against it. Retire it instead." role="img" aria-label="Cannot delete {{ group.name }}: completions are recorded against it">{{ icon('trash') }}</span>
-            {% else %}
-            {{ group_action(group, 'delete', 'trash', 'Delete', confirm='Delete ' ~ group.name ~ '? This cannot be undone.', danger=True) }}
-            {% endif %}
-            {% endif %}
-          </div></td>
-        </tr>
-        {% endfor %}
+        {% for group in current %}{{ group_row(group, loop.first, loop.last) }}{% endfor %}
         </tbody>
+        {% if current|length > 1 %}
+        {% set ns = namespace(done=0, scope=0, ready=0) %}
+        {% for group in current %}
+        {% set ns.done = ns.done + group.starting_completed + deployed.get(group.id, 0) %}
+        {% set ns.scope = ns.scope + group.baseline %}
+        {% set ns.ready = ns.ready + group.ready_not_complete %}
+        {% endfor %}
+        <tfoot><tr class="group-total">
+          <th scope="row">All {{ label|lower|plural }}</th>
+          <td class="group-progress-cell">
+            <span class="group-progress-line">{{ bar(ns.done, ns.scope, extra=ns.ready, label=ns.done ~ ' of ' ~ ns.scope ~ ' complete') }}
+              <span class="group-pct">{{ (ns.done / ns.scope if ns.scope else none)|pct }}</span></span>
+            <span class="cell-sub">{{ ns.done|num }} of {{ ns.scope|num }}</span>
+          </td>
+          <td class="num" data-label="Remaining:">{{ (ns.scope - ns.done)|num }}</td>
+          <td class="num" data-label="Ready:">{{ ns.ready|num }}</td>
+          <td></td><td></td><td></td>
+        </tr></tfoot>
+        {% endif %}
       </table>
     </div>
-    <p class="section-foot-note">Retire a {{ label|lower }} once its remaining figure is zero. Only {{ label|lower|plural }} with no completions recorded can be deleted.</p>
-    {% else %}
+    {% elif not retired %}
     <p class="empty-note">No {{ label|plural|lower }} have been added yet.</p>
+    {% else %}
+    <p class="empty-note">Every {{ label|lower }} is retired.</p>
     {% endif %}
+    {% if retired %}
+    <details class="closed-block">
+      <summary>Retired {{ label|lower|plural }} ({{ retired|length }})</summary>
+      <div class="section-table register group-table">
+        <table class="table">
+          {{ head() }}
+          <tbody>{% for group in retired %}{{ group_row(group) }}{% endfor %}</tbody>
+        </table>
+      </div>
+    </details>
+    {% endif %}
+    {% if groups %}<p class="section-foot-note">Retire a {{ label|lower }} once its remaining figure is zero. Only {{ label|lower|plural }} with no completions recorded can be deleted.</p>{% endif %}
   </section>
 </div>
 {% endblock %}

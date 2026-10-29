@@ -1,54 +1,132 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import bar, csrf_field, icon %}
 {% block head_extra %}
-{% include "_table_assets.html" %}
+  <script src="{{ url_for('static', filename='entries.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
-<div class="settings">
-  <div class="toolbar">
-    <form method="get">
-      <div class="toolbar-field">
-        <label for="week">Week ending</label>
-        <select id="week" name="week"><option value="">All weeks</option>
-          {% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if selected_week == w }}>{{ format_date(w) }}</option>{% endfor %}</select>
+{% set label = tracker.group_label or 'Group' %}
+{% set unit = tracker.unit_label or 'units' %}
+{% set active = tracker.status == 'active' %}
+{% set chosen = groups.get(selected_group) if selected_group is not none else none %}
+{% set week_arg = selected_week.isoformat() if selected_week else none %}
+<div class="settings entries-page">
+  {% if active and active_groups %}
+  <form class="settings-section quick-add" method="post" action="{{ url_for('entries.new_entry', tracker_id=tracker.id) }}" data-quick-add
+    data-weekday="{{ tracker.week_ending_weekday }}" data-first="{{ tracker.first_week_ending.isoformat() }}" data-last="{{ tracker.last_week_ending.isoformat() }}">
+    {{ csrf_field(csrf_token()) }}
+    <input type="hidden" name="return_to" value="list">
+    <header class="settings-section-head has-action">
+      <div>
+        <h2 id="section-record">Record completions</h2>
+        <p>Work finished on a day. It counts towards the week ending on or after that date and shows on the report straight away.</p>
       </div>
-      <div class="toolbar-field">
-        <label for="group">{{ tracker.group_label or 'Group' }}</label>
-        <select id="group" name="group"><option value="">All</option>
-          {% for grp in group_list %}<option value="{{ grp.id }}" {{ 'selected' if selected_group == grp.id }}>{{ grp.name }}</option>{% endfor %}</select>
+      <a class="button button-small" href="{{ url_for('entries.new_entry', tracker_id=tracker.id) }}">Full form</a>
+    </header>
+    <div class="quick-add-row">
+      <div class="field">
+        <label for="qa-group">{{ label }}</label>
+        <select id="qa-group" name="group_id" required><option value="">Choose</option>
+          {% for grp in active_groups %}<option value="{{ grp.id }}" {{ 'selected' if grp.id == selected_group }}>{{ grp.name }}</option>{% endfor %}</select>
       </div>
-      <button class="button" type="submit">Filter</button>
-    </form>
-    {% if tracker.status == 'active' %}<a class="button primary toolbar-end" href="{{ url_for('entries.new_entry', tracker_id=tracker.id) }}">Record completions</a>{% endif %}
-  </div>
+      <div class="field">
+        <label for="qa-date">Date</label>
+        <input id="qa-date" name="entry_date" type="date" value="{{ today.isoformat() }}" required aria-describedby="qa-date-hint">
+        <span class="field-help" id="qa-date-hint" data-week-hint aria-live="polite"></span>
+      </div>
+      <div class="field">
+        <label for="qa-quantity">Quantity</label>
+        <div class="input-affix">
+          <input id="qa-quantity" name="quantity" type="number" min="1" step="1" inputmode="numeric" required>
+          <span aria-hidden="true">{{ unit }}</span>
+        </div>
+      </div>
+      <div class="field field-grow">
+        <label for="qa-note">Note <span class="field-optional">(optional, not on the report)</span></label>
+        <input id="qa-note" name="note">
+      </div>
+      <div class="quick-add-actions"><button class="button primary" type="submit">Record</button></div>
+    </div>
+  </form>
+  {% endif %}
 
   <section class="settings-section" aria-labelledby="section-entries">
-    <header class="settings-section-head">
-      <h2 id="section-entries">Entries</h2>
-      <p>Every completion recorded against this tracker, newest first. Sort or filter by column, or download the list as CSV.</p>
+    <header class="settings-section-head has-action">
+      <div>
+        <h2 id="section-entries">Entries</h2>
+        <p>Every completion recorded, newest week first. To correct an entry, delete it and record it again.</p>
+      </div>
+      <a class="button button-small" href="{{ url_for('entries.entries_csv', tracker_id=tracker.id, week=week_arg, group=selected_group) }}">{{ icon('download') }}Download CSV</a>
     </header>
-    {% if entries %}
-    <div class="section-body">
-      <table class="table" data-table data-table-page-size="50" data-table-export="entries.csv">
-        <thead><tr><th data-sort="date" data-filter="none">Date</th><th data-sort="date" data-filter="none">Week ending</th>
-          <th data-filter="select">{{ tracker.group_label or 'Group' }}</th><th data-sort="number">Quantity</th><th>Note</th><th data-html></th></tr></thead>
-        <tbody>
-        {% for e in entries %}
-        <tr><td>{{ format_date(e.entry_date) }}</td><td>{{ format_date(e.week_ending) }}</td>
-          <td>{{ groups[e.group_id].name if e.group_id in groups else e.group_id }}</td><td>{{ e.quantity }}</td><td>{{ e.note }}</td>
-          <td>{% if tracker.status == 'active' %}
-            <form method="post" action="{{ url_for('entries.delete_entry', tracker_id=tracker.id, entry_id=e.id) }}">
-              {{ csrf_field(csrf_token()) }}<button class="button button-small button-quiet" type="submit">Delete</button></form>{% endif %}</td></tr>
+    <div class="entry-filters">
+      <nav class="chips" aria-label="{{ label }}">
+        <a class="chip" href="{{ url_for('entries.list_entries', tracker_id=tracker.id, week=week_arg) }}"{% if selected_group is none %} aria-current="true"{% endif %}>All {{ label|plural|lower }}<span class="chip-count">{{ chip_counts.values()|sum }}</span></a>
+        {% for grp in group_list if not grp.retired or chip_counts.get(grp.id) %}
+        <a class="chip" href="{{ url_for('entries.list_entries', tracker_id=tracker.id, week=week_arg, group=grp.id) }}"{% if grp.id == selected_group %} aria-current="true"{% endif %}>{{ grp.name }}<span class="chip-count">{{ chip_counts.get(grp.id, 0) }}</span></a>
         {% endfor %}
-        </tbody>
-      </table>
-      {% if capped %}<p class="section-note">Showing the latest {{ list_limit }} entries only. Use the week or location filter to see older entries; Download CSV includes only the entries shown.</p>{% endif %}
-      <p class="section-note">To correct an entry, delete it and record it again.</p>
+      </nav>
+      <form class="entry-week" method="get" action="{{ url_for('entries.list_entries', tracker_id=tracker.id) }}">
+        {% if selected_group is not none %}<input type="hidden" name="group" value="{{ selected_group }}">{% endif %}
+        <label class="sr-only" for="week">Week ending</label>
+        <select id="week" name="week" data-autosubmit><option value="">All weeks</option>
+          {% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if selected_week == w }}>Week ending {{ format_date(w) }}</option>{% endfor %}</select>
+        <button class="button button-small" type="submit" data-autosubmit-fallback>Show</button>
+      </form>
     </div>
+    {% if by_week %}
+    <div class="week-blocks">
+      {% for w, items in by_week.items() %}
+      {% set total, count = totals.get(w, (0, 0)) %}
+      {% set target = targets.get(w) %}
+      {% set in_progress = w == current_week %}
+      <details class="week-block"{% if loop.index <= 3 %} open{% endif %}>
+        <summary>
+          <span class="week-block-title">Week ending {{ format_date(w) }}{% if in_progress %}<span class="tag">In progress</span>{% endif %}</span>
+          {% if selected_group is none and target %}
+          {% set gap = total - target %}
+          {% set low = gap < 0 and not in_progress %}
+          <span class="week-block-sum"><strong>{{ total|num }}</strong> of {{ target|num }} target
+            <span class="{{ 'tone-danger' if low else ('tone-success' if gap >= 0 else 'muted') }}">{% if gap == 0 %}on target{% else %}{{ '+' if gap > 0 else '−' }}{{ gap|abs|num }}{% endif %}</span></span>
+          <span class="week-block-bar{{ ' is-low' if low }}">{{ bar(total, target, label=total ~ ' of ' ~ target ~ ' target') }}</span>
+          {% else %}
+          <span class="week-block-sum"><strong>{{ total|num }}</strong> recorded{% if chosen %} at {{ chosen.name }}{% endif %}</span>
+          <span class="week-block-bar"></span>
+          {% endif %}
+          <span class="week-block-count">{{ count }} {{ 'entry' if count == 1 else 'entries' }}</span>
+        </summary>
+        <div class="week-block-body">
+          <table class="entry-table">
+            <thead class="sr-only"><tr><th scope="col">Date</th><th scope="col">{{ label }}</th><th scope="col">Quantity</th><th scope="col">Note</th><th scope="col">Actions</th></tr></thead>
+            <tbody>
+            {% for e in items %}
+            {% set where = groups[e.group_id].name if e.group_id in groups else e.group_id %}
+            <tr>
+              <td class="entry-date">{{ e.entry_date.strftime('%a %d %b') }}</td>
+              <td>{{ where }}</td>
+              <td class="num">{{ e.quantity|num }}</td>
+              <td class="entry-note">{{ e.note }}</td>
+              <td class="cell-actions">{% if active %}
+                <form class="entry-delete" method="post" action="{{ url_for('entries.delete_entry', tracker_id=tracker.id, entry_id=e.id) }}"
+                  data-confirm="Delete {{ e.quantity }} for {{ where }} on {{ format_date(e.entry_date) }}? This cannot be undone." data-inline-confirm>
+                  {{ csrf_field(csrf_token()) }}
+                  <button class="tool-button is-danger" type="submit" title="Delete" aria-label="Delete {{ e.quantity }} for {{ where }} on {{ format_date(e.entry_date) }}" data-ask>{{ icon('trash') }}</button>
+                  <span class="inline-confirm" data-confirm-box hidden>Delete {{ e.quantity }} for {{ where }}?
+                    <button class="button button-small danger" type="button" data-confirm-yes>Delete</button>
+                    <button class="button button-small" type="button" data-confirm-no>Keep</button></span>
+                </form>{% endif %}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+          {% if items|length < count %}<p class="section-note">Showing the latest {{ items|length }} of {{ count }} entries this week. Choose this week above to see them all.</p>{% endif %}
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+    {% if capped %}<p class="section-foot-note">Showing the latest {{ list_limit }} entries only. Choose a week or a {{ label|lower }} to see older entries; Download CSV includes every matching entry.</p>{% endif %}
     {% else %}
-    <p class="empty-note">No entries match.</p>
+    <p class="empty-note">No entries match these filters.</p>
     {% endif %}
   </section>
 </div>

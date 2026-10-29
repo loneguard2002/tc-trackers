@@ -127,13 +127,57 @@ def test_entry_list_filters(client, db, tracker_factory, user_factory, grant):
     assert b"first batch" in page and b"second batch" not in page
 
 
-def test_entries_table_is_enhanced(client, db, tracker_factory, user_factory, grant):
+def test_entries_are_grouped_by_week_against_target(client, db, tracker_factory, user_factory, grant):
     tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
-    post(client, entry_url(tracker, "/new"), entry_form(group))
+    db.add(Week(tracker_id=tracker.id, week_ending=date(2026, 10, 16), target=10))
+    db.commit()
+    post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-14", "5", note="first batch"))
+    post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-21", "6", note="second batch"))
     html = client.get(entry_url(tracker)).get_data(as_text=True)
-    assert 'data-table data-table-page-size="50" data-table-export="entries.csv"' in html
-    for asset in ("vendor/tabulator-6.6.1.min.js", "vendor/tabulator-6.6.1.min.css", "tables.js"):
-        assert asset in html
+    assert html.index("Week ending 23 Oct 2026") < html.index("Week ending 16 Oct 2026")  # newest week first
+    short = html[html.index("Week ending 16 Oct 2026") :]
+    assert "<strong>5</strong> of 10 target" in short and "−5" in short and "week-block-bar is-low" in short
+    assert "<strong>6</strong> recorded" in html  # no target set for the week ending 23 Oct
+    assert html.count("1 entry<") == 2
+    assert "tabulator" not in html and "tables.js" not in html
+
+
+def test_entries_location_chips_count_and_filter(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    other = Group(tracker_id=tracker.id, name="Site B", baseline=20)
+    db.add(other)
+    db.commit()
+    post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-14", "5", note="at A"))
+    post(client, entry_url(tracker, "/new"), entry_form(other, "2026-10-14", "3", note="at B"))
+    html = client.get(entry_url(tracker)).get_data(as_text=True)
+    assert 'aria-current="true">All locations<span class="chip-count">2</span>' in html
+    assert 'Site B<span class="chip-count">1</span>' in html
+    html = client.get(entry_url(tracker) + f"?group={other.id}").get_data(as_text=True)
+    assert "at B" in html and "at A" not in html
+    assert "<strong>3</strong> recorded at Site B" in html
+
+
+def test_quick_add_returns_to_the_entries_list(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    html = client.get(entry_url(tracker)).get_data(as_text=True)
+    assert 'name="return_to" value="list"' in html and "data-quick-add" in html
+    response = post(client, entry_url(tracker, "/new"), {**entry_form(group), "return_to": "list"})
+    assert response.status_code == 302 and response.headers["Location"].endswith(entry_url(tracker))
+    response = post(client, entry_url(tracker, "/new"), entry_form(group))
+    assert response.headers["Location"].endswith(entry_url(tracker, f"/new?group={group.id}"))
+
+
+def test_entries_csv_follows_the_filters(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-14", "5", note="=HYPERLINK(1)"))
+    post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-21", "6", note="later"))
+    response = client.get(entry_url(tracker, ".csv"))
+    assert response.mimetype == "text/csv" and "filename=entries.csv" in response.headers["Content-Disposition"]
+    lines = response.get_data(as_text=True).lstrip("\ufeff").splitlines()
+    assert lines[0] == "Date,Week ending,Location,Quantity,Note"
+    assert lines[1:] == ["2026-10-21,2026-10-23,Site A,6,later", "2026-10-14,2026-10-16,Site A,5,'=HYPERLINK(1)"]
+    lines = client.get(entry_url(tracker, ".csv?week=2026-10-23")).get_data(as_text=True).splitlines()
+    assert len(lines) == 2 and lines[1].endswith(",later")
 
 
 def test_entries_list_says_when_it_is_capped(client, db, tracker_factory, user_factory, grant, monkeypatch):
@@ -145,14 +189,51 @@ def test_entries_list_says_when_it_is_capped(client, db, tracker_factory, user_f
     post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-16"))
     html = client.get(entry_url(tracker)).get_data(as_text=True)
     assert "Showing the latest 2 entries only." in html
-    assert "Download CSV includes only the entries shown." in html
+    assert "Download CSV includes every matching entry." in html
+    assert "Showing the latest 2 of 3 entries this week." in html  # the week total still counts all three
 
 
-def test_risks_table_is_enhanced(client, db, tracker_factory, user_factory, grant):
+def test_risk_register_matches_the_report_order(client, db, tracker_factory, user_factory, grant):
     tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
-    post(client, f"/trackers/{tracker.id}/risks", {"description": "Supplier delay", "status": "Open", "rag": "Red"})
+    for ref, rag, status, target in (
+        ("R1", "Green", "Open", None),
+        ("R2", "Red", "Open", None),
+        ("R3", "Red", "In progress", date(2020, 1, 3)),
+        ("R4", None, "Open", None),
+        ("R5", "Amber", "Closed", None),
+    ):
+        db.add(
+            Risk(tracker_id=tracker.id, ref=ref, description=f"Risk {ref}", rag=rag, status=status, target_date=target)
+        )
+    db.commit()
     html = client.get(f"/trackers/{tracker.id}/risks").get_data(as_text=True)
-    assert '<table class="table" data-table>' in html and "tables.js" in html
+    register, closed = html.split("Closed risks (1)")
+    order = [ref for ref in ("R1", "R2", "R3", "R4") if f'risk-ref">{ref}<' in register]
+    assert sorted(order, key=register.index) == ["R3", "R2", "R1", "R4"]
+    assert 'risk-ref">R5<' in closed and 'risk-ref">R5<' not in register
+    assert 'data-overdue="true"' in register and "days overdue" in register
+    red_chip = html[html.index('data-filter="red"') :]
+    assert '</span>Red<span class="chip-count">2</span>' in red_chip[: red_chip.index("</button>")]
+    assert '<span class="chip-count is-alert">1</span>' in html
+    assert "tabulator" not in html
+
+
+def test_risk_form_previews_the_report_row(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    db.add(Risk(tracker_id=tracker.id, ref="R1", description="Existing"))
+    db.commit()
+    html = client.get(f"/trackers/{tracker.id}/risks/new").get_data(as_text=True)
+    assert 'placeholder="R2"' in html and "<strong data-preview-ref>R2</strong>" in html
+    assert 'type="radio" name="status" value="Open" checked' in html
+    assert 'type="radio" name="rag" value="" checked' in html
+    response = post(
+        client,
+        f"/trackers/{tracker.id}/risks",
+        {"description": "Supplier delay", "status": "In progress", "rag": "Amber"},
+    )
+    assert response.status_code == 302
+    risk = db.scalars(select(Risk).where(Risk.ref == "R2")).one()
+    assert (risk.status, risk.rag) == ("In progress", "Amber")
 
 
 def test_targets_saved_per_week(client, db, tracker_factory, user_factory, grant):

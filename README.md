@@ -27,7 +27,7 @@ The CI workflow is kept in `ci/github-ci.yml`; after cloning, move it to `.githu
 
 ## Front-end libraries
 
-The live report page draws its charts with Apache ECharts 6.1.0 (Apache-2.0), and the report, Risks and Entries tables use Tabulator 6.6.1 (MIT). Both are stored in `tracker/static/vendor/` with their licence files, because the Content Security Policy allows scripts from the application only. To update one, run `npm pack <name>@<version>`, copy the `dist` file and the licence into `tracker/static/vendor/`, and change the version in the file name and in the templates that load it (`report/page.html` and `_table_assets.html`). The PDF, PNG and email keep the matplotlib charts.
+The live report page draws its charts with Apache ECharts 6.1.0 (Apache-2.0). It is stored in `tracker/static/vendor/` with its licence files, because the Content Security Policy allows scripts from the application only. To update it, run `npm pack echarts@<version>`, copy the `dist` file and the licence into `tracker/static/vendor/`, and change the version in the file name and in `report/page.html`. The PDF, PNG and email keep the matplotlib charts.
 
 ## Importing the existing workbook
 

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import date, datetime, timezone
 
-from flask import abort, flash, g, redirect, render_template, request, url_for
-from sqlalchemy import select
+from flask import Response, abort, flash, g, redirect, render_template, request, url_for
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from ..audit import record
@@ -14,7 +16,7 @@ from ..db import get_session
 from ..engine.calc import COMPLETE
 from ..engine.weeks import in_progress_week, week_endings
 from ..models import CompletionEntry, Group, ReportInput, Risk, Tracker, User, Week
-from ..report.build import compute_position, default_report_week
+from ..report.build import compute_position, default_report_week, select_top_risks
 from ..trackers.forms import RAG_VALUES, parse_date
 from ..trackers.views import _jsonable, _ordered_groups, _refuse_if_archived
 from . import bp
@@ -51,37 +53,113 @@ def _page(tracker: Tracker, title: str) -> dict:
 # --- Entries -------------------------------------------------------------------------------------------------
 
 
+def _entry_filters(tracker: Tracker, week: date | None, group_id: int | None) -> list:
+    conditions = [CompletionEntry.tracker_id == tracker.id]
+    if week is not None:
+        conditions.append(CompletionEntry.week_ending == week)
+    if group_id is not None:
+        conditions.append(CompletionEntry.group_id == group_id)
+    return conditions
+
+
 @bp.get("/trackers/<int:tracker_id>/entries")
 @require_tracker_role("editor")
 def list_entries(tracker_id: int):
     tracker, db = g.tracker, get_session()
-    weeks = week_endings(tracker.first_week_ending, tracker.last_week_ending)
+    today = date.today()
+    current = in_progress_week(today, tracker.week_ending_weekday)
     week = parse_date(request.args.get("week"))
     group_id = request.args.get("group", type=int)
-    query = select(CompletionEntry).where(CompletionEntry.tracker_id == tracker.id)
-    if week is not None:
-        query = query.where(CompletionEntry.week_ending == week)
-    if group_id is not None:
-        query = query.where(CompletionEntry.group_id == group_id)
+    conditions = _entry_filters(tracker, week, group_id)
     # One row beyond the limit tells the page whether older entries were left out.
     entries = db.scalars(
-        query.order_by(CompletionEntry.entry_date.desc(), CompletionEntry.id.desc()).limit(LIST_LIMIT + 1)
+        select(CompletionEntry)
+        .where(*conditions)
+        .order_by(CompletionEntry.week_ending.desc(), CompletionEntry.entry_date.desc(), CompletionEntry.id.desc())
+        .limit(LIST_LIMIT + 1)
     ).all()
     capped = len(entries) > LIST_LIMIT
-    entries = entries[:LIST_LIMIT]
+    by_week: dict[date, list[CompletionEntry]] = {}
+    for entry in entries[:LIST_LIMIT]:
+        by_week.setdefault(entry.week_ending, []).append(entry)
+    # Week totals cover every matching entry, including any beyond the list limit.
+    totals = {
+        week_ending: (int(total), count)
+        for week_ending, total, count in db.execute(
+            select(CompletionEntry.week_ending, func.sum(CompletionEntry.quantity), func.count())
+            .where(*conditions)
+            .group_by(CompletionEntry.week_ending)
+        )
+    }
+    targets = dict(db.execute(select(Week.week_ending, Week.target).where(Week.tracker_id == tracker.id)).all())
+    # Location chips count the entries in the chosen week, across every location.
+    chip_counts = dict(
+        db.execute(
+            select(CompletionEntry.group_id, func.count())
+            .where(*_entry_filters(tracker, week, None))
+            .group_by(CompletionEntry.group_id)
+        ).all()
+    )
     groups = _ordered_groups(db, tracker)
+    weeks = [w for w in week_endings(tracker.first_week_ending, tracker.last_week_ending) if w <= (current or today)]
+    if week is not None and week not in weeks:
+        weeks.append(week)
     return render_template(
         "entries/list.html",
-        entries=entries,
+        by_week=by_week,
+        totals=totals,
+        targets=targets,
         groups={grp.id: grp for grp in groups},
         group_list=groups,
-        weeks=weeks,
+        active_groups=[grp for grp in groups if not grp.retired],
+        chip_counts=chip_counts,
+        weeks=list(reversed(weeks)),
         selected_week=week,
         selected_group=group_id,
+        current_week=current,
+        today=today,
         format_date=format_date,
         capped=capped,
         list_limit=LIST_LIMIT,
         **_page(tracker, "Entries"),
+    )
+
+
+def _csv_cell(value) -> str:
+    """Text for one CSV cell; a leading formula character is quoted so a spreadsheet shows it as text."""
+    text = "" if value is None else str(value)
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
+
+@bp.get("/trackers/<int:tracker_id>/entries.csv")
+@require_tracker_role("editor")
+def entries_csv(tracker_id: int):
+    tracker, db = g.tracker, get_session()
+    week = parse_date(request.args.get("week"))
+    group_id = request.args.get("group", type=int)
+    names = {grp.id: grp.name for grp in _ordered_groups(db, tracker)}
+    entries = db.scalars(
+        select(CompletionEntry)
+        .where(*_entry_filters(tracker, week, group_id))
+        .order_by(CompletionEntry.entry_date.desc(), CompletionEntry.id.desc())
+    ).all()
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["Date", "Week ending", tracker.group_label or "Group", "Quantity", "Note"])
+    for e in entries:
+        writer.writerow(
+            [
+                e.entry_date.isoformat(),
+                e.week_ending.isoformat(),
+                _csv_cell(names.get(e.group_id, e.group_id)),
+                e.quantity,
+                _csv_cell(e.note),
+            ]
+        )
+    return Response(
+        "\ufeff" + out.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=entries.csv"},
     )
 
 
@@ -142,7 +220,9 @@ def new_entry(tracker_id: int):
         {"group_id": group.id, "entry_date": entry.entry_date.isoformat(), "quantity": quantity},
     )
     db.commit()
-    flash(f"Recorded {quantity} for {group.name}.", "success")
+    flash(f"Recorded {quantity} for {group.name} on {format_date(entry.entry_date)}.", "success")
+    if request.form.get("return_to") == "list":
+        return redirect(url_for("entries.list_entries", tracker_id=tracker.id))
     return redirect(url_for("entries.new_entry", tracker_id=tracker.id, group=group.id))
 
 
@@ -347,9 +427,19 @@ def risks(tracker_id: int):
         flash(f"Risk {risk.ref} added.", "success")
         return redirect(url_for("entries.risks", tracker_id=tracker.id))
     items = db.scalars(select(Risk).where(Risk.tracker_id == tracker.id).order_by(Risk.id)).all()
+    today = date.today()
+    # Open risks in the report's Top risks order, so the register reads the same as the report.
+    live = select_top_risks(items, limit=len(items))
+    overdue = {r.id for r in live if r.target_date is not None and r.target_date < today}
+    counts = {rag: sum(1 for r in live if r.rag == rag) for rag in RAG_VALUES}
+    counts.update({"open": len(live), "none": sum(1 for r in live if not r.rag), "overdue": len(overdue)})
     return render_template(
         "entries/risks.html",
-        risks=items,
+        risks=live,
+        closed=[r for r in items if r.status == "Closed"],
+        overdue=overdue,
+        counts=counts,
+        today=today,
         group_names={grp.id: grp.name for grp in context["groups"]},
         format_date=format_date,
         **_page(tracker, "Risks"),
@@ -365,9 +455,12 @@ def new_risk(tracker_id: int):
 
 def _render_risk_form(tracker: Tracker, risk: Risk | None, context: dict, form, errors: list[str], status: int):
     title = f"Risk {risk.ref}" if risk else "New risk"
+    next_ref = None
+    if risk is None:
+        next_ref = next_risk_ref(list(get_session().scalars(select(Risk.ref).where(Risk.tracker_id == tracker.id))))
     return (
-        render_template("entries/risk_form.html", risk=risk, form=form, errors=errors, **context,
-                        **_page(tracker, title)),
+        render_template("entries/risk_form.html", risk=risk, form=form, errors=errors, next_ref=next_ref,
+                        today=date.today(), format_date=format_date, **context, **_page(tracker, title)),
         status,
     )  # fmt: skip
 

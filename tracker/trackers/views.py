@@ -577,11 +577,14 @@ def _handle_group_action(db, tracker: Tracker) -> str | None:
         group.retired = False
         _audit_group(db, tracker, "group_unretired", group)
     elif action in ("up", "down"):
+        # Active and retired groups are listed apart, so a group swaps places with its neighbour in its own list.
         ordered = _ordered_groups(db, tracker)
-        index = ordered.index(group)
-        swap = index - 1 if action == "up" else index + 1
-        if 0 <= swap < len(ordered):
-            ordered[index], ordered[swap] = ordered[swap], ordered[index]
+        peers = [i for i, item in enumerate(ordered) if item.retired == group.retired]
+        here = peers.index(ordered.index(group))
+        there = here - 1 if action == "up" else here + 1
+        if 0 <= there < len(peers):
+            a, b = peers[here], peers[there]
+            ordered[a], ordered[b] = ordered[b], ordered[a]
         for position, item in enumerate(ordered):
             item.sort_order = position
         _audit_group(db, tracker, "group_reordered", group, {"direction": action})

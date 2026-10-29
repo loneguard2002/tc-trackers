@@ -1,46 +1,94 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, icon, tool_link %}
+{% from "macros.html" import csrf_field, icon, rag_dot, rag_tone, tool_link %}
+{% set group_name = tracker.group_label or 'Group' %}
+{% set active = tracker.status == 'active' %}
 {% block head_extra %}
-{% include "_table_assets.html" %}
+  <script src="{{ url_for('static', filename='risks.js', v=app_version) }}" defer></script>
 {% endblock %}
+{% macro risk_row(r) -%}
+{% set tone = rag_tone(r.rag) %}
+{% set late = r.id in overdue %}
+{% set where = group_names.get(r.group_id) %}
+<tr class="risk-row risk-row-{{ tone }}" data-risk data-rag="{{ tone }}" data-overdue="{{ 'true' if late else 'false' }}"
+  data-search="{{ [r.ref, r.description or '', r.impact or '', where or '', r.owner_role or '', r.latest_update or '']|join(' ')|lower }}">
+  <td class="risk-rag"><span class="rag-pill">{{ rag_dot(r.rag) }}{{ r.rag or 'Not set' }}</span></td>
+  <td class="risk-ref">{{ r.ref }}</td>
+  <td class="risk-text">
+    <span class="risk-desc">{{ r.description or 'No description' }}</span>
+    {% if r.impact %}<span class="risk-impact">{{ r.impact }}</span>{% endif %}
+    {% if r.latest_update %}<span class="risk-update"><strong>Latest:</strong> {{ r.latest_update }}</span>{% endif %}
+  </td>
+  <td data-label="{{ group_name }}:">{% if where %}{{ where }}{% else %}<span class="muted">All</span>{% endif %}</td>
+  <td data-label="Owner:">{{ r.owner_role or '–' }}</td>
+  <td><span class="status-pill status-{{ r.status|lower|replace(' ', '-') }}">{{ r.status }}</span></td>
+  <td class="risk-due">
+    {%- if r.target_date %}{{ format_date(r.target_date) }}
+      {%- if r.status != 'Closed' %}{% set days = (r.target_date - today).days %}
+      <small class="{{ 'tone-danger' if days < 0 else ('tone-warning' if days <= 14 else 'muted') }}">
+        {%- if days < 0 %}{{ -days }} day{{ '' if days == -1 else 's' }} overdue{% elif days == 0 %}due today{% else %}in {{ days }} day{{ '' if days == 1 else 's' }}{% endif %}</small>
+      {%- endif %}
+    {%- else %}<span class="muted">Not set</span>{% endif %}</td>
+  <td class="cell-actions"><div class="row-tools">
+    {{ tool_link(url_for('entries.edit_risk', tracker_id=tracker.id, risk_id=r.id), 'edit', 'Edit risk ' ~ r.ref) }}
+    {% if active %}
+    <form method="post" action="{{ url_for('entries.delete_risk', tracker_id=tracker.id, risk_id=r.id) }}" data-confirm="Delete risk {{ r.ref }}? This cannot be undone. To keep it on record, set its status to Closed instead.">
+      {{ csrf_field(csrf_token()) }}<button class="tool-button is-danger" type="submit" title="Delete" aria-label="Delete risk {{ r.ref }}">{{ icon('trash') }}</button>
+    </form>
+    {% endif %}
+  </div></td>
+</tr>
+{%- endmacro %}
+{% macro head() -%}
+<thead><tr><th scope="col">RAG</th><th scope="col">Ref</th><th scope="col">Risk</th><th scope="col">{{ group_name }}</th><th scope="col">Owner</th>
+  <th scope="col">Status</th><th scope="col">Target date</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+{%- endmacro %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
-{% set group_name = tracker.group_label or 'Group' %}
-{% set active = tracker.status == 'active' %}
 <div class="settings">
   <section class="settings-section" aria-labelledby="section-register">
     <header class="settings-section-head has-action">
       <div>
         <h2 id="section-register">Risks</h2>
-        <p>The risk register. Open risks appear in the report's Top risks table, Red first, then by target date. Closed risks stay here but drop off the report.</p>
+        <p>Open risks appear in the report's Top risks table, in the order shown here. Closed risks stay on record but drop off the report.</p>
       </div>
       {% if active %}<a class="button primary button-small" href="{{ url_for('entries.new_risk', tracker_id=tracker.id) }}">{{ icon('plus') }}Add a risk</a>{% endif %}
     </header>
     {% if risks %}
-    <div class="section-body">
-      <table class="table" data-table>
-        <thead><tr><th data-width="80">Ref</th><th data-min-width="220">Description</th><th data-filter="select" data-min-width="120">{{ group_name }}</th>
-          <th data-min-width="120">Owner</th><th data-filter="select" data-width="120">Status</th><th data-filter="select" data-width="100">RAG</th>
-          <th data-sort="date" data-filter="none" data-width="140">Target date</th><th data-html data-frozen data-width="{{ 88 if active else 52 }}"></th></tr></thead>
-        <tbody>
-        {% for r in risks %}
-        <tr><td>{{ r.ref }}</td><td>{{ r.description }}</td><td>{{ group_names.get(r.group_id, '') }}</td><td>{{ r.owner_role }}</td>
-          <td>{{ r.status }}</td><td>{{ r.rag or '' }}</td><td>{{ format_date(r.target_date) if r.target_date else '' }}</td>
-          <td><div class="row-tools">
-            {{ tool_link(url_for('entries.edit_risk', tracker_id=tracker.id, risk_id=r.id), 'edit', 'Edit risk ' ~ r.ref) }}
-            {% if active %}
-            <form method="post" action="{{ url_for('entries.delete_risk', tracker_id=tracker.id, risk_id=r.id) }}" data-confirm="Delete risk {{ r.ref }}? This cannot be undone. To keep it on record, set its status to Closed instead.">
-              {{ csrf_field(csrf_token()) }}<button class="tool-button is-danger" type="submit" title="Delete" aria-label="Delete risk {{ r.ref }}">{{ icon('trash') }}</button>
-            </form>
-            {% endif %}
-          </div></td></tr>
+    <div class="risk-filters" data-risk-tools hidden>
+      <div class="chips" role="group" aria-label="Show risks">
+        <button class="chip" type="button" data-filter="all" aria-pressed="true">All open<span class="chip-count">{{ counts.open }}</span></button>
+        {% for rag in ('Red', 'Amber', 'Green') %}
+        <button class="chip" type="button" data-filter="{{ rag_tone(rag) }}" aria-pressed="false">{{ rag_dot(rag) }}{{ rag }}<span class="chip-count">{{ counts[rag] }}</span></button>
         {% endfor %}
+        <button class="chip" type="button" data-filter="none" aria-pressed="false">{{ rag_dot(none) }}Not rated<span class="chip-count">{{ counts.none }}</span></button>
+        <button class="chip" type="button" data-filter="overdue" aria-pressed="false">Past target date<span class="chip-count{{ ' is-alert' if counts.overdue }}">{{ counts.overdue }}</span></button>
+      </div>
+      <label class="search-field">{{ icon('search') }}<span class="sr-only">Search risks</span>
+        <input type="search" placeholder="Search risks, owners, {{ group_name|plural|lower }}" data-risk-search></label>
+    </div>
+    <div class="section-table register risk-table">
+      <table class="table">
+        {{ head() }}
+        <tbody data-risk-rows>
+        {% for r in risks %}{{ risk_row(r) }}{% endfor %}
         </tbody>
       </table>
     </div>
+    <p class="empty-note" data-risk-empty hidden>No risks match this filter.</p>
     {% else %}
-    <p class="empty-note">No risks have been recorded.</p>
+    <p class="empty-note">No open risks.{% if active %} Add one when something could stop the work finishing on time.{% endif %}</p>
+    {% endif %}
+    {% if closed %}
+    <details class="closed-block">
+      <summary>Closed risks ({{ closed|length }})</summary>
+      <div class="section-table register risk-table">
+        <table class="table">
+          {{ head() }}
+          <tbody>{% for r in closed %}{{ risk_row(r) }}{% endfor %}</tbody>
+        </table>
+      </div>
+    </details>
     {% endif %}
   </section>
 </div>
