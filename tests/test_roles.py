@@ -254,3 +254,11 @@ def test_home_lists_team_trackers_with_their_role(client, logged_in_user, tracke
     assert b"Patching tracker" in page.data and b"Firewall tracker" in page.data
     assert b"Unrelated tracker" not in page.data
     assert page.data.count(b'<span class="role-tag">Editor</span>') == 2
+
+
+def test_an_inactive_administrator_has_no_role(db, user_factory, tracker_factory):
+    t = tracker_factory()
+    for status in ("pending", "disabled"):
+        admin = user_factory(is_admin=True, status=status)
+        assert user_role(db, admin, t.id) is None
+        assert tracker_roles(db, admin) == {} and visible_trackers(db, admin) == []

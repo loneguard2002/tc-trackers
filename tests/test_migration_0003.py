@@ -63,6 +63,7 @@ def test_upgrade_keeps_visible_trackers_and_backfills_affected_users(db, at_revi
         admin: [tracker_a, tracker_b],
         viewer: [tracker_a],
         nobody: [],
+        pending: [],  # a pending owner reached nothing before the upgrade and reaches nothing after it
     }
     db.commit()
 
