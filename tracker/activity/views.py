@@ -93,7 +93,7 @@ def index():
         query = query.where(AuditLog.action == filters.action)
     if filters.start:
         query = query.where(AuditLog.at >= _midnight(filters.start))
-    if filters.end:
+    if filters.end and filters.end < date.max:
         query = query.where(AuditLog.at < _midnight(filters.end) + timedelta(days=1))
     rows = db.execute(
         query.order_by(AuditLog.at.desc(), AuditLog.id.desc())

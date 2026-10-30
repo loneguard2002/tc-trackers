@@ -93,6 +93,8 @@ def test_action_and_date_range_filters(client, logged_in_admin, db):
         "page=99999999999999999999",
         "from=2026-13-45",
         "to=zzz",
+        "to=9999-12-31",
+        "from=0001-01-01",
         "person=xyz",
         "person=99999999999999999999",
         "action=<b>",
