@@ -77,6 +77,7 @@ LINKS = {
     "manage_teams": 'href="/admin/teams"',
     "import_workbooks": 'href="/import"',
     "manage_email_settings": 'href="/admin/smtp"',
+    "view_activity": 'href="/admin/activity"',
 }
 
 
@@ -90,6 +91,7 @@ LINKS = {
         {"view_all_trackers"},
         {"manage_teams"},
         {"manage_users"},
+        {"view_activity"},
     ],
 )
 def test_sidebar_shows_only_the_links_held(app, held):

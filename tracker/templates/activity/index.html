@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "macros.html" import field %}
+{% block content %}
+<h1>Activity</h1>
+<p class="page-lede">Every recorded change and sign-in, newest first. Entries never contain passwords or other secrets.</p>
+<div class="settings">
+  <section class="settings-section" id="activity" aria-labelledby="section-activity">
+    <header class="settings-section-head has-action">
+      <div>
+        <h2 id="section-activity">Activity log</h2>
+        <p>{{ 'Filtered entries' if filtered else 'All entries' }}, {{ entries|length }} shown on this page. Times are UTC.</p>
+      </div>
+      {% if filtered %}<a class="button" href="{{ url_for('activity.index') }}">Clear filters</a>{% endif %}
+    </header>
+    <form class="activity-filters" method="get" action="{{ url_for('activity.index') }}">
+      {% call field('Person', 'Who acted or was affected.', 'filter-person') %}
+      <select id="filter-person" name="person">
+        <option value="">Anyone</option>
+        {% for id, name in people %}<option value="{{ id }}"{{ ' selected' if filters.person == id }}>{{ name }}</option>{% endfor %}
+      </select>
+      {% endcall %}
+      {% call field('Action', '', 'filter-action') %}
+      <select id="filter-action" name="action">
+        <option value="">Any action</option>
+        {% for key, label in actions %}<option value="{{ key }}"{{ ' selected' if filters.action == key }}>{{ label }}</option>{% endfor %}
+      </select>
+      {% endcall %}
+      {% call field('From', 'Inclusive.', 'filter-from') %}
+      <input id="filter-from" type="date" name="from" value="{{ filters.start.isoformat() if filters.start }}">
+      {% endcall %}
+      {% call field('To', 'Inclusive.', 'filter-to') %}
+      <input id="filter-to" type="date" name="to" value="{{ filters.end.isoformat() if filters.end }}">
+      {% endcall %}
+      <div class="activity-filters-go"><button class="button primary" type="submit">Apply filters</button></div>
+    </form>
+    {% if entries %}
+    <div class="section-table">
+      <table class="table activity-table">
+        <thead>
+          <tr>
+            <th scope="col">Time</th>
+            <th scope="col">Performed by</th>
+            <th scope="col">User affected</th>
+            <th scope="col">Action</th>
+            <th scope="col">Tracker</th>
+            <th scope="col">Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in entries %}
+          <tr data-entry="{{ e.id }}">
+            <td class="activity-time">{{ e.at.strftime('%d %b %Y %H:%M') if e.at else '–' }}</td>
+            <td>{{ e.actor or '–' }}</td>
+            <td>{{ e.affected or '–' }}</td>
+            <td>{{ e.label }}</td>
+            <td>{{ e.tracker or '–' }}</td>
+            <td>
+              {% if e.lines %}
+              <ul class="activity-detail">
+                {% for line in e.lines %}
+                <li>{% if line.field %}<span class="activity-field">{{ line.field }}</span> {% endif %}{% if line.value is not none %}{{ line.value }}{% else %}<span class="activity-before">{{ line.before }}</span> <span aria-label="changed to">→</span> <span class="activity-after">{{ line.after }}</span>{% endif %}</li>
+                {% endfor %}
+              </ul>
+              {% else %}–{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-note">No activity matches.</p>
+    {% endif %}
+    {% if newer or older %}
+    <div class="settings-section-foot activity-pager">
+      {% if newer %}<a class="button" href="{{ newer }}" rel="prev">Newer</a>{% endif %}
+      {% if older %}<a class="button" href="{{ older }}" rel="next">Older</a>{% endif %}
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
