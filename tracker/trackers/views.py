@@ -14,7 +14,7 @@ from ..auth import (
     current_user,
     login_required,
     require_tracker_role,
-    user_role,
+    tracker_roles,
     visible_trackers,
 )
 from ..db import get_session
@@ -218,6 +218,7 @@ def home():
     user = current_user()
     show_archived = request.args.get("archived") == "1"
     trackers = [t for t in visible_trackers(db, user) if show_archived or t.status == "active"]
+    roles = tracker_roles(db, user)
     ids = [t.id for t in trackers]
     last_entries = _last_entry_dates(db, ids)
     statuses = _latest_statuses(db, ids)
@@ -237,7 +238,7 @@ def home():
             "headline": headline,
             "last_entry": last_entry,
             "status": status,
-            "role": user_role(db, user, t.id),
+            "role": roles.get(t.id),
             "open_risks": risks.get(t.id, (0, 0))[0],
             "red_risks": risks.get(t.id, (0, 0))[1],
             "starts": t.first_week_ending if t.first_week_ending > today else None,
