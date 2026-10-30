@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import bar, csrf_field, icon %}
+{% from "macros.html" import bar, csrf_field, icon, tool_link %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='entries.js', v=app_version) }}" defer></script>
 {% endblock %}
@@ -55,7 +55,7 @@
     <header class="settings-section-head has-action">
       <div>
         <h2 id="section-entries">Entries</h2>
-        <p>Every completion recorded, newest week first. To correct an entry, delete it and record it again.</p>
+        <p>Every completion recorded, newest week first. Use Edit to correct an entry; delete only entries recorded by mistake.</p>
       </div>
       <a class="button button-small" href="{{ url_for('entries.entries_csv', tracker_id=tracker.id, week=week_arg, group=selected_group) }}">{{ icon('download') }}Download CSV</a>
     </header>
@@ -107,6 +107,7 @@
               <td class="num">{{ e.quantity|num }}</td>
               <td class="entry-note">{{ e.note }}</td>
               <td class="cell-actions">{% if active %}
+                {{ tool_link(url_for('entries.edit_entry', tracker_id=tracker.id, entry_id=e.id), 'edit', 'Edit ' ~ e.quantity ~ ' for ' ~ where ~ ' on ' ~ format_date(e.entry_date)) }}
                 <form class="entry-delete" method="post" action="{{ url_for('entries.delete_entry', tracker_id=tracker.id, entry_id=e.id) }}"
                   data-confirm="Delete {{ e.quantity }} for {{ where }} on {{ format_date(e.entry_date) }}? This cannot be undone." data-inline-confirm>
                   {{ csrf_field(csrf_token()) }}
