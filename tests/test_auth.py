@@ -104,6 +104,8 @@ def test_admin_approves_pending_user(client, logged_in_admin, user_factory, db):
     assert db.get(User, pending.id).status == "active"
     row = db.scalars(select(AuditLog).where(AuditLog.action == "user_approved")).one()
     assert row.user_id == logged_in_admin.id and row.entity_id == str(pending.id)
+    assert row.target_user_id == pending.id
+    assert row.detail == {"before": "pending", "after": "active"}
 
 
 def test_admin_disables_user_but_not_self(client, logged_in_admin, user_factory, db):
@@ -125,6 +127,9 @@ def test_admin_grants_and_revokes_admin_but_not_self(client, logged_in_admin, us
     db.expire_all()
     assert db.get(User, other.id).is_admin is False
     assert db.get(User, logged_in_admin.id).is_admin is True
+    rows = db.scalars(select(AuditLog).where(AuditLog.action == "user_admin_changed").order_by(AuditLog.id)).all()
+    assert [row.detail for row in rows] == [{"before": False, "after": True}, {"before": True, "after": False}]
+    assert all(row.target_user_id == other.id for row in rows)
 
 
 def test_admin_creates_active_local_user(client, logged_in_admin, db):

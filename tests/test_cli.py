@@ -80,6 +80,8 @@ def test_create_admin_creates_an_active_administrator(app, db):
     user = db.scalars(select(User).where(User.email == "a@example.com")).one()
     assert user.status == "active" and user.is_admin and user.auth_source == "local"
     assert verify_password("a-long-password-1", user.password_hash)
+    row = db.scalars(select(AuditLog).where(AuditLog.action == "user_created")).one()
+    assert row.target_user_id == user.id and row.user_id is None
 
 
 def _local_user(db, email="u@example.com", password="old-password-123", **overrides) -> User:
@@ -106,6 +108,7 @@ def test_reset_password_with_option_replaces_hash_and_audits_without_the_passwor
     assert verify_password("new-password-456", db.get(User, user.id).password_hash)
     row = db.scalars(select(AuditLog).where(AuditLog.action == "password_reset")).one()
     assert row.entity == "user" and row.entity_id == str(user.id) and row.user_id is None
+    assert row.target_user_id == user.id
     assert "new-password-456" not in repr(row.detail) and "password" not in (row.detail or {})
     assert "new-password-456" not in result.output
 

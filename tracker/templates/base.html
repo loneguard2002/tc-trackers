@@ -39,7 +39,7 @@
   <aside class="sidebar" id="primary-navigation" aria-label="Primary navigation">
     <nav class="sidebar-nav">
       {{ nav_link('trackers', 'index', 'Trackers', 'trackers') }}
-      {% set show_users = current_user.is_admin %}
+      {% set show_users = can('manage_users') %}
       {% set show_permsets = current_user.is_admin %}
       {% set show_teams = can('manage_teams') %}
       {% set show_import = can('import_workbooks') %}

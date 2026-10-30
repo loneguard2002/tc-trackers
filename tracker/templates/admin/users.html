@@ -6,45 +6,89 @@
   <button class="button button-small{{ ' button-quiet' if confirm }}" type="submit">{{ text }}</button>
 </form>
 {%- endmacro %}
+{% macro person(u) -%}
+<span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
+<span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
+{%- endmacro %}
 {% block content %}
 <h1>Users</h1>
 {% set pending = users|selectattr('status', 'equalto', 'pending')|list %}
 <div class="settings">
+  {% if pending %}
+  <section class="settings-section" aria-labelledby="section-pending">
+    <header class="settings-section-head">
+      <h2 id="section-pending">Awaiting approval</h2>
+      <p>People who signed in with Microsoft and wait for approval before they can use the app.{% if place_choices %} You can also add each one to a team with a role as you approve them.{% endif %}</p>
+    </header>
+    <ul class="member-list">
+      {% for u in pending %}
+      <li class="member">
+        {{ person(u) }}
+        {% if actions[u.id].approve %}
+        <form class="member-actions" method="post" action="{{ url_for('admin.approve', user_id=u.id) }}">
+          {{ csrf_field(csrf_token()) }}
+          {% if place_choices %}
+          <label class="sr-only" for="team-{{ u.id }}">Team for {{ u.full_name }}</label>
+          <select id="team-{{ u.id }}" name="team_id">
+            <option value="">No team</option>
+            {% for id, label in place_choices %}<option value="{{ id }}">{{ label }}</option>{% endfor %}
+          </select>
+          <label class="sr-only" for="team-role-{{ u.id }}">Role in the team for {{ u.full_name }}</label>
+          <select id="team-role-{{ u.id }}" name="team_role">
+            {% for r in roles %}<option value="{{ r }}">{{ r|title }}</option>{% endfor %}
+          </select>
+          {% endif %}
+          <button class="button primary button-small" type="submit">Approve</button>
+        </form>
+        {% else %}
+        <span class="muted">Only an administrator can approve this person.</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
   <section class="settings-section" aria-labelledby="section-users">
     <header class="settings-section-head has-action">
       <div>
         <h2 id="section-users">People</h2>
-        <p>Everyone who can sign in. {% if pending %}<strong>{{ pending|length }} awaiting approval</strong>, listed first. {% endif %}Access to each tracker is given on that tracker's Access tab.</p>
+        <p>Everyone who can sign in. {% if pending %}<strong>{{ pending|length }} awaiting approval</strong>, listed first. {% endif %}People reach trackers through their teams and the roles given on each tracker's Access tab.</p>
       </div>
       <a class="button primary button-small" href="{{ url_for('admin.new_user') }}">{{ icon('plus') }}Add a user</a>
     </header>
     <div class="section-table register">
       <table class="table">
         <thead><tr><th scope="col">Name</th><th scope="col" class="hide-narrow">Sign-in</th><th scope="col">Status</th>
-          <th scope="col" class="hide-narrow">Role</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <th scope="col" class="hide-narrow">Role</th><th scope="col" class="hide-narrow">Teams</th>
+          <th scope="col" class="hide-narrow">Permission sets</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
         <tbody>
         {% for u in users %}
+        {% set can_do = actions[u.id] %}
         <tr>
-          <td><div class="member-cell">
-            <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
-            <span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
-          </div></td>
+          <td><div class="member-cell">{{ person(u) }}</div></td>
           <td class="hide-narrow">{{ 'Microsoft' if u.auth_source == 'sso' else 'Password' }}</td>
           <td><span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(u.status, 'muted') }}">{{ u.status|title }}</span></td>
           <td class="hide-narrow">{% if u.is_admin %}<span class="badge badge-info">Administrator</span>{% else %}<span class="muted">User</span>{% endif %}</td>
+          <td class="hide-narrow">{% for path, role in teams.get(u.id, []) %}<span class="status-pill">{{ path }} · {{ role|title }}</span> {% else %}<span class="muted">None</span>{% endfor %}</td>
+          <td class="hide-narrow">{% for name in sets.get(u.id, []) %}<span class="status-pill">{{ name }}</span> {% else %}<span class="muted">None</span>{% endfor %}</td>
           <td class="cell-actions"><div class="row-tools row-tools-text">
-            {% if u.status != 'active' %}{{ user_action('admin.approve', u, 'Approve' if u.status == 'pending' else 'Re-enable') }}{% endif %}
-            {% if u.id != current_user.id %}
-            {{ user_action('admin.set_admin', u, 'Remove administrator' if u.is_admin else 'Make administrator', ('is_admin', '0' if u.is_admin else '1')) }}
-            {% if u.status != 'disabled' %}{{ user_action('admin.disable', u, 'Disable', confirm='Disable ' ~ u.full_name ~ '? They will no longer be able to sign in.') }}{% endif %}
-            {% endif %}
+            <a class="button button-small button-quiet" href="{{ url_for('admin.access', user_id=u.id) }}">Effective access</a>
+            {% if can_do.enable %}{{ user_action('admin.enable', u, 'Re-enable') }}{% endif %}
+            {% if can_do.password %}<a class="button button-small" href="{{ url_for('admin.password', user_id=u.id) }}">Reset password</a>{% endif %}
+            {% if can_do.set_admin %}{{ user_action('admin.set_admin', u, 'Remove administrator' if u.is_admin else 'Make administrator', ('is_admin', '0' if u.is_admin else '1')) }}{% endif %}
+            {% if can_do.disable %}{{ user_action('admin.disable', u, 'Disable', confirm='Disable ' ~ u.full_name ~ '? They will no longer be able to sign in.') }}{% endif %}
           </div></td>
         </tr>
         {% endfor %}
         </tbody>
       </table>
     </div>
-    <p class="section-foot-note">Administrators manage users, email settings and imports, and have owner access to every tracker. You cannot disable your own account or remove your own administrator role.</p>
+    {% if current_user.is_admin %}
+    <p class="section-foot-note">Administrators have owner access to every tracker and every permission. You cannot disable your own account or remove your own administrator role, and the application keeps at least one active administrator.</p>
+    {% else %}
+    <p class="section-foot-note">Only an administrator can change an administrator, anyone who holds a permission set, or your own account.</p>
+    {% endif %}
   </section>
 </div>
 {% endblock %}

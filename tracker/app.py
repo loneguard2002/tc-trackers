@@ -161,6 +161,7 @@ def _register_cli(app: Flask) -> None:
             entity="user",
             entity_id=user.id,
             detail={"email": email, "source": "cli", "is_admin": True},
+            target_user_id=user.id,
         )
         db.commit()
         click.echo(f"Created administrator {email}.")
@@ -187,6 +188,7 @@ def _register_cli(app: Flask) -> None:
             entity="user",
             entity_id=user.id,
             detail={"email": email, "source": "cli"},
+            target_user_id=user.id,
         )
         db.commit()
         click.echo(f"Reset the password for {email}.")
