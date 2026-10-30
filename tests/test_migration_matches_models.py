@@ -52,3 +52,26 @@ def test_migration_creates_partial_unique_index_and_named_constraints():
     named = {c.name for t in Base.metadata.tables.values() for c in t.constraints if c.name}
     missing = [name for name in named if name not in sql]
     assert not missing
+
+
+def test_migration_creates_access_indexes_and_backfill():
+    sql = _offline_sql()
+    assert "CREATE UNIQUE INDEX uq_teams_name_lower ON teams (lower(name))" in sql
+    assert "CREATE UNIQUE INDEX uq_permission_sets_name_lower ON permission_sets (lower(name))" in sql
+    assert re.search(
+        r"CREATE UNIQUE INDEX uq_permission_set_holders_set_team ON permission_set_holders "
+        r"\(set_id, team_id\) WHERE team_id IS NOT NULL",
+        sql,
+    )
+    assert re.search(
+        r"CREATE UNIQUE INDEX uq_permission_set_holders_set_user ON permission_set_holders "
+        r"\(set_id, user_id\) WHERE user_id IS NOT NULL",
+        sql,
+    )
+    for name in ("ix_audit_log_at", "ix_audit_log_target_user_id", "ix_audit_log_action"):
+        assert f"CREATE INDEX {name} ON audit_log" in sql
+    assert re.search(
+        r"UPDATE audit_log SET target_user_id = users\.id FROM users\s+WHERE audit_log\.entity = 'user' "
+        r"AND audit_log\.entity_id = users\.id::text",
+        sql,
+    )

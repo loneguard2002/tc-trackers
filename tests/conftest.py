@@ -11,12 +11,29 @@ from sqlalchemy.orm import Session
 
 from tracker.app import create_app
 from tracker.auth.passwords import hash_password
-from tracker.models import Base, Tracker, TrackerRole, User
+from tracker.models import (
+    Base,
+    PermissionSet,
+    PermissionSetHolder,
+    PermissionSetPermission,
+    Team,
+    TeamMember,
+    Tracker,
+    TrackerRole,
+    User,
+)
 
 DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "postgresql+psycopg://localhost/tracker_test")
 ROOT = Path(__file__).resolve().parent.parent
 
 _state: dict = {}
+
+
+def alembic_config() -> Config:
+    config = Config(str(ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(ROOT / "migrations"))
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    return config
 
 
 @pytest.fixture(autouse=True)
@@ -49,10 +66,7 @@ def _db_engine():
             engine.dispose()
             _state["engine"] = None
         else:
-            config = Config(str(ROOT / "alembic.ini"))
-            config.set_main_option("script_location", str(ROOT / "migrations"))
-            config.set_main_option("sqlalchemy.url", DATABASE_URL)
-            command.upgrade(config, "head")
+            command.upgrade(alembic_config(), "head")
             _state["engine"] = engine
     if _state["engine"] is None:
         pytest.skip("database unavailable")
@@ -115,6 +129,56 @@ def user_factory(db):
         return user
 
     return make
+
+
+@pytest.fixture
+def team_factory(db):
+    counter = {"n": 0}
+
+    def make(name: str | None = None, parent: Team | None = None, **kw) -> Team:
+        if name is None:
+            counter["n"] += 1
+            name = f"Team {counter['n']}"
+        team = Team(name=name, parent_id=parent.id if parent else None, **kw)
+        db.add(team)
+        db.commit()
+        return team
+
+    return make
+
+
+@pytest.fixture
+def add_member(db):
+    def add(team: Team, user: User, role: str) -> None:
+        db.add(TeamMember(team_id=team.id, user_id=user.id, role=role))
+        db.commit()
+
+    return add
+
+
+@pytest.fixture
+def give_set(db):
+    counter = {"n": 0}
+
+    def give(
+        permissions: list[str], *, team: Team | None = None, user: User | None = None, name: str | None = None
+    ) -> PermissionSet:
+        if name is None:
+            counter["n"] += 1
+            name = f"Set {counter['n']}"
+        permission_set = PermissionSet(name=name)
+        db.add(permission_set)
+        db.flush()
+        db.add_all(PermissionSetPermission(set_id=permission_set.id, permission=p) for p in permissions)
+        db.add(
+            PermissionSetHolder(
+                set_id=permission_set.id, team_id=team.id if team else None, user_id=user.id if user else None
+            )
+        )
+        db.commit()
+        return permission_set
+
+    return give
 
 
 def sign_in(client, user: User) -> None:

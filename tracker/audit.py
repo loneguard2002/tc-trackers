@@ -16,6 +16,7 @@ def record(
     entity: str,
     entity_id: str | int | None,
     detail: dict | None = None,
+    target_user_id: int | None = None,
 ) -> None:
     """Add an audit row to the session; the caller commits."""
     session.add(
@@ -26,5 +27,11 @@ def record(
             entity=entity,
             entity_id=None if entity_id is None else str(entity_id),
             detail=detail,
+            target_user_id=target_user_id,
         )
     )
+
+
+def change(before: object, after: object) -> dict:
+    """The detail payload of a change entry."""
+    return {"before": before, "after": after}
