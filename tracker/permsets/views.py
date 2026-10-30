@@ -10,31 +10,22 @@ from flask import abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
-from ..audit import change, record
+from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import admin_required, current_user
 from ..auth.permissions import PERMISSIONS
 from ..db import get_session
+from ..ids import in_range, parse_id
 from ..models import PermissionSet, PermissionSetHolder, PermissionSetPermission, Team, User
 from ..naming import description_error, name_error, name_taken
-from ..teams.tree import load_team_rows, paths
+from ..teams.tree import load_team_rows, team_labels
 from . import bp
 
-NO_CHANGES_MESSAGE = "No changes to save."
 ALREADY_HOLDS_MESSAGE = "That team or person already holds this set."
 CHOOSE_HOLDER_MESSAGE = "Choose a team or an active person from the list."
-_MAX_ID = 2**31 - 1  # the largest Postgres integer; a larger id cannot exist and must not reach a query
-
-
-def _id(value: str | None) -> int | None:
-    """A positive id typed into a form, or ``None`` for anything else."""
-    text = (value or "").strip()
-    if not (text.isascii() and text.isdigit()) or not 0 < int(text) <= _MAX_ID:
-        return None
-    return int(text)
 
 
 def _set_or_404(set_id: int) -> PermissionSet:
-    permission_set = get_session().get(PermissionSet, set_id) if set_id <= _MAX_ID else None
+    permission_set = get_session().get(PermissionSet, set_id) if in_range(set_id) else None
     if permission_set is None:
         abort(404)
     return permission_set
@@ -86,7 +77,7 @@ def index():
 @admin_required
 def save_grid():
     db = get_session()
-    set_ids = {i for i in (_id(value) for value in request.form.getlist("sets")) if i is not None}
+    set_ids = {i for i in (parse_id(value) for value in request.form.getlist("sets")) if i is not None}
     sets = db.scalars(select(PermissionSet).where(PermissionSet.id.in_(set_ids)).order_by(PermissionSet.id)).all()
     current = _permissions_of([s.id for s in sets])
     changed = 0
@@ -148,7 +139,7 @@ def create():
 def _holders(permission_set: PermissionSet):
     """The set's holders as ``(holder, team path or None, user or None)``, teams first."""
     db = get_session()
-    labels = paths(load_team_rows(db))
+    labels = team_labels(load_team_rows(db))
     rows = db.execute(
         select(PermissionSetHolder, Team.name, User)
         .outerjoin(Team, Team.id == PermissionSetHolder.team_id)
@@ -172,7 +163,7 @@ def _render_set(permission_set: PermissionSet, errors: list[str], status: int, f
     held_teams = {h.team_id for h, _path, _user in holders if h.team_id}
     held_users = {h.user_id for h, _path, _user in holders if h.user_id}
     team_choices = sorted(
-        ((team_id, label) for team_id, label in paths(load_team_rows(db)).items() if team_id not in held_teams),
+        ((team_id, label) for team_id, label in team_labels(load_team_rows(db)).items() if team_id not in held_teams),
         key=lambda item: item[1].lower(),
     )
     people = [
@@ -231,6 +222,7 @@ def rename(set_id: int):
         flash(NO_CHANGES_MESSAGE, "info")
         return _to_set(permission_set)
     after = {field: submitted[field] for field in before}
+    set_name = permission_set.name  # as it was before the change
     for field, value in after.items():
         setattr(permission_set, field, value)
     record(
@@ -240,7 +232,7 @@ def rename(set_id: int):
         action="permission_set_renamed",
         entity="permission_set",
         entity_id=permission_set.id,
-        detail=change(before, after),
+        detail={"set": set_name, **change(before, after)},
     )
     try:
         db.commit()
@@ -302,7 +294,7 @@ def add_holder(set_id: int):
     permission_set = _set_or_404(set_id)
     db = get_session()
     kind, _, raw_id = request.form.get("holder", "").partition(":")
-    holder_id = _id(raw_id)
+    holder_id = parse_id(raw_id)
     team = user = None
     if kind == "team" and holder_id:
         team = db.get(Team, holder_id)
@@ -317,7 +309,7 @@ def add_holder(set_id: int):
         select(PermissionSetHolder.id).where(PermissionSetHolder.set_id == permission_set.id, column == value)
     ):
         return _render_set(permission_set, [ALREADY_HOLDS_MESSAGE], 400)
-    team_path = paths(load_team_rows(db)).get(team.id, team.name) if team else None
+    team_path = team_labels(load_team_rows(db)).get(team.id, team.name) if team else None
     db.add(
         PermissionSetHolder(
             set_id=permission_set.id, team_id=team.id if team else None, user_id=user.id if user else None
@@ -338,14 +330,16 @@ def add_holder(set_id: int):
 def remove_holder(set_id: int, holder_id: int):
     permission_set = _set_or_404(set_id)
     db = get_session()
-    holder = db.get(PermissionSetHolder, holder_id) if holder_id <= _MAX_ID else None
+    holder = db.get(PermissionSetHolder, holder_id) if in_range(holder_id) else None
     if holder is None or holder.set_id != permission_set.id:
         abort(404)
-    team_path = None
-    if holder.team_id:
-        team_path = paths(load_team_rows(db)).get(holder.team_id)
-    _record_holder(permission_set, "permission_set_holder_removed", team_path, holder.user_id)
-    db.delete(holder)
+    team_id, user_id = holder.team_id, holder.user_id
+    team_path = team_labels(load_team_rows(db)).get(team_id) if team_id else None
+    if not db.execute(delete(PermissionSetHolder).where(PermissionSetHolder.id == holder.id)).rowcount:
+        db.rollback()  # removed by someone else at the same moment
+        flash(f"That holder of {permission_set.name} has already been removed.", "info")
+        return _to_set(permission_set)
+    _record_holder(permission_set, "permission_set_holder_removed", team_path, user_id)
     db.commit()
     flash(f"Removed a holder of {permission_set.name}.", "success")
     return _to_set(permission_set)

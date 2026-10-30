@@ -11,12 +11,13 @@ from ..models import User
 from .csrf import LoginThrottle, csrf_token, safe_next_url, valid_csrf
 from .passwords import verify_against_dummy, verify_password
 from .permissions import PERMISSIONS, has_permission, permission_required, user_permissions
-from .roles import ROLE_ORDER, require_tracker_role, tracker_roles, user_role, visible_trackers
+from .roles import ROLE_ORDER, ROLES, require_tracker_role, tracker_roles, user_role, visible_trackers
 from .session import admin_required, current_user, login_required, login_user, logout_user
 
 __all__ = [
     "PERMISSIONS",
     "ROLE_ORDER",
+    "ROLES",
     "LoginThrottle",
     "admin_required",
     "bp",

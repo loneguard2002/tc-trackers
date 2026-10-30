@@ -10,7 +10,7 @@ from sqlalchemy import select
 from tests.conftest import post, sign_in
 from tests.importer.build_fixture import workbook_bytes
 from tracker.auth.guards import SELF_PROMOTION_MESSAGE
-from tracker.models import AuditLog, Tracker, TrackerRole
+from tracker.models import AuditLog, Team, Tracker, TrackerRole
 
 SETTINGS = {
     "name": "Rollout",
@@ -55,6 +55,8 @@ def test_creator_without_admin_becomes_owner_and_it_is_logged(client, logged_in_
     assert db.get(TrackerRole, (logged_in_user.id, tracker.id)).role == "owner"
     entry = db.scalars(select(AuditLog).where(AuditLog.action == "role_set")).one()
     assert entry.detail == {"before": None, "after": "owner"} and entry.target_user_id == logged_in_user.id
+    logged = db.scalars(select(AuditLog.action).where(AuditLog.tracker_id == tracker.id).order_by(AuditLog.id)).all()
+    assert logged == ["tracker_created", "role_set"]
 
 
 def test_new_tracker_in_a_team_or_none(client, logged_in_admin, team_factory, db):
@@ -101,10 +103,13 @@ def test_import_confirmation_sets_team_and_owner(client, user_factory, give_set,
         token = page.get_data(as_text=True).split('name="payload" value="')[1].split('"')[0]
         return post(client, "/import/confirm", {"payload": token, "name": "Rollout", **extra})
 
-    assert 'name="team_id"' in confirm_page(client)
+    page = html.unescape(confirm_page(client))
+    assert 'name="team_id"' in page and "You become its owner." in page and "As an administrator" not in page
     assert confirm(team_id=str(team.id)).status_code == 302
     tracker = db.scalars(select(Tracker)).one()
     assert tracker.team_id == team.id and db.get(TrackerRole, (user.id, tracker.id)).role == "owner"
+    logged = db.scalars(select(AuditLog.action).where(AuditLog.tracker_id == tracker.id).order_by(AuditLog.id)).all()
+    assert logged == ["tracker_imported", "role_set"]
     bad = confirm(team_id="9999")
     assert bad.status_code == 400 and CHOICE_ERROR in text_of(bad)
     assert db.scalars(select(Tracker)).all() == [tracker]
@@ -117,6 +122,8 @@ def test_import_confirmation_by_an_administrator_gives_no_role(client, logged_in
         {"weekday": "4", "workbook": (BytesIO(workbook_bytes()), "book.xlsx")},
         content_type="multipart/form-data",
     )
+    assert "As an administrator, you can already open every tracker." in text_of(page)
+    assert "You become its owner." not in text_of(page)
     token = page.get_data(as_text=True).split('name="payload" value="')[1].split('"')[0]
     assert post(client, "/import/confirm", {"payload": token, "name": "Rollout"}).status_code == 302
     tracker = db.scalars(select(Tracker)).one()
@@ -219,4 +226,77 @@ def test_settings_team_section_for_an_administrator(client, logged_in_admin, tra
 def test_home_card_shows_the_team_name(client, logged_in_admin, tracker_factory, team_factory):
     team = team_factory(name="Network")
     tracker_factory(name="With team", team_id=team.id, first_week_ending=date(2026, 9, 4))
-    assert "Network" in client.get("/").get_data(as_text=True)
+    assert '<p class="tracker-card-team">Network</p>' in client.get("/").get_data(as_text=True)
+
+
+# --- Final review fixes ---------------------------------------------------------------------------------------------
+
+
+def test_a_very_long_team_id_is_400(client, logged_in_admin, tracker_factory, db):
+    response = post(client, "/trackers/new", {**SETTINGS, "team_id": "9" * 5000})
+    assert response.status_code == 400 and CHOICE_ERROR in text_of(response)
+    t = tracker_factory()
+    assert post(client, f"/trackers/{t.id}/team", {"team_id": "9" * 5000}).status_code == 400
+    assert db.scalars(select(Tracker)).all() == [t] and entries(db, "tracker_team_changed") == []
+
+
+def delete_team_on_first_read(monkeypatch, module, db, team):
+    """Delete ``team`` from another session the first time the view reads the team tree."""
+    original = module.load_team_rows
+
+    def delete_first(session, lock=False):
+        if db.get(Team, team.id) is not None:
+            db.delete(db.get(Team, team.id))
+            db.commit()
+        return original(session, lock)
+
+    monkeypatch.setattr(module, "load_team_rows", delete_first)
+
+
+def test_a_tracker_created_in_a_team_deleted_at_the_same_moment(client, logged_in_admin, team_factory, db, monkeypatch):
+    from tracker.trackers import views as tracker_views
+
+    team = team_factory(name="Going")
+    delete_team_on_first_read(monkeypatch, tracker_views, db, team)
+    response = post(client, "/trackers/new", {**SETTINGS, "team_id": str(team.id)})
+    assert response.status_code == 400 and CHOICE_ERROR in text_of(response)
+    assert db.scalars(select(Tracker)).first() is None and entries(db, "tracker_created") == []
+
+
+def test_a_tracker_moved_into_a_team_deleted_at_the_same_moment(
+    client, logged_in_admin, team_factory, tracker_factory, db, monkeypatch
+):
+    from tracker.trackers import views as tracker_views
+
+    team, t = team_factory(name="Going"), tracker_factory()
+    delete_team_on_first_read(monkeypatch, tracker_views, db, team)
+    response = post(client, f"/trackers/{t.id}/team", {"team_id": str(team.id)}, follow_redirects=True)
+    assert response.status_code == 200 and CHOICE_ERROR in text_of(response)
+    assert team_of(db, t) is None and entries(db, "tracker_team_changed") == []
+
+
+def test_a_workbook_imported_into_a_team_deleted_at_the_same_moment(
+    client, logged_in_admin, team_factory, db, monkeypatch
+):
+    from tracker.importer import views as importer_views
+
+    team = team_factory(name="Going")
+    page = post(
+        client,
+        "/import",
+        {"weekday": "4", "workbook": (BytesIO(workbook_bytes()), "book.xlsx")},
+        content_type="multipart/form-data",
+    )
+    token = page.get_data(as_text=True).split('name="payload" value="')[1].split('"')[0]
+    original = importer_views.parse_team_id
+
+    def delete_after_parsing(session, value):
+        found = original(session, value)
+        db.delete(db.get(Team, team.id))
+        db.commit()
+        return found
+
+    monkeypatch.setattr(importer_views, "parse_team_id", delete_after_parsing)
+    response = post(client, "/import/confirm", {"payload": token, "name": "Rollout", "team_id": str(team.id)})
+    assert response.status_code == 400 and CHOICE_ERROR in text_of(response)
+    assert db.scalars(select(Tracker)).first() is None

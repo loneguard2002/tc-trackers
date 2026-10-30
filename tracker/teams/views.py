@@ -3,7 +3,8 @@
 Every change is committed with its activity entries in one transaction, and the entries name teams by their path from
 the top of the tree. A change that could raise the actor's own tracker access (moving a team, adding a member,
 changing a role) goes through the self-promotion guard of ``tracker/auth/guards.py``: input is validated first, the
-access snapshot is taken before any object is touched, and a refused change is rolled back.
+access snapshot is taken before any object is touched, and a refused change is rolled back. A non-administrator cannot
+give a team place or a member role to an account they created or whose password they reset (``vouched_refusal``).
 """
 
 from __future__ import annotations
@@ -12,8 +13,9 @@ from flask import abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.exc import IntegrityError
 
-from ..audit import change, record
-from ..auth import ROLE_ORDER, current_user, permission_required
+from ..audit import NO_CHANGES_MESSAGE, change, record
+from ..auth import ROLES, current_user, permission_required
+from ..auth.accounts import vouched_refusal
 from ..auth.guards import (
     SELF_PROMOTION_MESSAGE,
     TEAM_WITH_SETS_MESSAGE,
@@ -22,10 +24,13 @@ from ..auth.guards import (
     team_holds_sets,
 )
 from ..db import get_session
+from ..ids import in_range, parse_id
 from ..models import PermissionSet, PermissionSetHolder, Team, TeamMember, Tracker, User
 from ..naming import description_error, name_error, name_taken
 from . import bp
 from .tree import (
+    ALREADY_MEMBER_MESSAGE,
+    CHOOSE_ROLE_MESSAGE,
     TEAM_CHOICE_ERROR,
     TeamRow,
     children_map,
@@ -33,32 +38,19 @@ from .tree import (
     load_team_rows,
     order_tree,
     parse_team_id,
-    paths,
     team_choices,
+    team_labels,
 )
 
 CYCLE_MESSAGE = "A team cannot be moved under itself or under a team below it."
 HAS_CHILDREN_MESSAGE = "This team has teams below it. Move or delete them first."
 HAS_TRACKERS_MESSAGE = "This team has trackers, including archived ones. Move them to another team first."
-ALREADY_MEMBER_MESSAGE = "That person is already a member of this team."
 CHOOSE_PERSON_MESSAGE = "Choose an active person from the list."
-CHOOSE_ROLE_MESSAGE = "Choose a role: viewer, editor or owner."
-NO_CHANGES_MESSAGE = "No changes to save."
 TOP_LEVEL = "Top level"
-ROLES = tuple(ROLE_ORDER)
-_MAX_ID = 2**31 - 1  # the largest Postgres integer; a larger id cannot exist and must not reach a query
-
-
-def _id(value: str | None) -> int | None:
-    """A positive id typed into a form or URL, or ``None`` for anything else."""
-    text = (value or "").strip()
-    if not (text.isascii() and text.isdigit()) or not 0 < int(text) <= _MAX_ID:
-        return None
-    return int(text)
 
 
 def _team_or_404(team_id: int) -> Team:
-    team = get_session().get(Team, team_id) if team_id <= _MAX_ID else None
+    team = get_session().get(Team, team_id) if in_range(team_id) else None
     if team is None:
         abort(404)
     return team
@@ -123,7 +115,7 @@ def create():
     errors = [e for e in (name_error(db, Team, name, "team"), description_error(description), parent_error) if e]
     if errors:
         return _render_index(request.form, errors, 400)
-    parent_path = paths(load_team_rows(db))[parent.id] if parent else None
+    parent_path = team_labels(load_team_rows(db)).get(parent.id, parent.name) if parent else None
     team = Team(name=name, description=description, parent_id=parent.id if parent else None)
     db.add(team)
     try:
@@ -138,9 +130,9 @@ def create():
             detail={"name": name, "parent": parent_path},
         )
         db.commit()
-    except IntegrityError:
+    except IntegrityError:  # the same name was taken, or the parent deleted, at the same moment
         db.rollback()
-        return _render_index(request.form, [name_taken("team")], 400)
+        return _render_index(request.form, [name_error(db, Team, name, "team") or TEAM_CHOICE_ERROR], 400)
     flash(f"Created the team {name}.", "success")
     return _to_team(team)
 
@@ -151,7 +143,7 @@ def create():
 def _render_team(team: Team, errors: list[str], status: int, form=None):
     db = get_session()
     rows = load_team_rows(db)
-    labels = paths(rows)
+    labels = team_labels(rows)
     below = descendants(rows, team.id)
     members = db.execute(
         select(TeamMember.role, User)
@@ -218,6 +210,7 @@ def rename(team_id: int):
         flash(NO_CHANGES_MESSAGE, "info")
         return _to_team(team)
     after = {field: submitted[field] for field in before}
+    path = _team_path(team)  # as it was before the change
     for field, value in after.items():
         setattr(team, field, value)
     record(
@@ -227,7 +220,7 @@ def rename(team_id: int):
         action="team_renamed",
         entity="team",
         entity_id=team.id,
-        detail=change(before, after),
+        detail={"team": path, **change(before, after)},
     )
     try:
         db.commit()
@@ -244,7 +237,7 @@ def move(team_id: int):
     team = _team_or_404(team_id)
     db = get_session()
     text = request.form.get("parent_id", "").strip()
-    new_parent_id = _id(text) if text else None
+    new_parent_id = parse_id(text) if text else None
     if text and new_parent_id is None:
         return _render_team(team, [TEAM_CHOICE_ERROR], 400)
     rows = load_team_rows(db, lock=True)  # held until commit or rollback, so a concurrent move cannot form a cycle
@@ -268,7 +261,7 @@ def move(team_id: int):
     team.parent_id = new_parent_id
     if raises_own_access(db, actor, before):
         return _refuse(team, SELF_PROMOTION_MESSAGE)
-    labels = paths(rows)
+    labels = team_labels(rows)  # read before the move: the team's path is the one it had
     old_path = labels.get(old_parent_id) if old_parent_id else None
     new_path = labels.get(new_parent_id) if new_parent_id else None
     record(
@@ -278,7 +271,7 @@ def move(team_id: int):
         action="team_moved",
         entity="team",
         entity_id=team.id,
-        detail=change(old_path, new_path),
+        detail={"team": labels[team.id], **change(old_path, new_path)},
     )
     db.commit()
     flash(f"Moved {team.name} to {new_path or 'the top level'}.", "success")
@@ -291,15 +284,17 @@ def delete_team(team_id: int):
     team = _team_or_404(team_id)
     db = get_session()
     rows = load_team_rows(db, lock=True)  # a team or tracker cannot be put under it until this commits
-    if team.id not in {row.id for row in rows}:
+    current = {row.id: row for row in rows}
+    if team.id not in current:
         db.rollback()
         abort(404)
     blocker = _delete_blocker(team.id, rows)
     if blocker:
         db.rollback()
         return _render_team(team, [blocker], 400)
-    labels = paths(rows)
-    path = labels.get(team.id, team.name)
+    labels = team_labels(rows)
+    path = labels[team.id]
+    parent_id = current[team.id].parent_id  # from the locked row: a move just committed has changed it
     actor_id = current_user().id
     memberships = db.execute(
         select(TeamMember.user_id, TeamMember.role).where(TeamMember.team_id == team.id).order_by(TeamMember.user_id)
@@ -338,7 +333,7 @@ def delete_team(team_id: int):
         action="team_deleted",
         entity="team",
         entity_id=team.id,
-        detail={"name": team.name, "parent": labels.get(team.parent_id) if team.parent_id else None},
+        detail={"name": current[team.id].name, "parent": labels.get(parent_id) if parent_id else None},
     )
     db.execute(delete(TeamMember).where(TeamMember.team_id == team.id))
     db.execute(delete(PermissionSetHolder).where(PermissionSetHolder.team_id == team.id))
@@ -352,7 +347,7 @@ def delete_team(team_id: int):
 
 
 def _team_path(team: Team) -> str:
-    return paths(load_team_rows(get_session())).get(team.id, team.name)
+    return team_labels(load_team_rows(get_session())).get(team.id, team.name)
 
 
 @bp.post("/<int:team_id>/members")
@@ -363,15 +358,18 @@ def add_member(team_id: int):
     actor = current_user()
     if not actor.is_admin and team_holds_sets(db, team.id):
         return _refuse(team, TEAM_WITH_SETS_MESSAGE)
-    user_id = _id(request.form.get("user_id"))
+    user_id = parse_id(request.form.get("user_id"))
     user = db.get(User, user_id) if user_id else None
     if user is None or user.status != "active":
         return _render_team(team, [CHOOSE_PERSON_MESSAGE], 400)
     role = request.form.get("role", "")
-    if role not in ROLE_ORDER:
+    if role not in ROLES:
         return _render_team(team, [CHOOSE_ROLE_MESSAGE], 400)
     if db.get(TeamMember, (team.id, user.id)) is not None:
         return _render_team(team, [ALREADY_MEMBER_MESSAGE], 400)
+    refusal = vouched_refusal(db, actor, user)
+    if refusal:
+        return _refuse(team, refusal)
     path = _team_path(team)
     before = snapshot_access(db, actor)
     db.add(TeamMember(team_id=team.id, user_id=user.id, role=role))
@@ -401,13 +399,21 @@ def add_member(team_id: int):
 def update_member(team_id: int, user_id: int):
     team = _team_or_404(team_id)
     db = get_session()
-    membership = db.get(TeamMember, (team.id, user_id)) if user_id <= _MAX_ID else None
+    membership = db.get(TeamMember, (team.id, user_id)) if in_range(user_id) else None
     if membership is None:
         abort(404)
     user = db.get(User, user_id)
     path = _team_path(team)
     actor = current_user()
     if request.form.get("action") == "remove":
+        role = membership.role
+        removed = db.execute(
+            delete(TeamMember).where(TeamMember.team_id == team.id, TeamMember.user_id == user.id)
+        ).rowcount
+        if not removed:  # removed by someone else at the same moment
+            db.rollback()
+            flash(f"{user.full_name} is no longer a member of {team.name}.", "info")
+            return _to_team(team)
         record(
             db,
             user_id=actor.id,
@@ -415,20 +421,22 @@ def update_member(team_id: int, user_id: int):
             action="team_member_removed",
             entity="team",
             entity_id=team.id,
-            detail={"team": path, "role": membership.role},
+            detail={"team": path, "role": role},
             target_user_id=user.id,
         )
-        db.delete(membership)
         db.commit()
         flash(f"Removed {user.full_name} from {team.name}.", "success")
         return _to_team(team)
     role = request.form.get("role", "")
-    if role not in ROLE_ORDER:
+    if role not in ROLES:
         return _render_team(team, [CHOOSE_ROLE_MESSAGE], 400)
     old = membership.role
     if role == old:
         flash(NO_CHANGES_MESSAGE, "info")
         return _to_team(team)
+    refusal = vouched_refusal(db, actor, user)
+    if refusal:
+        return _refuse(team, refusal)
     before = snapshot_access(db, actor)
     membership.role = role
     if raises_own_access(db, actor, before):

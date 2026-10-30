@@ -4,10 +4,12 @@ import html
 
 from sqlalchemy import select
 
-from tests.conftest import post
+from tests.conftest import post, sign_in
+from tracker.auth.accounts import VOUCHED_MESSAGE
 from tracker.auth.guards import SELF_PROMOTION_MESSAGE
 from tracker.auth.roles import team_access
-from tracker.models import AuditLog, TrackerRole
+from tracker.models import AuditLog, Tracker, TrackerRole
+from tracker.trackers.views import INACTIVE_PERSON_MESSAGE
 
 
 def text_of(response) -> str:
@@ -64,7 +66,7 @@ def test_holder_cannot_give_themselves_a_direct_role(client, logged_in_user, giv
     assert db.get(TrackerRole, (logged_in_user.id, t.id)) is None and not entries(db, "role_set")
 
 
-def test_holder_can_give_another_user_a_role_and_administrators_cannot_receive_one(
+def test_administrators_cannot_receive_a_role_and_an_unknown_role_is_refused(
     client, logged_in_user, give_set, tracker_factory, user_factory, db
 ):
     give_set(["manage_teams"], user=logged_in_user)
@@ -132,9 +134,13 @@ def test_archived_tracker_refuses_roles_but_offers_the_team_form(
     t, member = tracker_factory(status="archived"), user_factory()
     page = post(client, f"/trackers/{t.id}/roles", {"user_id": member.id, "role": "viewer"}, follow_redirects=True)
     assert "This tracker is archived." in text_of(page)
-    assert db.get(TrackerRole, (member.id, t.id)) is None
+    assert db.get(TrackerRole, (member.id, t.id)) is None and entries(db, "role_set") == []
     assert 'name="team_id"' in page.get_data(as_text=True) and f"/trackers/{t.id}/team" in text_of(page)
     assert post(client, f"/trackers/{t.id}/team", {"team_id": str(team.id), "next": "access"}).status_code == 302
+    db.expire_all()
+    assert db.get(Tracker, t.id).team_id == team.id
+    (moved,) = entries(db, "tracker_team_changed")
+    assert moved.detail == {"before": None, "after": "Network"} and moved.tracker_id == t.id
 
 
 # --- Where a team change returns to --------------------------------------------------------------------------
@@ -162,3 +168,95 @@ def test_team_change_with_an_unknown_next_goes_home(client, logged_in_admin, tra
     response = post(client, f"/trackers/{t.id}/team", {"team_id": str(team.id), "next": "elsewhere"})
     assert response.status_code == 302 and response.headers["Location"].endswith("/")
     assert "/roles" not in response.headers["Location"]
+
+
+# --- Final review fixes ---------------------------------------------------------------------------------------------
+
+
+def holder_with_tracker(client, logged_in_user, give_set, tracker_factory):
+    give_set(["manage_teams"], user=logged_in_user)
+    return tracker_factory(name="Rollout", group_label="Location")
+
+
+def test_setting_the_same_role_or_removing_no_role_changes_nothing(
+    client, logged_in_user, give_set, tracker_factory, user_factory, db, grant
+):
+    t = holder_with_tracker(client, logged_in_user, give_set, tracker_factory)
+    member, outsider = user_factory(), user_factory()
+    grant(member, t, "editor")
+    url = f"/trackers/{t.id}/roles"
+    for data in ({"user_id": member.id, "role": "editor"}, {"user_id": outsider.id, "role": "remove"}):
+        response = post(client, url, data, follow_redirects=True)
+        assert response.status_code == 200 and "No changes to save." in text_of(response)
+    assert entries(db, "role_set") == [] and entries(db, "role_removed") == []
+    assert db.get(TrackerRole, (member.id, t.id)).role == "editor"
+
+
+def test_a_direct_role_is_refused_to_a_person_who_is_not_active(
+    client, logged_in_user, give_set, tracker_factory, user_factory, db, grant
+):
+    t = holder_with_tracker(client, logged_in_user, give_set, tracker_factory)
+    url = f"/trackers/{t.id}/roles"
+    for status in ("disabled", "pending"):
+        person = user_factory(status=status)
+        response = post(client, url, {"user_id": person.id, "role": "viewer"})
+        assert response.status_code == 400 and INACTIVE_PERSON_MESSAGE in text_of(response)
+        assert db.get(TrackerRole, (person.id, t.id)) is None
+    leaver = user_factory(status="disabled")
+    grant(leaver, t, "viewer")
+    assert post(client, url, {"user_id": leaver.id, "role": "remove"}).status_code == 302  # removing stays possible
+    assert db.get(TrackerRole, (leaver.id, t.id)) is None
+    assert entries(db, "role_set") == []
+
+
+def test_a_direct_role_is_refused_to_an_account_the_holder_vouched_for(
+    client, logged_in_user, give_set, tracker_factory, user_factory, db
+):
+    t = holder_with_tracker(client, logged_in_user, give_set, tracker_factory)
+    person, other = user_factory(), user_factory()
+    db.add(
+        AuditLog(
+            action="user_created",
+            entity="user",
+            entity_id=str(person.id),
+            user_id=logged_in_user.id,
+            target_user_id=person.id,
+        )
+    )
+    db.commit()
+    url = f"/trackers/{t.id}/roles"
+    response = post(client, url, {"user_id": person.id, "role": "viewer"}, follow_redirects=True)
+    assert VOUCHED_MESSAGE in text_of(response) and db.get(TrackerRole, (person.id, t.id)) is None
+    assert post(client, url, {"user_id": other.id, "role": "viewer"}).status_code == 302
+    assert [e.target_user_id for e in entries(db, "role_set")] == [other.id]
+
+
+def test_a_very_long_user_id_is_400(client, logged_in_user, give_set, tracker_factory, db):
+    t = holder_with_tracker(client, logged_in_user, give_set, tracker_factory)
+    for value in ("9" * 5000, str(2**31)):
+        assert post(client, f"/trackers/{t.id}/roles", {"user_id": value, "role": "viewer"}).status_code == 400
+    assert entries(db, "role_set") == []
+
+
+def test_add_people_leaves_out_the_holder_but_not_for_an_administrator(
+    client, logged_in_user, give_set, tracker_factory, user_factory
+):
+    t = holder_with_tracker(client, logged_in_user, give_set, tracker_factory)
+    other = user_factory(full_name="Other Person")
+    page = client.get(f"/trackers/{t.id}/roles").get_data(as_text=True)
+    assert f'id="role-{other.id}"' in page and f'id="role-{logged_in_user.id}"' not in page
+    admin = user_factory(is_admin=True)
+    admin_client = client.application.test_client()
+    sign_in(admin_client, admin)
+    assert f'id="role-{logged_in_user.id}"' in admin_client.get(f"/trackers/{t.id}/roles").get_data(as_text=True)
+
+
+def test_roles_legend_names_groups_generically_for_a_holder_without_a_role(
+    client, logged_in_user, give_set, tracker_factory, user_factory, grant
+):
+    t = holder_with_tracker(client, logged_in_user, give_set, tracker_factory)
+    legend = text_of(client.get(f"/trackers/{t.id}/roles")).split('class="role-legend"', 1)[1].split("</dl>", 1)[0]
+    assert "targets, groups and risks" in legend and "locations" not in legend
+    grant(logged_in_user, t, "viewer")
+    legend = text_of(client.get(f"/trackers/{t.id}/roles")).split('class="role-legend"', 1)[1].split("</dl>", 1)[0]
+    assert "targets, locations and risks" in legend

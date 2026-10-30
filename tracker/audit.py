@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from .models import AuditLog
 
+NO_CHANGES_MESSAGE = "No changes to save."  # the answer to a save that changes nothing; it writes no entry
+
 
 def record(
     session: Session,

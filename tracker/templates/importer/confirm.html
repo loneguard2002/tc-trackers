@@ -105,7 +105,7 @@
     <section class="settings-section span-all" aria-labelledby="section-new">
       <header class="settings-section-head">
         <h2 id="section-new">New tracker</h2>
-        <p>Name the tracker and say what it counts. You become its owner unless you are an administrator, who has access to every tracker already.</p>
+        <p>Name the tracker and say what it counts. {% if current_user.is_admin %}As an administrator, you can already open every tracker.{% else %}You become its owner.{% endif %}</p>
       </header>
       {% call setting('Tracker name', 'Shown on the Trackers page, the report and the email.', 'name') %}
       <input id="name" name="name" value="{{ form.get('name', '') }}" required aria-describedby="name-help">

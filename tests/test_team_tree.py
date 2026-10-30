@@ -1,5 +1,8 @@
 """Team tree helpers. The tree functions are pure; the loaders and the form parser need the database."""
 
+import pytest
+
+from tracker.ids import MAX_ID, in_range, parse_id
 from tracker.teams.tree import (
     TeamRow,
     children_map,
@@ -9,6 +12,7 @@ from tracker.teams.tree import (
     parse_team_id,
     paths,
     team_choices,
+    team_labels,
 )
 
 ROWS = [
@@ -74,3 +78,24 @@ def test_parse_team_id(db, team_factory):
     assert parse_team_id(db, f" {team.id} ") == (team, None)
     for value in ("abc", "-1", "0", "1.5", "²", str(team.id + 1), "99999999999999999999"):
         assert parse_team_id(db, value) == (None, TEAM_CHOICE_ERROR), value
+
+
+def test_team_labels_fall_back_to_the_name_for_a_team_the_tree_cannot_place():
+    rows = [TeamRow(1, 2, "A"), TeamRow(2, 1, "B"), TeamRow(3, None, "C"), TeamRow(4, 3, "D")]
+    assert team_labels(rows) == {1: "A", 2: "B", 3: "C", 4: "C › D"}
+
+
+@pytest.mark.parametrize("text,expected", [("1", 1), (" 42 ", 42), (str(MAX_ID), MAX_ID), ("0007", 7)])
+def test_parse_id_accepts_positive_ids(text, expected):
+    assert parse_id(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text", [None, "", "0", "-1", "+1", "1.0", "abc", "١٢", str(MAX_ID + 1), "9" * 11, "9" * 5000, "00000000001"]
+)
+def test_parse_id_refuses_anything_else(text):
+    assert parse_id(text) is None
+
+
+def test_in_range_bounds_ids_from_urls():
+    assert in_range(1) and in_range(MAX_ID) and not in_range(0) and not in_range(MAX_ID + 1)

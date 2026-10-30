@@ -482,7 +482,6 @@ def create_tracker_from_preview(
         session.add(Risk(tracker_id=tracker.id, group_id=group_ids.get(item["group"]), **values))
     if preview.inputs:
         session.add(ReportInput(tracker_id=tracker.id, prepared_by=user_id, **preview.inputs))
-    give_creator_ownership(session, tracker, session.get(User, user_id))
     record(
         session,
         user_id=user_id,
@@ -499,5 +498,6 @@ def create_tracker_from_preview(
             "mismatch_accepted": preview.mismatch != 0,
         },
     )
+    give_creator_ownership(session, tracker, session.get(User, user_id))  # logged after the import, as on New tracker
     session.flush()
     return tracker
