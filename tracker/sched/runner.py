@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 
+from ..activity.retention import prune_audit_log
 from ..mail import sending
 from ..models import ReportSend, Tracker
 from .schedules import next_occurrences
@@ -128,6 +129,11 @@ def _send_claimed(session, tracker_id: int, send_id: int, now: datetime) -> None
 
 def run_scheduler_cycle(session, now_utc: datetime) -> int:
     """Send every due report once, then retry queued sends. Returns the number of sends attempted."""
+    try:
+        prune_audit_log(session, now_utc)
+    except Exception:
+        session.rollback()
+        logger.exception("Pruning the activity log failed")
     attempted = 0
     for tracker_id, week_ending in due_sends(session, now_utc):
         try:

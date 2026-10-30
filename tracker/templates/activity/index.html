@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import field %}
+{% from "macros.html" import csrf_field, field %}
 {% block content %}
 <h1>Activity</h1>
 <p class="page-lede">Every recorded change and sign-in, newest first. Entries never contain passwords or other secrets.</p>
@@ -76,6 +76,15 @@
       {% if newer %}<a class="button" href="{{ newer }}" rel="prev">Newer</a>{% endif %}
       {% if older %}<a class="button" href="{{ older }}" rel="next">Older</a>{% endif %}
     </div>
+    {% endif %}
+    {% if current_user and current_user.is_admin %}
+    <form class="settings-section-foot activity-retention" method="post" action="{{ url_for('activity.retention') }}">
+      {{ csrf_field(csrf_token()) }}
+      {% call field('Retention (days)', 'Entries older than this are deleted once a day. Leave empty to keep entries indefinitely.', 'retention-days') %}
+      <input id="retention-days" type="text" inputmode="numeric" name="retention_days" value="{{ retention if retention is not none }}" aria-describedby="retention-days-help" autocomplete="off">
+      {% endcall %}
+      <button class="button primary" type="submit">Save retention</button>
+    </form>
     {% endif %}
   </section>
 </div>

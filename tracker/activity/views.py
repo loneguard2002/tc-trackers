@@ -9,11 +9,14 @@ from flask import render_template, request, url_for
 from sqlalchemy import or_, select
 from sqlalchemy.orm import aliased
 
+from ..auth import current_user
 from ..auth.permissions import permission_required
+from ..auth.session import admin_required
 from ..db import get_session
 from ..models import AuditLog, Tracker, User
 from . import bp
 from .labels import ACTION_LABELS, action_label, describe
+from .retention import retention_days, save_retention
 
 PAGE_SIZE = 50
 _MAX_ID = 2**31 - 1
@@ -124,5 +127,12 @@ def index():
         actions=sorted(ACTION_LABELS.items(), key=lambda item: item[1]),
         newer=newer,
         older=older,
+        retention=retention_days(db),
         filtered=any((filters.person, filters.action, filters.start, filters.end)),
     )
+
+
+@bp.post("/retention")
+@admin_required
+def retention():
+    return save_retention(get_session(), current_user().id, request.form.get("retention_days"))
