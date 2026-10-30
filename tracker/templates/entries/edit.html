@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field, setting %}
+{% block content %}
+<h1>{{ tracker.name }}</h1>
+{% include "trackers/_nav.html" %}
+{% set group_word = (tracker.group_label or 'group')|lower %}
+<div class="settings settings-narrow">
+  <form method="post" action="{{ url_for('entries.edit_entry', tracker_id=tracker.id, entry_id=entry.id) }}">
+    {% include "entries/_errors.html" %}
+    {{ csrf_field(csrf_token()) }}
+    <section class="settings-section" aria-labelledby="section-edit">
+      <header class="settings-section-head">
+        <h2 id="section-edit">Edit entry</h2>
+        <p>Correct this entry. The report figures follow the corrected entry straight away.</p>
+      </header>
+      {% call setting(tracker.group_label or 'Group', 'Where the work was done. A retired ' ~ group_word ~ ' can be kept but not chosen.', 'group_id') %}
+      <select id="group_id" name="group_id" required aria-describedby="group_id-help">
+        {% for grp in groups %}<option value="{{ grp.id }}" {{ 'selected' if form.get('group_id')|string == grp.id|string }}>{{ grp.name }}{{ ' (retired)' if grp.retired }}</option>{% endfor %}</select>
+      {% endcall %}
+      {% call setting('Date', 'The day the work was finished, today or earlier. It counts towards the week ending on or after this date.', 'entry_date') %}
+      <input id="entry_date" name="entry_date" type="date" value="{{ form.get('entry_date', '') }}" max="{{ today.isoformat() }}" required aria-describedby="entry_date-help">
+      {% endcall %}
+      {% call setting('Quantity', 'How many were finished on that day, as a whole number of 1 or more.', 'quantity') %}
+      <div class="input-affix">
+        <input id="quantity" name="quantity" type="number" min="1" step="1" inputmode="numeric" value="{{ form.get('quantity', '') }}" required aria-describedby="quantity-help">
+        {% if tracker.unit_label %}<span aria-hidden="true">{{ tracker.unit_label }}</span>{% endif %}
+      </div>
+      {% endcall %}
+      {% call setting('Note', 'Optional. Shown in the entries list only, not on the report.', 'note') %}
+      <input id="note" name="note" value="{{ form.get('note', '') }}" aria-describedby="note-help">
+      {% endcall %}
+    </section>
+    <div class="settings-actions">
+      <a class="button" href="{{ url_for('entries.list_entries', tracker_id=tracker.id) }}">Cancel</a>
+      <button class="button primary" type="submit">Save</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

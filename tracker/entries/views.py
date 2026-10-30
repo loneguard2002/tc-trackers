@@ -10,7 +10,7 @@ from flask import Response, abort, flash, g, redirect, render_template, request,
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from ..audit import record
+from ..audit import change, record
 from ..auth import current_user, require_tracker_role
 from ..db import get_session
 from ..engine.calc import COMPLETE
@@ -232,6 +232,87 @@ def new_entry(tracker_id: int):
     if request.form.get("return_to") == "list":
         return redirect(url_for("entries.list_entries", tracker_id=tracker.id))
     return redirect(url_for("entries.new_entry", tracker_id=tracker.id, group=group.id))
+
+
+def _render_edit(tracker: Tracker, entry: CompletionEntry, groups: list[Group], form, errors: list[str], status=200):
+    return (
+        render_template(
+            "entries/edit.html",
+            entry=entry,
+            groups=groups,
+            form=form,
+            errors=errors,
+            today=date.today(),
+            **_page(tracker, "Edit entry"),
+        ),
+        status,
+    )
+
+
+@bp.route("/trackers/<int:tracker_id>/entries/<int:entry_id>/edit", methods=["GET", "POST"])
+@require_tracker_role("editor")
+def edit_entry(tracker_id: int, entry_id: int):
+    tracker, db = g.tracker, get_session()
+    refused = _refuse_if_archived(tracker, "entries.list_entries")
+    if refused:
+        return refused
+    entry = db.get(CompletionEntry, entry_id)
+    if entry is None or entry.tracker_id != tracker.id:
+        abort(404)
+    # Active groups, plus the entry's own group when it has since been retired (it may be kept, not chosen).
+    groups = [grp for grp in _ordered_groups(db, tracker) if not grp.retired or grp.id == entry.group_id]
+    if request.method == "GET":
+        form = {
+            "group_id": str(entry.group_id),
+            "entry_date": entry.entry_date.isoformat(),
+            "quantity": str(entry.quantity),
+            "note": entry.note or "",
+        }
+        return _render_edit(tracker, entry, groups, form, [])
+    errors: list[str] = []
+    group = db.get(Group, request.form.get("group_id", type=int) or 0)
+    if group is None or group.tracker_id != tracker.id:
+        errors.append("Choose a group.")
+    elif group.retired and group.id != entry.group_id:
+        errors.append("Entries cannot be moved to a retired group.")
+    new_date = parse_date(request.form.get("entry_date"))
+    week_ending, date_error = check_entry_date(
+        new_date,
+        tracker.week_ending_weekday,
+        tracker.first_week_ending,
+        tracker.last_week_ending,
+        today=date.today(),
+    )
+    if date_error:
+        errors.append(date_error)
+    quantity, quantity_error = parse_quantity(request.form.get("quantity"))
+    if quantity_error:
+        errors.append(quantity_error)
+    if errors:
+        return _render_edit(tracker, entry, groups, request.form, errors, status=400)
+    note = (request.form.get("note") or "").strip()
+    before: dict = {}
+    after: dict = {}
+    for field, old, new in (
+        ("entry_date", entry.entry_date.isoformat(), new_date.isoformat()),
+        ("group_id", entry.group_id, group.id),
+        ("quantity", entry.quantity, quantity),
+        ("note", entry.note or "", note),
+    ):
+        if old != new:
+            before[field], after[field] = old, new
+    if not before:
+        flash("No changes to save.", "info")
+        return redirect(url_for("entries.list_entries", tracker_id=tracker.id))
+    if "group_id" in before:
+        old_group = db.get(Group, entry.group_id)
+        before["group"], after["group"] = (old_group.name if old_group else None), group.name
+    entry.group_id, entry.entry_date, entry.week_ending = group.id, new_date, week_ending
+    entry.quantity, entry.note = quantity, note
+    _audit(db, tracker, "entry_updated", "entry", entry.id, change(before, after))
+    db.commit()
+    flash(f"Updated the entry for {group.name} on {format_date(new_date)}.", "success")
+    return redirect(url_for("entries.list_entries", tracker_id=tracker.id))
 
 
 @bp.post("/trackers/<int:tracker_id>/entries/<int:entry_id>/delete")

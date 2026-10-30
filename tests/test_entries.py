@@ -463,3 +463,195 @@ def test_archived_tracker_refuses_every_post(client, db, tracker_factory, user_f
     assert db.scalars(select(Week)).all() == []
     assert db.scalars(select(ReportInput)).all() == []
     assert db.scalars(select(Risk)).all() == [risk]
+
+
+# --- Correcting an entry in place ----------------------------------------------------------------------------
+
+
+def edit_url(tracker, entry):
+    return f"/trackers/{tracker.id}/entries/{entry.id}/edit"
+
+
+def make_entry(
+    db, tracker, group, entry_date=date(2026, 10, 14), week_ending=date(2026, 10, 16), quantity=12, note="n"
+):
+    entry = CompletionEntry(
+        tracker_id=tracker.id,
+        group_id=group.id,
+        entry_date=entry_date,
+        week_ending=week_ending,
+        quantity=quantity,
+        note=note,
+    )
+    db.add(entry)
+    db.commit()
+    return entry
+
+
+def test_editors_and_owners_can_edit_and_viewers_cannot(
+    client, db, tracker_factory, user_factory, grant, team_factory, add_member
+):
+    from tests.conftest import sign_in
+
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    entry = make_entry(db, tracker, group)
+    assert client.get(edit_url(tracker, entry)).status_code == 200
+    owner = user_factory()
+    grant(owner, tracker, "owner")
+    sign_in(client, owner)
+    assert client.get(edit_url(tracker, entry)).status_code == 200
+    team = team_factory()
+    tracker.team_id = team.id
+    member = user_factory()
+    add_member(team, member, "editor")
+    db.commit()
+    sign_in(client, member)
+    assert client.get(edit_url(tracker, entry)).status_code == 200
+    viewer = user_factory()
+    grant(viewer, tracker, "viewer")
+    sign_in(client, viewer)
+    assert client.get(edit_url(tracker, entry)).status_code == 404
+    assert post(client, edit_url(tracker, entry), entry_form(group, quantity="99")).status_code == 404
+    db.expire_all()
+    assert entry.quantity == 12
+
+
+def test_edit_changes_fields_and_recalculates_the_week(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    other = Group(tracker_id=tracker.id, name="Site B", baseline=10)
+    db.add(other)
+    db.commit()
+    entry = make_entry(db, tracker, group)
+    response = post(client, edit_url(tracker, entry), entry_form(other, "2026-10-20", "7", " moved "))
+    assert response.status_code == 302
+    db.expire_all()
+    assert (entry.group_id, entry.entry_date, entry.week_ending, entry.quantity, entry.note) == (
+        other.id,
+        date(2026, 10, 20),
+        date(2026, 10, 23),
+        7,
+        "moved",
+    )
+
+
+def test_edit_checks_like_a_new_entry(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    entry = make_entry(db, tracker, group)
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    response = post(client, edit_url(tracker, entry), entry_form(group, tomorrow))
+    assert response.status_code == 400 and "The date cannot be after today" in response.get_data(as_text=True)
+    response = post(client, edit_url(tracker, entry), entry_form(group, "2026-01-05"))
+    assert response.status_code == 400 and OUTSIDE in response.get_data(as_text=True)
+    for bad in ("0", "abc"):
+        assert post(client, edit_url(tracker, entry), entry_form(group, quantity=bad)).status_code == 400
+    db.expire_all()
+    assert (entry.entry_date, entry.quantity) == (date(2026, 10, 14), 12)
+    assert db.scalars(select(AuditLog).where(AuditLog.action == "entry_updated")).all() == []
+
+
+def test_a_retired_location_can_be_kept_but_not_chosen(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    other = Group(tracker_id=tracker.id, name="Site B", baseline=10, retired=True)
+    foreign_tracker = tracker_factory(name="Other")
+    foreign = Group(tracker_id=foreign_tracker.id, name="Elsewhere", baseline=1)
+    db.add_all([other, foreign])
+    db.commit()
+    entry = make_entry(db, tracker, group)
+    group.retired = True
+    db.commit()
+    page = client.get(edit_url(tracker, entry)).get_data(as_text=True)
+    assert "Site A (retired)" in page and "Site B" not in page
+    assert post(client, edit_url(tracker, entry), entry_form(group, quantity="13")).status_code == 302
+    response = post(client, edit_url(tracker, entry), entry_form(other))
+    assert response.status_code == 400 and "Entries cannot be moved to a retired group." in response.get_data(
+        as_text=True
+    )
+    response = post(client, edit_url(tracker, entry), entry_form(foreign))
+    assert response.status_code == 400 and "Choose a group." in response.get_data(as_text=True)
+    db.expire_all()
+    assert (entry.group_id, entry.quantity) == (group.id, 13)
+
+
+def test_edit_refused_on_an_archived_tracker(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client, status="archived")
+    entry = make_entry(db, tracker, group)
+    for response in (
+        client.get(edit_url(tracker, entry), follow_redirects=True),
+        post(client, edit_url(tracker, entry), entry_form(group, quantity="99"), follow_redirects=True),
+    ):
+        assert b"This tracker is archived." in response.data
+    db.expire_all()
+    assert entry.quantity == 12
+
+
+def test_edit_logs_one_entry_updated_with_changed_fields_only(client, db, tracker_factory, user_factory, grant):
+    tracker, user, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    entry = make_entry(db, tracker, group, note="")
+    post(client, edit_url(tracker, entry), entry_form(group, quantity="15", note=""))
+    (logged,) = db.scalars(select(AuditLog).where(AuditLog.action == "entry_updated")).all()
+    assert logged.detail == {"before": {"quantity": 12}, "after": {"quantity": 15}} and logged.user_id == user.id
+    assert logged.entity == "entry" and logged.entity_id == str(entry.id) and logged.tracker_id == tracker.id
+
+
+def test_edit_logs_the_location_name_when_it_changes(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    other = Group(tracker_id=tracker.id, name="Site B", baseline=10)
+    db.add(other)
+    db.commit()
+    entry = make_entry(db, tracker, group)
+    post(client, edit_url(tracker, entry), entry_form(other, quantity="12", note="n"))
+    (logged,) = db.scalars(select(AuditLog).where(AuditLog.action == "entry_updated")).all()
+    assert logged.detail == {
+        "before": {"group_id": group.id, "group": "Site A"},
+        "after": {"group_id": other.id, "group": "Site B"},
+    }
+
+
+def test_saving_without_changes_writes_no_entry(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    entry = make_entry(db, tracker, group)
+    response = post(client, edit_url(tracker, entry), entry_form(group, quantity="12", note="n"), follow_redirects=True)
+    assert b"No changes to save." in response.data
+    assert db.scalars(select(AuditLog).where(AuditLog.action == "entry_updated")).all() == []
+
+
+def test_report_figures_follow_the_corrected_entry(client, db, tracker_factory, user_factory, grant):
+    from tracker.report.build import compute_position
+
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    entry = make_entry(db, tracker, group)
+    args = (db, tracker, date(2026, 10, 16), date(2026, 10, 30))
+    before = compute_position(*args).headline.completed
+    post(client, edit_url(tracker, entry), entry_form(group, quantity="15", note="n"))
+    db.expire_all()
+    assert compute_position(*args).headline.completed == before + 3
+
+
+def test_editing_a_deleted_or_foreign_entry_is_404(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    entry = make_entry(db, tracker, group)
+    foreign_tracker = tracker_factory(name="Other")
+    foreign_group = Group(tracker_id=foreign_tracker.id, name="Elsewhere", baseline=1)
+    db.add(foreign_group)
+    db.commit()
+    foreign = make_entry(db, foreign_tracker, foreign_group)
+    assert client.get(edit_url(tracker, foreign)).status_code == 404
+    assert post(client, edit_url(tracker, foreign), entry_form(group)).status_code == 404
+    url = edit_url(tracker, entry)
+    db.delete(entry)
+    db.commit()
+    assert client.get(url).status_code == 404
+    assert post(client, url, entry_form(group, quantity="99")).status_code == 404
+    assert db.scalars(select(AuditLog).where(AuditLog.action == "entry_updated")).all() == []
+
+
+def test_entries_page_offers_edit_and_drops_the_delete_and_record_note(
+    client, db, tracker_factory, user_factory, grant
+):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    entry = make_entry(db, tracker, group)
+    page = client.get(entry_url(tracker)).get_data(as_text=True)
+    assert f'href="{edit_url(tracker, entry)}"' in page
+    assert "Edit 12 for Site A on" in page
+    assert "delete it and record it again" not in page
+    assert "Use Edit to correct an entry; delete only entries recorded by mistake." in page
