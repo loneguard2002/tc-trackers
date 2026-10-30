@@ -30,7 +30,9 @@ def test_parse_retention_accepts(value, expected):
     assert parse_retention(value) == expected
 
 
-@pytest.mark.parametrize("value", ["89", "0", "90.5", "3651", "abc", "-90"])
+@pytest.mark.parametrize(
+    "value", ["89", "0", "90.5", "3651", "abc", "-90", "9,0", "3 6 5", "3,65", "36,50", ",365", "365,", "9" * 5000]
+)
 def test_parse_retention_refuses(value):
     assert parse_retention(value) == (None, RETENTION_ERROR)
 
@@ -72,13 +74,15 @@ def test_retention_set_and_cleared_are_logged(client, logged_in_admin, db):
 
 def test_unchanged_retention_writes_no_entry(client, logged_in_admin, db):
     post(client, URL, {"retention_days": "3,650"})
-    post(client, URL, {"retention_days": "3650"})
+    response = post(client, URL, {"retention_days": "3650"}, follow_redirects=True)
     assert len(entries(db, "audit_retention_changed")) == 1
+    assert '<p class="flash flash-info" role="status">No changes to save.</p>' in response.get_data(as_text=True)
 
 
 def test_invalid_retention_is_refused_with_message(client, logged_in_admin, db):
     response = post(client, URL, {"retention_days": "89"}, follow_redirects=True)
     assert html.unescape(response.get_data(as_text=True)).count(RETENTION_ERROR) == 1
+    assert 'class="flash flash-danger"' in response.get_data(as_text=True)  # the styled category, not "error"
     assert retention_days(db) is None
     assert entries(db, "audit_retention_changed") == []
 
