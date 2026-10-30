@@ -58,7 +58,7 @@
   - `PermissionSetHolder`: `permission_set_holders` (`id`; `set_id` FK cascade not null; `team_id` FK `teams.id` cascade nullable; `user_id` FK `users.id` cascade nullable; `CheckConstraint("num_nonnulls(team_id, user_id) = 1", name="one_holder")`; partial unique indexes `uq_permission_set_holders_set_team` on `(set_id, team_id) WHERE team_id IS NOT NULL` and `uq_permission_set_holders_set_user` on `(set_id, user_id) WHERE user_id IS NOT NULL`).
   - `AuditLog.target_user_id: Mapped[int | None]` FK `users.id` `ondelete="SET NULL"`; indexes `ix_audit_log_at`, `ix_audit_log_target_user_id`, `ix_audit_log_action`.
 - Produces (audit): `record(session, *, user_id, tracker_id, action, entity, entity_id, detail=None, target_user_id: int | None = None) -> None` and `change(before, after) -> dict` returning `{"before": before, "after": after}` in `tracker/audit.py`.
-- Produces (test fixtures in `tests/conftest.py`): `alembic_config() -> Config` (used by `_db_engine` too); `team_factory(name: str | None = None, parent: Team | None = None, **kw) -> Team`; `add_member(team: Team, user: User, role: str) -> None`; `give_set(permissions: list[str], *, team: Team | None = None, user: User | None = None, name: str | None = None) -> PermissionSet` (creates the set, its permissions and one holder, commits).
+- Produces (test fixtures in `tests/conftest.py`): `alembic_config() -> Config` (used by `_db_engine` too); `team_factory(name: str | None = None, parent: Team | None = None, **kw) -> Team` (default names are unique, `Team 1`, `Team 2`, …, because of `uq_teams_name_lower`); `add_member(team: Team, user: User, role: str) -> None`; `give_set(permissions: list[str], *, team: Team | None = None, user: User | None = None, name: str | None = None) -> PermissionSet` (creates the set, its permissions and one holder, commits; default names are unique, `Set 1`, `Set 2`, …).
 
 - [ ] **Step 1: Write the failing model tests in `tests/test_models.py`**
 
@@ -103,7 +103,7 @@ assert re.search(r"UPDATE audit_log SET target_user_id = users\.id FROM users\s+
                  r"AND audit_log\.entity_id = users\.id::text", sql)
 ```
 
-Create `tests/test_migration_0003.py` with one test, `test_upgrade_keeps_visible_trackers_and_backfills_affected_users(db)`. It uses a fixture `at_revision_0002(db)` that runs `command.downgrade(alembic_config(), "0002")` and, in `finally`, `command.upgrade(alembic_config(), "head")` (the fixture depends on `db`, so it tears down before the truncation). In the 0002 schema, insert with raw SQL: an active administrator, an active user with a `viewer` row on tracker A, an active user with no rows, a pending user with an `owner` row on tracker B, two trackers, and three audit rows (`entity='user'` with an existing user's id, `entity='user'` with id `'9999'`, `entity='tracker'`). Record each active user's visible tracker ids with the old rule (administrator: every tracker; anyone else: their `tracker_roles` rows). Upgrade, then:
+Create `tests/test_migration_0003.py` with one test, `test_upgrade_keeps_visible_trackers_and_backfills_affected_users(db)`. It uses a fixture `at_revision_0002(db)` that runs `command.downgrade(alembic_config(), "0002")` and, in `finally`, calls `db.rollback()` and then `command.upgrade(alembic_config(), "head")` (the fixture depends on `db`, so it tears down before the truncation; the rollback releases any row locks the test still holds, so the `ALTER TABLE` cannot wait on the test's own transaction). In the 0002 schema, insert with raw SQL (`db.execute(text(...))`) and `db.commit()` before upgrading: an active administrator, an active user with a `viewer` row on tracker A, an active user with no rows, a pending user with an `owner` row on tracker B, two trackers, and three audit rows (`entity='user'` with an existing user's id, `entity='user'` with id `'9999'`, `entity='tracker'`). Record each active user's visible tracker ids with the old rule in raw SQL too (the ORM `Tracker` already maps `team_id`, which does not exist at 0002): administrator, every tracker; anyone else, their `tracker_roles` rows. Call `db.commit()` so no transaction is open, then upgrade, then:
 
 ```python
 for user_id, before in old_visible.items():
@@ -157,6 +157,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `tracker/auth/roles.py`
+- Modify: `tracker/auth/__init__.py` (re-export `tracker_roles`)
 - Modify: `tracker/trackers/views.py` (`home` reads every card's role from one call)
 - Test: `tests/test_roles.py`
 
@@ -168,6 +169,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `user_role(session, user: User, tracker_id: int) -> str | None` (same rules, one tracker).
   - `visible_trackers(session, user: User) -> list[Tracker]`, ordered by name then id, one SQL statement.
   - `require_tracker_role(min_role)` unchanged in behaviour.
+  - `tracker_roles` is re-exported from `tracker.auth` (with `user_role` and `visible_trackers`).
 
 The grants query (built with SQLAlchemy Core, `select(...).cte(recursive=True)` and a `case()` for the rank). `UNION` (not `UNION ALL`) in the recursive part guarantees the walk ends even if a cycle ever reached the table:
 
@@ -240,7 +242,7 @@ Expected: PASS.
 Run the lint command from Global Constraints.
 
 ```bash
-git add tracker/auth/roles.py tracker/trackers/views.py tests/test_roles.py
+git add tracker/auth/roles.py tracker/auth/__init__.py tracker/trackers/views.py tests/test_roles.py
 git -c user.name="Alex Krovina" -c user.email="alex.krovina@tradition.ch" commit -m "feat: tracker roles flow down the team tree in one recursive query
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -296,17 +298,19 @@ def test_new_tracker_button_follows_create_trackers(client, logged_in_user, give
 Add a helper `render_sidebar(app, is_admin: bool, held: set[str]) -> str` that renders `base.html` inside `app.test_request_context("/")` with `current_user=SimpleNamespace(id=1, full_name="Pat", is_admin=is_admin)` and `can=lambda p: is_admin or p in held` (explicit render arguments override the context processor).
 
 ```python
-LINKS = {"manage_users": None, "import_workbooks": 'href="/import"', "manage_email_settings": 'href="/admin/smtp"'}
+# Permission -> sidebar link. Tasks 5, 9 and 11 add a row each; nothing else in the tests below changes.
+LINKS = {"import_workbooks": 'href="/import"', "manage_email_settings": 'href="/admin/smtp"'}
 
 @pytest.mark.parametrize("held", [set(), {"import_workbooks"}, {"manage_email_settings"},
                                   {"import_workbooks", "manage_email_settings"}, {"view_all_trackers"}])
 def test_sidebar_shows_only_the_links_held(app, held):
     html = render_sidebar(app, is_admin=False, held=held)
     for permission, link in LINKS.items():
-        if link:
-            assert (link in html) == (permission in held)
-    assert 'href="/admin/users"' not in html            # Users stays administrator-only until Task 9
-    assert ("Administration" in html) == bool(held & {"import_workbooks", "manage_email_settings"})
+        assert (link in html) == (permission in held)
+    assert ("Administration" in html) == bool(held & set(LINKS))
+
+def test_users_link_stays_administrator_only_for_now(app):   # deleted in Task 9
+    assert 'href="/admin/users"' not in render_sidebar(app, is_admin=False, held={"manage_users"})
 
 def test_sidebar_shows_every_link_to_administrators(app): ...
 ```
@@ -424,6 +428,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `tracker/teams/__init__.py` (blueprint `teams`), Create: `tracker/teams/views.py`
+- Modify: `tracker/auth/guards.py` (`TEAM_WITH_SETS_MESSAGE`, `team_holds_sets`)
+- Create: `tracker/naming.py` (the name and description checks shared with Task 8)
 - Create: `tracker/templates/teams/index.html`, `tracker/templates/teams/team.html`
 - Modify: `tracker/app.py` (register), `tracker/templates/base.html` (Teams link), `tracker/templates/macros.html` (icon `teams`), `tracker/static/tracker.css` (tree list), `tracker/static/tracker.js` (confirmation names the choice)
 - Test: `tests/test_teams.py` (new), `tests/test_teams_browser.py` (new), `tests/test_templates.py`
@@ -436,10 +442,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `teams.view` `GET /admin/teams/<int:team_id>`: rename form, move form (parent select offering only teams outside `descendants(...)`, plus "Top level"), delete (shown only when allowed), members table (role select, remove), add-member form (active users who are not members), and the team's trackers by name (archived marked).
   - `teams.rename` `POST /admin/teams/<int:team_id>/rename` (name, description): logs `team_renamed` with `change({changed fields before}, {changed fields after})`; no entry when nothing changed.
   - `teams.move` `POST /admin/teams/<int:team_id>/move` (`parent_id`, empty for top level): locks the tree (`load_team_rows(db, lock=True)`), refuses a parent in `descendants(rows, team.id)` with `CYCLE_MESSAGE = "A team cannot be moved under itself or under a team below it."`, applies the self-promotion guard, logs `team_moved` with `change(<old parent path or None>, <new parent path or None>)`. A non-numeric `parent_id` gives 400.
-  - `teams.delete` `POST /admin/teams/<int:team_id>/delete`: refused with `"This team has teams below it. Move or delete them first."` or `"This team has trackers, including archived ones. Move them to another team first."`; otherwise logs `team_member_removed` for each membership (with `target_user_id`), `permission_set_holder_removed` for each holding (`{"set": name, "team": team name}`), then `team_deleted` (`{"name": …, "parent": …}`), then deletes.
-  - `teams.add_member` `POST /admin/teams/<int:team_id>/members` (`user_id`, `role`): active users only (400 otherwise); an existing member gives `"That person is already a member of this team."`; logs `team_member_added` with `{"team": name, "role": role}` and `target_user_id`. A non-administrator adding anyone to a team that holds a permission set is refused with `TEAM_WITH_SETS_MESSAGE` (adding a member chooses who holds the set, which section 6.2 keeps for administrators). Add to `tracker/auth/guards.py`: `TEAM_WITH_SETS_MESSAGE = "This team holds permission sets, so only an administrator can add people to it."` and `team_holds_sets(session, team_id: int) -> bool`.
-  - `teams.update_member` `POST /admin/teams/<int:team_id>/members/<int:user_id>` (`role`, or `action=remove`): logs `team_member_role_changed` with `{"team": name, "before": old, "after": new}` or `team_member_removed` with `{"team": name, "role": old}`, each with `target_user_id`. A user who is not a member gives 404.
-  - Self-promotion guard on move, add and role change; `team_name_error(session, name: str, exclude_id: int | None = None) -> str | None` in `tracker/teams/views.py` gives `"Enter a team name."`, `"A team name can be at most 100 characters."` or `"A team with that name already exists."` (compares `func.lower(Team.name) == name.lower()` after trimming; an `IntegrityError` on commit is turned into the same message).
+  - `teams.delete` `POST /admin/teams/<int:team_id>/delete`: refused with `"This team has teams below it. Move or delete them first."` or `"This team has trackers, including archived ones. Move them to another team first."`; otherwise logs `team_member_removed` for each membership (with `target_user_id`), `permission_set_holder_removed` for each holding (`{"set": name, "team": <team path>}`, the same shape as Task 8), then `team_deleted` (`{"name": …, "parent": …}`), then deletes.
+  - `teams.add_member` `POST /admin/teams/<int:team_id>/members` (`user_id`, `role`): active users only (400 otherwise); an existing member gives `"That person is already a member of this team."`; logs `team_member_added` with `{"team": <team path>, "role": role}` and `target_user_id` (the same shape as the approval step in Task 9). A non-administrator adding anyone to a team that holds a permission set is refused with `TEAM_WITH_SETS_MESSAGE` (adding a member chooses who holds the set, which section 6.2 keeps for administrators). Add to `tracker/auth/guards.py`: `TEAM_WITH_SETS_MESSAGE = "This team holds permission sets, so only an administrator can add people to it."` and `team_holds_sets(session, team_id: int) -> bool`.
+  - `teams.update_member` `POST /admin/teams/<int:team_id>/members/<int:user_id>` (`role`, or `action=remove`): logs `team_member_role_changed` with `{"team": <team path>, "before": old, "after": new}` or `team_member_removed` with `{"team": <team path>, "role": old}`, each with `target_user_id`. Every `team_member_*` and `permission_set_holder_*` entry names a team by its path (`paths(...)`), never its bare name. A user who is not a member gives 404.
+  - Self-promotion guard on move, add and role change.
+  - In `tracker/naming.py`, used for teams here and for permission sets in Task 8: `name_error(session, model: type[Team] | type[PermissionSet], name: str, noun: str, exclude_id: int | None = None) -> str | None` gives `"Enter a {noun} name."`, `"A {noun} name can be at most 100 characters."` or `"A {noun} with that name already exists."` (expects the trimmed name; compares `func.lower(model.name) == name.lower()`); `description_error(description: str) -> str | None` gives `"A description can be at most 500 characters."`. Teams call them with `noun="team"`. An `IntegrityError` on commit is turned into the "already exists" message.
   - `tracker.js`: inside a `form[data-inline-confirm]`, when `[data-ask]` opens the box, every `[data-confirm-choice]` element gets the text of the selected option of the form's `select[data-confirm-source]`. The team move confirmation reads "Move {team} from {old parent or Top level} to {choice}? People in the teams above it will gain or lose access to its trackers." and the `data-confirm` fallback reads "Move {team} to the chosen place? Access to its trackers will change."
   - Sidebar: Teams link (`href="/admin/teams"`) when `can('manage_teams')`.
 
@@ -460,6 +467,7 @@ def test_team_name_unique_ignoring_case_and_spaces(client, logged_in_admin, team
     assert page.status_code == 400 and "A team with that name already exists." in page.get_data(as_text=True)
     assert db.scalar(select(func.count()).select_from(Team)) == 1
 def test_team_name_required_and_at_most_100_characters(...)   # "" and "x" * 101 -> 400, nothing stored
+def test_team_description_at_most_500_characters(...)         # "x" * 501 -> 400 "A description can be at most 500 characters."; on create and on rename
 def test_rename_logs_before_and_after(...)
 def test_move_form_offers_only_valid_parents(...)            # options exclude the team and every team below it
 def test_move_under_itself_or_below_refused_on_the_server(...)   # CYCLE_MESSAGE shown; parent unchanged; no team_moved
@@ -479,7 +487,7 @@ def test_non_admin_cannot_add_members_to_a_team_holding_a_set(...)   # TEAM_WITH
 def test_team_page_names_trackers_the_holder_cannot_open(...)        # name shown; GET /trackers/<id> still 404
 ```
 
-Extend the sidebar test in `tests/test_templates.py` so `manage_teams` maps to `'href="/admin/teams"'`.
+In `tests/test_templates.py`, add `"manage_teams": 'href="/admin/teams"'` to `LINKS` and `{"manage_teams"}` to the parametrised `held` sets; the Administration check needs no change.
 
 - [ ] **Step 2: Write the failing browser test in `tests/test_teams_browser.py`**
 
@@ -504,7 +512,7 @@ Expected: PASS.
 Run the lint command from Global Constraints.
 
 ```bash
-git add tracker/teams tracker/templates/teams tracker/app.py tracker/templates/base.html tracker/templates/macros.html tracker/static/tracker.css tracker/static/tracker.js tests/test_teams.py tests/test_teams_browser.py tests/test_templates.py
+git add tracker/teams tracker/auth/guards.py tracker/naming.py tracker/templates/teams tracker/app.py tracker/templates/base.html tracker/templates/macros.html tracker/static/tracker.css tracker/static/tracker.js tests/test_teams.py tests/test_teams_browser.py tests/test_templates.py
 git -c user.name="Alex Krovina" -c user.email="alex.krovina@tradition.ch" commit -m "feat: Teams screens with nested teams, members, confirmed moves and delete guards
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -515,25 +523,27 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 6: A tracker's team, and the creator becomes owner
 
 **Files:**
-- Modify: `tracker/trackers/views.py` (`new`, new route `set_team`, `home` card team name, `give_creator_ownership`)
+- Modify: `tracker/auth/roles.py` (`give_creator_ownership`, the one place that gives a creator the owner role)
+- Modify: `tracker/trackers/views.py` (`new`, new route `set_team`, `home` card team name)
 - Create: `tracker/templates/trackers/_team_form.html`
-- Modify: `tracker/templates/trackers/_fields.html` (Team select on the new tracker form only), `tracker/templates/trackers/settings.html` (Team section and subnav link), `tracker/templates/home.html`
+- Modify: `tracker/templates/trackers/_fields.html` (Team select on the new tracker form only), `tracker/templates/trackers/settings.html` (Team section and subnav link, both only for administrators and `manage_teams` holders), `tracker/templates/home.html`
 - Modify: `tracker/importer/views.py`, `tracker/importer/workbook.py`, `tracker/templates/importer/confirm.html`
-- Test: `tests/test_tracker_teams.py` (new), `tests/test_trackers.py` (one existing test changes)
+- Test: `tests/test_tracker_teams.py` (new), `tests/test_trackers.py` and `tests/importer/test_workbook.py` (one existing test changes in each). `tests/test_settings_browser.py` stays unchanged: an owner without `manage_teams` still sees exactly four section links.
 
 **Interfaces:**
 - Consumes: `team_choices`, `parse_team_id`, `paths`, `load_team_rows` (Task 4); guard functions (Task 4); `has_permission`, `can` (Task 3); `record`, `change` (Task 1).
 - Produces:
-  - `give_creator_ownership(session, tracker: Tracker, actor: User) -> None` in `tracker/trackers/views.py`: for a non-administrator, adds `TrackerRole(owner)` and logs `role_set` with `change(None, "owner")` and `target_user_id=actor.id`; for an administrator, does nothing (an administrator needs no role and gets none).
-  - `create_tracker_from_preview(session, preview, name, unit_label, group_label, user_id, accept_mismatch, team_id: int | None = None, owner_role: bool = True) -> Tracker`: sets `team_id`; adds the owner role (and its `role_set` entry) only when `owner_role`. The web import passes `owner_role=not current_user().is_admin`; the `import-workbook` command keeps the default.
+  - `give_creator_ownership(session, tracker: Tracker, actor: User) -> None` in `tracker/auth/roles.py`: for a non-administrator, adds `TrackerRole(owner)` and logs `role_set` with `change(None, "owner")` and `target_user_id=actor.id`; for an administrator, does nothing (an administrator needs no role and gets none). It is the only code that gives a creator the owner role: `trackers.new` and `create_tracker_from_preview` both call it, and neither checks `is_admin` itself.
+  - `create_tracker_from_preview(session, preview, name, unit_label, group_label, user_id, accept_mismatch, team_id: int | None = None) -> Tracker`: sets `team_id`; replaces its own `TrackerRole` line with `give_creator_ownership(session, tracker, session.get(User, user_id))`. This covers the web import and the `import-workbook` command alike, so an administrator named as owner by the command also gets no direct role.
   - `trackers.set_team` `POST /trackers/<int:tracker_id>/team` (`team_id`, empty for no team; `next` = `settings` or `access`): `permission_required("manage_teams")`; 404 for a missing tracker; allowed on archived trackers; no entry when the team is unchanged; self-promotion guard; logs `tracker_team_changed` with `change(<old team path or None>, <new team path or None>)`.
+  - Settings: the Team section and its subnav link appear only when `can('manage_teams')` (administrators included), like the Archive section; other owners see neither and find the team on the home card.
   - `trackers/_team_form.html`: expects `tracker`, `team_choices`, `team_path` (current path or `None`) and `next`; select `name="team_id"` with `data-confirm-source`; in-page confirmation "Move {tracker} from {old team or No team} to {choice}? People's access to this tracker will change."; fallback `data-confirm="Move {tracker} to the chosen team? People's access to this tracker will change."`.
   - Home cards carry `card["team"]` (the team's name or `None`), shown on the card.
   - `tracker_created` detail gains `"team"` (path or `None`).
 
 - [ ] **Step 1: Write the failing tests in `tests/test_tracker_teams.py` and change the existing one**
 
-In `tests/test_trackers.py`, rename `test_admin_creates_tracker_and_becomes_owner` to `test_admin_creates_tracker_without_a_role` and assert `db.get(TrackerRole, (logged_in_admin.id, tracker.id)) is None`.
+In `tests/test_trackers.py`, rename `test_admin_creates_tracker_and_becomes_owner` to `test_admin_creates_tracker_without_a_role` and assert `db.get(TrackerRole, (logged_in_admin.id, tracker.id)) is None`. In `tests/importer/test_workbook.py`, the import test that asserts `db.get(TrackerRole, (admin.id, tracker.id)).role == "owner"` now asserts `is None`, and a new `test_import_by_a_non_administrator_gives_an_owner_role` asserts the role and one `role_set` entry with `{"before": None, "after": "owner"}`.
 
 ```python
 def test_creator_without_admin_becomes_owner_and_it_is_logged(client, logged_in_user, give_set, db):
@@ -551,13 +561,13 @@ def test_set_team_requires_manage_teams(...)                # owner without the 
 def test_set_team_logs_before_and_after_and_works_when_archived(...)  # change("Infrastructure › Windows", "Network")
 def test_set_team_to_the_same_team_writes_nothing(...)
 def test_holder_cannot_move_a_tracker_into_their_own_team(...)   # SELF_PROMOTION_MESSAGE; team unchanged
-def test_settings_team_form_only_for_team_managers(...)     # owner sees the team name read-only; holder or admin sees the form
+def test_settings_team_section_only_for_team_managers(...)  # owner: no Team section, no "#team" subnav link; holder or admin: both
 def test_home_card_shows_the_team_name(...)
 ```
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run (sandbox disabled): `/tmp/claude-1000/-home-alexkrovina/cf13b4e4-1890-473a-b9dc-06d0fca97d35/scratchpad/tools/acc-test.sh tests/test_tracker_teams.py tests/test_trackers.py -q`
+Run (sandbox disabled): `/tmp/claude-1000/-home-alexkrovina/cf13b4e4-1890-473a-b9dc-06d0fca97d35/scratchpad/tools/acc-test.sh tests/test_tracker_teams.py tests/test_trackers.py tests/importer/test_workbook.py -q`
 Expected: FAIL.
 
 - [ ] **Step 3: Implement**
@@ -574,7 +584,7 @@ Expected: PASS.
 Run the lint command from Global Constraints.
 
 ```bash
-git add tracker/trackers/views.py tracker/templates/trackers tracker/templates/home.html tracker/importer tracker/templates/importer/confirm.html tests/test_tracker_teams.py tests/test_trackers.py
+git add tracker/auth/roles.py tracker/trackers/views.py tracker/templates/trackers tracker/templates/home.html tracker/importer tracker/templates/importer/confirm.html tests/test_tracker_teams.py tests/test_trackers.py tests/importer/test_workbook.py
 git -c user.name="Alex Krovina" -c user.email="alex.krovina@tradition.ch" commit -m "feat: trackers belong to a team, chosen at creation and moved with confirmation
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -654,7 +664,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Test: `tests/test_permission_sets.py` (new), `tests/test_templates.py`
 
 **Interfaces:**
-- Consumes: `PERMISSIONS`, `user_permissions` (Task 3); `admin_required`; `paths`, `load_team_rows` (Task 4); `record`, `change` (Task 1).
+- Consumes: `PERMISSIONS`, `user_permissions` (Task 3); `admin_required`; `paths`, `load_team_rows` (Task 4); `name_error`, `description_error` from `tracker/naming.py` (Task 5); `record`, `change` (Task 1).
 - Produces (all `admin_required`, prefix `/admin/permission-sets`):
   - `permsets.index` `GET /admin/permission-sets`: the grid (`.section-table`, permissions as rows with their labels and descriptions, sets as columns, one checkbox per cell named `set-<set id>` with the permission name as value, plus a hidden `sets` field per column) and the create form.
   - `permsets.save_grid` `POST /admin/permission-sets/grid`: for each set id listed in `sets` that still exists, replaces its permissions with the checked known names; logs `permission_set_permissions_changed` with `change(sorted before, sorted after)` per changed set only. Unknown names and unknown set ids are ignored.
@@ -662,9 +672,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `permsets.view` `GET /admin/permission-sets/<int:set_id>`: rename, delete, holders (teams with their paths, users with name and email), add-holder form.
   - `permsets.rename` `POST /admin/permission-sets/<int:set_id>/rename`: logs `permission_set_renamed` with `change(...)` of the changed fields.
   - `permsets.delete` `POST /admin/permission-sets/<int:set_id>/delete`: logs `permission_set_holder_removed` for each holder, then `permission_set_deleted` (`{"name": …, "permissions": [...]}`), then deletes.
-  - `permsets.add_holder` `POST /admin/permission-sets/<int:set_id>/holders` (`holder` = `team:<id>` or `user:<id>`; active users only): `"That team or person already holds this set."` for a duplicate; logs `permission_set_holder_added` with `{"set": name, "team": path}` or `{"set": name}` and `target_user_id`.
+  - `permsets.add_holder` `POST /admin/permission-sets/<int:set_id>/holders` (`holder` = `team:<id>` or `user:<id>`; active users only): `"That team or person already holds this set."` for a duplicate; logs `permission_set_holder_added` with `{"set": name, "team": <team path>}` or `{"set": name}` and `target_user_id`.
   - `permsets.remove_holder` `POST /admin/permission-sets/<int:set_id>/holders/<int:holder_id>/delete`: logs `permission_set_holder_removed` likewise; 404 when the holder belongs to another set.
-  - `set_name_error(session, name: str, exclude_id: int | None = None) -> str | None`: `"Enter a set name."`, `"A set name can be at most 100 characters."`, `"A permission set with that name already exists."`.
+  - Names and descriptions are checked with `name_error(session, PermissionSet, name, "permission set", exclude_id)` and `description_error(...)` from Task 5 (no second validator): `"Enter a permission set name."`, `"A permission set name can be at most 100 characters."`, `"A permission set with that name already exists."`, `"A description can be at most 500 characters."`.
+  - Holder entries name a team by its path, as in Task 5: `{"set": name, "team": <team path>}`.
   - Sidebar: "Permission sets" (`href="/admin/permission-sets"`) for administrators only.
 
 - [ ] **Step 1: Write the failing tests in `tests/test_permission_sets.py`**
@@ -681,7 +692,7 @@ def test_non_administrators_are_refused_even_with_every_permission(client, logge
     assert (client.get(target) if method == "get" else post(client, target)).status_code == 403
 
 def test_create_set_logs_and_names_are_unique_ignoring_case_and_spaces(...)   # " pmo " after "PMO" -> 400, message
-def test_set_name_at_most_100_characters(...)
+def test_set_name_at_most_100_characters_and_description_at_most_500(...)   # "x" * 101 name, "x" * 501 description -> 400, nothing stored
 def test_grid_saves_every_set_in_one_action_and_logs_each_changed_set(...):
     # two sets; change one -> one entry with {"before": ["view_activity"], "after": ["create_trackers", "view_activity"]}
 def test_grid_ignores_unknown_permissions_and_sets(...)        # "approve" and set id 9999 -> nothing stored, 302
@@ -692,7 +703,7 @@ def test_duplicate_holder_refused(...)
 def test_removing_a_holder_takes_the_permission_away(...)       # user_permissions(...) before and after
 ```
 
-Extend the sidebar test in `tests/test_templates.py`: `href="/admin/permission-sets"` only for administrators.
+In `tests/test_templates.py`, add `test_permission_sets_link_only_for_administrators`: `href="/admin/permission-sets"` is absent for every parametrised `held` set (including all of `PERMISSIONS`) and present for an administrator. `LINKS` is not changed (no permission opens the screen).
 
 - [ ] **Step 2: Run them to verify they fail**
 
@@ -729,7 +740,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `tracker/auth/roles.py` (`tracker_access_routes`), `tracker/auth/permissions.py` (`permission_sources`)
 - Modify: `tracker/templates/admin/users.html`, `tracker/templates/base.html`; Create: `tracker/templates/admin/user_password.html`, `tracker/templates/admin/user_access.html`
 - Modify: `tracker/app.py` (`create-admin` and `reset-password` set `target_user_id`)
-- Test: `tests/test_users_admin.py` (new), `tests/test_auth.py`, `tests/test_cli.py`, `tests/test_templates.py`
+- Test: `tests/test_users_admin.py` (new), `tests/test_cli.py`, `tests/test_templates.py`, and `tests/test_auth.py`, where `test_admin_approves_pending_user` also asserts `row.target_user_id == pending.id` and `row.detail == {"before": "pending", "after": "active"}`, and `test_admin_grants_and_revokes_admin_but_not_self` asserts the two `user_admin_changed` entries carry `{"before": False, "after": True}` then `{"before": True, "after": False}` and `target_user_id == other.id`.
 
 **Interfaces:**
 - Consumes: `permission_required`, `has_permission`, `can`, `PERMISSIONS` (Task 3); `tracker_roles` (Task 2); `team_choices`, `parse_team_id`, `paths`, `load_team_rows` (Task 4); guard functions, `TEAM_WITH_SETS_MESSAGE` and `team_holds_sets` from `tracker/auth/guards.py` (Tasks 4 and 5); `validate_new_password`, `hash_password`.
@@ -742,8 +753,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces (in `tracker/auth/permissions.py`): `permission_sources(session, user: User) -> dict[str, list[str]]`, with texts `"Administrator"`, `"Set PMO, held directly"`, `"Set PMO, held by team PMO Office"`.
 - Routes (`permission_required("manage_users")` unless stated; each refusal flashes the message, changes nothing and redirects to `admin.users`):
   - `admin.users`, `admin.new_user`, `admin.create_user`: as today; rows show teams (name and role) and permission sets (direct and through teams), a link to Effective access, and only the actions the viewer may take; "Re-enable" now posts to `admin.enable`.
-  - `admin.approve` `POST /admin/users/<id>/approve`: pending users only (400 otherwise); `account_refusal`; optional `team_id` and `team_role`: accepted only when `has_permission(actor, "manage_teams")` (403 otherwise, user stays pending), refused with `TEAM_WITH_SETS_MESSAGE` for a non-administrator when the team holds a set, `parse_team_id` errors give 400 and the user stays pending; logs `user_approved` with `change("pending", "active")` and, when placed, `team_member_added` (`{"team": path, "role": role}`), both with `target_user_id`.
-  - `admin.enable` `POST /admin/users/<id>/enable`: disabled users only (400 otherwise); `account_refusal`; logs `user_enabled` with `target_user_id`.
+  - Order in every route that acts on a user: `account_refusal` first, then the status check, so refusals on one's own or an elevated account always give their message.
+  - `admin.approve` `POST /admin/users/<id>/approve`: `account_refusal`; then pending users only (400 otherwise); optional `team_id` and `team_role`: accepted only when `has_permission(actor, "manage_teams")` (403 otherwise, user stays pending), refused with `TEAM_WITH_SETS_MESSAGE` for a non-administrator when the team holds a set, `parse_team_id` errors give 400 and the user stays pending; logs `user_approved` with `change("pending", "active")` and, when placed, `team_member_added` (`{"team": <team path>, "role": role}`, the shape of Task 5), both with `target_user_id`. The self-promotion rule of spec 6.3 needs no separate call here: the person approved is never the actor (`account_refusal` refuses one's own account), so the actor's own access cannot change.
+  - `admin.enable` `POST /admin/users/<id>/enable`: `account_refusal`; then disabled users only (400 otherwise); logs `user_enabled` with `change("disabled", "active")` and `target_user_id`.
   - `admin.disable`: adds `account_refusal` and `last_admin_refusal`; logs `user_disabled` with `target_user_id`.
   - `admin.password` `GET/POST /admin/users/<id>/password` (`password`): local accounts only (`"This person signs in with Microsoft and has no password here."`); `account_refusal`; `validate_new_password`; logs `password_reset` with `{"source": "web"}` and `target_user_id`, never the password or hash.
   - `admin.set_admin`: stays `admin_required`; adds `last_admin_refusal` when removing; logs `user_admin_changed` with `change(old, new)` and `target_user_id`.
@@ -796,7 +808,7 @@ def test_effective_access_hides_names_the_holder_cannot_open(...)     # "and 1 t
 def test_effective_access_refused_without_manage_users(...)
 ```
 
-In `tests/test_cli.py`, extend the `create-admin` and `reset-password` tests to assert `row.target_user_id == user.id`. Extend the sidebar test in `tests/test_templates.py`: `manage_users` maps to `'href="/admin/users"'`.
+In `tests/test_cli.py`, extend the `create-admin` and `reset-password` tests to assert `row.target_user_id == user.id`. In `tests/test_templates.py`, add `"manage_users": 'href="/admin/users"'` to `LINKS`, add `{"manage_users"}` to the parametrised `held` sets, and delete `test_users_link_stays_administrator_only_for_now`.
 
 - [ ] **Step 3: Run them to verify they fail**
 
@@ -908,11 +920,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `ACTION_LABELS: dict[str, str]`, a readable label for exactly these actions: `login`, `sso_login`, `sso_linked`, `login_failed`, `user_created`, `user_approved`, `user_disabled`, `user_enabled`, `password_reset`, `user_admin_changed`, `user_name_synced`, `team_created`, `team_renamed`, `team_moved`, `team_deleted`, `team_member_added`, `team_member_role_changed`, `team_member_removed`, `tracker_created`, `tracker_imported`, `tracker_archived`, `settings_updated`, `tracker_team_changed`, `role_set`, `role_removed`, `group_created`, `group_updated`, `group_deleted`, `group_retired`, `group_unretired`, `group_reordered`, `baseline_changed`, `entry_created`, `entry_updated`, `entry_deleted`, `targets_updated`, `inputs_saved`, `risk_created`, `risk_updated`, `risk_deleted`, `recipient_added`, `recipient_removed`, `email_template_saved`, `email_template_reset`, `report_sent`, `report_send_queued`, `report_send_failed`, `report_test_sent`, `permission_set_created`, `permission_set_renamed`, `permission_set_deleted`, `permission_set_permissions_changed`, `permission_set_holder_added`, `permission_set_holder_removed`, `smtp_settings_updated`, `audit_retention_changed`, `audit_pruned`. (Labels are sentence case, for example "Failed sign-in", "Team member role changed".)
   - `action_label(action: str) -> str`: the label, or the stored action name when unknown.
   - `DetailLine(NamedTuple)`: `field: str`, `before: str | None`, `after: str | None`, `value: str | None`.
-  - `describe(detail: dict | None) -> list[DetailLine]`: `None` gives `[]`; `"before"`/`"after"` keys give change lines first (one per key when both are dicts, otherwise one line with an empty field), then every other key a plain line; a value that is a two-item list in an older entry (for example `{"role": [None, "viewer"]}`, `settings_updated`, `targets_updated`) gives a change line; anything else a plain line. Values are shown as text: `None` as "none", lists joined with ", ", booleans as "Yes"/"No", nested dicts as `key: value` pairs.
+  - `LEGACY_PAIR_ACTIONS = frozenset({"role_set", "role_removed", "settings_updated", "group_updated", "baseline_changed", "targets_updated", "inputs_saved", "risk_updated"})`: the older actions that store each change as `{field: [before, after]}`.
+  - `describe(action: str, detail: dict | None) -> list[DetailLine]`: `None` gives `[]`; `"before"`/`"after"` keys give change lines first (one per key when both are dicts, otherwise one line with an empty field), then every other key a plain line; a two-item list is read as before and after only when `action in LEGACY_PAIR_ACTIONS` (so `smtp_settings_updated` `{"changed": [...]}`, `report_sent` `{"recipients": [...]}` and `permission_set_deleted` `{"permissions": [...]}` stay plain lists); anything else a plain line. Values are shown as text: `None` as "none", lists joined with ", ", booleans as "Yes"/"No", nested dicts as `key: value` pairs.
 - Produces (in `tracker/activity/views.py`):
   - `PAGE_SIZE = 50`.
   - `ActivityFilters(NamedTuple)`: `person: int | None`, `action: str | None`, `start: date | None`, `end: date | None`, `page: int`; `parse_filters(args) -> ActivityFilters`: any unparsable value is ignored (and `page` below 1 becomes 1).
-  - `activity.index` `GET /admin/activity` (`permission_required("view_activity")`): newest first (`at` then `id`, descending), 50 a page (one extra row read to know whether an older page exists, with "Newer" and "Older" links keeping the filters), columns Time (`%d %b %Y %H:%M` UTC), Performed by, User affected, Action (label), Tracker (name, for every entry), Detail (`describe`, before → after). Filters: person (matches `user_id` or `target_user_id`), action (from `ACTION_LABELS`), from and to dates (inclusive, UTC). Missing people or trackers show "–".
+  - `activity.index` `GET /admin/activity` (`permission_required("view_activity")`): newest first (`at` then `id`, descending), 50 a page (one extra row read to know whether an older page exists, with "Newer" and "Older" links keeping the filters), columns Time (`%d %b %Y %H:%M` UTC), Performed by, User affected, Action (label), Tracker (name, for every entry), Detail (`describe(entry.action, entry.detail)`, before → after). Filters: person (matches `user_id` or `target_user_id`), action (from `ACTION_LABELS`), from and to dates (inclusive, UTC). Missing people or trackers show "–".
   - Sidebar: Activity link (`href="/admin/activity"`) when `can('view_activity')`.
 
 - [ ] **Step 1: Write the failing tests (no database) in `tests/test_activity_labels.py`**
@@ -922,20 +935,28 @@ def test_every_action_written_in_the_code_has_a_label():
     package = Path(__file__).resolve().parent.parent / "tracker"
     source = "\n".join(p.read_text(encoding="utf-8") for p in package.rglob("*.py"))
     written = set(re.findall(r'action="([a-z_]+)"', source))
+    # positional helpers: _audit(db, tracker, "x", ...), _audit(tracker, "x", ...), _audit_group(db, tracker, "x", ...)
+    written |= set(re.findall(r'_audit(?:_group)?\(\s*(?:[\w.()]+\s*,\s*){1,2}"([a-z_]+)"', source))
+    assert {"group_retired", "recipient_added", "risk_deleted", "entry_created"} <= written   # the pattern works
     assert written <= set(ACTION_LABELS)
     assert {"login_failed", "entry_updated", "audit_pruned", "tracker_team_changed"} <= set(ACTION_LABELS)
 
 def test_describe_reads_the_new_shape():
-    assert describe({"team": "Windows", "before": "viewer", "after": "editor"}) == [
+    assert describe("team_member_role_changed", {"team": "Windows", "before": "viewer", "after": "editor"}) == [
         DetailLine("", "viewer", "editor", None), DetailLine("team", None, None, "Windows")]
 
 def test_describe_reads_older_shapes():
-    assert describe({"role": [None, "viewer"]}) == [DetailLine("role", "none", "viewer", None)]
-    assert describe({"is_admin": True}) == [DetailLine("is_admin", None, None, "Yes")]
-    assert describe(None) == []
+    assert describe("role_set", {"role": [None, "viewer"]}) == [DetailLine("role", "none", "viewer", None)]
+    assert describe("user_admin_changed", {"is_admin": True}) == [DetailLine("is_admin", None, None, "Yes")]
+    assert describe("login", None) == []
+
+def test_two_item_lists_of_other_actions_stay_lists():
+    assert describe("smtp_settings_updated", {"changed": ["smtp_host", "smtp_port"]}) == [
+        DetailLine("changed", None, None, "smtp_host, smtp_port")]
+    assert describe("report_sent", {"recipients": ["a@example.com", "b@example.com"]})[0].before is None
 
 def test_describe_lists_changed_fields_one_per_line():
-    lines = describe({"before": {"quantity": 12}, "after": {"quantity": 15}})
+    lines = describe("entry_updated", {"before": {"quantity": 12}, "after": {"quantity": 15}})
     assert lines == [DetailLine("quantity", "12", "15", None)]
 ```
 
@@ -955,11 +976,13 @@ def test_rows_with_deleted_people_or_trackers_and_any_detail_shape_render(...):
     # entries with user_id/target_user_id/tracker_id None, detail None, {"role": [None, "viewer"]}, action "mystery"
 def test_tracker_names_shown_to_a_view_activity_holder_without_access(...)
 def test_no_secrets_in_any_entry(client, logged_in_admin, user_factory, db):
-    # create a local user (password P1), reset a password (P2), fail a sign-in (P3) and save SMTP settings,
+    # create a local user (password P1), reset a password (P2) and save SMTP settings as the administrator;
+    # fail a sign-in with password P3 from a fresh client (client.application.test_client(); a signed-in client is
+    # redirected before any check) and assert exactly one login_failed row exists;
     # then for json.dumps of every entry's detail: no P1, P2, P3, "$2b$", "password_hash" or "smtp_password"
 ```
 
-Extend the sidebar test in `tests/test_templates.py`: `view_activity` maps to `'href="/admin/activity"'`.
+In `tests/test_templates.py`, add `"view_activity": 'href="/admin/activity"'` to `LINKS` and `{"view_activity"}` to the parametrised `held` sets.
 
 - [ ] **Step 3: Run them to verify they fail**
 
@@ -1003,7 +1026,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `RETENTION_ERROR = "Enter a whole number of days from 90 to 3,650, or leave the box empty to keep entries indefinitely."`
   - `retention_days(session) -> int | None` (absent key means indefinitely).
   - `parse_retention(value: str | None) -> tuple[int | None, str | None]`: blank gives `(None, None)`; spaces and thousands commas are removed; anything else must be a whole number from 90 to 3,650.
-  - `prune_audit_log(session, now_utc: datetime) -> int | None`: `None` when no retention is set or today's prune (UTC date) has already been claimed; the claim is an `INSERT … ON CONFLICT (key) DO UPDATE SET value = :today WHERE app_settings.value <> :today RETURNING key` on `LAST_PRUNED_KEY`, so two workers never prune twice the same day. It deletes entries with `at < now_utc - retention`, records `audit_pruned` (`entity="audit_log"`, `detail={"removed": n, "cutoff": <cutoff ISO timestamp>}`) only when `n > 0`, commits, and returns `n`.
+  - `prune_audit_log(session, now_utc: datetime) -> int | None`: `None` when no retention is set or today's prune (UTC date) has already been claimed; the claim is an `INSERT … ON CONFLICT (key) DO UPDATE SET value = :today WHERE app_settings.value <> :today RETURNING key` on `LAST_PRUNED_KEY`, so two workers never prune twice the same day. It deletes entries with `at < now_utc - retention`, records `audit_pruned` (`entity="audit_log"`, `detail={"removed": n, "cutoff": <cutoff ISO timestamp>}`) only when `n > 0`, commits, and returns `n`. This is a narrower reading of spec 8.2, ruled by the owner: a day with nothing to remove writes no entry.
   - `activity.retention` `POST /admin/activity/retention` (`admin_required`, field `retention_days`): on error flashes `RETENTION_ERROR`; otherwise stores the value (or deletes the key when blank) and logs `audit_retention_changed` with `change(old, new)` (`entity="app_settings"`, `entity_id="audit_retention_days"`); no entry when unchanged.
   - The Activity page footer (`.settings-section-foot`) shows the form to administrators only, with the current value and "Entries older than this are deleted once a day. Leave empty to keep entries indefinitely."
   - `run_scheduler_cycle` calls `prune_audit_log(session, now_utc)` first, inside `try`/`except Exception` (rollback and `logger.exception`), so a prune failure never stops sends.
