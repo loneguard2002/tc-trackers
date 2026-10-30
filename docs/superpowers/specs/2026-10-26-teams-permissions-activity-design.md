@@ -1,7 +1,7 @@
 # Teams, permission sets and activity log: design
 
 Date: 2026-10-26
-Status: draft for approval
+Status: approved by the owner on 30 October 2026
 Backlog: item 1 in `docs/backlog.md`
 Builds on: `docs/superpowers/specs/2026-10-20-generic-progress-tracker-design.md` (section 5.2, Users and access)
 
