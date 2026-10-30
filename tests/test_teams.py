@@ -633,3 +633,32 @@ def test_an_administrator_may_give_access_to_an_account_they_created(
         post(client, f"/admin/teams/{team.id}/members", {"user_id": str(person.id), "role": "owner"}).status_code == 302
     )
     assert member_role(db, team, person) == "owner"
+
+
+def test_holder_can_lower_the_role_of_an_account_they_vouched_for(
+    client, db, user_factory, give_set, team_factory, add_member
+):
+    actor = holder(user_factory, give_set, client)
+    team = team_factory(name="Windows")
+    created = user_factory()
+    vouch(db, actor, created)
+    add_member(team, created, "editor")
+    assert post(client, f"/admin/teams/{team.id}/members/{created.id}", {"role": "viewer"}).status_code == 302
+    db.expire_all()
+    assert member_role(db, team, created) == "viewer"  # lowering gives nothing, so it is allowed
+    assert [e.target_user_id for e in entries(db, "team_member_role_changed")] == [created.id]
+
+
+def test_delete_message_names_the_team_read_under_the_lock(client, logged_in_admin, db, team_factory, monkeypatch):
+    team = team_factory(name="Windows")
+    original = team_views.load_team_rows
+
+    def rename_first(session, lock=False):
+        if lock:  # another manager renames the team after this request read it, just before the lock
+            db.execute(update(Team).where(Team.id == team.id).values(name="Windows Server"))
+            db.commit()
+        return original(session, lock)
+
+    monkeypatch.setattr(team_views, "load_team_rows", rename_first)
+    response = post(client, f"/admin/teams/{team.id}/delete", follow_redirects=True)
+    assert "Deleted the team Windows Server." in text_of(response)

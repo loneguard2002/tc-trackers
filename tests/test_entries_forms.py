@@ -98,3 +98,10 @@ def test_a_date_without_a_week_ending_is_outside_the_weeks():
     for weekday in range(7):  # 31 Dec 9999 is a Friday: a later week-ending day would fall after year 9999
         week, error = check_entry_date(date(9999, 12, 31), weekday, FIRST, LAST)
         assert week is None and error.startswith("That date is outside this tracker's weeks")
+
+
+def test_quantity_with_long_zero_padding():
+    # int() refuses more than 4,300 digits, so the zeros are dropped before it is called.
+    assert parse_quantity("0" * 5000 + "7") == (7, None)
+    assert parse_quantity("0" * 5000) == (None, "The quantity must be a whole number of at least 1.")
+    assert parse_quantity("-" + "0" * 5000 + "7") == (None, "The quantity must be a whole number of at least 1.")

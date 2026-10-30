@@ -54,7 +54,7 @@
   <section class="settings-section" aria-labelledby="section-add-people">
     <header class="settings-section-head">
       <h2 id="section-add-people">Add people</h2>
-      <p>Users who cannot open this tracker yet. Administrators have owner access everywhere, so they are not listed here.</p>
+      <p>Users with no direct role on this tracker. Someone listed under Access through teams can open it already; a direct role adds to that. Administrators have owner access everywhere, so they are not listed here.</p>
     </header>
     {% if others %}
     <ul class="member-list">
@@ -66,7 +66,7 @@
       {% endfor %}
     </ul>
     {% else %}
-    <p class="empty-note">Everyone already has access.</p>
+    <p class="empty-note">Every user already has a direct role.</p>
     {% endif %}
   </section>
 

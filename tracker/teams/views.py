@@ -14,7 +14,7 @@ from sqlalchemy import delete, exists, func, select
 from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
-from ..auth import ROLES, current_user, permission_required
+from ..auth import ROLE_ORDER, ROLES, current_user, permission_required
 from ..auth.accounts import vouched_refusal
 from ..auth.guards import (
     SELF_PROMOTION_MESSAGE,
@@ -337,9 +337,10 @@ def delete_team(team_id: int):
     )
     db.execute(delete(TeamMember).where(TeamMember.team_id == team.id))
     db.execute(delete(PermissionSetHolder).where(PermissionSetHolder.team_id == team.id))
+    name = current[team.id].name  # from the locked row: a rename just committed has changed it
     db.delete(team)
     db.commit()
-    flash(f"Deleted the team {team.name}.", "success")
+    flash(f"Deleted the team {name}.", "success")
     return redirect(url_for("teams.index"))
 
 
@@ -434,7 +435,8 @@ def update_member(team_id: int, user_id: int):
     if role == old:
         flash(NO_CHANGES_MESSAGE, "info")
         return _to_team(team)
-    refusal = vouched_refusal(db, actor, user)
+    # Lowering a member's role gives nothing, so only a higher role is refused.
+    refusal = vouched_refusal(db, actor, user) if ROLE_ORDER[role] > ROLE_ORDER[old] else None
     if refusal:
         return _refuse(team, refusal)
     before = snapshot_access(db, actor)
