@@ -13,6 +13,7 @@ from jinja2 import StrictUndefined
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from .activity import bp as activity_bp
 from .admin import bp as admin_bp
 from .audit import record
 from .auth import bp as auth_bp
@@ -70,6 +71,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     app.register_blueprint(admin_bp)
     app.register_blueprint(teams_bp)
     app.register_blueprint(permsets_bp)
+    app.register_blueprint(activity_bp)
     app.register_blueprint(trackers_bp)
     app.register_blueprint(entries_bp)
     app.register_blueprint(report_bp)
