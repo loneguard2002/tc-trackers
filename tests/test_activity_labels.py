@@ -12,6 +12,7 @@ def test_every_action_written_in_the_code_has_a_label():
     written = set(re.findall(r'action="([a-z_]+)"', source))
     # positional helpers: _audit(db, tracker, "x", ...), _audit(tracker, "x", ...), _audit_group(db, tracker, "x", ...)
     written |= set(re.findall(r'_audit(?:_group)?\(\s*(?:[\w.()]+\s*,\s*){1,2}"([a-z_]+)"', source))
+    written |= set(re.findall(r'\brecord\(\s*[\w.()]+\s*,\s*"([a-z_]+)"', source))
     assert {"group_retired", "recipient_added", "risk_deleted", "entry_created"} <= written  # the pattern works
     assert written <= set(ACTION_LABELS)
     assert {"login_failed", "entry_updated", "audit_pruned", "tracker_team_changed"} <= set(ACTION_LABELS)
