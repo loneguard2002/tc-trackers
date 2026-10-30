@@ -274,6 +274,9 @@ Tests that need no database:
 14. Attempts refused by the sign-in throttle are not logged individually.
 15. Old audit entries keep their stored shapes, and the Activity screen reads both.
 16. An edited entry may keep a location that has since been retired, so old figures can still be corrected; Delete stays for entries recorded by mistake.
+17. On the Activity screen, a viewer who is not an administrator sees every entry, but the detail of an entry about a tracker they cannot open is replaced by "Details hidden: you cannot open this tracker.", because the anti-goal of names, not contents (section 2) outranks seeing every entry (section 6.2).
+18. A non-administrator cannot give access (a team place at approval, a team membership or member role, or a direct tracker role) to an account they created or whose password they reset, as found in the activity log, which closes the stand-in account route around section 6.3; the Permission sets screen notes that Manage users and Manage teams together give reach close to an administrator's.
+19. A `manage_email_settings` holder who is not an administrator may change only the sender address (no sender display name is stored), and sees the server, port, authentication method, user, tenant and client read-only, so the SMTP password or token cannot be sent to another server.
 
 ## 13. Left to the builder
 
