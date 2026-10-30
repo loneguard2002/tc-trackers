@@ -27,6 +27,14 @@
       <input id="group_label" name="group_label" value="{{ form.get('group_label', '') }}" placeholder="For example, Location" aria-describedby="group_label-help">
       {% endcall %}
     </div>
+    {% if not tracker %}
+    {% call field('Team', 'Optional. People in a team, and in the teams above it, reach its trackers. It can be changed later by people who manage teams.', 'team_id') %}
+    <select id="team_id" name="team_id" aria-describedby="team_id-help">
+      <option value="" {{ 'selected' if not form.get('team_id') }}>No team</option>
+      {% for id, label in team_choices %}<option value="{{ id }}" {{ 'selected' if form.get('team_id')|string == id|string }}>{{ label }}</option>{% endfor %}
+    </select>
+    {% endcall %}
+    {% endif %}
     {% call field('Description', 'A note for the people who maintain the tracker. Not shown on the report or in emails.', 'description') %}
     <textarea id="description" name="description" rows="2" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
     {% endcall %}

@@ -92,6 +92,7 @@
       <h2 class="tracker-card-title"><a href="{{ url_for('report.view', tracker_id=t.id) }}">{{ t.name }}</a>
         {% if c.role %}<span class="role-tag">{{ c.role|capitalize }}</span>{% endif %}
         {% if t.status == 'archived' %}<span class="role-tag">Archived</span>{% endif %}</h2>
+      {% if c.team %}<p class="tracker-card-team">{{ c.team }}</p>{% endif %}
       <p class="tracker-card-status">{{ rag_dot(c.status) }}<span><span class="status-word">{{ c.status or 'Not set' }}</span>: <span class="{{ '' if dvt is none else ('tone-danger' if dvt > 0 else 'tone-success') }}">{{ h.verdict }}</span></span></p>
     </header>
     <div class="tracker-card-progress">

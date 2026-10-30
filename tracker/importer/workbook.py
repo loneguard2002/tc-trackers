@@ -21,8 +21,9 @@ from openpyxl.utils.datetime import from_excel
 from sqlalchemy.orm import Session
 
 from ..audit import record
+from ..auth.roles import give_creator_ownership
 from ..engine.weeks import max_last_week_ending, report_date_to_week_ending, week_endings
-from ..models import Group, ReportInput, Risk, Tracker, TrackerRole, Week
+from ..models import Group, ReportInput, Risk, Tracker, User, Week
 
 SHEET_SETTINGS = "Settings"
 SHEET_GROUPS = "By Location"
@@ -430,6 +431,7 @@ def create_tracker_from_preview(
     group_label: str,
     user_id: int,
     accept_mismatch: bool,
+    team_id: int | None = None,
 ) -> Tracker:
     """Add the tracker and its history to ``session`` (the caller commits)."""
     name = name.strip()
@@ -455,6 +457,7 @@ def create_tracker_from_preview(
         target_completion=s["target_completion"],
         completed_before_first=s["completed_before_first"],
         moving_average_weeks=s["moving_average_weeks"],
+        team_id=team_id,
     )
     session.add(tracker)
     session.flush()
@@ -479,7 +482,7 @@ def create_tracker_from_preview(
         session.add(Risk(tracker_id=tracker.id, group_id=group_ids.get(item["group"]), **values))
     if preview.inputs:
         session.add(ReportInput(tracker_id=tracker.id, prepared_by=user_id, **preview.inputs))
-    session.add(TrackerRole(user_id=user_id, tracker_id=tracker.id, role="owner"))
+    give_creator_ownership(session, tracker, session.get(User, user_id))
     record(
         session,
         user_id=user_id,

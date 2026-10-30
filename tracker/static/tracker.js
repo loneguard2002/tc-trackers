@@ -101,7 +101,7 @@
   // Forms marked data-inline-confirm ask in the page instead: the [data-ask] button reveals [data-confirm-box], whose
   // [data-confirm-yes] submits and [data-confirm-no] (or Escape) puts the button back. form.submit() skips the submit
   // event, so the data-confirm dialog kept as the no-script fallback does not ask a second time. When the form has a
-  // select[data-confirm-source], each [data-confirm-choice] in it shows the option chosen as the box opens.
+  // select[data-confirm-source], each [data-confirm-choice] in it shows the option chosen, as the box opens and whenever the choice changes.
   document.querySelectorAll("form[data-inline-confirm]").forEach(function (form) {
     var ask = form.querySelector("[data-ask]");
     var box = form.querySelector("[data-confirm-box]");
@@ -114,6 +114,7 @@
         target.textContent = chosen ? chosen.text : "";
       });
     };
+    if (source) source.addEventListener("change", showChoice);
     var close = function () {
       box.hidden = true;
       ask.hidden = false;

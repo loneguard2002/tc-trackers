@@ -132,6 +132,15 @@ def test_import_reconciles_when_figures_agree(fixture_xlsx):
     assert (p.group_total, p.weekly_total, p.mismatch) == (138, 138, 0)
 
 
+def test_import_by_a_non_administrator_gives_an_owner_role(db, fixture_xlsx, user_factory):
+    user = user_factory()
+    tracker = create_tracker_from_preview(db, read_workbook(fixture_xlsx, 4), "Rollout", "", "", user.id, False)
+    db.commit()
+    assert db.get(TrackerRole, (user.id, tracker.id)).role == "owner"
+    entry = db.scalars(select(AuditLog).where(AuditLog.action == "role_set")).one()
+    assert entry.detail == {"before": None, "after": "owner"} and entry.target_user_id == user.id
+
+
 def test_import_reports_mismatch_in_preview(fixture_xlsx_mismatch):
     p = read_workbook(fixture_xlsx_mismatch, weekday=4)
     assert p.mismatch == 1
@@ -274,7 +283,7 @@ def test_import_creates_tracker(db, fixture_xlsx, user_factory):
     assert risk.ref == "R1" and risk.group_id == groups[0].id and risk.status == "Open"
     inputs = db.get(ReportInput, (tracker.id, date(2026, 9, 25)))
     assert inputs.status == "Green" and inputs.prepared_by == admin.id
-    assert db.get(TrackerRole, (admin.id, tracker.id)).role == "owner"
+    assert db.get(TrackerRole, (admin.id, tracker.id)) is None
     audit = db.scalars(select(AuditLog).where(AuditLog.action == "tracker_imported")).one()
     assert audit.tracker_id == tracker.id and audit.user_id == admin.id
 

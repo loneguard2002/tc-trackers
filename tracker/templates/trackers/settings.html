@@ -12,6 +12,7 @@
   <a href="#reporting-period">Reporting period</a>
   <a href="#progress-forecast">Progress and forecast</a>
   <a href="#schedule">Scheduled sending</a>
+  {% if can('manage_teams') %}<a href="#team">Team</a>{% endif %}
   {% if can_archive %}<a href="#archive">Archive</a>{% endif %}
 </nav>
 <div class="settings">
@@ -60,6 +61,16 @@
       <button class="button primary" type="submit">Save settings</button>
     </div>
   </form>
+
+  {% if can('manage_teams') %}
+  <section class="settings-section" id="team" aria-labelledby="section-team">
+    <header class="settings-section-head">
+      <h2 id="section-team">Team</h2>
+      <p>{% if team_path %}In <strong>{{ team_path }}</strong>.{% else %}In no team.{% endif %} People in a team, and in the teams above it, reach its trackers, so moving this tracker changes who can open it.</p>
+    </header>
+    {% with next = 'settings' %}{% include "trackers/_team_form.html" %}{% endwith %}
+  </section>
+  {% endif %}
 
   {% if can_archive %}
   <section class="settings-section settings-section-danger" id="archive" aria-labelledby="section-archive">

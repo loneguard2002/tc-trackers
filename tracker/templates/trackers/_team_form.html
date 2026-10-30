@@ -1,0 +1,24 @@
+{#- Moves a tracker to another team (or to none), asking in the page first. Expects ``tracker``, ``team_choices``,
+    ``team_path`` (the current path, or None) and ``next`` (``settings`` or ``access``: where to return). -#}
+{% from "macros.html" import csrf_field %}
+{% set current = team_path or 'No team' %}
+<form class="archive-row team-move" method="post" action="{{ url_for('trackers.set_team', tracker_id=tracker.id) }}"
+  data-confirm="Move {{ tracker.name }} to the chosen team? People's access to this tracker will change." data-inline-confirm>
+  {{ csrf_field(csrf_token()) }}
+  <input type="hidden" name="next" value="{{ next }}">
+  <div class="archive-text field">
+    <label for="team_id-{{ next }}">Team</label>
+    <select id="team_id-{{ next }}" name="team_id" data-confirm-source>
+      <option value="" {{ 'selected' if tracker.team_id is none }}>No team</option>
+      {% for id, label in team_choices %}<option value="{{ id }}" {{ 'selected' if tracker.team_id == id }}>{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  <button class="button" type="submit" data-ask>Move…</button>
+  <div class="confirm-box" data-confirm-box hidden>
+    <p>Move <strong>{{ tracker.name }}</strong> from <strong>{{ current }}</strong> to <strong data-confirm-choice>{{ current }}</strong>? People's access to this tracker will change.</p>
+    <div class="confirm-box-actions">
+      <button class="button danger" type="button" data-confirm-yes>Move</button>
+      <button class="button" type="button" data-confirm-no>Cancel</button>
+    </div>
+  </div>
+</form>
