@@ -1,5 +1,6 @@
 """The self-promotion guard (spec section 6.3); database required."""
 
+import pytest
 from sqlalchemy import select
 
 from tracker.auth.guards import SELF_PROMOTION_MESSAGE, raises_own_access, snapshot_access
@@ -91,3 +92,40 @@ def test_administrator_is_exempt(db, user_factory, tracker_factory):
     assert before is None
     tracker_factory()
     assert raises_own_access(db, admin, before) is False
+
+
+def test_moving_own_team_under_a_team_where_the_actor_is_owner_raises_own_access(
+    db, user_factory, team_factory, tracker_factory, add_member
+):
+    actor = user_factory()
+    parent = team_factory("P")
+    own = team_factory("W")
+    tracker = tracker_factory(team_id=own.id)
+    add_member(own, actor, "viewer")
+    add_member(parent, actor, "owner")
+    before = snapshot_access(db, actor)
+    assert before == {tracker.id: "viewer"}
+    own.parent_id = parent.id
+    assert raises_own_access(db, actor, before) is True
+
+
+def test_joining_a_team_holding_view_all_trackers_raises_own_access(
+    db, user_factory, team_factory, tracker_factory, give_set
+):
+    actor = user_factory()
+    team = team_factory()
+    give_set(["view_all_trackers"], team=team)
+    tracker_factory()
+    before = snapshot_access(db, actor)
+    assert before == {}
+    db.add(TeamMember(team_id=team.id, user_id=actor.id, role="viewer"))
+    assert raises_own_access(db, actor, before) is True
+
+
+def test_snapshot_after_the_change_is_refused(db, user_factory, team_factory, tracker_factory):
+    actor = user_factory()
+    team = team_factory()
+    tracker_factory(team_id=team.id)
+    db.add(TeamMember(team_id=team.id, user_id=actor.id, role="owner"))
+    with pytest.raises(RuntimeError, match="snapshot_access must run before the change is made"):
+        snapshot_access(db, actor)
