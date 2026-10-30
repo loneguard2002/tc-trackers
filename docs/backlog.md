@@ -31,3 +31,8 @@ Scope to settle in the spec:
 - The Render starter plan may run short of memory while Chromium renders a PDF.
 - Package versions in `requirements.txt` are not pinned.
 - The remaining minor review points are listed in the plan ledger (`.superpowers/sdd/2026-10-20-generic-progress-tracker/progress.md`).
+
+## 3. Found while building teams, permission sets and the activity log
+
+- A password reset does not end the person's existing sessions (now that delegates can reset passwords).
+- NUL bytes in form input cause a 500 app-wide, including the sign-in page; reject them at request level.
