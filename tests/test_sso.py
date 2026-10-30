@@ -198,3 +198,22 @@ def test_sso_sign_in_and_link_entries_name_the_user(sso_client, monkeypatch, db,
     for action in ("sso_linked", "sso_login"):
         entry = db.scalars(select(AuditLog).where(AuditLog.action == action)).one()
         assert entry.target_user_id == user.id
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"status": "pending", "auth_source": "sso", "password_hash": None},
+        {"status": "disabled", "auth_source": "sso", "password_hash": None},
+        {"status": "active", "auth_source": "local"},
+    ],
+)
+def test_name_not_synced_for_a_user_who_is_not_active_or_not_microsoft(
+    sso_client, monkeypatch, db, user_factory, overrides
+):
+    user = user_factory(sso_subject=f"{TENANT}:oid-1", full_name="Old Name", **overrides)
+    start(sso_client, monkeypatch, FakeMsal(claims(name="New Name")))
+    sso_client.get("/auth/callback?code=c&state=s")
+    db.expire_all()
+    assert db.get(User, user.id).full_name == "Old Name"
+    assert db.scalars(select(AuditLog).where(AuditLog.action == "user_name_synced")).all() == []
