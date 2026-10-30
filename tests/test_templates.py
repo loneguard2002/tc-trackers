@@ -35,11 +35,23 @@ def test_template_has_nothing_the_csp_blocks(path):
     assert not problems, f"{path.relative_to(TEMPLATES)} contains: {', '.join(problems)}"
 
 
-def render_nav(app, role: str) -> str:
+def render_nav(app, role: str | None, held: frozenset[str] = frozenset()) -> str:
     tracker = SimpleNamespace(id=7, group_label="Site", status="active")
     with app.test_request_context("/"):
         g.role = role
-        return render_template("trackers/_nav.html", tracker=tracker)
+        return render_template(
+            "trackers/_nav.html", tracker=tracker, current_user=None, can=lambda permission: permission in held
+        )
+
+
+def test_a_team_manager_without_a_role_sees_only_the_access_tab(app):
+    nav = render_nav(app, None, frozenset({"manage_teams"}))
+    assert nav.count('<a class="tab') == 1 and "/trackers/7/roles" in nav
+    assert "/trackers/7/report" not in nav
+
+
+def test_access_tab_hidden_without_manage_teams(app):
+    assert "/trackers/7/roles" not in render_nav(app, "owner")
 
 
 def test_groups_link_hidden_from_viewers(app):

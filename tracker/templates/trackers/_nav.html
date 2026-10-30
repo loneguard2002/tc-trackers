@@ -3,7 +3,9 @@
 <a class="tab{{ ' active' if active }}" href="{{ url_for(endpoint, tracker_id=tracker.id) }}"{% if active %} aria-current="page"{% endif %}>{{ label }}</a>
 {%- endmacro %}
 <nav class="tabs" aria-label="Tracker sections">
+  {% if g.role %}
   {{ tab('report.view', 'Report') }}
+  {% endif %}
   {% if g.role in ('editor', 'owner') %}
   {{ tab('entries.list_entries', 'Entries', ('entries.new_entry',)) }}
   {{ tab('entries.inputs', 'Weekly inputs') }}
@@ -15,6 +17,6 @@
   {{ tab('mail.settings', 'Email', ('mail.preview',)) }}
   {{ tab('trackers.settings', 'Settings') }}
   {% endif %}
-  {% if current_user and current_user.is_admin %}{{ tab('trackers.roles', 'Access') }}{% endif %}
+  {% if can('manage_teams') %}{{ tab('trackers.roles', 'Access') }}{% endif %}
 </nav>
 {% if tracker.status == 'archived' %}<p class="flash flash-danger">This tracker is archived.</p>{% endif %}
