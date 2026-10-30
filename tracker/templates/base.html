@@ -40,12 +40,14 @@
     <nav class="sidebar-nav">
       {{ nav_link('trackers', 'index', 'Trackers', 'trackers') }}
       {% set show_users = current_user.is_admin %}
+      {% set show_permsets = current_user.is_admin %}
       {% set show_teams = can('manage_teams') %}
       {% set show_import = can('import_workbooks') %}
       {% set show_smtp = can('manage_email_settings') %}
-      {% if show_users or show_teams or show_import or show_smtp %}
+      {% if show_users or show_permsets or show_teams or show_import or show_smtp %}
       <span class="nav-heading">Administration</span>
       {% if show_users %}{{ nav_link('users', 'admin.users', 'Users', 'users') }}{% endif %}
+      {% if show_permsets %}{{ nav_link('permsets', 'permsets.index', 'Permission sets', 'key') }}{% endif %}
       {% if show_teams %}{{ nav_link('teams', 'teams.index', 'Teams', 'teams') }}{% endif %}
       {% if show_import %}{{ nav_link('import', 'importer.upload', 'Import workbook', 'upload') }}{% endif %}
       {% if show_smtp %}{{ nav_link('smtp', 'admin.smtp', 'Email settings', 'mail') }}{% endif %}

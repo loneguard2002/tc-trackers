@@ -26,6 +26,7 @@ from .formatting import register_filters
 from .importer import bp as importer_bp
 from .mail import bp as mail_bp
 from .models import User
+from .permsets import bp as permsets_bp
 from .report import bp as report_bp
 from .teams import bp as teams_bp
 from .trackers import bp as trackers_bp
@@ -68,6 +69,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(teams_bp)
+    app.register_blueprint(permsets_bp)
     app.register_blueprint(trackers_bp)
     app.register_blueprint(entries_bp)
     app.register_blueprint(report_bp)

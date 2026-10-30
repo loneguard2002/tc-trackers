@@ -837,3 +837,13 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .mail-attachment { display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; overflow-wrap: anywhere; }
 .mail-attachment .icon { width: 14px; height: 14px; flex: none; }
 .button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Permission sets: the permissions grid (one row per permission, one column per set) and the add-holder form. */
+.permission-grid .grid-set { text-align: center; }
+.permission-grid .grid-permission { min-width: 16rem; max-width: 28rem; text-align: left; text-transform: none; letter-spacing: 0; white-space: normal; }
+.permission-grid .grid-label { display: block; color: var(--text); font-size: .9rem; font-weight: 600; }
+.permission-grid .grid-description { display: block; margin-top: 2px; color: var(--muted); font-size: .8125rem; font-weight: 400; }
+.permission-grid .grid-cell { text-align: center; }
+.permission-grid .grid-cell input { width: 18px; height: 18px; }
+.holder-add { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
+.holder-add select { padding: 7px 10px; font-size: .9rem; }

@@ -9,6 +9,8 @@ from types import SimpleNamespace
 import pytest
 from flask import g, render_template
 
+from tracker.auth.permissions import PERMISSIONS
+
 TEMPLATES = Path(__file__).resolve().parent.parent / "tracker" / "templates"
 # Rendered outside the browser's CSP: an email (inline styles are required) and the standalone PDF/PNG document.
 EXEMPT = {Path("mail/email_body.html"), Path("report/print.html")}
@@ -103,3 +105,9 @@ def test_sidebar_shows_every_link_to_administrators(app):
     html = render_sidebar(app, is_admin=True, held=set())
     assert 'href="/admin/users"' in html
     assert all(link in html for link in LINKS.values())
+
+
+@pytest.mark.parametrize("held", [set(), {"manage_teams"}, {"import_workbooks"}, set(PERMISSIONS)])
+def test_permission_sets_link_only_for_administrators(app, held):
+    assert 'href="/admin/permission-sets"' not in render_sidebar(app, is_admin=False, held=held)
+    assert 'href="/admin/permission-sets"' in render_sidebar(app, is_admin=True, held=set())
