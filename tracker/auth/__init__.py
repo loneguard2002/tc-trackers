@@ -62,6 +62,21 @@ def _login_page(error: str | None = None, status: int = 200):
     )
 
 
+def _record_failure(db, user: User | None, entered_email: str, reason: str) -> None:
+    """Log a refused sign-in: the email as entered and the reason, never the password."""
+    record(
+        db,
+        user_id=None,
+        tracker_id=None,
+        action="login_failed",
+        entity="user",
+        entity_id=None if user is None else user.id,
+        detail={"email": entered_email, "reason": reason},
+        target_user_id=None if user is None else user.id,
+    )
+    db.commit()
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user() is not None:
@@ -70,6 +85,7 @@ def login():
         return _login_page()
 
     email = request.form.get("email", "").strip().lower()
+    entered_email = email[:MAX_EMAIL_LENGTH]
     password = request.form.get("password", "")
     account_throttle, address_throttle = _throttles()
     account_key = f"account:{email}"
@@ -90,17 +106,23 @@ def login():
     if not password_ok:
         account_throttle.fail(account_key)
         address_throttle.fail(address_key)
+        reason = "unknown_account" if user is None else "wrong_password"
+        _record_failure(db, user, entered_email, reason)
         return _login_page("Invalid email or password.", 200)
 
     if user.status == "pending":
+        _record_failure(db, user, entered_email, "not_active")
         return _login_page("Your account is awaiting approval by an administrator.", 200)
     if user.status != "active":
         account_throttle.fail(account_key)
+        _record_failure(db, user, entered_email, "not_active")
         return _login_page("Invalid email or password.", 200)
 
     account_throttle.clear(account_key)
     login_user(user)
-    record(db, user_id=user.id, tracker_id=None, action="login", entity="user", entity_id=user.id)
+    record(
+        db, user_id=user.id, tracker_id=None, action="login", entity="user", entity_id=user.id, target_user_id=user.id
+    )
     db.commit()
     return redirect(safe_next_url(request.args.get("next") or request.form.get("next")) or url_for("index"))
 

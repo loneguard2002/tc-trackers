@@ -221,3 +221,70 @@ def test_smtp_rejects_invalid_values(client, logged_in_admin, db):
     response = post(client, "/admin/smtp", {"smtp_host": "h", "smtp_port": "25", "smtp_auth": "weird"})
     assert response.status_code == 400
     assert db.scalars(select(AppSetting)).first() is None
+
+
+def failures(db):
+    return db.scalars(select(AuditLog).where(AuditLog.action == "login_failed").order_by(AuditLog.id)).all()
+
+
+def test_failed_sign_in_with_an_unknown_account_is_logged(client, db):
+    post(client, "/login", {"email": "Nobody@Example.com", "password": "x" * 12})
+    (entry,) = failures(db)
+    assert entry.detail == {"email": "nobody@example.com", "reason": "unknown_account"}
+    assert entry.user_id is None and entry.target_user_id is None
+    assert entry.entity == "user"
+
+
+def test_wrong_password_logged_with_the_affected_user(client, db, user_factory):
+    user = user_factory()
+    post(client, "/login", {"email": user.email, "password": "wrong-password"})
+    (entry,) = failures(db)
+    assert entry.detail == {"email": user.email, "reason": "wrong_password"}
+    assert entry.user_id is None
+    assert entry.target_user_id == user.id and entry.entity_id == str(user.id)
+
+
+def test_account_without_a_password_logged_as_wrong_password(client, db, user_factory):
+    user = user_factory(auth_source="sso", password_hash=None)
+    post(client, "/login", {"email": user.email, "password": TEST_PASSWORD})
+    (entry,) = failures(db)
+    assert entry.detail["reason"] == "wrong_password" and entry.target_user_id == user.id
+
+
+def test_pending_and_disabled_accounts_logged_as_not_active(client, db, user_factory):
+    pending = user_factory(status="pending")
+    disabled = user_factory(status="disabled")
+    post(client, "/login", {"email": pending.email, "password": TEST_PASSWORD})
+    post(client, "/login", {"email": disabled.email, "password": TEST_PASSWORD})
+    first, second = failures(db)
+    assert first.detail == {"email": pending.email, "reason": "not_active"} and first.target_user_id == pending.id
+    assert second.detail == {"email": disabled.email, "reason": "not_active"} and second.target_user_id == disabled.id
+
+
+def test_logged_email_is_cut_to_254_characters(client, db):
+    email = "a" * 300 + "@example.com"
+    post(client, "/login", {"email": email, "password": "x" * 12})
+    (entry,) = failures(db)
+    assert len(entry.detail["email"]) == 254 and entry.detail["email"] == email[:254]
+    assert entry.detail["reason"] == "unknown_account"
+
+
+def test_failed_sign_in_never_stores_the_password(client, db, user_factory):
+    user = user_factory()
+    post(client, "/login", {"email": user.email, "password": "Secret-typed-pw-1"})
+    (entry,) = failures(db)
+    assert "Secret-typed-pw-1" not in str(entry.detail)
+
+
+def test_throttled_attempts_are_not_logged(client, db, user_factory):
+    user = user_factory()
+    for _ in range(6):
+        post(client, "/login", {"email": user.email, "password": "wrong-password"})
+    assert len(failures(db)) == 5
+
+
+def test_sign_in_entry_names_the_user(client, db, user_factory):
+    user = user_factory()
+    post(client, "/login", {"email": user.email, "password": TEST_PASSWORD})
+    entry = db.scalars(select(AuditLog).where(AuditLog.action == "login")).one()
+    assert entry.user_id == user.id and entry.target_user_id == user.id

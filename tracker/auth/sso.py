@@ -5,7 +5,7 @@ from __future__ import annotations
 from flask import Blueprint, current_app, flash, redirect, request, session, url_for
 from sqlalchemy import select
 
-from ..audit import record
+from ..audit import change, record
 from ..db import get_session
 from ..models import User
 from .session import login_user
@@ -71,6 +71,7 @@ def _resolve_user(db, subject: str, claims: dict, full_name: str):
             action="user_created",
             entity="user",
             entity_id=user.id,
+            target_user_id=user.id,
             detail={"email": email, "source": "sso", "status": "pending", "sso_subject": subject},
         )
         return user, None
@@ -86,6 +87,7 @@ def _resolve_user(db, subject: str, claims: dict, full_name: str):
         action="sso_linked",
         entity="user",
         entity_id=user.id,
+        target_user_id=user.id,
         detail={"sso_subject": subject},
     )
     return user, None
@@ -122,6 +124,16 @@ def sso_callback():
         return _fail(refusal)
 
     if user.status == "active" and user.auth_source == "sso" and full_name and user.full_name != full_name:
+        record(
+            db,
+            user_id=user.id,
+            tracker_id=None,
+            action="user_name_synced",
+            entity="user",
+            entity_id=user.id,
+            detail=change(user.full_name, full_name),
+            target_user_id=user.id,
+        )
         user.full_name = full_name
     db.commit()
 
@@ -132,6 +144,14 @@ def sso_callback():
         return _fail("Your account is inactive. Contact your administrator.")
 
     login_user(user)
-    record(db, user_id=user.id, tracker_id=None, action="sso_login", entity="user", entity_id=user.id)
+    record(
+        db,
+        user_id=user.id,
+        tracker_id=None,
+        action="sso_login",
+        entity="user",
+        entity_id=user.id,
+        target_user_id=user.id,
+    )
     db.commit()
     return redirect(url_for("index"))
