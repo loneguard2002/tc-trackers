@@ -16,7 +16,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from .admin import bp as admin_bp
 from .audit import record
 from .auth import bp as auth_bp
-from .auth import current_user
+from .auth import current_user, has_permission
 from .auth.csrf import install_csrf
 from .auth.passwords import hash_password, validate_new_password
 from .config import load_config, validate_config
@@ -55,6 +55,10 @@ def create_app(overrides: dict | None = None) -> Flask:
             "app_version": app.config["APP_VERSION"],
             "current_user": current_user(),
         }
+
+    @app.context_processor
+    def permission_context():
+        return {"can": lambda permission: has_permission(current_user(), permission)}
 
     register_filters(app)
     if app.config.get("TESTING"):

@@ -27,7 +27,7 @@ from tracker.report.charts import (
 )
 from tracker.report.render import render_print_html
 
-STUB_USER = SimpleNamespace(is_admin=False, full_name="Test User")
+STUB_USER = SimpleNamespace(id=0, is_admin=False, full_name="Test User")
 BADGE_IN_PROGRESS = '<span class="badge badge-info">In progress</span>'
 
 
@@ -394,6 +394,7 @@ def test_report_page_template_renders_without_database(app):
     with app.test_request_context("/"):
         g.role, g.tracker = "viewer", tracker
         g.current_user = STUB_USER  # read by the app's context processor, with or without a database
+        g.permission_cache = {STUB_USER.id: frozenset()}  # the stub holds no permission; no database is read
         html = render_template(
             "report/page.html",
             tracker=tracker,
@@ -420,6 +421,8 @@ def render_page(app, report, tracker, user):
 
     with app.test_request_context("/"):
         g.role, g.tracker, g.current_user = "viewer", tracker, user
+        if user is not None:
+            g.permission_cache = {user.id: frozenset()}  # no permission held; no database is read
         return render_template(
             "report/page.html", tracker=tracker, report=report, weeks=WEEKS, page_title="x", current_page="trackers"
         )

@@ -1,11 +1,11 @@
-"""Upload and confirm pages for the one-time workbook import (administrators only)."""
+"""Upload and confirm pages for the one-time workbook import (holders of the import permission)."""
 
 from __future__ import annotations
 
 from flask import current_app, flash, redirect, render_template, request, url_for
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
-from ..auth import admin_required, current_user
+from ..auth import current_user, permission_required
 from ..db import get_session
 from ..trackers.views import WEEKDAYS
 from . import bp
@@ -50,13 +50,13 @@ def _render_confirm(preview: ImportPreview, token: str, form, error: str | None 
 
 
 @bp.get("/import")
-@admin_required
+@permission_required("import_workbooks")
 def upload():
     return _render_upload()
 
 
 @bp.post("/import")
-@admin_required
+@permission_required("import_workbooks")
 def preview():
     try:
         weekday = int(request.form.get("weekday", "4"))
@@ -74,7 +74,7 @@ def preview():
 
 
 @bp.post("/import/confirm")
-@admin_required
+@permission_required("import_workbooks")
 def confirm():
     token = request.form.get("payload", "")
     try:
