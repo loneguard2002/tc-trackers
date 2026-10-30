@@ -7,6 +7,7 @@ from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from ..auth import current_user, permission_required
 from ..db import get_session
+from ..teams.tree import parse_team_id, team_choices
 from ..trackers.views import WEEKDAYS
 from . import bp
 from .workbook import ImportError_, ImportMismatch, ImportPreview, create_tracker_from_preview, read_workbook
@@ -42,6 +43,7 @@ def _render_confirm(preview: ImportPreview, token: str, form, error: str | None 
             form=form,
             error=error,
             weekdays=WEEKDAYS,
+            team_choices=team_choices(get_session()),
             page_title="Confirm import",
             current_page="import",
         ),
@@ -85,6 +87,9 @@ def confirm():
     form = request.form
     accept = form.get("accept_mismatch") == "1"
     db = get_session()
+    team, team_error = parse_team_id(db, form.get("team_id"))
+    if team_error:
+        return _render_confirm(parsed, token, form, team_error, 400)
     try:
         tracker = create_tracker_from_preview(
             db,
@@ -94,6 +99,7 @@ def confirm():
             group_label=form.get("group_label", ""),
             user_id=current_user().id,
             accept_mismatch=accept,
+            team_id=team.id if team else None,
         )
     except ImportMismatch as exc:
         db.rollback()

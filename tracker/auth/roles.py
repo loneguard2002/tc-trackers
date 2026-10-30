@@ -13,6 +13,7 @@ from flask import abort, g
 from sqlalchemy import Select, Subquery, case, func, literal, or_, select, union_all
 from sqlalchemy.orm import Session
 
+from ..audit import change, record
 from ..db import get_session
 from ..models import (
     PermissionSetHolder,
@@ -126,3 +127,24 @@ def require_tracker_role(min_role: str):
         return wrapped
 
     return decorator
+
+
+def give_creator_ownership(session: Session, tracker: Tracker, actor: User) -> None:
+    """Make a non-administrator who has just created ``tracker`` its owner, and log it (the caller commits).
+
+    An administrator is owner everywhere already and gets no role. This is the only code that gives a creator the
+    owner role, for the New tracker screen and for the workbook import alike.
+    """
+    if actor.is_admin:
+        return
+    session.add(TrackerRole(user_id=actor.id, tracker_id=tracker.id, role="owner"))
+    record(
+        session,
+        user_id=actor.id,
+        tracker_id=tracker.id,
+        action="role_set",
+        entity="user",
+        entity_id=actor.id,
+        detail=change(None, "owner"),
+        target_user_id=actor.id,
+    )

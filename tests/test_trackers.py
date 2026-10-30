@@ -46,12 +46,11 @@ def audit_actions(db, tracker_id):
     return [a for a in db.scalars(select(AuditLog).where(AuditLog.tracker_id == tracker_id).order_by(AuditLog.id))]
 
 
-def test_admin_creates_tracker_and_becomes_owner(client, logged_in_admin, db):
+def test_admin_creates_tracker_without_a_role(client, logged_in_admin, db):
     response = post(client, "/trackers/new", SETTINGS)
     assert response.status_code == 302
     tracker = db.scalars(select(Tracker)).one()
-    role = db.get(TrackerRole, (logged_in_admin.id, tracker.id))
-    assert role.role == "owner"
+    assert db.get(TrackerRole, (logged_in_admin.id, tracker.id)) is None
     assert any(a.action == "tracker_created" for a in audit_actions(db, tracker.id))
 
 

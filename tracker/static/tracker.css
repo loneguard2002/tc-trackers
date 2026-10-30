@@ -240,6 +240,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tracker-card-title a { color: var(--text); text-decoration: none; }
 .tracker-card-title a:hover { color: var(--primary); text-decoration: underline; }
 .role-tag { padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .75rem; font-weight: 600; }
+.tracker-card-team { margin: 2px 0 0; color: var(--muted); font-size: .8rem; }
 .tracker-card-status { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .9rem; font-weight: 600; }
 .status-word { color: var(--tone-text); font-weight: 700; }
 .tracker-card-progress { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 20px; align-items: start; padding: 6px 18px 16px 23px; }

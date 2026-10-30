@@ -7,7 +7,7 @@ from datetime import date, datetime, time, timezone
 from flask import abort, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import func, select, union_all
 
-from ..audit import record
+from ..audit import change, record
 from ..auth import (
     ROLE_ORDER,
     admin_required,
@@ -16,12 +16,16 @@ from ..auth import (
     permission_required,
     require_tracker_role,
     tracker_roles,
+    user_role,
     visible_trackers,
 )
+from ..auth.guards import SELF_PROMOTION_MESSAGE, raises_own_access, snapshot_access
+from ..auth.roles import give_creator_ownership
 from ..db import get_session
 from ..engine.calc import COMPLETE, GroupInput, Headline, WeekRow, build_headline, build_week_rows, group_positions
 from ..engine.weeks import week_endings
 from ..models import CompletionEntry, Group, Recipient, ReportInput, Risk, Tracker, TrackerRole, User, Week
+from ..teams.tree import load_team_rows, parse_team_id, paths, team_choices
 from . import bp
 from .forms import (
     RAG_VALUES,
@@ -226,6 +230,7 @@ def home():
     risks = _risk_counts(db, ids)
     written = _written_weeks(db, ids)
     today = date.today()
+    team_names = {row.id: row.name for row in load_team_rows(db)}
     cards = []
     for t in trackers:
         position = compute_position(db, t, None, today)
@@ -240,6 +245,7 @@ def home():
             "last_entry": last_entry,
             "status": status,
             "role": roles.get(t.id),
+            "team": team_names.get(t.team_id),
             "open_risks": risks.get(t.id, (0, 0))[0],
             "red_risks": risks.get(t.id, (0, 0))[1],
             "starts": t.first_week_ending if t.first_week_ending > today else None,
@@ -309,25 +315,79 @@ def new():
     db = get_session()
     if request.method == "POST":
         values, errors = validate_tracker_form(request.form)
+        team, team_error = parse_team_id(db, request.form.get("team_id"))
+        if team_error:
+            errors.append(team_error)
         if not errors:
-            tracker = Tracker(**values)
+            actor = current_user()
+            tracker = Tracker(**values, team_id=team.id if team else None)
             db.add(tracker)
             db.flush()
-            db.add(TrackerRole(user_id=current_user().id, tracker_id=tracker.id, role="owner"))
+            give_creator_ownership(db, tracker, actor)
             record(
                 db,
-                user_id=current_user().id,
+                user_id=actor.id,
                 tracker_id=tracker.id,
                 action="tracker_created",
                 entity="tracker",
                 entity_id=tracker.id,
-                detail={"name": tracker.name},
+                detail={"name": tracker.name, "team": paths(load_team_rows(db)).get(team.id) if team else None},
             )
             db.commit()
             flash("Tracker created.", "success")
             return redirect(url_for("trackers.settings", tracker_id=tracker.id))
         return _render_settings(None, request.form, errors, status=400)
     return _render_settings(None, _defaults_form(), [])
+
+
+@bp.post("/trackers/<int:tracker_id>/team")
+@permission_required("manage_teams")
+def set_team(tracker_id: int):
+    """Put a tracker in a team, or in none (empty ``team_id``); the confirmation is in the page."""
+    db = get_session()
+    tracker = db.get(Tracker, tracker_id)
+    if tracker is None:
+        abort(404)
+    destination = request.form.get("next", "settings")
+    team, team_error = parse_team_id(db, request.form.get("team_id"))
+    if team_error:
+        abort(400, description=team_error)
+    new_team_id = team.id if team else None
+    actor = current_user()
+    if new_team_id == tracker.team_id:
+        flash("No changes to save.", "info")
+        return _after_team_change(actor, tracker, destination)
+    old_team_id = tracker.team_id
+    before = snapshot_access(db, actor)
+    tracker.team_id = new_team_id
+    if raises_own_access(db, actor, before):
+        db.rollback()
+        flash(SELF_PROMOTION_MESSAGE, "danger")
+        return _after_team_change(actor, tracker, destination)
+    labels = paths(load_team_rows(db))
+    record(
+        db,
+        user_id=actor.id,
+        tracker_id=tracker.id,
+        action="tracker_team_changed",
+        entity="tracker",
+        entity_id=tracker.id,
+        detail=change(labels.get(old_team_id), labels.get(new_team_id)),
+    )
+    name = tracker.name
+    db.commit()
+    flash(f"Moved {name} to {labels[new_team_id] if new_team_id else 'no team'}.", "success")
+    return _after_team_change(actor, tracker, destination)
+
+
+def _after_team_change(actor: User, tracker: Tracker, destination: str):
+    """Back to where the change was made, or to the home page when the actor no longer reaches that screen."""
+    db = get_session()
+    if destination == "access" and actor.is_admin:
+        return redirect(url_for("trackers.roles", tracker_id=tracker.id))
+    if destination == "settings" and user_role(db, actor, tracker.id) == "owner":
+        return redirect(url_for("trackers.settings", tracker_id=tracker.id))
+    return redirect(url_for("index"))
 
 
 MOVING_AVERAGE_RANGE = range(1, 13)
@@ -377,6 +437,12 @@ def _settings_live(db, tracker: Tracker) -> dict:
     }
 
 
+def _team_path(tracker: Tracker | None) -> str | None:
+    if tracker is None or tracker.team_id is None:
+        return None
+    return paths(load_team_rows(get_session())).get(tracker.team_id)
+
+
 def _render_settings(tracker: Tracker | None, form, errors: list[str], status: int = 200):
     template = "trackers/settings.html" if tracker is not None else "trackers/new.html"
     locked = tracker is not None and _has_entries(get_session(), tracker)
@@ -388,6 +454,8 @@ def _render_settings(tracker: Tracker | None, form, errors: list[str], status: i
             errors=errors,
             weekdays=list(enumerate(WEEKDAYS)),
             weekday_locked=locked,
+            team_choices=team_choices(get_session()),
+            team_path=_team_path(tracker),
             live=_settings_live(get_session(), tracker) if tracker is not None else None,
             page_title="New tracker" if tracker is None else f"{tracker.name} settings",
             current_page="trackers",
