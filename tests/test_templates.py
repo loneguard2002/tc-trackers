@@ -73,6 +73,7 @@ def render_sidebar(app, is_admin: bool, held: set[str]) -> str:
 
 # Permission -> sidebar link. Tasks 5, 9 and 11 add a row each; nothing else in the tests below changes.
 LINKS = {
+    "manage_users": 'href="/admin/users"',
     "manage_teams": 'href="/admin/teams"',
     "import_workbooks": 'href="/import"',
     "manage_email_settings": 'href="/admin/smtp"',
@@ -88,6 +89,7 @@ LINKS = {
         {"import_workbooks", "manage_email_settings"},
         {"view_all_trackers"},
         {"manage_teams"},
+        {"manage_users"},
     ],
 )
 def test_sidebar_shows_only_the_links_held(app, held):
@@ -95,10 +97,6 @@ def test_sidebar_shows_only_the_links_held(app, held):
     for permission, link in LINKS.items():
         assert (link in html) == (permission in held)
     assert ("Administration" in html) == bool(held & set(LINKS))
-
-
-def test_users_link_stays_administrator_only_for_now(app):  # deleted in Task 9
-    assert 'href="/admin/users"' not in render_sidebar(app, is_admin=False, held={"manage_users"})
 
 
 def test_sidebar_shows_every_link_to_administrators(app):

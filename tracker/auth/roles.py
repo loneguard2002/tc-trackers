@@ -124,6 +124,60 @@ def team_access(session: Session, tracker: Tracker) -> list[TeamAccess]:
     return sorted(access, key=lambda a: (a.user.full_name.lower(), a.user.full_name, a.path, a.user.id))
 
 
+class TrackerAccess(NamedTuple):
+    tracker: Tracker
+    role: str
+    routes: list[str]
+
+
+def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
+    """Every tracker the user reaches, with the highest role and every route that gives one (Effective access).
+
+    Routes read ``"Administrator"``, ``"Direct role: Viewer"``, ``"Team Infrastructure › Windows: Editor"`` (the path
+    of the team the user belongs to) and ``"View all trackers: Viewer"``, in that order. The roles agree with
+    ``tracker_roles``. Sorted by tracker name, then id; empty for a user who is not active.
+    """
+    if user.status != "active":
+        return []
+    from ..teams.tree import descendants, load_team_rows, paths  # here: see team_access
+    from .permissions import set_permission_sources
+
+    trackers = {tracker.id: tracker for tracker in session.scalars(select(Tracker))}
+    routes: dict[int, list[tuple[str, str]]] = {}  # tracker id -> [(role, route text)]
+
+    def add(tracker_ids, role: str, text: str) -> None:
+        for tracker_id in tracker_ids:
+            if tracker_id in trackers:
+                routes.setdefault(tracker_id, []).append((role, text))
+
+    if user.is_admin:
+        add(trackers, "owner", "Administrator")
+    direct = session.execute(select(TrackerRole.tracker_id, TrackerRole.role).where(TrackerRole.user_id == user.id))
+    for tracker_id, role in direct:
+        add([tracker_id], role, f"Direct role: {role.title()}")
+    rows = load_team_rows(session)
+    labels = {row.id: row.name for row in rows} | paths(rows)  # the bare name for a team caught in a cycle
+    by_team: dict[int, list[int]] = {}
+    for tracker in trackers.values():
+        if tracker.team_id is not None:
+            by_team.setdefault(tracker.team_id, []).append(tracker.id)
+    memberships = session.execute(select(TeamMember.team_id, TeamMember.role).where(TeamMember.user_id == user.id))
+    for team_id, role in sorted(memberships, key=lambda m: (labels.get(m.team_id, ""), m.team_id)):
+        reached = [tracker_id for team in descendants(rows, team_id) for tracker_id in by_team.get(team, [])]
+        add(reached, role, f"Team {labels.get(team_id, '')}: {role.title()}")
+    if any(permission == "view_all_trackers" for permission, _source in set_permission_sources(session, user)):
+        add(trackers, "viewer", "View all trackers: Viewer")
+    access = [
+        TrackerAccess(
+            trackers[tracker_id],
+            ROLE_BY_RANK[max(ROLE_ORDER[role] for role, _text in found)],
+            [text for _role, text in found],
+        )
+        for tracker_id, found in routes.items()
+    ]
+    return sorted(access, key=lambda a: (a.tracker.name, a.tracker.id))
+
+
 def visible_trackers(session: Session, user: User) -> list[Tracker]:
     """Every tracker the user reaches, ordered by name then id, in one SQL statement."""
     if user.status != "active":

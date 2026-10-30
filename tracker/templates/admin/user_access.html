@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Effective access</h1>
+<p class="page-lede"><a href="{{ url_for('admin.users') }}">Users</a> › {{ person.full_name }}</p>
+<div class="settings settings-narrow">
+  <section class="settings-section" aria-labelledby="section-access">
+    <header class="settings-section-head">
+      <h2 id="section-access">{{ person.full_name }}</h2>
+      <p>{{ person.email }} · {{ person.status|title }}{% if person.is_admin %} · Administrator{% endif %}. Every tracker this person can open, with their role and each route that gives it, then every permission they hold and where it comes from.</p>
+    </header>
+    {% if person.status != 'active' %}
+    <p class="empty-note">This account is not active, so it gives no access to trackers and no permissions. Any teams and permission sets it keeps apply again once it is active.</p>
+    {% else %}
+    {% if trackers %}
+    <div class="section-table register">
+      <table class="table">
+        <thead><tr><th scope="col">Tracker</th><th scope="col">Role</th><th scope="col">Through</th></tr></thead>
+        <tbody>
+        {% for a in trackers %}
+        <tr>
+          <td><span class="cell-title">{{ a.tracker.name }}</span>{% if a.tracker.status == 'archived' %} <span class="badge badge-muted">Archived</span>{% endif %}</td>
+          <td>{{ a.role|title }}</td>
+          <td>{% for route in a.routes %}<span class="cell-sub">{{ route }}</span>{% endfor %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif not hidden %}
+    <p class="empty-note">This person cannot open any tracker.</p>
+    {% endif %}
+    {% if hidden %}
+    <p class="section-foot-note">and {{ hidden }} {{ 'tracker' if hidden == 1 else 'trackers' }} you cannot open</p>
+    {% endif %}
+    {% if sources %}
+    <div class="section-table register">
+      <table class="table">
+        <thead><tr><th scope="col">Permission</th><th scope="col">Comes from</th></tr></thead>
+        <tbody>
+        {% for name, found in sources.items() %}
+        <tr>
+          <td><span class="cell-title">{{ permission_labels[name] }}</span></td>
+          <td>{% for source in found %}<span class="cell-sub">{{ source }}</span>{% endfor %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-note">This person holds no permissions.</p>
+    {% endif %}
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
