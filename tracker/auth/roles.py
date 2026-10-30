@@ -1,32 +1,103 @@
-"""Per-tracker roles. Administrators count as owner on every tracker."""
+"""Per-tracker roles (spec section 6.1).
+
+An active user's role on a tracker is the highest of: administrator (owner everywhere), a direct role, a team role
+(membership of the tracker's team or of any team above it) and the ``view_all_trackers`` permission (viewer
+everywhere). Users who are not active have no access.
+"""
 
 from __future__ import annotations
 
 from functools import wraps
 
 from flask import abort, g
-from sqlalchemy import select
+from sqlalchemy import Select, Subquery, case, func, literal, or_, select, union_all
 from sqlalchemy.orm import Session
 
 from ..db import get_session
-from ..models import Tracker, TrackerRole, User
+from ..models import (
+    PermissionSetHolder,
+    PermissionSetPermission,
+    Team,
+    TeamMember,
+    Tracker,
+    TrackerRole,
+    User,
+)
 from .session import current_user, login_required
 
 ROLE_ORDER = {"viewer": 1, "editor": 2, "owner": 3}
+ROLE_BY_RANK = {1: "viewer", 2: "editor", 3: "owner"}
+
+
+def _rank(role_column):
+    return case(ROLE_ORDER, value=role_column)
+
+
+def _grants(user_id: int) -> Subquery:
+    """Every (tracker_id, rank) the user holds by a direct role, a team role or ``view_all_trackers``.
+
+    The team walk uses ``UNION`` rather than ``UNION ALL`` so it ends even if a cycle ever reached the table.
+    """
+    reach = (
+        select(TeamMember.team_id.label("team_id"), _rank(TeamMember.role).label("rank"))
+        .where(TeamMember.user_id == user_id)
+        .cte("reach", recursive=True)
+    )
+    reach = reach.union(select(Team.id, reach.c.rank).join(reach, Team.parent_id == reach.c.team_id))
+    member_teams = select(TeamMember.team_id).where(TeamMember.user_id == user_id)
+    view_all = (
+        select(literal(1))
+        .select_from(PermissionSetHolder)
+        .join(
+            PermissionSetPermission,
+            (PermissionSetPermission.set_id == PermissionSetHolder.set_id)
+            & (PermissionSetPermission.permission == "view_all_trackers"),
+        )
+        .where(or_(PermissionSetHolder.user_id == user_id, PermissionSetHolder.team_id.in_(member_teams)))
+        .exists()
+    )
+    return union_all(
+        select(TrackerRole.tracker_id.label("tracker_id"), _rank(TrackerRole.role).label("rank")).where(
+            TrackerRole.user_id == user_id
+        ),
+        select(Tracker.id, reach.c.rank).join(reach, Tracker.team_id == reach.c.team_id),
+        select(Tracker.id, literal(1)).where(view_all),
+    ).subquery("grants")
+
+
+def _role_ranks(user_id: int) -> Select:
+    """The highest rank per tracker the user reaches: ``(tracker_id, rank)``."""
+    grants = _grants(user_id)
+    return select(grants.c.tracker_id, func.max(grants.c.rank).label("rank")).group_by(grants.c.tracker_id)
+
+
+def tracker_roles(session: Session, user: User) -> dict[int, str]:
+    """Tracker id to the user's highest role, for every tracker the user reaches (archived included)."""
+    if user.status != "active":
+        return {}
+    if user.is_admin:
+        return dict.fromkeys(session.scalars(select(Tracker.id)), "owner")
+    return {tracker_id: ROLE_BY_RANK[rank] for tracker_id, rank in session.execute(_role_ranks(user.id))}
 
 
 def user_role(session: Session, user: User, tracker_id: int) -> str | None:
+    if user.status != "active":
+        return None
     if user.is_admin:
         return "owner"
-    return session.scalar(
-        select(TrackerRole.role).where(TrackerRole.user_id == user.id, TrackerRole.tracker_id == tracker_id)
-    )
+    ranks = _role_ranks(user.id).subquery()
+    rank = session.scalar(select(ranks.c.rank).where(ranks.c.tracker_id == tracker_id))
+    return ROLE_BY_RANK[rank] if rank is not None else None
 
 
 def visible_trackers(session: Session, user: User) -> list[Tracker]:
+    """Every tracker the user reaches, ordered by name then id, in one SQL statement."""
+    if user.status != "active":
+        return []
     query = select(Tracker).order_by(Tracker.name, Tracker.id)
     if not user.is_admin:
-        query = query.join(TrackerRole, TrackerRole.tracker_id == Tracker.id).where(TrackerRole.user_id == user.id)
+        ranks = _role_ranks(user.id).subquery()
+        query = query.join(ranks, ranks.c.tracker_id == Tracker.id)
     return list(session.scalars(query))
 
 
