@@ -26,11 +26,11 @@
         </tbody>
       </table>
     </div>
-    {% elif not hidden %}
+    {% elif not limited %}
     <p class="empty-note">This person cannot open any tracker.</p>
     {% endif %}
-    {% if hidden %}
-    <p class="section-foot-note">and {{ hidden }} {{ 'tracker' if hidden == 1 else 'trackers' }} you cannot open</p>
+    {% if limited %}
+    <p class="section-foot-note">Only trackers you can open are listed.</p>
     {% endif %}
     {% if sources %}
     <div class="section-table register">

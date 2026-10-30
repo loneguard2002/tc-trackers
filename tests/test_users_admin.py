@@ -6,7 +6,14 @@ import pytest
 from sqlalchemy import select
 
 from tests.conftest import post, sign_in
-from tracker.auth.accounts import ELEVATED_MESSAGE, LAST_ADMIN_MESSAGE, OWN_ACCOUNT_MESSAGE, last_admin_refusal
+from tracker.auth.accounts import (
+    ELEVATED_MESSAGE,
+    LAST_ADMIN_MESSAGE,
+    OWN_ACCOUNT_MESSAGE,
+    VOUCHED_MESSAGE,
+    last_admin_refusal,
+    vouched_refusal,
+)
 from tracker.auth.guards import TEAM_WITH_SETS_MESSAGE
 from tracker.auth.passwords import verify_password
 from tracker.auth.permissions import permission_sources
@@ -234,6 +241,8 @@ def test_approval_with_a_team_place(client, logged_in_admin, user_factory, team_
     assert approved.target_user_id == pending.id and added.target_user_id == pending.id
     assert added.detail == {"team": "Infrastructure › Windows", "role": "editor"}
     assert added.entity == "team" and added.entity_id == str(windows.id)
+    flashed = text_of(client.get("/admin/users"))
+    assert f"{pending.full_name} is now active, as editor in Windows." in flashed
 
 
 def test_team_place_refused_for_a_holder_without_manage_teams(client, user_manager, user_factory, team_factory, db):
@@ -262,6 +271,7 @@ def test_team_place_in_a_team_holding_a_set_refused_for_non_admins(client, user_
     assert TEAM_WITH_SETS_MESSAGE in text_of(response)
     assert reloaded(db, pending).status == "pending"
     assert db.get(TeamMember, (holding.id, pending.id)) is None
+    assert entries(db, "user_approved") == []
     response = post(client, f"/admin/users/{pending.id}/approve", {"team_id": str(plain.id), "team_role": "owner"})
     assert response.status_code == 302
     assert db.get(TeamMember, (plain.id, pending.id)).role == "owner"
@@ -350,7 +360,7 @@ def test_effective_access_lists_routes_and_permission_sources(
         "Set Readers, held directly",
     ):
         assert text in page
-    assert "you cannot open" not in page
+    assert "Only trackers you can open are listed." not in page
 
 
 def test_effective_access_of_an_administrator_and_of_an_inactive_user(
@@ -378,15 +388,78 @@ def test_effective_access_hides_names_the_holder_cannot_open(
     grant(user_manager, shared, "viewer")
     page = text_of(client.get(f"/admin/users/{person.id}/access"))
     assert "Shared Work" in page and "Secret Plans" not in page
-    assert "and 1 tracker you cannot open" in page
+    assert "Only trackers you can open are listed." in page and "you cannot open" not in page  # nothing is counted
     another = tracker_factory(name="Other Secret")
     grant(person, another, "editor")
-    assert "and 2 trackers you cannot open" in text_of(client.get(f"/admin/users/{person.id}/access"))
+    assert "Only trackers you can open are listed." in text_of(client.get(f"/admin/users/{person.id}/access"))
     give_set(["manage_teams"], user=user_manager)
     page = text_of(client.get(f"/admin/users/{person.id}/access"))
-    assert "Secret Plans" in page and "Other Secret" in page and "you cannot open" not in page
+    assert "Secret Plans" in page and "Other Secret" in page and "Only trackers you can open" not in page
 
 
 def test_effective_access_refused_without_manage_users(client, logged_in_user, user_factory):
     other = user_factory()
     assert client.get(f"/admin/users/{other.id}/access").status_code == 403
+
+
+# --- Final review fixes ---------------------------------------------------------------------------------------------
+
+
+def test_a_holder_disables_a_plain_user(client, user_manager, user_factory, db):
+    target = user_factory(full_name="Plain Person")
+    response = post(client, f"/admin/users/{target.id}/disable", follow_redirects=True)
+    assert response.status_code == 200 and "Plain Person has been disabled." in text_of(response)
+    assert reloaded(db, target).status == "disabled"
+    (row,) = entries(db, "user_disabled")
+    assert row.user_id == user_manager.id and row.target_user_id == target.id
+
+
+def test_pending_copy_says_waiting_for_approval(client, logged_in_admin, user_factory):
+    user_factory(status="pending", auth_source="sso", password_hash=None)
+    assert "People who signed in with Microsoft and are waiting for approval" in text_of(client.get("/admin/users"))
+
+
+def test_vouched_refusal_reads_the_activity_log(db, user_factory):
+    actor, created, reset, other = (user_factory() for _ in range(4))
+    admin = user_factory(is_admin=True)
+    for action, target in (("user_created", created), ("password_reset", reset), ("user_disabled", other)):
+        db.add(
+            AuditLog(action=action, entity="user", entity_id=str(target.id), user_id=actor.id, target_user_id=target.id)
+        )
+    db.commit()
+    assert vouched_refusal(db, actor, created) == VOUCHED_MESSAGE
+    assert vouched_refusal(db, actor, reset) == VOUCHED_MESSAGE
+    assert vouched_refusal(db, actor, other) is None
+    assert vouched_refusal(db, admin, created) is None
+    assert VOUCHED_MESSAGE == "You created this account or set its password, so another person must give it access."
+
+
+def test_holder_cannot_place_an_account_they_vouched_for_at_approval(client, user_factory, team_factory, give_set, db):
+    actor = user_factory(full_name="Both")
+    give_set(["manage_users", "manage_teams"], user=actor)
+    sign_in(client, actor)
+    team = team_factory(name="Plain")
+    pending = user_factory(status="pending")
+    db.add(
+        AuditLog(
+            action="password_reset",
+            entity="user",
+            entity_id=str(pending.id),
+            user_id=actor.id,
+            target_user_id=pending.id,
+        )
+    )
+    db.commit()
+    data = {"team_id": str(team.id), "team_role": "viewer"}
+    response = post(client, f"/admin/users/{pending.id}/approve", data, follow_redirects=True)
+    assert VOUCHED_MESSAGE in text_of(response)
+    assert reloaded(db, pending).status == "pending" and db.get(TeamMember, (team.id, pending.id)) is None
+    assert entries(db, "user_approved") == []
+    assert post(client, f"/admin/users/{pending.id}/approve").status_code == 302  # approval alone gives no access
+    assert reloaded(db, pending).status == "active"
+
+
+def test_approval_with_a_very_long_team_id_is_400(client, logged_in_admin, user_factory, db):
+    pending = user_factory(status="pending")
+    response = post(client, f"/admin/users/{pending.id}/approve", {"team_id": "9" * 5000, "team_role": "viewer"})
+    assert response.status_code == 400 and reloaded(db, pending).status == "pending"

@@ -11,11 +11,13 @@ from typing import NamedTuple
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..ids import parse_id
 from ..models import Team
 
 PATH_SEPARATOR = " › "
 TEAM_CHOICE_ERROR = "Choose a team from the list."
-_MAX_ID = 2**31 - 1  # the largest Postgres integer; a larger id cannot exist and must not reach the query
+ALREADY_MEMBER_MESSAGE = "That person is already a member of this team."
+CHOOSE_ROLE_MESSAGE = "Choose a role: viewer, editor or owner."
 
 
 class TeamRow(NamedTuple):
@@ -68,6 +70,14 @@ def paths(rows: list[TeamRow]) -> dict[int, str]:
     return labels
 
 
+def team_labels(rows: list[TeamRow]) -> dict[int, str]:
+    """Team id to its path label, or to its bare name for a team the tree cannot place (caught in a cycle).
+
+    Use this wherever a team is named in an activity entry or on a screen, so a team never goes unnamed.
+    """
+    return {row.id: row.name for row in rows} | paths(rows)
+
+
 def load_team_rows(session: Session, lock: bool = False) -> list[TeamRow]:
     """Every team; with ``lock`` the rows are read ``FOR UPDATE`` so a concurrent move cannot form a cycle."""
     query = select(Team.id, Team.parent_id, Team.name).order_by(Team.id)
@@ -79,16 +89,14 @@ def load_team_rows(session: Session, lock: bool = False) -> list[TeamRow]:
 def team_choices(session: Session) -> list[tuple[int, str]]:
     """``(id, path label)`` for every team in tree order, for selects."""
     rows = load_team_rows(session)
-    labels = paths(rows)
+    labels = team_labels(rows)
     return [(row.id, labels[row.id]) for row, _depth in order_tree(rows)]
 
 
 def parse_team_id(session: Session, value: str | None) -> tuple[Team | None, str | None]:
     """A team chosen in a form: ``(None, None)`` for no team, ``(None, message)`` for anything but an existing id."""
-    text = (value or "").strip()
-    if not text:
+    if not (value or "").strip():
         return None, None
-    if not (text.isascii() and text.isdigit()) or int(text) > _MAX_ID:
-        return None, TEAM_CHOICE_ERROR
-    team = session.get(Team, int(text))
+    team_id = parse_id(value)
+    team = session.get(Team, team_id) if team_id is not None else None
     return (team, None) if team is not None else (None, TEAM_CHOICE_ERROR)

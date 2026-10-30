@@ -12,27 +12,31 @@ from flask import abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from ..audit import change, record
-from ..auth import ROLE_ORDER, admin_required, current_user, has_permission, permission_required, tracker_roles
-from ..auth.accounts import account_refusal, last_admin_refusal
+from ..audit import NO_CHANGES_MESSAGE, change, record
+from ..auth import ROLES, admin_required, current_user, has_permission, permission_required, tracker_roles
+from ..auth.accounts import account_refusal, last_admin_refusal, vouched_refusal
 from ..auth.guards import TEAM_WITH_SETS_MESSAGE, team_holds_sets
 from ..auth.passwords import hash_password, validate_new_password
 from ..auth.permissions import PERMISSIONS, permission_sources
 from ..auth.roles import tracker_access_routes
 from ..db import get_session
+from ..ids import in_range
 from ..models import PermissionSet, PermissionSetHolder, TeamMember, User
-from ..teams.tree import load_team_rows, parse_team_id, paths, team_choices
-from ..teams.views import ALREADY_MEMBER_MESSAGE, CHOOSE_ROLE_MESSAGE
+from ..teams.tree import (
+    ALREADY_MEMBER_MESSAGE,
+    CHOOSE_ROLE_MESSAGE,
+    load_team_rows,
+    parse_team_id,
+    team_choices,
+    team_labels,
+)
 from . import bp
 
 SSO_PASSWORD_MESSAGE = "This person signs in with Microsoft and has no password here."
-NO_CHANGES_MESSAGE = "No changes to save."
-ROLES = tuple(ROLE_ORDER)
-_MAX_ID = 2**31 - 1  # the largest Postgres integer; a larger id cannot exist and must not reach a query
 
 
 def _get_user_or_404(user_id: int) -> User:
-    user = get_session().get(User, user_id) if user_id <= _MAX_ID else None
+    user = get_session().get(User, user_id) if in_range(user_id) else None
     if user is None:
         abort(404)
     return user
@@ -43,11 +47,6 @@ def _refuse(message: str):
     get_session().rollback()
     flash(message, "danger")
     return redirect(url_for("admin.users"))
-
-
-def _team_labels(db) -> dict[int, str]:
-    rows = load_team_rows(db)
-    return {row.id: row.name for row in rows} | paths(rows)  # the bare name for a team the tree cannot place
 
 
 # --- The list -------------------------------------------------------------------------------------------------------
@@ -95,7 +94,7 @@ def users():
     db = get_session()
     actor = current_user()
     rows = db.scalars(select(User).order_by(User.status != "pending", User.full_name, User.id)).all()
-    labels = _team_labels(db)
+    labels = team_labels(load_team_rows(db))
     teams, sets = _teams_and_sets(db, labels)
     place_choices = []
     if has_permission(actor, "manage_teams"):
@@ -196,13 +195,16 @@ def approve(user_id: int):
         if error:
             abort(400, description=error)
         role = request.form.get("team_role", "")
-        if role not in ROLE_ORDER:
+        if role not in ROLES:
             abort(400, description=CHOOSE_ROLE_MESSAGE)
         if not actor.is_admin and team_holds_sets(db, team.id):
             return _refuse(TEAM_WITH_SETS_MESSAGE)
         if db.get(TeamMember, (team.id, user.id)) is not None:
             abort(400, description=ALREADY_MEMBER_MESSAGE)
-        path = _team_labels(db).get(team.id, team.name)
+        refusal = vouched_refusal(db, actor, user)
+        if refusal:
+            return _refuse(refusal)
+        path = team_labels(load_team_rows(db)).get(team.id, team.name)
     user.status = "active"
     record(
         db,
@@ -232,7 +234,7 @@ def approve(user_id: int):
         db.rollback()
         abort(400, description="The team has changed since the page was opened. Please try again.")
     if team is not None:
-        flash(f"{user.full_name} is now active and {role} in {team.name}.", "success")
+        flash(f"{user.full_name} is now active, as {role} in {team.name}.", "success")
     else:
         flash(f"{user.full_name} is now active.", "success")
     return redirect(url_for("admin.users"))
@@ -382,22 +384,22 @@ def access(user_id: int):
     """Every tracker the user reaches and every permission they hold, with where each comes from.
 
     Tracker names are shown to administrators and ``manage_teams`` holders (spec section 6.2), and otherwise only for
-    trackers the viewer can open themselves; the rest are counted, never named.
+    trackers the viewer can open themselves; the rest are neither named nor counted.
     """
     user = _get_user_or_404(user_id)
     db = get_session()
     viewer = current_user()
     reached = tracker_access_routes(db, user)
-    if viewer.is_admin or has_permission(viewer, "manage_teams"):
-        shown = reached
-    else:
+    limited = not (viewer.is_admin or has_permission(viewer, "manage_teams"))
+    shown = reached
+    if limited:
         own = tracker_roles(db, viewer)
         shown = [entry for entry in reached if entry.tracker.id in own]
     return render_template(
         "admin/user_access.html",
         person=user,
         trackers=shown,
-        hidden=len(reached) - len(shown),
+        limited=limited,
         sources=permission_sources(db, user),
         permission_labels={name: label for name, (label, _description) in PERMISSIONS.items()},
         page_title=f"Effective access: {user.full_name}",

@@ -24,7 +24,8 @@ def name_error(
         return f"Enter a {noun} name."
     if len(name) > MAX_NAME_LENGTH:
         return f"A {noun} name can be at most {MAX_NAME_LENGTH} characters."
-    query = select(model.id).where(func.lower(model.name) == name.lower())
+    # Postgres lowers both sides, as the unique index on lower(name) does; Python's lower() differs for some letters.
+    query = select(model.id).where(func.lower(model.name) == func.lower(name))
     if exclude_id is not None:
         query = query.where(model.id != exclude_id)
     if session.scalar(query.limit(1)) is not None:

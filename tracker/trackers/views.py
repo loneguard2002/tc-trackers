@@ -6,10 +6,12 @@ from datetime import date, datetime, time, timezone
 
 from flask import abort, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import func, select, union_all
+from sqlalchemy.exc import IntegrityError
 
-from ..audit import change, record
+from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import (
     ROLE_ORDER,
+    ROLES,
     admin_required,
     current_user,
     has_permission,
@@ -20,13 +22,15 @@ from ..auth import (
     user_role,
     visible_trackers,
 )
+from ..auth.accounts import vouched_refusal
 from ..auth.guards import SELF_PROMOTION_MESSAGE, raises_own_access, snapshot_access
 from ..auth.roles import give_creator_ownership, team_access
 from ..db import get_session
 from ..engine.calc import COMPLETE, GroupInput, Headline, WeekRow, build_headline, build_week_rows, group_positions
 from ..engine.weeks import week_endings
+from ..ids import parse_id
 from ..models import CompletionEntry, Group, Recipient, ReportInput, Risk, Tracker, TrackerRole, User, Week
-from ..teams.tree import load_team_rows, parse_team_id, paths, team_choices
+from ..teams.tree import TEAM_CHOICE_ERROR, load_team_rows, parse_team_id, team_choices, team_labels
 from . import bp
 from .forms import (
     RAG_VALUES,
@@ -38,7 +42,7 @@ from .forms import (
 
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 ARCHIVED_MESSAGE = "This tracker is archived."
-ROLES = ("viewer", "editor", "owner")
+INACTIVE_PERSON_MESSAGE = "This person's account is not active, so it cannot be given access."
 
 
 # --- Data loading --------------------------------------------------------------------------------------------
@@ -321,20 +325,25 @@ def new():
             errors.append(team_error)
         if not errors:
             actor = current_user()
+            team_path = team_labels(load_team_rows(db)).get(team.id, team.name) if team else None
             tracker = Tracker(**values, team_id=team.id if team else None)
             db.add(tracker)
-            db.flush()
-            give_creator_ownership(db, tracker, actor)
-            record(
-                db,
-                user_id=actor.id,
-                tracker_id=tracker.id,
-                action="tracker_created",
-                entity="tracker",
-                entity_id=tracker.id,
-                detail={"name": tracker.name, "team": paths(load_team_rows(db)).get(team.id) if team else None},
-            )
-            db.commit()
+            try:
+                db.flush()
+                record(
+                    db,
+                    user_id=actor.id,
+                    tracker_id=tracker.id,
+                    action="tracker_created",
+                    entity="tracker",
+                    entity_id=tracker.id,
+                    detail={"name": tracker.name, "team": team_path},
+                )
+                give_creator_ownership(db, tracker, actor)
+                db.commit()
+            except IntegrityError:  # the team was deleted at the same moment
+                db.rollback()
+                return _render_settings(None, request.form, [TEAM_CHOICE_ERROR], status=400)
             flash("Tracker created.", "success")
             return redirect(url_for("trackers.settings", tracker_id=tracker.id))
         return _render_settings(None, request.form, errors, status=400)
@@ -356,28 +365,33 @@ def set_team(tracker_id: int):
     new_team_id = team.id if team else None
     actor = current_user()
     if new_team_id == tracker.team_id:
-        flash("No changes to save.", "info")
+        flash(NO_CHANGES_MESSAGE, "info")
         return _after_team_change(actor, tracker, destination)
-    old_team_id = tracker.team_id
+    old_team_id, name = tracker.team_id, tracker.name
+    labels = team_labels(load_team_rows(db))
+    new_path = labels.get(new_team_id, team.name) if team else None
     before = snapshot_access(db, actor)
-    tracker.team_id = new_team_id
-    if raises_own_access(db, actor, before):
+    try:  # the change is flushed by the guard's query, so a team deleted at the same moment fails there or on commit
+        tracker.team_id = new_team_id
+        if raises_own_access(db, actor, before):
+            db.rollback()
+            flash(SELF_PROMOTION_MESSAGE, "danger")
+            return _after_team_change(actor, tracker, destination)
+        record(
+            db,
+            user_id=actor.id,
+            tracker_id=tracker.id,
+            action="tracker_team_changed",
+            entity="tracker",
+            entity_id=tracker.id,
+            detail=change(labels.get(old_team_id), new_path),
+        )
+        db.commit()
+    except IntegrityError:
         db.rollback()
-        flash(SELF_PROMOTION_MESSAGE, "danger")
+        flash(TEAM_CHOICE_ERROR, "danger")
         return _after_team_change(actor, tracker, destination)
-    labels = paths(load_team_rows(db))
-    record(
-        db,
-        user_id=actor.id,
-        tracker_id=tracker.id,
-        action="tracker_team_changed",
-        entity="tracker",
-        entity_id=tracker.id,
-        detail=change(labels.get(old_team_id), labels.get(new_team_id)),
-    )
-    name = tracker.name
-    db.commit()
-    flash(f"Moved {name} to {labels[new_team_id] if new_team_id else 'no team'}.", "success")
+    flash(f"Moved {name} to {new_path or 'no team'}.", "success")
     return _after_team_change(actor, tracker, destination)
 
 
@@ -441,7 +455,7 @@ def _settings_live(db, tracker: Tracker) -> dict:
 def _team_path(tracker: Tracker | None) -> str | None:
     if tracker is None or tracker.team_id is None:
         return None
-    return paths(load_team_rows(get_session())).get(tracker.team_id)
+    return team_labels(load_team_rows(get_session())).get(tracker.team_id)
 
 
 def _render_settings(tracker: Tracker | None, form, errors: list[str], status: int = 200):
@@ -790,12 +804,23 @@ def roles(tracker_id: int):
         refused = _refuse_if_archived(tracker, "trackers.roles")
         if refused:
             return refused
-        user = db.get(User, request.form.get("user_id", type=int) or 0)
+        user_id = parse_id(request.form.get("user_id"))
+        user = db.get(User, user_id) if user_id else None
         choice = request.form.get("role", "")
         if user is None or user.is_admin or choice not in (*ROLES, "remove"):
             abort(400, description="Choose a user and a role.")
         existing = db.get(TrackerRole, (user.id, tracker.id))
         previous = existing.role if existing else None
+        if previous == (None if choice == "remove" else choice):
+            flash(NO_CHANGES_MESSAGE, "info")
+            return redirect(url_for("trackers.roles", tracker_id=tracker_id))
+        if choice != "remove":
+            if user.status != "active":
+                abort(400, description=INACTIVE_PERSON_MESSAGE)
+            refusal = vouched_refusal(db, actor, user)
+            if refusal:
+                flash(refusal, "danger")
+                return redirect(url_for("trackers.roles", tracker_id=tracker_id))
         before = snapshot_access(db, actor)
         if choice == "remove":
             if existing:

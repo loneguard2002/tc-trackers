@@ -55,7 +55,9 @@
             <td>{{ e.label }}</td>
             <td>{{ e.tracker or '–' }}</td>
             <td>
-              {% if e.lines %}
+              {% if e.hidden %}
+              <span class="activity-hidden">{{ hidden_detail }}</span>
+              {% elif e.lines %}
               <ul class="activity-detail">
                 {% for line in e.lines %}
                 <li>{% if line.field %}<span class="activity-field">{{ line.field }}</span> {% endif %}{% if line.value is not none %}{{ line.value }}{% else %}<span class="activity-before">{{ line.before }}</span> <span aria-label="changed to">→</span> <span class="activity-after">{{ line.after }}</span>{% endif %}</li>

@@ -144,3 +144,37 @@ def test_no_secrets_in_any_entry(client, logged_in_admin, user_factory, db):
     blob = json.dumps([e.detail for e in db.scalars(select(AuditLog))])
     for secret in (p1, p2, p3, "smtp-secret-9", "$2b$", "password_hash", "smtp_password"):
         assert secret not in blob
+
+
+# --- Names, not contents ----------------------------------------------------------------------------------------------
+
+HIDDEN = "Details hidden: you cannot open this tracker."
+
+
+def test_detail_hidden_from_a_holder_who_cannot_open_the_tracker(
+    client, db, user_factory, give_set, tracker_factory, grant
+):
+    secret, shared = tracker_factory(name="Secret rollout"), tracker_factory(name="Shared rollout")
+    add(db, tracker_id=secret.id, action="entry_created", detail={"quantity": 4242})
+    add(db, tracker_id=shared.id, action="entry_created", detail={"quantity": 5151})
+    add(db, action="team_created", detail={"name": "Teamwide"})
+    holder = user_factory()
+    give_set(["view_activity"], user=holder)
+    grant(holder, shared, "viewer")
+    sign_in(client, holder)
+    page = text_of(client.get(URL))
+    assert "Secret rollout" in page and "4242" not in page and page.count(HIDDEN) == 1
+    assert "Shared rollout" in page and "5151" in page and "Teamwide" in page
+
+
+def test_administrator_sees_every_detail(client, logged_in_admin, db, tracker_factory):
+    secret = tracker_factory(name="Secret rollout")
+    add(db, tracker_id=secret.id, action="entry_created", detail={"quantity": 4242})
+    page = text_of(client.get(URL))
+    assert "4242" in page and HIDDEN not in page
+
+
+def test_a_very_long_person_filter_is_ignored(client, logged_in_admin, db):
+    add(db)
+    response = client.get(URL + "?person=" + "9" * 5000)
+    assert response.status_code == 200 and text_of(response).count("<tr data-entry") == 1

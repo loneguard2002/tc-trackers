@@ -29,6 +29,7 @@ from .session import current_user, login_required
 
 ROLE_ORDER = {"viewer": 1, "editor": 2, "owner": 3}
 ROLE_BY_RANK = {1: "viewer", 2: "editor", 3: "owner"}
+ROLES = tuple(ROLE_ORDER)  # the roles in rising order, for selects and checks
 
 
 def _rank(role_column):
@@ -105,11 +106,11 @@ def team_access(session: Session, tracker: Tracker) -> list[TeamAccess]:
     """
     if tracker.team_id is None:
         return []
-    from ..teams.tree import load_team_rows, paths  # here: importing tracker.teams at load time would be circular
+    from ..teams.tree import load_team_rows, team_labels  # here: importing tracker.teams at load time is circular
 
     rows = load_team_rows(session)
     parents = {row.id: row.parent_id for row in rows}
-    labels = paths(rows)
+    labels = team_labels(rows)
     reaching: set[int] = set()
     team_id = tracker.team_id
     while team_id is not None and team_id not in reaching:  # the guard ends a walk through a cycle
@@ -120,7 +121,7 @@ def team_access(session: Session, tracker: Tracker) -> list[TeamAccess]:
         .join(TeamMember, TeamMember.user_id == User.id)
         .where(TeamMember.team_id.in_(reaching), User.status == "active")
     )
-    access = [TeamAccess(user, labels[team], role) for user, team, role in found if team in labels]
+    access = [TeamAccess(user, labels.get(team, ""), role) for user, team, role in found]
     return sorted(access, key=lambda a: (a.user.full_name.lower(), a.user.full_name, a.path, a.user.id))
 
 
@@ -139,7 +140,7 @@ def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
     """
     if user.status != "active":
         return []
-    from ..teams.tree import descendants, load_team_rows, paths  # here: see team_access
+    from ..teams.tree import descendants, load_team_rows, team_labels  # here: see team_access
     from .permissions import set_permission_sources
 
     trackers = {tracker.id: tracker for tracker in session.scalars(select(Tracker))}
@@ -156,7 +157,7 @@ def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
     for tracker_id, role in direct:
         add([tracker_id], role, f"Direct role: {role.title()}")
     rows = load_team_rows(session)
-    labels = {row.id: row.name for row in rows} | paths(rows)  # the bare name for a team caught in a cycle
+    labels = team_labels(rows)
     by_team: dict[int, list[int]] = {}
     for tracker in trackers.values():
         if tracker.team_id is not None:

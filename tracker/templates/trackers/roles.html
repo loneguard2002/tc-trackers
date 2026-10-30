@@ -19,6 +19,7 @@
 {% include "trackers/_nav.html" %}
 {% set members = users|selectattr('is_admin')|list + users|rejectattr('is_admin')|selectattr('id', 'in', current)|list %}
 {% set others = users|rejectattr('is_admin')|rejectattr('id', 'in', current)|list %}
+{% if not current_user.is_admin %}{% set others = others|rejectattr('id', 'equalto', current_user.id)|list %}{% endif %}
 <div class="settings settings-narrow">
   <section class="settings-section" aria-labelledby="section-members">
     <header class="settings-section-head">
@@ -26,7 +27,7 @@
       <p>Who can open this tracker and what they can do. Each role includes everything the one before it can do.</p>
       <dl class="role-legend">
         <div><dt>Viewer</dt><dd>Opens the report and downloads it.</dd></div>
-        <div><dt>Editor</dt><dd>Also records entries, weekly inputs, targets, {{ (tracker.group_label|plural if tracker.group_label else 'groups')|lower }} and risks.</dd></div>
+        <div><dt>Editor</dt><dd>Also records entries, weekly inputs, targets, {{ (tracker.group_label|plural if tracker.group_label and g.role else 'groups')|lower }} and risks.</dd></div>
         <div><dt>Owner</dt><dd>Also changes settings and manages the weekly email.</dd></div>
       </dl>
     </header>

@@ -3,12 +3,15 @@
 import html
 import re
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 
 from tests.conftest import post, sign_in
+from tracker.auth.accounts import VOUCHED_MESSAGE
 from tracker.auth.guards import SELF_PROMOTION_MESSAGE, TEAM_WITH_SETS_MESSAGE, team_holds_sets
 from tracker.models import AuditLog, PermissionSet, PermissionSetHolder, Team, TeamMember
 from tracker.naming import description_error, name_error
+from tracker.teams import views as team_views
+from tracker.teams.tree import TEAM_CHOICE_ERROR
 from tracker.teams.views import CYCLE_MESSAGE
 
 
@@ -177,10 +180,11 @@ def test_rename_logs_before_and_after(client, logged_in_admin, db, team_factory)
     response = post(client, f"/admin/teams/{team.id}/rename", {"name": "Windows clients", "description": "Desktops"})
     assert response.status_code == 302
     [entry] = entries(db, "team_renamed")
-    assert entry.detail == {"before": {"name": "Windows"}, "after": {"name": "Windows clients"}}
+    assert entry.detail == {"team": "Windows", "before": {"name": "Windows"}, "after": {"name": "Windows clients"}}
     assert entry.entity == "team" and entry.entity_id == str(team.id)
     post(client, f"/admin/teams/{team.id}/rename", {"name": "Windows clients", "description": "Laptops"})
     assert entries(db, "team_renamed")[-1].detail == {
+        "team": "Windows clients",
         "before": {"description": "Desktops"},
         "after": {"description": "Laptops"},
     }
@@ -234,8 +238,8 @@ def test_move_logs_parent_before_and_after(client, logged_in_admin, db, team_fac
     assert parent_of(db, windows) == apps.id
     moves = entries(db, "team_moved")
     assert [m.detail for m in moves] == [
-        {"before": "Infrastructure", "after": None},
-        {"before": None, "after": "Applications"},
+        {"team": "Infrastructure › Windows", "before": "Infrastructure", "after": None},
+        {"team": "Windows", "before": None, "after": "Applications"},
     ]
     assert moves[0].entity == "team" and moves[0].entity_id == str(windows.id)
 
@@ -246,7 +250,7 @@ def test_move_names_parents_by_their_paths(client, logged_in_admin, db, team_fac
     laptops = team_factory(name="Laptops")
     assert post(client, f"/admin/teams/{laptops.id}/move", {"parent_id": str(windows.id)}).status_code == 302
     [entry] = entries(db, "team_moved")
-    assert entry.detail == {"before": None, "after": "Infrastructure › Windows"}
+    assert entry.detail == {"team": "Laptops", "before": None, "after": "Infrastructure › Windows"}
 
 
 def test_move_to_the_same_parent_logs_nothing(client, logged_in_admin, db, team_factory):
@@ -509,3 +513,123 @@ def test_team_page_names_trackers_the_holder_cannot_open(client, user_factory, g
     assert "Secret rollout" in page
     assert re.search(r"Old rollout.*Archived", page, re.S)
     assert client.get(f"/trackers/{tracker.id}").status_code == 404
+
+
+# --- Final review fixes ---------------------------------------------------------------------------------------------
+
+LONG_ID = "9" * 5000  # int() refuses it, so it must be turned away before any conversion
+
+
+def vouch(db, actor, target, action="user_created"):
+    """Record that ``actor`` created ``target``'s account (or reset its password)."""
+    db.add(AuditLog(action=action, entity="user", entity_id=str(target.id), user_id=actor.id, target_user_id=target.id))
+    db.commit()
+
+
+def test_team_moved_names_the_team_by_its_path(client, logged_in_admin, db, team_factory):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    laptops = team_factory(name="Laptops", parent=windows)
+    apps = team_factory(name="Applications")
+    assert post(client, f"/admin/teams/{laptops.id}/move", {"parent_id": str(apps.id)}).status_code == 302
+    [entry] = entries(db, "team_moved")
+    assert entry.detail == {
+        "team": "Infrastructure › Windows › Laptops",
+        "before": "Infrastructure › Windows",
+        "after": "Applications",
+    }
+
+
+def test_very_long_ids_are_400_not_500(client, logged_in_admin, db, team_factory):
+    team = team_factory(name="Windows")
+    assert post(client, "/admin/teams", {"name": "New", "parent_id": LONG_ID}).status_code == 400
+    assert post(client, f"/admin/teams/{team.id}/move", {"parent_id": LONG_ID}).status_code == 400
+    assert post(client, f"/admin/teams/{team.id}/members", {"user_id": LONG_ID, "role": "viewer"}).status_code == 400
+    assert post(client, f"/admin/teams/{team.id}/move", {"parent_id": str(2**31)}).status_code == 400
+    assert entries(db) == [] and db.scalar(select(func.count()).select_from(Team)) == 1
+
+
+def test_create_under_a_parent_deleted_at_the_same_moment(client, logged_in_admin, db, team_factory, monkeypatch):
+    parent = team_factory(name="Going")
+    original = team_views.load_team_rows
+
+    def delete_parent_first(session, lock=False):
+        if db.get(Team, parent.id) is not None:
+            db.delete(db.get(Team, parent.id))
+            db.commit()
+        return original(session, lock)
+
+    monkeypatch.setattr(team_views, "load_team_rows", delete_parent_first)
+    page = post(client, "/admin/teams", {"name": "Child", "parent_id": str(parent.id)})
+    assert page.status_code == 400 and TEAM_CHOICE_ERROR in text_of(page)
+    assert "already exists" not in text_of(page)
+    assert db.scalar(select(func.count()).select_from(Team)) == 0 and entries(db) == []
+
+
+def test_delete_names_the_parent_read_under_the_lock(client, logged_in_admin, db, team_factory, monkeypatch):
+    infra, apps = team_factory(name="Infrastructure"), team_factory(name="Applications")
+    team = team_factory(name="Windows", parent=infra)
+    original = team_views.load_team_rows
+
+    def move_first(session, lock=False):
+        if lock:  # another manager moves the team after this request read it, just before the lock
+            db.execute(update(Team).where(Team.id == team.id).values(parent_id=apps.id))
+            db.commit()
+        return original(session, lock)
+
+    monkeypatch.setattr(team_views, "load_team_rows", move_first)
+    assert post(client, f"/admin/teams/{team.id}/delete").status_code == 302
+    [deleted] = entries(db, "team_deleted")
+    assert deleted.detail == {"name": "Windows", "parent": "Applications"}
+
+
+def test_removing_a_member_removed_at_the_same_moment(
+    client, logged_in_admin, db, team_factory, user_factory, add_member, monkeypatch
+):
+    team, user = team_factory(name="Windows"), user_factory(full_name="Pat")
+    add_member(team, user, "viewer")
+    original = team_views._team_path
+
+    def remove_first(t):
+        db.execute(delete(TeamMember).where(TeamMember.team_id == team.id))
+        db.commit()
+        return original(t)
+
+    monkeypatch.setattr(team_views, "_team_path", remove_first)
+    response = post(client, f"/admin/teams/{team.id}/members/{user.id}", {"action": "remove"}, follow_redirects=True)
+    assert response.status_code == 200 and "Pat is no longer a member of Windows." in text_of(response)
+    assert entries(db) == []
+
+
+def test_holder_cannot_give_a_team_place_to_an_account_they_vouched_for(
+    client, db, user_factory, give_set, team_factory, add_member
+):
+    actor = holder(user_factory, give_set, client)
+    team = team_factory(name="Windows")
+    created, reset, other = user_factory(), user_factory(), user_factory()
+    vouch(db, actor, created)
+    vouch(db, actor, reset, action="password_reset")
+    url = f"/admin/teams/{team.id}/members"
+    for person in (created, reset):
+        response = post(client, url, {"user_id": str(person.id), "role": "viewer"}, follow_redirects=True)
+        assert VOUCHED_MESSAGE in text_of(response) and member_role(db, team, person) is None
+    assert post(client, url, {"user_id": str(other.id), "role": "viewer"}).status_code == 302
+    assert member_role(db, team, other) == "viewer"
+    add_member(team, created, "viewer")  # placed there by someone else
+    response = post(client, f"/admin/teams/{team.id}/members/{created.id}", {"role": "owner"}, follow_redirects=True)
+    assert VOUCHED_MESSAGE in text_of(response) and member_role(db, team, created) == "viewer"
+    assert post(client, f"/admin/teams/{team.id}/members/{created.id}", {"action": "remove"}).status_code == 302
+    assert member_role(db, team, created) is None  # removing lowers access, so it is allowed
+    assert [e.target_user_id for e in entries(db, "team_member_added")] == [other.id]
+    assert entries(db, "team_member_role_changed") == []
+
+
+def test_an_administrator_may_give_access_to_an_account_they_created(
+    client, logged_in_admin, db, team_factory, user_factory
+):
+    team, person = team_factory(name="Windows"), user_factory()
+    vouch(db, logged_in_admin, person)
+    assert (
+        post(client, f"/admin/teams/{team.id}/members", {"user_id": str(person.id), "role": "owner"}).status_code == 302
+    )
+    assert member_role(db, team, person) == "owner"

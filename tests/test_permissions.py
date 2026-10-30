@@ -118,14 +118,57 @@ def test_import_workbooks_holder_opens_import(client, logged_in_user, give_set):
     assert client.get("/import").status_code == 200
 
 
-def test_email_settings_holder_saves_settings(client, logged_in_user, give_set, db):
+def test_email_settings_holder_saves_the_sender_address(client, logged_in_user, give_set, db):
     give_set(["manage_email_settings"], user=logged_in_user)
-    response = post(client, "/admin/smtp", {"smtp_host": "smtp.example.com", "smtp_port": "587", "smtp_auth": "plain"})
+    response = post(client, "/admin/smtp", {"smtp_from": "reports@example.com"})
     assert response.status_code == 302
-    assert db.scalar(select(AuditLog).where(AuditLog.action == "smtp_settings_updated")) is not None
+    entry = db.scalar(select(AuditLog).where(AuditLog.action == "smtp_settings_updated"))
+    assert entry is not None and entry.detail == {"changed": ["smtp_from"]}
 
 
 def test_new_tracker_button_follows_create_trackers(client, logged_in_user, give_set):
     assert 'href="/trackers/new"' not in client.get("/").get_data(as_text=True)
     give_set(["create_trackers"], user=logged_in_user)
     assert 'href="/trackers/new"' in client.get("/").get_data(as_text=True)
+
+
+def test_email_settings_holder_sees_the_server_read_only_and_cannot_change_it(client, logged_in_user, give_set, db):
+    from tracker.admin.smtp import SERVER_LOCKED_MESSAGE
+    from tracker.models import AppSetting
+
+    for key, value in (("smtp_host", "smtp.example.com"), ("smtp_port", "587"), ("smtp_auth", "plain")):
+        db.merge(AppSetting(key=key, value=value))
+    db.commit()
+    give_set(["manage_email_settings"], user=logged_in_user)
+    page = client.get("/admin/smtp").get_data(as_text=True)
+    assert 'name="smtp_from"' in page and 'value="smtp.example.com"' in page
+    for key in ("smtp_host", "smtp_port", "smtp_auth", "smtp_user", "smtp_tenant_id", "smtp_client_id"):
+        assert f'name="{key}"' not in page
+    for key, value in (
+        ("smtp_host", "evil.example.com"),
+        ("smtp_port", "25"),
+        ("smtp_auth", "none"),
+        ("smtp_user", "me@example.com"),
+        ("smtp_tenant_id", "other"),
+        ("smtp_client_id", "other"),
+    ):
+        response = post(client, "/admin/smtp", {"smtp_from": "x@example.com", key: value})
+        assert response.status_code == 400 and SERVER_LOCKED_MESSAGE in response.get_data(as_text=True)
+    db.expire_all()
+    stored = {row.key: row.value for row in db.scalars(select(AppSetting))}
+    assert stored == {"smtp_host": "smtp.example.com", "smtp_port": "587", "smtp_auth": "plain"}
+    assert db.scalar(select(AuditLog).where(AuditLog.action == "smtp_settings_updated")) is None
+    unchanged = {"smtp_host": "smtp.example.com", "smtp_from": "x@example.com"}  # a stale copy of the same value
+    assert post(client, "/admin/smtp", unchanged).status_code == 302
+    db.expire_all()
+    assert db.get(AppSetting, "smtp_from").value == "x@example.com"
+    assert db.get(AppSetting, "smtp_host").value == "smtp.example.com"
+
+
+def test_administrator_still_changes_every_email_setting(client, logged_in_admin, db):
+    from tracker.models import AppSetting
+
+    page = client.get("/admin/smtp").get_data(as_text=True)
+    assert 'name="smtp_host"' in page and 'name="smtp_auth"' in page and "readonly" not in page
+    assert post(client, "/admin/smtp", {"smtp_host": "new.example.com", "smtp_auth": "none"}).status_code == 302
+    assert db.get(AppSetting, "smtp_host").value == "new.example.com"

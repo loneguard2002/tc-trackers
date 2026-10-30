@@ -1,4 +1,8 @@
-"""The Activity screen (spec section 7): newest first, 50 a page, filtered by person, action and date range."""
+"""The Activity screen (spec section 7): newest first, 50 a page, filtered by person, action and date range.
+
+Names, not contents (spec section 2): a viewer who is not an administrator sees every entry, but the detail of an entry
+about a tracker they cannot open is hidden; its time, people, action and tracker name stay.
+"""
 
 from __future__ import annotations
 
@@ -9,18 +13,19 @@ from flask import render_template, request, url_for
 from sqlalchemy import or_, select
 from sqlalchemy.orm import aliased
 
-from ..auth import current_user
+from ..auth import current_user, tracker_roles
 from ..auth.permissions import permission_required
 from ..auth.session import admin_required
 from ..db import get_session
+from ..ids import parse_id
 from ..models import AuditLog, Tracker, User
 from . import bp
 from .labels import ACTION_LABELS, action_label, describe
 from .retention import retention_days, save_retention
 
 PAGE_SIZE = 50
-_MAX_ID = 2**31 - 1
 _MAX_PAGE = 10**6
+HIDDEN_DETAIL_MESSAGE = "Details hidden: you cannot open this tracker."
 
 
 class ActivityFilters(NamedTuple):
@@ -31,9 +36,9 @@ class ActivityFilters(NamedTuple):
     page: int
 
 
-def _number(value: str | None, upper: int) -> int | None:
+def _page_number(value: str | None) -> int | None:
     text = (value or "").strip()
-    if not (text.isascii() and text.isdigit()) or len(text) > 12 or int(text) > upper:
+    if not (text.isascii() and text.isdigit()) or len(text) > 12 or int(text) > _MAX_PAGE:
         return None
     return int(text)
 
@@ -47,11 +52,11 @@ def _date(value: str | None) -> date | None:
 
 def parse_filters(args) -> ActivityFilters:
     """The filters in a query string; any value that cannot be read is ignored."""
-    person = _number(args.get("person"), _MAX_ID)
+    person = parse_id(args.get("person"))
     action = args.get("action", "").strip()
-    page = _number(args.get("page"), _MAX_PAGE) or 1
+    page = _page_number(args.get("page")) or 1
     return ActivityFilters(
-        person=person if person else None,
+        person=person,
         action=action if action in ACTION_LABELS else None,
         start=_date(args.get("from")),
         end=_date(args.get("to")),
@@ -103,6 +108,12 @@ def index():
         .limit(PAGE_SIZE + 1)
         .offset((filters.page - 1) * PAGE_SIZE)
     ).all()
+    viewer = current_user()
+    can_open = None if viewer.is_admin else tracker_roles(db, viewer)  # None: every detail is shown
+
+    def hidden(entry: AuditLog) -> bool:
+        return can_open is not None and entry.tracker_id is not None and entry.tracker_id not in can_open
+
     entries = [
         {
             "id": entry.id,
@@ -111,7 +122,8 @@ def index():
             "affected": affected_name,
             "label": action_label(entry.action),
             "tracker": tracker_name,
-            "lines": describe(entry.action, entry.detail),
+            "hidden": hidden(entry),
+            "lines": [] if hidden(entry) else describe(entry.action, entry.detail),
         }
         for entry, actor_name, affected_name, tracker_name in rows[:PAGE_SIZE]
     ]
@@ -129,6 +141,7 @@ def index():
         older=older,
         retention=retention_days(db),
         filtered=any((filters.person, filters.action, filters.start, filters.end)),
+        hidden_detail=HIDDEN_DETAIL_MESSAGE,
     )
 
 

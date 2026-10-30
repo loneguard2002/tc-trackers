@@ -3,7 +3,7 @@
 import html
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from tests.conftest import post
 from tracker.auth.permissions import PERMISSIONS, user_permissions
@@ -125,6 +125,7 @@ def test_rename_logs_before_and_after(client, logged_in_admin, db):
     assert response.status_code == 302
     [entry] = entries(db, "permission_set_renamed")
     assert entry.detail == {
+        "set": "Old",
         "before": {"name": "Old", "description": ""},
         "after": {"name": "New", "description": "Note"},
     }
@@ -218,3 +219,39 @@ def test_removing_a_holder_of_another_set_is_404(client, logged_in_admin, db, us
     db.commit()
     assert post(client, f"/admin/permission-sets/{one.id}/holders/{holder.id}/delete").status_code == 404
     assert db.get(PermissionSetHolder, holder.id) is not None
+
+
+def test_a_very_long_holder_id_is_400_not_500(client, logged_in_admin, db):
+    s = make_set(db, "PMO", [])
+    url = f"/admin/permission-sets/{s.id}/holders"
+    for value in ("team:" + "9" * 5000, "user:" + "9" * 5000, f"user:{2**31}"):
+        assert post(client, url, {"holder": value}).status_code == 400
+    grid = post(client, "/admin/permission-sets/grid", {"sets": ["9" * 5000], "set-1": ["view_activity"]})
+    assert grid.status_code == 302 and entries(db) == []
+
+
+def test_removing_a_holder_removed_at_the_same_moment(client, logged_in_admin, db, team_factory, monkeypatch):
+    from tracker.permsets import views as permset_views
+
+    team = team_factory(name="Network")
+    s = make_set(db, "PMO", [])
+    holder = PermissionSetHolder(set_id=s.id, team_id=team.id)
+    db.add(holder)
+    db.commit()
+    original = permset_views.load_team_rows
+
+    def remove_first(session, lock=False):
+        db.execute(delete(PermissionSetHolder).where(PermissionSetHolder.id == holder.id))
+        db.commit()
+        return original(session, lock)
+
+    monkeypatch.setattr(permset_views, "load_team_rows", remove_first)
+    url = f"/admin/permission-sets/{s.id}/holders/{holder.id}/delete"
+    response = post(client, url, follow_redirects=True)
+    assert response.status_code == 200 and "That holder of PMO has already been removed." in text_of(response)
+    assert entries(db) == []
+
+
+def test_permission_sets_screen_warns_about_users_and_teams_together(client, logged_in_admin):
+    page = text_of(client.get("/admin/permission-sets"))
+    assert "Holding both Manage users and Manage teams gives reach close to an administrator's" in page

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from flask import current_app, flash, redirect, render_template, request, url_for
 from itsdangerous import BadSignature, URLSafeTimedSerializer
+from sqlalchemy.exc import IntegrityError
 
 from ..auth import current_user, permission_required
 from ..db import get_session
-from ..teams.tree import parse_team_id, team_choices
+from ..teams.tree import TEAM_CHOICE_ERROR, parse_team_id, team_choices
 from ..trackers.views import WEEKDAYS
 from . import bp
 from .workbook import ImportError_, ImportMismatch, ImportPreview, create_tracker_from_preview, read_workbook
@@ -101,12 +102,15 @@ def confirm():
             accept_mismatch=accept,
             team_id=team.id if team else None,
         )
+        db.commit()
+    except IntegrityError:  # the team was deleted at the same moment
+        db.rollback()
+        return _render_confirm(parsed, token, form, TEAM_CHOICE_ERROR, 400)
     except ImportMismatch as exc:
         db.rollback()
         return _render_confirm(parsed, token, form, f"{exc} Tick the box to import regardless.", 400)
     except ImportError_ as exc:
         db.rollback()
         return _render_confirm(parsed, token, form, str(exc), 400)
-    db.commit()
     flash("Tracker imported.", "success")
     return redirect(url_for("trackers.settings", tracker_id=tracker.id))
