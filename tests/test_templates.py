@@ -49,3 +49,40 @@ def test_groups_link_hidden_from_viewers(app):
 @pytest.mark.parametrize("role", ["editor", "owner"])
 def test_groups_link_shown_to_editors_and_owners(app, role):
     assert "/trackers/7/groups" in render_nav(app, role)
+
+
+def render_sidebar(app, is_admin: bool, held: set[str]) -> str:
+    user = SimpleNamespace(id=1, full_name="Pat", is_admin=is_admin)
+    with app.test_request_context("/"):
+        return render_template("base.html", current_user=user, can=lambda p: is_admin or p in held)
+
+
+# Permission -> sidebar link. Tasks 5, 9 and 11 add a row each; nothing else in the tests below changes.
+LINKS = {"import_workbooks": 'href="/import"', "manage_email_settings": 'href="/admin/smtp"'}
+
+
+@pytest.mark.parametrize(
+    "held",
+    [
+        set(),
+        {"import_workbooks"},
+        {"manage_email_settings"},
+        {"import_workbooks", "manage_email_settings"},
+        {"view_all_trackers"},
+    ],
+)
+def test_sidebar_shows_only_the_links_held(app, held):
+    html = render_sidebar(app, is_admin=False, held=held)
+    for permission, link in LINKS.items():
+        assert (link in html) == (permission in held)
+    assert ("Administration" in html) == bool(held & set(LINKS))
+
+
+def test_users_link_stays_administrator_only_for_now(app):  # deleted in Task 9
+    assert 'href="/admin/users"' not in render_sidebar(app, is_admin=False, held={"manage_users"})
+
+
+def test_sidebar_shows_every_link_to_administrators(app):
+    html = render_sidebar(app, is_admin=True, held=set())
+    assert 'href="/admin/users"' in html
+    assert all(link in html for link in LINKS.values())

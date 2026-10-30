@@ -33,11 +33,14 @@
     <h1>Trackers</h1>
     <p class="muted">{{ cards|length }} tracker{{ '' if cards|length == 1 else 's' }} you can open{{ ', including archived' if show_archived }}</p>
   </div>
-  {% if current_user and current_user.is_admin %}
+  {% set admin_view = current_user and current_user.is_admin %}
+  {% if admin_view or can('create_trackers') %}
   <div class="home-actions">
+    {% if admin_view %}
     {% if show_archived %}<a class="button" href="{{ url_for('index') }}">Hide archived</a>
     {% else %}<a class="button" href="{{ url_for('index', archived=1) }}">Show archived</a>{% endif %}
-    <a class="button primary" href="{{ url_for('trackers.new') }}">{{ icon('plus') }}New tracker</a>
+    {% endif %}
+    {% if can('create_trackers') %}<a class="button primary" href="{{ url_for('trackers.new') }}">{{ icon('plus') }}New tracker</a>{% endif %}
   </div>
   {% endif %}
 </div>

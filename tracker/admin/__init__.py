@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from ..audit import record
-from ..auth import admin_required, current_user
+from ..auth import admin_required, current_user, permission_required
 from ..auth.passwords import hash_password, validate_new_password
 from ..db import get_session
 from ..models import AppSetting, User
@@ -152,7 +152,7 @@ def _smtp_values(db) -> dict[str, str]:
 
 
 @bp.route("/smtp", methods=["GET", "POST"])
-@admin_required
+@permission_required("manage_email_settings")
 def smtp():
     db = get_session()
     if request.method == "POST":

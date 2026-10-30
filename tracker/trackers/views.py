@@ -13,6 +13,7 @@ from ..auth import (
     admin_required,
     current_user,
     login_required,
+    permission_required,
     require_tracker_role,
     tracker_roles,
     visible_trackers,
@@ -303,7 +304,7 @@ def _form_from_tracker(t: Tracker) -> dict:
 
 
 @bp.route("/trackers/new", methods=["GET", "POST"])
-@admin_required
+@permission_required("create_trackers")
 def new():
     db = get_session()
     if request.method == "POST":
