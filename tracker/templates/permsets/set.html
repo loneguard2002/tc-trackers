@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field, field, icon %}
+{% block content %}
+<h1>{{ permission_set.name }}</h1>
+<p class="page-lede"><a href="{{ url_for('permsets.index') }}">Permission sets</a> › {{ permission_set.name }}</p>
+<nav class="subnav" aria-label="Permission set sections">
+  <a href="#details">Details</a>
+  <a href="#holders">Holders</a>
+  <a href="#delete">Delete</a>
+</nav>
+<div class="settings settings-narrow">
+  {% if errors %}
+  <div class="form-alert" role="alert">
+    <strong>Please correct the following:</strong>
+    <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  <section class="settings-section" id="details" aria-labelledby="section-details">
+    <header class="settings-section-head">
+      <h2 id="section-details">Details</h2>
+      <p>The set's name and a note on what it is for. Change its permissions in the <a href="{{ url_for('permsets.index') }}#grid">grid</a>.</p>
+    </header>
+    {% if permissions %}
+    <ul class="chips">{% for name, label in permissions %}<li class="chip">{{ label }}</li>{% endfor %}</ul>
+    {% else %}
+    <p class="empty-note">This set grants no permissions yet.</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('permsets.rename', set_id=permission_set.id) }}">
+      {{ csrf_field(csrf_token()) }}
+      <div class="field-stack">
+        {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
+        <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
+        {% endcall %}
+        {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
+        <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
+        {% endcall %}
+      </div>
+      <div class="settings-section-foot">
+        <button class="button primary" type="submit">Save details</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="settings-section" id="holders" aria-labelledby="section-holders">
+    <header class="settings-section-head">
+      <h2 id="section-holders">Holders</h2>
+      <p>Everyone in a team that holds this set, and each person who holds it directly, has its permissions. A team passes the set to its own members only, not to the teams below it.</p>
+    </header>
+    {% if holders %}
+    <div class="section-table register">
+      <table class="table">
+        <thead><tr><th scope="col">Holder</th><th scope="col">Kind</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody>
+        {% for h, path, u in holders %}
+        <tr>
+          <td>{% if path %}<span class="cell-title">{{ path }}</span>{% else %}<div class="member-cell">
+            <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
+            <span class="member-who"><span class="member-name">{{ u.full_name }}</span><span class="member-email">{{ u.email }}</span></span>
+          </div>{% endif %}</td>
+          <td>{% if path %}Team{% else %}Person{% endif %}</td>
+          <td class="cell-actions"><form method="post" action="{{ url_for('permsets.remove_holder', set_id=permission_set.id, holder_id=h.id) }}"
+            data-confirm="Remove {{ path or u.full_name }} as a holder of {{ permission_set.name }}? They lose the permissions it grants.">
+            {{ csrf_field(csrf_token()) }}
+            <button class="button button-small button-quiet" type="submit">Remove</button>
+          </form></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-note">Nobody holds this set yet.</p>
+    {% endif %}
+    {% if team_choices or people %}
+    <form class="holder-add" method="post" action="{{ url_for('permsets.add_holder', set_id=permission_set.id) }}">
+      {{ csrf_field(csrf_token()) }}
+      <div>
+        <label for="holder">Add a holder</label>
+        <select id="holder" name="holder" required>
+          {% if team_choices %}<optgroup label="Teams">
+            {% for id, label in team_choices %}<option value="team:{{ id }}">{{ label }}</option>{% endfor %}
+          </optgroup>{% endif %}
+          {% if people %}<optgroup label="People">
+            {% for u in people %}<option value="user:{{ u.id }}">{{ u.full_name }} ({{ u.email }})</option>{% endfor %}
+          </optgroup>{% endif %}
+        </select>
+      </div>
+      <button class="button" type="submit">{{ icon('plus') }}Add holder</button>
+    </form>
+    {% else %}
+    <p class="section-foot-note">Every team and active person already holds this set.</p>
+    {% endif %}
+  </section>
+
+  <section class="settings-section settings-section-danger" id="delete" aria-labelledby="section-delete">
+    <header class="settings-section-head">
+      <h2 id="section-delete">Delete</h2>
+      <p>Deleting a set takes its permissions away from every holder. It cannot be undone.</p>
+    </header>
+    <form class="archive-row" method="post" action="{{ url_for('permsets.delete_set', set_id=permission_set.id) }}"
+      data-confirm="Delete {{ permission_set.name }}? Its holders lose the permissions it grants." data-inline-confirm>
+      {{ csrf_field(csrf_token()) }}
+      <div class="archive-text">
+        <strong>Delete this permission set</strong>
+        <p>The activity log records each holder removed.</p>
+      </div>
+      <button class="button danger" type="submit" data-ask>{{ icon('trash') }}Delete set…</button>
+      <div class="confirm-box" data-confirm-box hidden>
+        <p>Delete <strong>{{ permission_set.name }}</strong>? Its holders lose the permissions it grants.</p>
+        <div class="confirm-box-actions">
+          <button class="button danger" type="button" data-confirm-yes>Delete</button>
+          <button class="button" type="button" data-confirm-no>Cancel</button>
+        </div>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}
