@@ -41,6 +41,13 @@ def test_paths_join_names_from_the_top():
     assert paths(ROWS)[4] == "Infrastructure › Windows › Desktops" and paths(ROWS)[5] == "Applications"
 
 
+def test_tree_functions_terminate_on_a_cycle():
+    rows = [TeamRow(1, 2, "A"), TeamRow(2, 1, "B"), TeamRow(3, None, "C"), TeamRow(4, 4, "D")]
+    assert [(r.id, d) for r, d in order_tree(rows)] == [(3, 0)]
+    assert paths(rows) == {3: "C"}
+    assert descendants(rows, 1) == {1, 2} and descendants(rows, 4) == {4}
+
+
 def test_load_team_rows_and_team_choices_follow_the_tree(db, team_factory):
     infrastructure = team_factory("Infrastructure")
     windows = team_factory("Windows", parent=infrastructure)

@@ -11,6 +11,10 @@ or gives them a tracker they could not reach. Every such change follows one patt
         return redirect(...)
     record(...)
     db.commit()
+
+Validate the input (duplicates, names, stale ids) before calling ``raises_own_access``: its flush is where an
+``IntegrityError`` would otherwise surface. The two reads are separate READ COMMITTED reads, so a grant committed
+concurrently in between can only cause a wrongful refusal, never a missed promotion.
 """
 
 from __future__ import annotations
@@ -24,9 +28,15 @@ SELF_PROMOTION_MESSAGE = "You cannot make a change that gives you more access to
 
 
 def snapshot_access(session: Session, actor: User) -> dict[int, str] | None:
-    """The actor's tracker roles before a change, or ``None`` for an administrator (exempt from the guard)."""
+    """The actor's tracker roles before a change, or ``None`` for an administrator (exempt from the guard).
+
+    Raises ``RuntimeError`` when the session already holds pending changes: the snapshot would include them (by
+    autoflush) and the guard would then compare the change with itself.
+    """
     if actor.is_admin:
         return None
+    if session.new or session.dirty or session.deleted:
+        raise RuntimeError("snapshot_access must run before the change is made")
     return tracker_roles(session, actor)
 
 
