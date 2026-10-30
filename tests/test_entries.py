@@ -699,3 +699,13 @@ def test_new_entry_refuses_out_of_range_values_like_edit(client, db, tracker_fac
     )
     assert post(client, url, {**entry_form(group), "group_id": str(2**31)}).status_code == 400
     assert db.scalars(select(CompletionEntry)).first() is None
+
+
+def test_entries_ignore_a_location_id_that_cannot_exist(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-14", "5", note="at A"))
+    for big in ("9" * 20, "9" * 5000):
+        page = client.get(entry_url(tracker) + f"?group={big}")
+        assert page.status_code == 200 and "at A" in page.get_data(as_text=True)
+        csv_page = client.get(entry_url(tracker, f".csv?group={big}"))
+        assert csv_page.status_code == 200 and len(csv_page.get_data(as_text=True).splitlines()) == 2

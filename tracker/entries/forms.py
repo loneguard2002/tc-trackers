@@ -27,9 +27,11 @@ def parse_quantity(value: str | None) -> tuple[int | None, str | None]:
     text = (value or "").strip()
     if not _DIGITS.match(text) or not text.isascii():
         return None, QUANTITY_ERROR
-    if len(text.lstrip("+-").lstrip("0")) > len(str(MAX_QUANTITY)):  # checked before int(), which refuses long text
-        return (None, QUANTITY_ERROR) if text.startswith("-") else (None, QUANTITY_TOO_LARGE)
-    quantity = int(text)
+    negative = text.startswith("-")
+    digits = text.lstrip("+-").lstrip("0")  # int() refuses text of more than 4,300 digits, zero padding included
+    if len(digits) > len(str(MAX_QUANTITY)):
+        return (None, QUANTITY_ERROR) if negative else (None, QUANTITY_TOO_LARGE)
+    quantity = int(digits or "0") * (-1 if negative else 1)
     if quantity < 1:
         return None, QUANTITY_ERROR
     if quantity > MAX_QUANTITY:

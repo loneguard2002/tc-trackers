@@ -71,7 +71,7 @@ def list_entries(tracker_id: int):
     today = date.today()
     current = in_progress_week(today, tracker.week_ending_weekday)
     week = parse_date(request.args.get("week"))
-    group_id = request.args.get("group", type=int)
+    group_id = parse_id(request.args.get("group"))
     conditions = _entry_filters(tracker, week, group_id)
     # One row beyond the limit tells the page whether older entries were left out.
     entries = db.scalars(
@@ -138,7 +138,7 @@ def _csv_cell(value) -> str:
 def entries_csv(tracker_id: int):
     tracker, db = g.tracker, get_session()
     week = parse_date(request.args.get("week"))
-    group_id = request.args.get("group", type=int)
+    group_id = parse_id(request.args.get("group"))
     names = {grp.id: grp.name for grp in _ordered_groups(db, tracker)}
     entries = db.scalars(
         select(CompletionEntry)

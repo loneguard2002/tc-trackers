@@ -260,3 +260,35 @@ def test_roles_legend_names_groups_generically_for_a_holder_without_a_role(
     grant(logged_in_user, t, "viewer")
     legend = text_of(client.get(f"/trackers/{t.id}/roles")).split('class="role-legend"', 1)[1].split("</dl>", 1)[0]
     assert "targets, locations and risks" in legend
+
+
+def test_a_vouched_account_can_have_its_direct_role_lowered(
+    client, logged_in_user, give_set, tracker_factory, user_factory, db, grant
+):
+    t = holder_with_tracker(client, logged_in_user, give_set, tracker_factory)
+    person = user_factory()
+    grant(person, t, "editor")
+    db.add(
+        AuditLog(
+            action="user_created",
+            entity="user",
+            entity_id=str(person.id),
+            user_id=logged_in_user.id,
+            target_user_id=person.id,
+        )
+    )
+    db.commit()
+    url = f"/trackers/{t.id}/roles"
+    response = post(client, url, {"user_id": person.id, "role": "owner"}, follow_redirects=True)
+    assert VOUCHED_MESSAGE in text_of(response)
+    assert post(client, url, {"user_id": person.id, "role": "viewer"}).status_code == 302
+    db.expire_all()
+    assert db.get(TrackerRole, (person.id, t.id)).role == "viewer"  # lowering gives nothing, so it is allowed
+    assert [e.target_user_id for e in entries(db, "role_set")] == [person.id]
+
+
+def test_add_people_says_it_lists_users_without_a_direct_role(client, logged_in_user, give_set, tracker_factory):
+    t = holder_with_tracker(client, logged_in_user, give_set, tracker_factory)
+    page = text_of(client.get(f"/trackers/{t.id}/roles"))
+    assert "Users with no direct role on this tracker." in page
+    assert "cannot open this tracker yet" not in page

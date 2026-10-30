@@ -570,7 +570,7 @@ def _ordered_groups(db, tracker: Tracker) -> list[Group]:
 
 
 def _group_or_404(db, tracker: Tracker) -> Group:
-    group_id = request.form.get("group_id", type=int)
+    group_id = parse_id(request.form.get("group_id"))
     group = db.get(Group, group_id) if group_id is not None else None
     if group is None or group.tracker_id != tracker.id:
         abort(404)
@@ -817,7 +817,9 @@ def roles(tracker_id: int):
         if choice != "remove":
             if user.status != "active":
                 abort(400, description=INACTIVE_PERSON_MESSAGE)
-            refusal = vouched_refusal(db, actor, user)
+            # Lowering a role gives nothing, so only a new or higher role is refused.
+            raised = previous is None or ROLE_ORDER[choice] > ROLE_ORDER[previous]
+            refusal = vouched_refusal(db, actor, user) if raised else None
             if refusal:
                 flash(refusal, "danger")
                 return redirect(url_for("trackers.roles", tracker_id=tracker_id))

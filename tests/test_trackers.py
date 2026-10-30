@@ -596,3 +596,11 @@ def test_settings_save_when_data_is_inside_range(client, logged_in_admin, db, tr
     db.commit()
     response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "name": "Still fine"})
     assert response.status_code == 302
+
+
+def test_group_action_with_an_id_that_cannot_exist_is_404(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    make_group(db, tracker, baseline=10)
+    for big in ("9" * 20, "9" * 5000):
+        response = post(client, f"/trackers/{tracker.id}/groups", {"action": "retire", "group_id": big})
+        assert response.status_code == 404

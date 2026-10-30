@@ -14,6 +14,7 @@ from ..audit import record
 from ..auth import current_user, require_tracker_role
 from ..db import get_session
 from ..engine.weeks import week_endings
+from ..ids import parse_id
 from ..models import EmailTemplate, Recipient, ReportSend
 from ..report import views as report_views
 from ..report.build import build_report, default_report_week
@@ -143,7 +144,7 @@ def settings(tracker_id: int):
             return back
         flash(f"Added {email}.", "success")
     elif action == "remove_recipient":
-        recipient = db.get(Recipient, request.form.get("recipient_id", type=int) or 0)
+        recipient = db.get(Recipient, parse_id(request.form.get("recipient_id")) or 0)
         if recipient is None or recipient.tracker_id != tracker.id:
             flash("That recipient was not found.", "danger")
             return back
