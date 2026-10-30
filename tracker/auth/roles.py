@@ -8,6 +8,7 @@ everywhere). Users who are not active have no access.
 from __future__ import annotations
 
 from functools import wraps
+from typing import NamedTuple
 
 from flask import abort, g
 from sqlalchemy import Select, Subquery, case, func, literal, or_, select, union_all
@@ -89,6 +90,38 @@ def user_role(session: Session, user: User, tracker_id: int) -> str | None:
     ranks = _role_ranks(user.id).subquery()
     rank = session.scalar(select(ranks.c.rank).where(ranks.c.tracker_id == tracker_id))
     return ROLE_BY_RANK[rank] if rank is not None else None
+
+
+class TeamAccess(NamedTuple):
+    user: User
+    path: str
+    role: str
+
+
+def team_access(session: Session, tracker: Tracker) -> list[TeamAccess]:
+    """Who reaches the tracker through a team: one row per membership of an active user in its team or a team above.
+
+    ``path`` is the path of the team the person belongs to. Sorted by user name, then path. Empty without a team.
+    """
+    if tracker.team_id is None:
+        return []
+    from ..teams.tree import load_team_rows, paths  # here: importing tracker.teams at load time would be circular
+
+    rows = load_team_rows(session)
+    parents = {row.id: row.parent_id for row in rows}
+    labels = paths(rows)
+    reaching: set[int] = set()
+    team_id = tracker.team_id
+    while team_id is not None and team_id not in reaching:  # the guard ends a walk through a cycle
+        reaching.add(team_id)
+        team_id = parents.get(team_id)
+    found = session.execute(
+        select(User, TeamMember.team_id, TeamMember.role)
+        .join(TeamMember, TeamMember.user_id == User.id)
+        .where(TeamMember.team_id.in_(reaching), User.status == "active")
+    )
+    access = [TeamAccess(user, labels[team], role) for user, team, role in found if team in labels]
+    return sorted(access, key=lambda a: (a.user.full_name.lower(), a.user.full_name, a.path, a.user.id))
 
 
 def visible_trackers(session: Session, user: User) -> list[Tracker]:

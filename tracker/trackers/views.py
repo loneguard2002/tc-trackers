@@ -12,6 +12,7 @@ from ..auth import (
     ROLE_ORDER,
     admin_required,
     current_user,
+    has_permission,
     login_required,
     permission_required,
     require_tracker_role,
@@ -20,7 +21,7 @@ from ..auth import (
     visible_trackers,
 )
 from ..auth.guards import SELF_PROMOTION_MESSAGE, raises_own_access, snapshot_access
-from ..auth.roles import give_creator_ownership
+from ..auth.roles import give_creator_ownership, team_access
 from ..db import get_session
 from ..engine.calc import COMPLETE, GroupInput, Headline, WeekRow, build_headline, build_week_rows, group_positions
 from ..engine.weeks import week_endings
@@ -383,7 +384,7 @@ def set_team(tracker_id: int):
 def _after_team_change(actor: User, tracker: Tracker, destination: str):
     """Back to where the change was made, or to the home page when the actor no longer reaches that screen."""
     db = get_session()
-    if destination == "access" and actor.is_admin:
+    if destination == "access" and has_permission(actor, "manage_teams"):
         return redirect(url_for("trackers.roles", tracker_id=tracker.id))
     if destination == "settings" and user_role(db, actor, tracker.id) == "owner":
         return redirect(url_for("trackers.settings", tracker_id=tracker.id))
@@ -777,10 +778,14 @@ def _update_group(db, tracker: Tracker, group: Group, form) -> list[str]:
 
 
 @bp.route("/trackers/<int:tracker_id>/roles", methods=["GET", "POST"])
-@admin_required
-@require_tracker_role("owner")
+@permission_required("manage_teams")
 def roles(tracker_id: int):
-    tracker, db = g.tracker, get_session()
+    db = get_session()
+    tracker = db.get(Tracker, tracker_id)
+    if tracker is None:
+        abort(404)
+    actor = current_user()
+    g.tracker, g.role = tracker, user_role(db, actor, tracker.id)
     if request.method == "POST":
         refused = _refuse_if_archived(tracker, "trackers.roles")
         if refused:
@@ -791,6 +796,7 @@ def roles(tracker_id: int):
             abort(400, description="Choose a user and a role.")
         existing = db.get(TrackerRole, (user.id, tracker.id))
         previous = existing.role if existing else None
+        before = snapshot_access(db, actor)
         if choice == "remove":
             if existing:
                 db.delete(existing)
@@ -798,18 +804,24 @@ def roles(tracker_id: int):
             existing.role = choice
         else:
             db.add(TrackerRole(user_id=user.id, tracker_id=tracker.id, role=choice))
+        if raises_own_access(db, actor, before):
+            db.rollback()
+            flash(SELF_PROMOTION_MESSAGE, "danger")
+            return redirect(url_for("trackers.roles", tracker_id=tracker_id))
         record(
             db,
-            user_id=current_user().id,
+            user_id=actor.id,
             tracker_id=tracker.id,
             action="role_removed" if choice == "remove" else "role_set",
             entity="user",
             entity_id=user.id,
-            detail={"role": [previous, None if choice == "remove" else choice]},
+            detail=change(previous, None if choice == "remove" else choice),
+            target_user_id=user.id,
         )
+        name = user.full_name
         db.commit()
-        flash(f"Updated access for {user.full_name}.", "success")
-        return redirect(url_for("trackers.roles", tracker_id=tracker.id))
+        flash(f"Updated access for {name}.", "success")
+        return redirect(url_for("trackers.roles", tracker_id=tracker_id))
     current = {r.user_id: r.role for r in db.scalars(select(TrackerRole).where(TrackerRole.tracker_id == tracker.id))}
     users = db.scalars(select(User).where(User.status == "active").order_by(User.full_name, User.id)).all()
     return render_template(
@@ -818,6 +830,9 @@ def roles(tracker_id: int):
         users=users,
         current=current,
         roles=ROLES,
+        team_access=team_access(db, tracker),
+        team_choices=team_choices(db),
+        team_path=_team_path(tracker),
         page_title=f"{tracker.name} access",
         current_page="trackers",
     )
