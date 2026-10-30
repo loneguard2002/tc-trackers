@@ -858,3 +858,5 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .activity-field { color: var(--muted); font-weight: 600; }
 .activity-before { color: var(--muted); text-decoration: line-through; }
 .activity-pager { display: flex; justify-content: space-between; gap: 12px; }
+.activity-retention { justify-content: space-between; align-items: flex-end; }
+.activity-retention .field { margin: 0; flex: 1 1 320px; }
