@@ -589,7 +589,13 @@ def test_edit_logs_one_entry_updated_with_changed_fields_only(client, db, tracke
     entry = make_entry(db, tracker, group, note="")
     post(client, edit_url(tracker, entry), entry_form(group, quantity="15", note=""))
     (logged,) = db.scalars(select(AuditLog).where(AuditLog.action == "entry_updated")).all()
-    assert logged.detail == {"before": {"quantity": 12}, "after": {"quantity": 15}} and logged.user_id == user.id
+    assert logged.detail == {
+        "entry_date": entry.entry_date.isoformat(),
+        "group": group.name,
+        "before": {"quantity": 12},
+        "after": {"quantity": 15},
+    }
+    assert logged.user_id == user.id
     assert logged.entity == "entry" and logged.entity_id == str(entry.id) and logged.tracker_id == tracker.id
 
 
@@ -602,6 +608,8 @@ def test_edit_logs_the_location_name_when_it_changes(client, db, tracker_factory
     post(client, edit_url(tracker, entry), entry_form(other, quantity="12", note="n"))
     (logged,) = db.scalars(select(AuditLog).where(AuditLog.action == "entry_updated")).all()
     assert logged.detail == {
+        "entry_date": "2026-10-14",
+        "group": "Site B",
         "before": {"group_id": group.id, "group": "Site A"},
         "after": {"group_id": other.id, "group": "Site B"},
     }
@@ -655,3 +663,39 @@ def test_entries_page_offers_edit_and_drops_the_delete_and_record_note(
     assert "Edit 12 for Site A on" in page
     assert "delete it and record it again" not in page
     assert "Use Edit to correct an entry; delete only entries recorded by mistake." in page
+
+
+def test_edit_refuses_a_missing_or_garbled_date_and_out_of_range_values(
+    client, db, tracker_factory, user_factory, grant
+):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    entry = make_entry(db, tracker, group)
+    url = edit_url(tracker, entry)
+    for bad_date in ("", "garbage", "2026-13-45"):
+        response = post(client, url, entry_form(group, bad_date))
+        assert response.status_code == 400 and "Enter a valid date." in response.get_data(as_text=True)
+    response = post(client, url, entry_form(group, "9999-12-31"))
+    assert response.status_code == 400 and OUTSIDE in response.get_data(as_text=True)
+    response = post(client, url, entry_form(group, quantity="99999999999"))
+    assert response.status_code == 400 and "The quantity can be at most 2,147,483,647." in response.get_data(
+        as_text=True
+    )
+    assert post(client, url, entry_form(group, quantity="9" * 5000)).status_code == 400
+    assert post(client, url, {**entry_form(group), "group_id": "9" * 5000}).status_code == 400
+    db.expire_all()
+    assert (entry.entry_date, entry.quantity) == (date(2026, 10, 14), 12)
+    assert db.scalars(select(AuditLog).where(AuditLog.action == "entry_updated")).all() == []
+
+
+def test_new_entry_refuses_out_of_range_values_like_edit(client, db, tracker_factory, user_factory, grant):
+    sundays = {"week_ending_weekday": 6, "first_week_ending": date(2026, 9, 6), "last_week_ending": date(2026, 12, 27)}
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client, **sundays)
+    url = entry_url(tracker, "/new")
+    response = post(client, url, entry_form(group, "9999-12-31"))  # its week would end in year 10000
+    assert response.status_code == 400 and "That date is outside this tracker" in response.get_data(as_text=True)
+    response = post(client, url, entry_form(group, quantity="2147483648"))
+    assert response.status_code == 400 and "The quantity can be at most 2,147,483,647." in response.get_data(
+        as_text=True
+    )
+    assert post(client, url, {**entry_form(group), "group_id": str(2**31)}).status_code == 400
+    assert db.scalars(select(CompletionEntry)).first() is None
