@@ -84,3 +84,17 @@ def test_entry_date_refuses_the_future():
     assert check_entry_date(today, 4, FIRST, LAST, today=today) == (date(2026, 10, 16), None)
     week, error = check_entry_date(date(2026, 10, 15), 4, FIRST, LAST, today=today)
     assert week is None and error == "The date cannot be after today (14 Oct 2026). Record work once it is finished."
+
+
+def test_quantity_has_an_upper_bound_checked_before_conversion():
+    assert parse_quantity("2147483647") == (2147483647, None)
+    assert parse_quantity("2147483648") == (None, "The quantity can be at most 2,147,483,647.")
+    assert parse_quantity("9" * 5000) == (None, "The quantity can be at most 2,147,483,647.")
+    assert parse_quantity("-" + "9" * 5000) == (None, "The quantity must be a whole number of at least 1.")
+    assert parse_quantity("0002") == (2, None)
+
+
+def test_a_date_without_a_week_ending_is_outside_the_weeks():
+    for weekday in range(7):  # 31 Dec 9999 is a Friday: a later week-ending day would fall after year 9999
+        week, error = check_entry_date(date(9999, 12, 31), weekday, FIRST, LAST)
+        assert week is None and error.startswith("That date is outside this tracker's weeks")

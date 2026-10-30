@@ -5,16 +5,18 @@ from __future__ import annotations
 import csv
 import io
 from datetime import date, datetime, timezone
+from typing import NamedTuple
 
 from flask import Response, abort, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from ..audit import change, record
+from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import current_user, require_tracker_role
 from ..db import get_session
 from ..engine.calc import COMPLETE
 from ..engine.weeks import in_progress_week, week_endings
+from ..ids import parse_id
 from ..models import CompletionEntry, Group, ReportInput, Risk, Tracker, User, Week
 from ..report.build import compute_position, default_report_week, select_top_risks
 from ..trackers.forms import RAG_VALUES, parse_date
@@ -163,6 +165,46 @@ def entries_csv(tracker_id: int):
     )
 
 
+class EntryInput(NamedTuple):
+    group: Group | None
+    entry_date: date | None
+    week_ending: date | None
+    quantity: int | None
+
+
+def _read_entry_form(db, tracker: Tracker, form, own_group_id: int | None = None) -> tuple[EntryInput, list[str]]:
+    """The group, date and quantity of a submitted entry, and every problem found; shared by New entry and Edit entry.
+
+    ``own_group_id`` is the edited entry's group, which may be kept although it has since been retired.
+    """
+    errors: list[str] = []
+    group_id = parse_id(form.get("group_id"))
+    group = db.get(Group, group_id) if group_id else None
+    if group is None or group.tracker_id != tracker.id:
+        errors.append("Choose a group.")
+        group = None
+    elif group.retired and group.id != own_group_id:
+        errors.append(
+            "Entries cannot be recorded against a retired group."
+            if own_group_id is None
+            else "Entries cannot be moved to a retired group."
+        )
+    entry_date = parse_date(form.get("entry_date"))
+    week_ending, date_error = check_entry_date(
+        entry_date,
+        tracker.week_ending_weekday,
+        tracker.first_week_ending,
+        tracker.last_week_ending,
+        today=date.today(),
+    )
+    if date_error:
+        errors.append(date_error)
+    quantity, quantity_error = parse_quantity(form.get("quantity"))
+    if quantity_error:
+        errors.append(quantity_error)
+    return EntryInput(group, entry_date, week_ending, quantity), errors
+
+
 def _render_new(tracker: Tracker, groups: list[Group], form, errors: list[str], status: int = 200):
     return (
         render_template(
@@ -188,31 +230,15 @@ def new_entry(tracker_id: int):
     refused = _refuse_if_archived(tracker, "entries.new_entry")
     if refused:
         return refused
-    errors: list[str] = []
-    group = db.get(Group, request.form.get("group_id", type=int) or 0)
-    if group is None or group.tracker_id != tracker.id:
-        errors.append("Choose a group.")
-    elif group.retired:
-        errors.append("Entries cannot be recorded against a retired group.")
-    week_ending, date_error = check_entry_date(
-        parse_date(request.form.get("entry_date")),
-        tracker.week_ending_weekday,
-        tracker.first_week_ending,
-        tracker.last_week_ending,
-        today=date.today(),
-    )
-    if date_error:
-        errors.append(date_error)
-    quantity, quantity_error = parse_quantity(request.form.get("quantity"))
-    if quantity_error:
-        errors.append(quantity_error)
+    submitted, errors = _read_entry_form(db, tracker, request.form)
     if errors:
         return _render_new(tracker, groups, request.form, errors, status=400)
+    group, quantity = submitted.group, submitted.quantity
     entry = CompletionEntry(
         tracker_id=tracker.id,
         group_id=group.id,
-        entry_date=parse_date(request.form.get("entry_date")),
-        week_ending=week_ending,
+        entry_date=submitted.entry_date,
+        week_ending=submitted.week_ending,
         quantity=quantity,
         note=(request.form.get("note") or "").strip(),
         created_by=current_user().id,
@@ -269,27 +295,10 @@ def edit_entry(tracker_id: int, entry_id: int):
             "note": entry.note or "",
         }
         return _render_edit(tracker, entry, groups, form, [])
-    errors: list[str] = []
-    group = db.get(Group, request.form.get("group_id", type=int) or 0)
-    if group is None or group.tracker_id != tracker.id:
-        errors.append("Choose a group.")
-    elif group.retired and group.id != entry.group_id:
-        errors.append("Entries cannot be moved to a retired group.")
-    new_date = parse_date(request.form.get("entry_date"))
-    week_ending, date_error = check_entry_date(
-        new_date,
-        tracker.week_ending_weekday,
-        tracker.first_week_ending,
-        tracker.last_week_ending,
-        today=date.today(),
-    )
-    if date_error:
-        errors.append(date_error)
-    quantity, quantity_error = parse_quantity(request.form.get("quantity"))
-    if quantity_error:
-        errors.append(quantity_error)
+    submitted, errors = _read_entry_form(db, tracker, request.form, own_group_id=entry.group_id)
     if errors:
         return _render_edit(tracker, entry, groups, request.form, errors, status=400)
+    group, new_date, week_ending, quantity = submitted
     note = (request.form.get("note") or "").strip()
     before: dict = {}
     after: dict = {}
@@ -302,14 +311,16 @@ def edit_entry(tracker_id: int, entry_id: int):
         if old != new:
             before[field], after[field] = old, new
     if not before:
-        flash("No changes to save.", "info")
+        flash(NO_CHANGES_MESSAGE, "info")
         return redirect(url_for("entries.list_entries", tracker_id=tracker.id))
     if "group_id" in before:
         old_group = db.get(Group, entry.group_id)
         before["group"], after["group"] = (old_group.name if old_group else None), group.name
     entry.group_id, entry.entry_date, entry.week_ending = group.id, new_date, week_ending
     entry.quantity, entry.note = quantity, note
-    _audit(db, tracker, "entry_updated", "entry", entry.id, change(before, after))
+    # The entry's date and group always name which entry it was, beside the fields that changed.
+    context = {"entry_date": new_date.isoformat(), "group": group.name}
+    _audit(db, tracker, "entry_updated", "entry", entry.id, {**context, **change(before, after)})
     db.commit()
     flash(f"Updated the entry for {group.name} on {format_date(new_date)}.", "success")
     return redirect(url_for("entries.list_entries", tracker_id=tracker.id))

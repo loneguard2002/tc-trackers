@@ -12,6 +12,8 @@ from ..trackers.forms import RAG_VALUES, parse_date, parse_int
 RISK_STATUSES = ("Open", "In progress", "Closed")
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 QUANTITY_ERROR = "The quantity must be a whole number of at least 1."
+MAX_QUANTITY = 2**31 - 1  # the quantity column is a Postgres integer
+QUANTITY_TOO_LARGE = "The quantity can be at most 2,147,483,647."
 _DIGITS = re.compile(r"^[+-]?\d+$")
 
 
@@ -21,11 +23,18 @@ def format_date(d: date) -> str:
 
 
 def parse_quantity(value: str | None) -> tuple[int | None, str | None]:
-    """Parse an entry quantity: a whole number of at least 1."""
+    """Parse an entry quantity: a whole number from 1 to ``MAX_QUANTITY``."""
     text = (value or "").strip()
-    if not _DIGITS.match(text) or int(text) < 1:
+    if not _DIGITS.match(text) or not text.isascii():
         return None, QUANTITY_ERROR
-    return int(text), None
+    if len(text.lstrip("+-").lstrip("0")) > len(str(MAX_QUANTITY)):  # checked before int(), which refuses long text
+        return (None, QUANTITY_ERROR) if text.startswith("-") else (None, QUANTITY_TOO_LARGE)
+    quantity = int(text)
+    if quantity < 1:
+        return None, QUANTITY_ERROR
+    if quantity > MAX_QUANTITY:
+        return None, QUANTITY_TOO_LARGE
+    return quantity, None
 
 
 def check_entry_date(
@@ -37,8 +46,11 @@ def check_entry_date(
     """
     if entry_date is None:
         return None, "Enter a valid date."
-    week_ending = week_ending_for(entry_date, weekday)
-    if week_ending < first or week_ending > last:
+    try:
+        week_ending = week_ending_for(entry_date, weekday)
+    except OverflowError:  # a date in the last days of year 9999 has no week ending
+        week_ending = None
+    if week_ending is None or week_ending < first or week_ending > last:
         return None, f"That date is outside this tracker's weeks ({format_date(first)} to {format_date(last)})."
     if today is not None and entry_date > today:
         return None, f"The date cannot be after today ({format_date(today)}). Record work once it is finished."
