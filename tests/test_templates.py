@@ -58,7 +58,11 @@ def render_sidebar(app, is_admin: bool, held: set[str]) -> str:
 
 
 # Permission -> sidebar link. Tasks 5, 9 and 11 add a row each; nothing else in the tests below changes.
-LINKS = {"import_workbooks": 'href="/import"', "manage_email_settings": 'href="/admin/smtp"'}
+LINKS = {
+    "manage_teams": 'href="/admin/teams"',
+    "import_workbooks": 'href="/import"',
+    "manage_email_settings": 'href="/admin/smtp"',
+}
 
 
 @pytest.mark.parametrize(
@@ -69,6 +73,7 @@ LINKS = {"import_workbooks": 'href="/import"', "manage_email_settings": 'href="/
         {"manage_email_settings"},
         {"import_workbooks", "manage_email_settings"},
         {"view_all_trackers"},
+        {"manage_teams"},
     ],
 )
 def test_sidebar_shows_only_the_links_held(app, held):
