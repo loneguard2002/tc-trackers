@@ -64,6 +64,77 @@ class User(Base):
         return value.strip().lower()
 
 
+class Team(Base):
+    __tablename__ = "teams"
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id", ondelete="RESTRICT"))
+    created_at: Mapped[datetime] = _now()
+
+
+Index("uq_teams_name_lower", func.lower(Team.name), unique=True)
+Index("ix_teams_parent_id", Team.parent_id)
+
+
+class TeamMember(Base):
+    __tablename__ = "team_members"
+    __table_args__ = (
+        CheckConstraint("role IN ('viewer', 'editor', 'owner')", name="role"),
+        Index("ix_team_members_user_id", "user_id"),
+    )
+
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    role: Mapped[str] = mapped_column(Text)
+
+
+class PermissionSet(Base):
+    __tablename__ = "permission_sets"
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_at: Mapped[datetime] = _now()
+
+
+Index("uq_permission_sets_name_lower", func.lower(PermissionSet.name), unique=True)
+
+
+class PermissionSetPermission(Base):
+    __tablename__ = "permission_set_permissions"
+
+    set_id: Mapped[int] = mapped_column(ForeignKey("permission_sets.id", ondelete="CASCADE"), primary_key=True)
+    permission: Mapped[str] = mapped_column(Text, primary_key=True)
+
+
+class PermissionSetHolder(Base):
+    __tablename__ = "permission_set_holders"
+    __table_args__ = (
+        CheckConstraint("num_nonnulls(team_id, user_id) = 1", name="one_holder"),
+        Index(
+            "uq_permission_set_holders_set_team",
+            "set_id",
+            "team_id",
+            unique=True,
+            postgresql_where=text("team_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_permission_set_holders_set_user",
+            "set_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    set_id: Mapped[int] = mapped_column(ForeignKey("permission_sets.id", ondelete="CASCADE"))
+    team_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+
+
 class Tracker(Base):
     __tablename__ = "trackers"
     __table_args__ = (
@@ -72,6 +143,7 @@ class Tracker(Base):
         CheckConstraint("last_week_ending >= first_week_ending", name="span_order"),
         CheckConstraint("last_week_ending - first_week_ending <= 357", name="span_52_weeks"),
         CheckConstraint("moving_average_weeks BETWEEN 1 AND 12", name="moving_average_weeks"),
+        Index("ix_trackers_team_id", "team_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
@@ -89,6 +161,7 @@ class Tracker(Base):
     send_time: Mapped[time] = mapped_column(Time, default=time(17, 0), server_default=text("'17:00'"))
     send_timezone: Mapped[str] = mapped_column(Text, default="Europe/London", server_default="Europe/London")
     schedule_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    team_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = _now()
 
 
@@ -103,6 +176,11 @@ class TrackerRole(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
+    __table_args__ = (
+        Index("ix_audit_log_at", "at"),
+        Index("ix_audit_log_target_user_id", "target_user_id"),
+        Index("ix_audit_log_action", "action"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -112,6 +190,7 @@ class AuditLog(Base):
     entity: Mapped[str] = mapped_column(Text)
     entity_id: Mapped[str | None] = mapped_column(Text)
     detail: Mapped[dict | None] = mapped_column(JSONB)
+    target_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
 
 
 class Group(Base):

@@ -4,8 +4,8 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from tracker.audit import record
-from tracker.models import AuditLog, ReportSend, User
+from tracker.audit import change, record
+from tracker.models import AuditLog, PermissionSet, PermissionSetHolder, ReportSend, User
 
 
 def test_scheduled_send_unique_per_week(db, tracker_factory):
@@ -68,3 +68,60 @@ def test_tracker_defaults(db, tracker_factory):
     assert (t.moving_average_weeks, t.completed_before_first, t.schedule_enabled) == (3, 0, False)
     assert t.send_timezone == "Europe/London"
     assert t.send_time.hour == 17
+
+
+def test_team_name_unique_ignoring_case(db, team_factory):
+    team_factory(name="Windows")
+    with pytest.raises(IntegrityError):
+        team_factory(name="windows")
+
+
+def test_holder_needs_exactly_one_of_team_and_user(db, team_factory, user_factory):
+    s = PermissionSet(name="PMO")
+    db.add(s)
+    db.commit()
+    for team_id, user_id in ((None, None), (team_factory().id, user_factory().id)):
+        db.add(PermissionSetHolder(set_id=s.id, team_id=team_id, user_id=user_id))
+        with pytest.raises(IntegrityError):
+            db.commit()
+        db.rollback()
+
+
+def test_set_held_once_per_team_and_per_user(db, team_factory, user_factory):
+    s = PermissionSet(name="PMO")
+    db.add(s)
+    db.commit()
+    team, user = team_factory(), user_factory()
+    for key in ({"team_id": team.id}, {"user_id": user.id}):
+        db.add(PermissionSetHolder(set_id=s.id, **key))
+        db.commit()
+        db.add(PermissionSetHolder(set_id=s.id, **key))
+        with pytest.raises(IntegrityError):
+            db.commit()
+        db.rollback()
+
+
+def test_team_with_tracker_or_child_cannot_be_deleted_in_the_database(db, team_factory, tracker_factory):
+    with_tracker, parent = team_factory(), team_factory()
+    tracker_factory(team_id=with_tracker.id)
+    team_factory(parent=parent)
+    for team in (with_tracker, parent):
+        db.delete(team)
+        with pytest.raises(IntegrityError):
+            db.commit()
+        db.rollback()
+
+
+def test_deleting_a_user_clears_target_user_id(db, user_factory):
+    u = user_factory()
+    record(db, user_id=None, tracker_id=None, action="user_edit", entity="user", entity_id=u.id, target_user_id=u.id)
+    db.commit()
+    db.delete(u)
+    db.commit()
+    row = db.scalars(select(AuditLog)).one()
+    assert row.target_user_id is None
+    assert row.entity_id == str(u.id)
+
+
+def test_change_helper_shapes_detail():
+    assert change("a", "b") == {"before": "a", "after": "b"}
