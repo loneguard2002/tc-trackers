@@ -118,6 +118,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .flash { padding: 0.6rem 0.9rem; border-radius: 6px; border: 1px solid currentColor; }
 .flash-danger { color: var(--danger); }
 .flash-success { color: var(--success); }
+.flash-info { color: var(--info); }
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(128, 128, 128, 0.3); }
 .row-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
@@ -578,6 +579,15 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .preview-week select { width: auto; min-width: 200px; padding: 7px 10px; font-size: .9rem; }
 .preview-week label { margin: 0 0 3px; font-size: .8125rem; font-weight: 600; }
 .preview-subject { margin: 16px 0 8px; font-size: .9rem; }
+
+/* Teams: the tree as nested lists, each level indented under its parent, and the add-member row. */
+.team-tree, .team-tree-children { margin: 0; padding: 0; list-style: none; }
+.team-tree-children { margin-left: 11px; padding-left: 20px; border-left: 1px solid var(--border); }
+.team-node { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 6px 0; }
+.team-counts { color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.team-move { align-items: flex-end; }
+.team-add { padding: 16px 20px; border-top: 1px solid var(--border); }
+.team-add select { padding: 7px 10px; font-size: .9rem; }
 
 @media (max-width: 720px) {
   .role-legend, .inline-form { grid-template-columns: 1fr; }

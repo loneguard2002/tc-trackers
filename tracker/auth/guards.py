@@ -19,12 +19,15 @@ concurrently in between can only cause a wrongful refusal, never a missed promot
 
 from __future__ import annotations
 
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
-from ..models import User
+from ..models import PermissionSetHolder, User
 from .roles import ROLE_ORDER, tracker_roles
 
 SELF_PROMOTION_MESSAGE = "You cannot make a change that gives you more access to a tracker. Ask an administrator."
+# Adding a member to a team that holds a permission set chooses who holds the set, which is for administrators only.
+TEAM_WITH_SETS_MESSAGE = "This team holds permission sets, so only an administrator can add people to it."
 
 
 def snapshot_access(session: Session, actor: User) -> dict[int, str] | None:
@@ -53,3 +56,8 @@ def raises_own_access(session: Session, actor: User, before: dict[int, str] | No
         tracker_id not in before or ROLE_ORDER[role] > ROLE_ORDER[before[tracker_id]]
         for tracker_id, role in after.items()
     )
+
+
+def team_holds_sets(session: Session, team_id: int) -> bool:
+    """Whether the team holds any permission set."""
+    return bool(session.scalar(select(exists().where(PermissionSetHolder.team_id == team_id))))
