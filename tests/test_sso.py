@@ -163,3 +163,38 @@ def test_disabled_sso_user_refused(sso_client, monkeypatch, user_factory):
     sso_client.get("/auth/callback?code=c&state=s")
     with sso_client.session_transaction() as sess:
         assert "user_id" not in sess
+
+
+def test_changed_entra_name_is_synced_and_logged(sso_client, monkeypatch, db, user_factory):
+    user = user_factory(auth_source="sso", password_hash=None, sso_subject=f"{TENANT}:oid-1", full_name="Old Name")
+    start(sso_client, monkeypatch, FakeMsal(claims(name="New Name")))
+    sso_client.get("/auth/callback?code=c&state=s")
+    db.expire_all()
+    assert db.get(User, user.id).full_name == "New Name"
+    entry = db.scalars(select(AuditLog).where(AuditLog.action == "user_name_synced")).one()
+    assert entry.detail == {"before": "Old Name", "after": "New Name"}
+    assert entry.user_id == user.id and entry.target_user_id == user.id and entry.entity_id == str(user.id)
+
+
+def test_unchanged_entra_name_writes_no_entry(sso_client, monkeypatch, db, user_factory):
+    user_factory(auth_source="sso", password_hash=None, sso_subject=f"{TENANT}:oid-1", full_name="Person")
+    start(sso_client, monkeypatch, FakeMsal(claims(name="Person")))
+    sso_client.get("/auth/callback?code=c&state=s")
+    assert db.scalars(select(AuditLog).where(AuditLog.action == "user_name_synced")).all() == []
+
+
+def test_first_sign_in_entry_names_the_new_user(sso_client, monkeypatch, db):
+    start(sso_client, monkeypatch, FakeMsal(claims()))
+    sso_client.get("/auth/callback?code=c&state=s")
+    user = db.scalars(select(User).where(User.email == "person@example.com")).one()
+    entry = db.scalars(select(AuditLog).where(AuditLog.action == "user_created")).one()
+    assert entry.target_user_id == user.id
+
+
+def test_sso_sign_in_and_link_entries_name_the_user(sso_client, monkeypatch, db, user_factory):
+    user = user_factory(auth_source="sso", password_hash=None, email="person@example.com")
+    start(sso_client, monkeypatch, FakeMsal(claims()))
+    sso_client.get("/auth/callback?code=c&state=s")
+    for action in ("sso_linked", "sso_login"):
+        entry = db.scalars(select(AuditLog).where(AuditLog.action == action)).one()
+        assert entry.target_user_id == user.id
