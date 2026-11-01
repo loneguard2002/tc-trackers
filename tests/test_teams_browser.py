@@ -116,3 +116,34 @@ def test_team_page_does_not_scroll_sideways(page, live_server, team_factory, use
     for width in (390, 1440):
         page.set_viewport_size({"width": width, "height": 900})
         assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"), width
+
+
+def test_tracker_access_filters_and_gives_a_role(
+    page, live_server, db, team_factory, user_factory, tracker_factory, add_member
+):
+    from tracker.models import TrackerRole
+
+    windows = team_factory(name="Windows")
+    t = tracker_factory(name="Patching", team_id=windows.id)
+    add_member(windows, user_factory(full_name="Tara Team"), "viewer")
+    dina = user_factory(full_name="Dina Direct")
+    db.add(TrackerRole(user_id=dina.id, tracker_id=t.id, role="editor"))
+    db.commit()
+    user_factory(full_name="Alice Aardvark")
+    zed = user_factory(full_name="Zed Zebra")
+    _open(page, live_server, user_factory(is_admin=True), f"/trackers/{t.id}/roles")
+
+    page.get_by_role("button", name="Teams (").click()
+    expect(page.get_by_role("row", name="Dina Direct")).to_be_hidden()
+    expect(page.get_by_role("row", name="Tara Team")).to_be_visible()
+    page.get_by_role("button", name="All (").click()
+    expect(page.get_by_role("row", name="Dina Direct")).to_be_visible()
+
+    page.locator("input[data-select-filter=user_id]").fill("zebra")
+    assert "Zed Zebra" in page.eval_on_selector("#user_id", "s => s.selectedOptions[0].text")
+    page.select_option("#user_id", str(zed.id))
+    page.select_option("#role", "viewer")
+    page.get_by_role("button", name="Give access").click()
+    page.wait_for_load_state("networkidle")
+    expect(page.locator(".flash")).to_contain_text("Updated access for Zed Zebra.")
+    _clean(page)

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from ..audit import change, record
 from ..db import get_session
 from ..models import (
+    PermissionSet,
     PermissionSetHolder,
     PermissionSetPermission,
     Team,
@@ -97,6 +98,7 @@ class TeamAccess(NamedTuple):
     user: User
     path: str
     role: str
+    team_id: int | None = None  # the team the person belongs to, for a link
 
 
 def team_access(session: Session, tracker: Tracker) -> list[TeamAccess]:
@@ -121,7 +123,7 @@ def team_access(session: Session, tracker: Tracker) -> list[TeamAccess]:
         .join(TeamMember, TeamMember.user_id == User.id)
         .where(TeamMember.team_id.in_(reaching), User.status == "active")
     )
-    access = [TeamAccess(user, labels.get(team, ""), role) for user, team, role in found]
+    access = [TeamAccess(user, labels.get(team, ""), role, team) for user, team, role in found]
     return sorted(access, key=lambda a: (a.user.full_name.lower(), a.user.full_name, a.path, a.user.id))
 
 
@@ -182,6 +184,68 @@ def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
         for tracker_id, found in routes.items()
     ]
     return sorted(access, key=lambda a: (a.tracker.name, a.tracker.id))
+
+
+class AccessRow(NamedTuple):
+    user: User
+    role: str  # the highest role over every route; agrees with ``user_role``
+    direct_role: str | None
+    teams: list[TeamAccess]
+    view_all_sets: list[str]  # names of sets granting view_all_trackers, held directly or through a team they belong to
+    admin: bool
+
+
+def tracker_access_list(session: Session, tracker: Tracker) -> list[AccessRow]:
+    """Every active user who can open the tracker, once, with each route that gives access.
+
+    Sorted by name (case-insensitive), then id. Inactive users never appear.
+    """
+    users = {u.id: u for u in session.scalars(select(User).where(User.status == "active"))}
+    direct = {
+        r.user_id: r.role
+        for r in session.scalars(select(TrackerRole).where(TrackerRole.tracker_id == tracker.id))
+        if r.user_id in users
+    }
+    teams: dict[int, list[TeamAccess]] = {}
+    for access in team_access(session, tracker):
+        teams.setdefault(access.user.id, []).append(access)
+    view_all: dict[int, set[str]] = {}
+    holdings = session.execute(
+        select(PermissionSet.name, PermissionSetHolder.user_id, PermissionSetHolder.team_id)
+        .join(PermissionSetHolder, PermissionSetHolder.set_id == PermissionSet.id)
+        .join(
+            PermissionSetPermission,
+            (PermissionSetPermission.set_id == PermissionSet.id)
+            & (PermissionSetPermission.permission == "view_all_trackers"),
+        )
+    ).all()
+    members: dict[int, list[int]] = {}
+    team_ids = {team_id for _name, _user, team_id in holdings if team_id is not None}
+    if team_ids:
+        for team_id, user_id in session.execute(
+            select(TeamMember.team_id, TeamMember.user_id).where(TeamMember.team_id.in_(team_ids))
+        ):
+            members.setdefault(team_id, []).append(user_id)
+    for name, user_id, team_id in holdings:
+        for holder in [user_id] if team_id is None else members.get(team_id, []):
+            if holder in users:
+                view_all.setdefault(holder, set()).add(name)
+    rows = []
+    for user_id, user in users.items():
+        ranks = [ROLE_ORDER[a.role] for a in teams.get(user_id, [])]
+        if user_id in direct:
+            ranks.append(ROLE_ORDER[direct[user_id]])
+        if user_id in view_all:
+            ranks.append(ROLE_ORDER["viewer"])
+        if user.is_admin:
+            ranks.append(ROLE_ORDER["owner"])
+        if not ranks:
+            continue
+        sets = sorted(view_all.get(user_id, ()), key=lambda n: (n.casefold(), n))
+        rows.append(
+            AccessRow(user, ROLE_BY_RANK[max(ranks)], direct.get(user_id), teams.get(user_id, []), sets, user.is_admin)
+        )
+    return sorted(rows, key=lambda r: (r.user.full_name.casefold(), r.user.id))
 
 
 def visible_trackers(session: Session, user: User) -> list[Tracker]:

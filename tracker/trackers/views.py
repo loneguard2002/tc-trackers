@@ -24,7 +24,7 @@ from ..auth import (
 )
 from ..auth.accounts import vouched_refusal
 from ..auth.guards import SELF_PROMOTION_MESSAGE, raises_own_access, snapshot_access
-from ..auth.roles import give_creator_ownership, team_access
+from ..auth.roles import give_creator_ownership, tracker_access_list
 from ..db import get_session
 from ..engine.calc import COMPLETE, GroupInput, Headline, WeekRow, build_headline, build_week_rows, group_positions
 from ..engine.weeks import week_endings
@@ -850,14 +850,18 @@ def roles(tracker_id: int):
         flash(f"Updated access for {name}.", "success")
         return redirect(url_for("trackers.roles", tracker_id=tracker_id))
     current = {r.user_id: r.role for r in db.scalars(select(TrackerRole).where(TrackerRole.tracker_id == tracker.id))}
-    users = db.scalars(select(User).where(User.status == "active").order_by(User.full_name, User.id)).all()
+    access = tracker_access_list(db, tracker)
+    candidates = [
+        u
+        for u in db.scalars(select(User).where(User.status == "active").order_by(User.full_name, User.id))
+        if not u.is_admin and u.id not in current and (actor.is_admin or u.id != actor.id)
+    ]
     return render_template(
         "trackers/roles.html",
         tracker=tracker,
-        users=users,
-        current=current,
+        access=access,
+        candidates=candidates,
         roles=ROLES,
-        team_access=team_access(db, tracker),
         team_choices=team_choices(db),
         team_path=_team_path(tracker),
         page_title=f"{tracker.name} access",
