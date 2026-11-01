@@ -85,3 +85,6 @@
 {% macro csrf_field(token) -%}
 <input type="hidden" name="csrf_token" value="{{ token }}">
 {%- endmacro %}
+
+{# "1 person" or "3 people": how many people reach a team. #}
+{% macro people_count(n) -%}{{ n }} {{ 'person' if n == 1 else 'people' }}{%- endmacro %}

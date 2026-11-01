@@ -591,6 +591,40 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .team-add { padding: 16px 20px; border-top: 1px solid var(--border); }
 .team-add select { padding: 7px 10px; font-size: .9rem; }
 
+/* Teams: the tree card beside the chosen team (or the New team form); one column under 900px. */
+.teams-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); align-items: start; gap: 20px; max-width: 1280px; }
+.teams-tree-card { margin-bottom: 0; }
+.teams-tree-card .section-body { padding: 12px 20px 16px; }
+.teams-main { min-width: 0; }
+.teams-crumb { margin-bottom: 12px; }
+.tree-filter { display: block; width: auto; margin: 12px 20px 0; padding: 7px 10px; font-size: .9rem; }
+.team-tree a[aria-current="page"] { color: var(--text); font-weight: 700; }
+.team-tree a[aria-current="page"]::before { content: ""; display: inline-block; width: 3px; height: 1em; margin-right: 8px; vertical-align: -2px; border-radius: 2px; background: var(--primary); }
+.team-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 16px; padding: 16px 20px; }
+.team-header h1 { margin: 0 0 4px; }
+.team-description { margin: 0 0 6px; max-width: 60ch; }
+.team-header-counts { margin: 0; color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.team-header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.row-filter { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.row-filter .button[aria-pressed="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary); }
+.role-note { color: var(--muted); font-size: .8125rem; }
+.select-filter { display: block; width: 100%; margin: 0 0 6px; padding: 7px 10px; font-size: .9rem; }
+.team-details > summary { cursor: pointer; list-style: none; }
+.team-details > summary::-webkit-details-marker { display: none; }
+.team-details > summary h2::before { content: "\25B8"; display: inline-block; margin-right: 8px; color: var(--muted); }
+.team-details[open] > summary { border-bottom: 1px solid var(--border); }
+.team-details[open] > summary h2::before { content: "\25BE"; }
+.team-delete { padding: 14px 20px 16px; border-top: 1px solid var(--border); }
+.team-delete h3 { margin: 0 0 2px; color: var(--danger); font-size: .9375rem; }
+.team-delete-note { margin: 0 0 10px; color: var(--muted); font-size: .8125rem; }
+.team-delete .empty-note { padding: 0; }
+.move-changes { margin: 0; padding: 12px 20px 14px 38px; }
+.move-changes li { padding: 3px 0; }
+
+@media (max-width: 900px) {
+  .teams-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
 @media (max-width: 720px) {
   .role-legend, .inline-form { grid-template-columns: 1fr; }
   .member, .section-body { padding-left: 16px; padding-right: 16px; }
