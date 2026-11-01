@@ -9,7 +9,7 @@ entries name the affected user in ``target_user_id``.
 from __future__ import annotations
 
 from flask import abort, flash, redirect, render_template, request, url_for
-from sqlalchemy import select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
@@ -20,8 +20,8 @@ from ..auth.passwords import hash_password, validate_new_password
 from ..auth.permissions import PERMISSIONS, permission_sources
 from ..auth.roles import tracker_access_routes
 from ..db import get_session
-from ..ids import in_range
-from ..models import PermissionSet, PermissionSetHolder, TeamMember, User
+from ..ids import in_range, parse_id
+from ..models import PermissionSet, PermissionSetHolder, Team, TeamMember, User
 from ..teams.tree import (
     ALREADY_MEMBER_MESSAGE,
     CHOOSE_ROLE_MESSAGE,
@@ -88,12 +88,55 @@ def _actions(db, actor: User, user: User) -> dict[str, bool]:
     }
 
 
+STATUS_FILTERS = {"active": "Active", "pending": "Awaiting approval", "disabled": "Disabled"}
+
+
+def _like_escaped(text: str) -> str:
+    """``text`` as a literal inside a LIKE pattern (``\\`` is the escape character)."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _list_filters(db) -> dict[str, str | int | None]:
+    """The filters on the list from the query string; anything unparseable or unknown is ignored."""
+    team_id, set_id = parse_id(request.args.get("team")), parse_id(request.args.get("set"))
+    status = request.args.get("status", "")
+    return {
+        "q": request.args.get("q", "").strip(),
+        "status": status if status in STATUS_FILTERS else "",
+        "team": team_id if team_id is not None and db.get(Team, team_id) is not None else None,
+        "set": set_id if set_id is not None and db.get(PermissionSet, set_id) is not None else None,
+    }
+
+
+def _filtered_users(filters: dict[str, str | int | None]):
+    query = select(User).order_by(User.status != "pending", User.full_name, User.id)
+    if filters["q"]:
+        pattern = f"%{_like_escaped(str(filters['q']))}%"
+        query = query.where(or_(User.full_name.ilike(pattern, escape="\\"), User.email.ilike(pattern, escape="\\")))
+    if filters["status"]:
+        query = query.where(User.status == filters["status"])
+    if filters["team"] is not None:
+        query = query.where(exists().where(TeamMember.user_id == User.id, TeamMember.team_id == filters["team"]))
+    if filters["set"] is not None:
+        direct = exists().where(PermissionSetHolder.set_id == filters["set"], PermissionSetHolder.user_id == User.id)
+        through = exists().where(
+            PermissionSetHolder.set_id == filters["set"],
+            PermissionSetHolder.team_id == TeamMember.team_id,
+            TeamMember.user_id == User.id,
+        )
+        query = query.where(or_(direct, through))
+    return query
+
+
 @bp.get("/users")
 @permission_required("manage_users")
 def users():
     db = get_session()
     actor = current_user()
-    rows = db.scalars(select(User).order_by(User.status != "pending", User.full_name, User.id)).all()
+    everyone = db.scalars(select(User).order_by(User.status != "pending", User.full_name, User.id)).all()
+    filters = _list_filters(db)
+    filtered = any(filters.values())
+    rows = db.scalars(_filtered_users(filters)).all()
     labels = team_labels(load_team_rows(db))
     teams, sets = _teams_and_sets(db, labels)
     place_choices = []
@@ -107,9 +150,18 @@ def users():
     return render_template(
         "admin/users.html",
         users=rows,
+        pending=[user for user in everyone if user.status == "pending"],
+        total=len(everyone),
+        filters=filters,
+        filtered=filtered,
+        status_filters=STATUS_FILTERS,
+        team_options=team_choices(db),
+        set_options=db.execute(
+            select(PermissionSet.id, PermissionSet.name).order_by(func.lower(PermissionSet.name))
+        ).all(),
         teams=teams,
         sets=sets,
-        actions={user.id: _actions(db, actor, user) for user in rows},
+        actions={user.id: _actions(db, actor, user) for user in everyone},
         place_choices=place_choices,
         roles=ROLES,
         page_title="Users",

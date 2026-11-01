@@ -1,6 +1,8 @@
 """The Users screen for manage_users holders: guards, password reset, re-enable, approval and effective access."""
 
 import html
+import re
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
@@ -264,7 +266,7 @@ def test_team_place_in_a_team_holding_a_set_refused_for_non_admins(client, user_
     holding = team_factory(name="Holding")
     give_set(["view_activity"], team=holding)
     pending = user_factory(status="pending")
-    page = text_of(client.get("/admin/users"))
+    page = text_of(client.get("/admin/users")).split('id="section-users"')[0]  # the filters list every team
     assert f'<option value="{plain.id}"' in page and f'<option value="{holding.id}"' not in page
     data = {"team_id": str(holding.id), "team_role": "viewer"}
     response = post(client, f"/admin/users/{pending.id}/approve", data, follow_redirects=True)
@@ -463,3 +465,103 @@ def test_approval_with_a_very_long_team_id_is_400(client, logged_in_admin, user_
     pending = user_factory(status="pending")
     response = post(client, f"/admin/users/{pending.id}/approve", {"team_id": "9" * 5000, "team_role": "viewer"})
     assert response.status_code == 400 and reloaded(db, pending).status == "pending"
+
+
+# --- The list: filters and the actions menu -------------------------------------------------------------------------
+
+
+def people_rows(response) -> dict[str, str]:
+    """Name to the HTML of its row in the People table."""
+    body = text_of(response)
+    table = body.split('id="section-users"', 1)[1]
+    rows = re.findall(r"<tr>(.*?)</tr>", table, flags=re.S)[1:]
+    return {re.search(r'class="member-name">([^<]*)', row).group(1).strip(): row for row in rows}
+
+
+@pytest.fixture
+def filter_people(client, user_manager, user_factory, team_factory, add_member, give_set):
+    """Manager plus four people: Ada (Platform, direct set), Bo (Platform), Cy (Ops, set through Ops), Di (disabled)."""
+    platform, ops = team_factory(name="Platform"), team_factory(name="Ops")
+    ada = user_factory(full_name="Ada Lovelace", email="ada@example.com")
+    bo = user_factory(full_name="Bo Peep", email="bo@example.org")
+    cy = user_factory(full_name="Cy Young", email="cy_young@example.com")
+    user_factory(full_name="Di Gone", email="di@example.com", status="disabled")
+    add_member(platform, ada, "viewer")
+    add_member(platform, bo, "viewer")
+    add_member(ops, cy, "viewer")
+    direct = give_set(["view_activity"], user=ada, name="Auditors")
+    through = give_set(["view_activity"], team=ops, name="Operators")
+    names = SimpleNamespace(platform=platform, ops=ops, direct=direct, through=through)
+    return names
+
+
+def listed(client, query: str = "") -> list[str]:
+    return [name for name in people_rows(client.get(f"/admin/users{query}")) if name != "Manager"]
+
+
+def test_users_filters(client, filter_people):
+    everyone = ["Ada Lovelace", "Bo Peep", "Cy Young", "Di Gone"]
+    assert sorted(listed(client)) == sorted(everyone)
+    assert "Showing" not in text_of(client.get("/admin/users"))
+    assert listed(client, "?q=LOVELACE") == ["Ada Lovelace"]
+    assert listed(client, "?q=example.org") == ["Bo Peep"]
+    assert listed(client, "?q=cy_") == ["Cy Young"]  # an underscore is literal, not a wildcard
+    assert listed(client, "?q=c_y") == []
+    assert listed(client, "?status=disabled") == ["Di Gone"]
+    assert sorted(listed(client, "?status=active")) == ["Ada Lovelace", "Bo Peep", "Cy Young"]
+    assert sorted(listed(client, f"?team={filter_people.platform.id}")) == ["Ada Lovelace", "Bo Peep"]
+    assert listed(client, f"?set={filter_people.direct.id}") == ["Ada Lovelace"]
+    assert listed(client, f"?set={filter_people.through.id}") == ["Cy Young"]
+    assert listed(client, f"?team={filter_people.platform.id}&q=peep") == ["Bo Peep"]
+    assert listed(client, f"?team={filter_people.platform.id}&status=disabled") == []
+    response = client.get(f"/admin/users?team={filter_people.platform.id}")
+    assert "Showing 2 of 5 people." in text_of(response)
+    assert f'<option value="{filter_people.platform.id}" selected' in text_of(response)
+
+
+def test_users_filters_ignore_bad_values(client, filter_people):
+    for query in ("?status=bogus", "?team=abc", "?team=" + "9" * 20, "?set=-1", "?team=999999", "?q="):
+        response = client.get(f"/admin/users{query}")
+        assert response.status_code == 200
+        assert len(people_rows(response)) == 5, query
+        assert "Showing" not in text_of(response)
+
+
+def test_empty_filtered_list_says_so(client, filter_people):
+    body = text_of(client.get("/admin/users?q=nobody"))
+    assert "No one matches these filters." in body and "Showing 0 of 5 people." in body
+    assert 'role="search"' in body and ">Clear<" in body
+
+
+def test_awaiting_approval_ignores_filters(client, user_manager, user_factory):
+    user_factory(full_name="Pat Pending", status="pending")
+    body = text_of(client.get("/admin/users?q=zzz"))
+    assert "Awaiting approval" in body.split('id="section-users"')[0]
+    assert "Pat Pending" in body.split('id="section-users"')[0]
+    assert "Pat Pending" not in body.split('id="section-users"')[1]
+
+
+def test_row_actions_sit_in_a_more_menu(client, logged_in_admin, user_factory):
+    plain = user_factory(full_name="Plain Person")
+    boss = user_factory(full_name="Boss Person", is_admin=True)
+    off = user_factory(full_name="Off Person", status="disabled")
+    sso = user_factory(full_name="Sso Person", auth_source="sso")
+    response = client.get("/admin/users")
+    body = text_of(response)
+    assert "Sign-in</th>" not in body and ">Role</th>" not in body
+    rows = people_rows(response)
+    for user in (plain, boss, off, sso):
+        row = rows[user.full_name]
+        assert f'href="/admin/users/{user.id}/access">Access<' in row
+        assert '<details class="row-menu">' in row
+        assert f'More<span class="sr-only"> actions for {user.full_name}</span>' in row
+    assert f'action="/admin/users/{plain.id}/disable"' in rows["Plain Person"]
+    assert f'href="/admin/users/{plain.id}/password"' in rows["Plain Person"]
+    assert "Make administrator" in rows["Plain Person"] and "Remove administrator" in rows["Boss Person"]
+    assert f'action="/admin/users/{off.id}/enable"' in rows["Off Person"]
+    assert "/password" not in rows["Sso Person"]
+    assert re.search(r"badge-success[^<]*>Active</span>\s*<span[^>]*badge-info[^>]*>Administrator", rows["Boss Person"])
+    assert "Administrator" not in rows["Plain Person"].replace("Make administrator", "")
+    # the signed-in administrator's own row offers neither Disable nor an administrator change
+    own = rows[logged_in_admin.full_name]
+    assert "/disable" not in own and "administrator</button>" not in own
