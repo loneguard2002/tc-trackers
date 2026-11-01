@@ -36,7 +36,7 @@ def parent_of(db, team) -> int | None:
 
 
 def move_options(page: str) -> list[str]:
-    select_html = re.search(r'<select id="parent_id-move".*?</select>', page, re.S).group(0)
+    select_html = re.search(r'<select id="parent_id".*?</select>', page, re.S).group(0)
     return re.findall(r'<option value="(\d*)"', select_html)
 
 
@@ -210,7 +210,7 @@ def test_move_form_offers_only_valid_parents(client, logged_in_admin, team_facto
     windows = team_factory(name="Windows", parent=infra)
     servers = team_factory(name="Servers", parent=windows)
     apps = team_factory(name="Applications")
-    page = text_of(client.get(f"/admin/teams/{windows.id}"))
+    page = text_of(client.get(f"/admin/teams/{windows.id}/move"))
     options = move_options(page)
     assert "" in options and str(infra.id) in options and str(apps.id) in options
     assert str(windows.id) not in options and str(servers.id) not in options

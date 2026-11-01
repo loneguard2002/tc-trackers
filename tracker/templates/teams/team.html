@@ -42,27 +42,9 @@
   <section class="settings-section" id="move" aria-labelledby="section-move">
     <header class="settings-section-head">
       <h2 id="section-move">Place in the tree</h2>
-      <p>Now at <strong>{{ parent_label }}</strong>. People in the teams above a team reach its trackers, so moving it changes who can see them.</p>
+      <p>{% if team.parent_id %}Now below <strong>{{ parent_label }}</strong>.{% else %}Now at the <strong>top level</strong>.{% endif %} People in the teams above a team reach its trackers, so moving it changes who can see them.</p>
     </header>
-    <form class="archive-row team-move" method="post" action="{{ url_for('teams.move', team_id=team.id) }}"
-      data-confirm="Move {{ team.name }} to the chosen place? Access to its trackers will change." data-inline-confirm>
-      {{ csrf_field(csrf_token()) }}
-      <div class="archive-text field">
-        <label for="parent_id-move">Move below</label>
-        <select id="parent_id-move" name="parent_id" data-confirm-source>
-          <option value="" {{ 'selected' if not team.parent_id }}>Top level</option>
-          {% for id, label in parents %}<option value="{{ id }}" {{ 'selected' if team.parent_id == id }}>{{ label }}</option>{% endfor %}
-        </select>
-      </div>
-      <button class="button" type="submit" data-ask>Move…</button>
-      <div class="confirm-box" data-confirm-box hidden>
-        <p>Move <strong>{{ team.name }}</strong> from <strong>{{ parent_label }}</strong> to <strong data-confirm-choice>{{ parent_label }}</strong>? People in the teams above it will gain or lose access to its trackers.</p>
-        <div class="confirm-box-actions">
-          <button class="button danger" type="button" data-confirm-yes>Move</button>
-          <button class="button" type="button" data-confirm-no>Cancel</button>
-        </div>
-      </div>
-    </form>
+    <p class="section-foot-note"><a href="{{ url_for('teams.move_preview', team_id=team.id) }}">Move…</a></p>
   </section>
 
   <section class="settings-section" id="members" aria-labelledby="section-members">
