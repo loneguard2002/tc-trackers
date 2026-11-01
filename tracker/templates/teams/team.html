@@ -1,155 +1,192 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, field, icon %}
+{% from "macros.html" import csrf_field, field, icon, people_count %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
-<h1>{{ team.name }}</h1>
-<p class="page-lede"><a href="{{ url_for('teams.index') }}">Teams</a> › {{ path }}</p>
-<nav class="subnav" aria-label="Team sections">
-  <a href="#details">Details</a>
-  <a href="#move">Place in the tree</a>
-  <a href="#members">Members</a>
-  <a href="#trackers">Trackers</a>
-  <a href="#delete">Delete</a>
-</nav>
-<div class="settings settings-narrow">
-  {% if errors %}
-  <div class="form-alert" role="alert">
-    <strong>Please correct the following:</strong>
-    <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
-  </div>
-  {% endif %}
-
-  <section class="settings-section" id="details" aria-labelledby="section-details">
-    <header class="settings-section-head">
-      <h2 id="section-details">Details</h2>
-      <p>The team's name, shown wherever the team is listed, and a note on what it is for.</p>
-    </header>
-    <form method="post" action="{{ url_for('teams.rename', team_id=team.id) }}">
-      {{ csrf_field(csrf_token()) }}
-      <div class="field-stack">
-        {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
-        <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
-        {% endcall %}
-        {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
-        <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
-        {% endcall %}
+<p class="page-lede teams-crumb"><a href="{{ url_for('teams.index') }}">Teams</a> › {{ path }}</p>
+<div class="teams-layout">
+  {% include "teams/_tree.html" %}
+  <div class="teams-main">
+    <header class="team-header settings-section">
+      <div class="team-header-text">
+        <h1>{{ team.name }}</h1>
+        {% if team.description %}<p class="team-description">{{ team.description }}</p>{% endif %}
+        <p class="team-header-counts">
+          {{ people_count(people|length) }} · {{ trackers|length }} {{ 'tracker' if trackers|length == 1 else 'trackers' }} · {{ below|length }} {{ 'team' if below|length == 1 else 'teams' }} below
+        </p>
       </div>
-      <div class="settings-section-foot">
-        <button class="button primary" type="submit">Save details</button>
+      <div class="team-header-actions">
+        <a class="button" href="#details" data-open-details>Edit details</a>
+        <a class="button" href="{{ url_for('teams.move_preview', team_id=team.id) }}">Move…</a>
       </div>
-    </form>
-  </section>
-
-  <section class="settings-section" id="move" aria-labelledby="section-move">
-    <header class="settings-section-head">
-      <h2 id="section-move">Place in the tree</h2>
-      <p>{% if team.parent_id %}Now below <strong>{{ parent_label }}</strong>.{% else %}Now at the <strong>top level</strong>.{% endif %} People in the teams above a team reach its trackers, so moving it changes who can see them.</p>
     </header>
-    <p class="section-foot-note"><a href="{{ url_for('teams.move_preview', team_id=team.id) }}">Move…</a></p>
-  </section>
 
-  <section class="settings-section" id="members" aria-labelledby="section-members">
-    <header class="settings-section-head">
-      <h2 id="section-members">Members</h2>
-      <p>Each member reaches this team's trackers, and those of the teams below it, with the role shown. Viewers open reports; editors also record progress; owners also change settings.</p>
-    </header>
-    {% if members %}
-    <div class="section-table register">
-      <table class="table">
-        <thead><tr><th scope="col">Name</th><th scope="col">Role</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
-        <tbody>
-        {% for role, u in members %}
-        <tr>
-          <td><div class="member-cell">
-            <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
-            <span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
-          </div></td>
-          <td><form class="member-actions" method="post" action="{{ url_for('teams.update_member', team_id=team.id, user_id=u.id) }}">
-            {{ csrf_field(csrf_token()) }}
-            <label class="sr-only" for="role-{{ u.id }}">Role for {{ u.full_name }}</label>
-            <select id="role-{{ u.id }}" name="role">
-              {% for r in roles %}<option value="{{ r }}" {{ 'selected' if role == r }}>{{ r|title }}</option>{% endfor %}
-            </select>
-            <button class="button button-small" type="submit">Set role</button>
-          </form></td>
-          <td class="cell-actions"><form method="post" action="{{ url_for('teams.update_member', team_id=team.id, user_id=u.id) }}"
-            data-confirm="Remove {{ u.full_name }} from {{ team.name }}? They lose the access this team gives.">
-            {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="remove">
-            <button class="button button-small button-quiet" type="submit">Remove</button>
-          </form></td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
+    {% if errors %}
+    <div class="form-alert" role="alert">
+      <strong>Please correct the following:</strong>
+      <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
     </div>
-    {% else %}
-    <p class="empty-note">No members yet.</p>
     {% endif %}
-    {% if not can_add %}
-    <p class="section-foot-note">{{ add_refusal }}</p>
-    {% elif candidates %}
-    <form class="inline-form team-add" method="post" action="{{ url_for('teams.add_member', team_id=team.id) }}">
-      {{ csrf_field(csrf_token()) }}
-      <div>
-        <label for="user_id">Person</label>
-        <select id="user_id" name="user_id" required>
-          {% for u in candidates %}<option value="{{ u.id }}">{{ u.full_name }} ({{ u.email }})</option>{% endfor %}
-        </select>
-      </div>
-      <div>
-        <label for="role">Role</label>
-        <select id="role" name="role">
-          {% for r in roles %}<option value="{{ r }}">{{ r|title }}</option>{% endfor %}
-        </select>
-      </div>
-      <button class="button" type="submit">{{ icon('plus') }}Add member</button>
-    </form>
-    {% else %}
-    <p class="section-foot-note">Every active person is already a member.</p>
-    {% endif %}
-  </section>
 
-  <section class="settings-section" id="trackers" aria-labelledby="section-trackers">
-    <header class="settings-section-head">
-      <h2 id="section-trackers">Trackers</h2>
-      <p>The trackers in this team, archived ones included.</p>
-    </header>
-    {% if trackers %}
-    <ul class="member-list">
-      {% for t in trackers %}
-      <li class="member"><span class="member-who"><span class="member-name">{{ t.name }}</span></span>
-        {% if t.status == 'archived' %}<span class="badge badge-muted">Archived</span>{% endif %}</li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="empty-note">No trackers are in this team.</p>
-    {% endif %}
-  </section>
-
-  <section class="settings-section settings-section-danger" id="delete" aria-labelledby="section-delete">
-    <header class="settings-section-head">
-      <h2 id="section-delete">Delete</h2>
-      <p>Deleting a team removes its members and the permission sets it holds. It cannot be undone.</p>
-    </header>
-    {% if delete_blocker %}
-    <p class="empty-note">{{ delete_blocker }}</p>
-    {% else %}
-    <form class="archive-row" method="post" action="{{ url_for('teams.delete', team_id=team.id) }}"
-      data-confirm="Delete {{ team.name }}? Its members lose the access it gives." data-inline-confirm>
-      {{ csrf_field(csrf_token()) }}
-      <div class="archive-text">
-        <strong>Delete this team</strong>
-        <p>Its members lose the access it gives. The activity log records each removal.</p>
+    <section class="settings-section" id="people" aria-labelledby="section-people">
+      <header class="settings-section-head">
+        <h2 id="section-people">People</h2>
+        <p>Everyone who reaches this team's trackers, and those of the teams below it, with the role shown. Viewers open reports; editors also record progress; owners also change settings.</p>
+      </header>
+      {% if people %}
+      <div class="row-filter" role="group" aria-label="Show people" data-row-filter="people" hidden>
+        <button class="button button-small" type="button" data-show="all" aria-pressed="true">All ({{ people|length }})</button>
+        <button class="button button-small" type="button" data-show="direct" aria-pressed="false">Direct ({{ direct_count }})</button>
+        <button class="button button-small" type="button" data-show="inherited" aria-pressed="false">From teams above ({{ inherited_count }})</button>
       </div>
-      <button class="button danger" type="submit" data-ask>{{ icon('trash') }}Delete team…</button>
-      <div class="confirm-box" data-confirm-box hidden>
-        <p>Delete <strong>{{ team.name }}</strong>? Its members and the permission sets it holds will be removed.</p>
-        <div class="confirm-box-actions">
-          <button class="button danger" type="button" data-confirm-yes>Delete</button>
-          <button class="button" type="button" data-confirm-no>Cancel</button>
+      <div class="section-table register">
+        <table class="table" data-row-filter-target="people">
+          <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Route</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody>
+          {% for row in people %}
+          {% set u = row.person.user %}
+          <tr data-route="{{ row.route }}">
+            <td><div class="member-cell">
+              <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
+              <span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}{% if u.status != 'active' %} <span class="badge badge-muted">{{ u.status|title }}</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
+            </div></td>
+            {% if row.person.direct_role %}
+            <td><form class="member-actions" method="post" action="{{ url_for('teams.update_member', team_id=team.id, user_id=u.id) }}">
+              {{ csrf_field(csrf_token()) }}
+              <label class="sr-only" for="role-{{ u.id }}">Role for {{ u.full_name }}</label>
+              <select id="role-{{ u.id }}" name="role" data-autosubmit>
+                {% for r in roles %}<option value="{{ r }}" {{ 'selected' if row.person.direct_role == r }}>{{ r|title }}</option>{% endfor %}
+              </select>
+              <button class="button button-small" type="submit" data-autosubmit-fallback>Set role</button>
+              {% if row.note %}<span class="role-note">{{ row.note }}</span>{% endif %}
+            </form></td>
+            <td>Direct</td>
+            <td class="cell-actions"><form method="post" action="{{ url_for('teams.update_member', team_id=team.id, user_id=u.id) }}"
+              data-confirm="Remove {{ u.full_name }} from {{ team.name }}? They lose the access this team gives.">
+              {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="remove">
+              <button class="button button-small button-quiet" type="submit">Remove</button>
+            </form></td>
+            {% else %}
+            <td>{{ row.person.role|title }}</td>
+            <td>{% for i in row.person.inherited %}{% if not loop.first %}, {% endif %}From <a href="{{ url_for('teams.view', team_id=i.team_id) }}">{{ i.path }}</a>{% if row.person.inherited|length > 1 %} ({{ i.role|title }}){% endif %}{% endfor %}</td>
+            <td class="cell-actions"></td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty-note">No one reaches this team yet.</p>
+      {% endif %}
+      {% if not can_add %}
+      <p class="section-foot-note">{{ add_refusal }}</p>
+      {% elif candidates %}
+      <form class="inline-form team-add" method="post" action="{{ url_for('teams.add_member', team_id=team.id) }}">
+        {{ csrf_field(csrf_token()) }}
+        <div>
+          <label for="user_id">Person</label>
+          <input class="select-filter" type="search" placeholder="Filter people" autocomplete="off" aria-label="Filter the list of people" data-select-filter="user_id" hidden>
+          <select id="user_id" name="user_id" required>
+            {% for u in candidates %}<option value="{{ u.id }}">{{ u.full_name }} ({{ u.email }})</option>{% endfor %}
+          </select>
         </div>
+        <div>
+          <label for="role">Role</label>
+          <select id="role" name="role">
+            {% for r in roles %}<option value="{{ r }}">{{ r|title }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="button" type="submit">{{ icon('plus') }}Add member</button>
+      </form>
+      {% else %}
+      <p class="section-foot-note">Every active person is already a direct member.</p>
+      {% endif %}
+    </section>
+
+    <section class="settings-section" id="teams-below" aria-labelledby="section-below">
+      <header class="settings-section-head has-action">
+        <div>
+          <h2 id="section-below">Teams below</h2>
+          <p>People in this team also reach the trackers of these teams.</p>
+        </div>
+        <a class="button button-small" href="{{ url_for('teams.index', parent=team.id, _anchor='new-team') }}">{{ icon('plus') }}New team below {{ team.name }}</a>
+      </header>
+      {% if below %}
+      <ul class="member-list">
+        {% for row in below %}
+        <li class="member"><span class="member-who"><a class="member-name" href="{{ url_for('teams.view', team_id=row.id) }}">{{ row.name }}</a></span>
+          <span class="team-counts">{{ people_count(reach.get(row.id, 0)) }}</span></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty-note">No teams are below this one.</p>
+      {% endif %}
+    </section>
+
+    <section class="settings-section" id="trackers" aria-labelledby="section-trackers">
+      <header class="settings-section-head">
+        <h2 id="section-trackers">Trackers</h2>
+        <p>The trackers in this team, archived ones included. Open a tracker's Access tab to see who can open it.</p>
+      </header>
+      {% if trackers %}
+      <ul class="member-list">
+        {% for t in trackers %}
+        <li class="member"><span class="member-who"><span class="member-name">{{ t.name }}</span></span>
+          {% if t.status == 'archived' %}<span class="badge badge-muted">Archived</span>{% endif %}
+          <a class="button button-small" href="{{ url_for('trackers.roles', tracker_id=t.id) }}">Access</a></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty-note">No trackers are in this team.</p>
+      {% endif %}
+    </section>
+
+    <details class="settings-section team-details" id="details"{% if errors %} open{% endif %}>
+      <summary class="settings-section-head">
+        <h2 id="section-details">Details</h2>
+        <p>The team's name and description, and deleting the team.</p>
+      </summary>
+      <form method="post" action="{{ url_for('teams.rename', team_id=team.id) }}">
+        {{ csrf_field(csrf_token()) }}
+        <div class="field-stack">
+          {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
+          <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
+          {% endcall %}
+          {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
+          <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
+          {% endcall %}
+        </div>
+        <div class="settings-section-foot">
+          <button class="button primary" type="submit">Save details</button>
+        </div>
+      </form>
+      <div class="team-delete" id="delete">
+        <h3>Delete</h3>
+        <p class="team-delete-note">Deleting a team removes its members and the permission sets it holds. It cannot be undone.</p>
+        {% if delete_blocker %}
+        <p class="empty-note">{{ delete_blocker }}</p>
+        {% else %}
+        <form class="archive-row" method="post" action="{{ url_for('teams.delete', team_id=team.id) }}"
+          data-confirm="Delete {{ team.name }}? Its members lose the access it gives." data-inline-confirm>
+          {{ csrf_field(csrf_token()) }}
+          <div class="archive-text">
+            <strong>Delete this team</strong>
+            <p>Its members lose the access it gives. The activity log records each removal.</p>
+          </div>
+          <button class="button danger" type="submit" data-ask>{{ icon('trash') }}Delete team…</button>
+          <div class="confirm-box" data-confirm-box hidden>
+            <p>Delete <strong>{{ team.name }}</strong>? Its members and the permission sets it holds will be removed.</p>
+            <div class="confirm-box-actions">
+              <button class="button danger" type="button" data-confirm-yes>Delete</button>
+              <button class="button" type="button" data-confirm-no>Cancel</button>
+            </div>
+          </div>
+        </form>
+        {% endif %}
       </div>
-    </form>
-    {% endif %}
-  </section>
+    </details>
+  </div>
 </div>
 {% endblock %}

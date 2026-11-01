@@ -1,74 +1,56 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, field, icon %}
-{% macro counted(n, noun) -%}{{ n }} {{ noun }}{{ '' if n == 1 else 's' }}{%- endmacro %}
-{#- One level of the tree; each team with teams below it calls the macro again, so any depth nests and indents. -#}
-{% macro tree(parent_id) -%}
-<ul class="{{ 'team-tree' if parent_id is none else 'team-tree-children' }}">
-  {% for row in children.get(parent_id, []) %}
-  <li>
-    <div class="team-node">
-      <a class="cell-title" href="{{ url_for('teams.view', team_id=row.id) }}">{{ row.name }}</a>
-      <span class="team-counts">{{ counted(member_counts.get(row.id, 0), 'member') }} · {{ counted(tracker_counts.get(row.id, 0), 'tracker') }}</span>
-    </div>
-    {% if children.get(row.id) %}{{ tree(row.id) }}{% endif %}
-  </li>
-  {% endfor %}
-</ul>
-{%- endmacro %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
 <h1>Teams</h1>
 <p class="page-lede">People in a team reach the team's trackers, and the trackers of every team below it, with their role in the team.</p>
-<nav class="subnav" aria-label="Teams sections">
-  <a href="#teams">Teams</a>
-  <a href="#new-team">New team</a>
-</nav>
-<div class="settings settings-narrow">
-  {% if errors %}
-  <div class="form-alert" role="alert">
-    <strong>Please correct the following:</strong>
-    <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
-  </div>
-  {% endif %}
-
-  <section class="settings-section" id="teams" aria-labelledby="section-teams">
-    <header class="settings-section-head">
-      <h2 id="section-teams">Teams</h2>
-      <p>Every team, with the teams below it indented. Open a team to rename, move or delete it and to manage its members.</p>
-    </header>
-    {% if children.get(none) %}
-    <div class="section-body">{{ tree(none) }}</div>
-    {% else %}
-    <p class="empty-note">No teams yet.</p>
+<div class="teams-layout">
+  {% include "teams/_tree.html" %}
+  <div class="teams-main">
+    {% if errors %}
+    <div class="form-alert" role="alert">
+      <strong>Please correct the following:</strong>
+      <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
     {% endif %}
-  </section>
 
-  <section class="settings-section" id="new-team" aria-labelledby="section-new-team">
-    <header class="settings-section-head">
-      <h2 id="section-new-team">New team</h2>
-      <p>A team at the top level, or below an existing team.</p>
-    </header>
-    <form method="post" action="{{ url_for('teams.create') }}">
-      {{ csrf_field(csrf_token()) }}
-      <div class="field-stack">
-        <div class="field-pair">
-          {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
-          <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
-          {% endcall %}
-          {% call field('Place in the tree', 'The team it sits below.', 'parent_id') %}
-          <select id="parent_id" name="parent_id" aria-describedby="parent_id-help">
-            <option value="">Top level</option>
-            {% for id, label in choices %}<option value="{{ id }}" {{ 'selected' if form.get('parent_id') == id|string }}>{{ label }}</option>{% endfor %}
-          </select>
+    <section class="settings-section" aria-labelledby="section-prompt">
+      <header class="settings-section-head">
+        <h2 id="section-prompt">Choose a team</h2>
+      </header>
+      <p class="empty-note">Choose a team to see its people and trackers.</p>
+    </section>
+
+    <section class="settings-section" id="new-team" aria-labelledby="section-new-team">
+      <header class="settings-section-head">
+        <h2 id="section-new-team">New team</h2>
+        <p>A team at the top level, or below an existing team.</p>
+      </header>
+      <form method="post" action="{{ url_for('teams.create') }}">
+        {{ csrf_field(csrf_token()) }}
+        <div class="field-stack">
+          <div class="field-pair">
+            {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
+            <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
+            {% endcall %}
+            {% call field('Place in the tree', 'The team it sits below.', 'parent_id') %}
+            <select id="parent_id" name="parent_id" aria-describedby="parent_id-help">
+              <option value="" {{ 'selected' if not selected_parent }}>Top level</option>
+              {% for id, label in choices %}<option value="{{ id }}" {{ 'selected' if selected_parent == id|string }}>{{ label }}</option>{% endfor %}
+            </select>
+            {% endcall %}
+          </div>
+          {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
+          <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
           {% endcall %}
         </div>
-        {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
-        <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
-        {% endcall %}
-      </div>
-      <div class="settings-section-foot">
-        <button class="button primary" type="submit">{{ icon('plus') }}Create team</button>
-      </div>
-    </form>
-  </section>
+        <div class="settings-section-foot">
+          <button class="button primary" type="submit">{{ icon('plus') }}Create team</button>
+        </div>
+      </form>
+    </section>
+  </div>
 </div>
 {% endblock %}

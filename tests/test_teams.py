@@ -96,14 +96,11 @@ def test_holder_of_manage_teams_opens_the_screens(client, user_factory, give_set
 # --- The tree and creating teams ------------------------------------------------------------------------------------
 
 
-def test_tree_is_nested_with_member_and_tracker_counts(
-    client, logged_in_admin, team_factory, user_factory, add_member, tracker_factory
-):
+def test_tree_is_nested_with_people_counts(client, logged_in_admin, team_factory, user_factory, add_member):
     infra = team_factory(name="Infrastructure")
     windows = team_factory(name="Windows", parent=infra)
     add_member(windows, user_factory(), "viewer")
     add_member(windows, user_factory(), "owner")
-    tracker_factory(team_id=windows.id)
     page = text_of(client.get("/admin/teams"))
     tree = re.search(r'<ul class="team-tree">.*', page, re.S).group(0)
     infra_at = tree.index(">Infrastructure<")
@@ -112,9 +109,9 @@ def test_tree_is_nested_with_member_and_tracker_counts(
     assert infra_at < nested_at < windows_at
     assert f'href="/admin/teams/{windows.id}"' in tree
     windows_item = tree[windows_at : tree.index("</li>", windows_at)]
-    assert "2 members" in windows_item and "1 tracker" in windows_item
+    assert "2 people" in windows_item
     infra_item = tree[infra_at:nested_at]
-    assert "0 members" in infra_item and "0 trackers" in infra_item
+    assert "0 people" in infra_item
 
 
 def test_create_team_logs_team_created(client, logged_in_admin, db, team_factory):
@@ -329,6 +326,173 @@ def test_delete_removes_and_logs_memberships_and_holdings(
     assert logged[2].detail == {"set": "Auditors", "team": "Infrastructure › Windows"}
     assert logged[3].detail == {"name": "Windows", "parent": "Infrastructure"}
     assert all(e.user_id == logged_in_admin.id for e in logged)
+
+
+# --- The layout: tree beside a people-first team page -----------------------------------------------------------------
+
+
+def raw_of(response) -> str:
+    return response.get_data(as_text=True)
+
+
+def table_rows(page: str) -> list[str]:
+    return re.findall(r"<tr data-route.*?</tr>", page, re.S)
+
+
+def row_for(page: str, name: str) -> str:
+    [row] = [row for row in table_rows(page) if name in row]
+    return row
+
+
+def test_index_and_team_page_show_the_tree_with_reach_counts(
+    client, logged_in_admin, team_factory, user_factory, add_member
+):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    patching = team_factory(name="Patching", parent=windows)
+    add_member(infra, user_factory(), "owner")
+    add_member(windows, user_factory(), "editor")
+    add_member(patching, user_factory(), "viewer")
+    for url in ("/admin/teams", f"/admin/teams/{windows.id}"):
+        raw = raw_of(client.get(url))
+        assert 'class="teams-layout"' in raw and "data-tree" in raw
+        item = raw[raw.index(">Patching<") : raw.index("</li>", raw.index(">Patching<"))]
+        assert "3 people" in item
+    assert re.search(r'<a [^>]*aria-current="page"[^>]*>\s*Windows\s*</a>', raw)
+    assert not re.search(r'<a [^>]*aria-current="page"[^>]*>\s*Infrastructure\s*</a>', raw)
+    index = raw_of(client.get("/admin/teams"))
+    assert re.search(r">Infrastructure<.*?1 person<", index, re.S)  # one member, so the singular form
+
+
+def test_index_right_column_holds_a_prompt_and_the_new_team_form(client, logged_in_admin, team_factory):
+    team_factory(name="Infrastructure")
+    raw = raw_of(client.get("/admin/teams"))
+    assert "Choose a team to see its people and trackers." in raw
+    assert 'id="new-team"' in raw and 'id="parent_id"' in raw
+
+
+def test_team_page_lists_people_from_teams_above(client, logged_in_admin, team_factory, user_factory, add_member):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    head = user_factory(full_name="Hana Head")
+    mia = user_factory(full_name="Mia Member")
+    add_member(infra, head, "owner")
+    add_member(windows, mia, "editor")
+    raw = raw_of(client.get(f"/admin/teams/{windows.id}"))
+    above = row_for(raw, "Hana Head")
+    assert 'data-route="inherited"' in above
+    assert re.search(rf'From <a href="/admin/teams/{infra.id}">Infrastructure</a>', above)
+    assert "<select" not in above and "Remove" not in above and "<form" not in above
+    direct = row_for(raw, "Mia Member")
+    assert 'data-route="direct"' in direct
+    assert re.search(r"<select[^>]*data-autosubmit", direct)
+    assert re.search(r"<button[^>]*data-autosubmit-fallback[^>]*>Set role</button>", direct)
+    assert "Remove" in direct
+
+
+def test_direct_member_with_a_higher_inherited_role_gets_a_note(
+    client, logged_in_admin, team_factory, user_factory, add_member
+):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    both, lower = user_factory(full_name="Bea Both"), user_factory(full_name="Lou Lower")
+    add_member(infra, both, "owner")
+    add_member(windows, both, "viewer")
+    add_member(infra, lower, "viewer")
+    add_member(windows, lower, "editor")
+    raw = raw_of(client.get(f"/admin/teams/{windows.id}"))
+    note = row_for(raw, "Bea Both")
+    assert 'data-route="direct inherited"' in note and "Owner from Infrastructure" in html.unescape(note)
+    assert "<select" in note
+    quiet = row_for(raw, "Lou Lower")  # the inherited role is lower than the direct one: nothing to note
+    assert 'data-route="direct inherited"' in quiet and " from Infrastructure" not in html.unescape(quiet)
+
+
+def test_inactive_direct_members_keep_their_row_with_a_status_badge(
+    client, logged_in_admin, team_factory, user_factory, add_member
+):
+    team = team_factory(name="Windows")
+    gone = user_factory(full_name="Dora Disabled", status="disabled")
+    add_member(team, gone, "viewer")
+    row = row_for(raw_of(client.get(f"/admin/teams/{team.id}")), "Dora Disabled")
+    assert "Disabled" in row and "<select" in row and "Remove" in row
+
+
+def test_filter_group_counts(client, logged_in_admin, team_factory, user_factory, add_member):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    add_member(infra, user_factory(), "owner")
+    add_member(windows, user_factory(), "viewer")
+    add_member(windows, user_factory(), "viewer")
+    text = text_of(client.get(f"/admin/teams/{windows.id}"))
+    assert "All (3)" in text and "Direct (2)" in text and "From teams above (1)" in text
+
+
+def test_team_page_sections_in_order(client, logged_in_admin, team_factory):
+    team = team_factory(name="Windows")
+    raw = raw_of(client.get(f"/admin/teams/{team.id}"))
+    headings = re.findall(r"<h2[^>]*>(.*?)</h2>", raw, re.S)
+    assert [h.strip() for h in headings if h.strip() in ("People", "Teams below", "Trackers", "Details")] == [
+        "People",
+        "Teams below",
+        "Trackers",
+        "Details",
+    ]
+    [tag] = re.findall(r"<details\b[^>]*>", raw)
+    assert not re.search(r"\sopen\b", tag)
+    bad = post(client, f"/admin/teams/{team.id}/rename", {"name": ""})
+    assert bad.status_code == 400
+    [tag] = re.findall(r"<details\b[^>]*>", raw_of(bad))
+    assert re.search(r"\sopen\b", tag)
+    assert "Edit details" in raw and f"/admin/teams/{team.id}/move" in raw and "Move…" in raw
+
+
+def test_teams_below_and_new_team_below(client, logged_in_admin, team_factory, user_factory, add_member):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    patching = team_factory(name="Patching", parent=windows)
+    add_member(windows, user_factory(), "viewer")
+    add_member(patching, user_factory(), "viewer")
+    raw = raw_of(client.get(f"/admin/teams/{windows.id}"))
+    below = raw[raw.index('id="teams-below"') : raw.index('id="trackers"')]
+    assert "Patching" in below and "2 people" in below
+    assert f'href="/admin/teams?parent={windows.id}#new-team"' in raw
+    page = raw_of(client.get(f"/admin/teams?parent={windows.id}"))
+    select_html = re.search(r'<select id="parent_id".*?</select>', page, re.S).group(0)
+    assert re.search(rf'<option value="{windows.id}"\s+selected', select_html)
+    for bad in ("abc", "", "9" * 20, "99999"):
+        page = raw_of(client.get(f"/admin/teams?parent={bad}"))
+        select_html = re.search(r'<select id="parent_id".*?</select>', page, re.S).group(0)
+        assert re.search(r'<option value=""\s+selected', select_html), bad
+        assert select_html.count("selected") == 1
+
+
+def test_trackers_link_to_their_access_tab(client, logged_in_admin, team_factory, tracker_factory):
+    team = team_factory(name="Windows")
+    tracker = tracker_factory(name="Laptop refresh", team_id=team.id)
+    raw = raw_of(client.get(f"/admin/teams/{team.id}"))
+    assert f'href="/trackers/{tracker.id}/roles"' in raw
+
+
+def test_names_with_markup_are_escaped(client, logged_in_admin, team_factory, user_factory, add_member):
+    team = team_factory(name="<b>x</b>")
+    add_member(team, user_factory(full_name='O"Neil <i>'), "viewer")
+    for url in (f"/admin/teams/{team.id}", "/admin/teams"):
+        raw = raw_of(client.get(url))
+        assert "<b>x</b>" not in raw and "<i>" not in raw and 'O"Neil' not in raw
+        assert "&lt;b&gt;x&lt;/b&gt;" in raw
+        assert 'data-search="&lt;b&gt;x&lt;/b&gt; o&#34;neil &lt;i&gt;"' in raw
+
+
+def test_filters_render_hidden_for_no_script(client, logged_in_admin, team_factory, user_factory, add_member):
+    team = team_factory(name="Windows")
+    add_member(team, user_factory(), "viewer")
+    user_factory(full_name="Olly Other")
+    raw = raw_of(client.get(f"/admin/teams/{team.id}"))
+    for marker in ("data-tree-filter", "data-row-filter=", "data-select-filter="):
+        [tag] = re.findall(rf"<[a-z]+[^>]*{marker}[^>]*>", raw)
+        assert re.search(r"\bhidden\b", tag), marker
+    assert 'src="/static/admin.js' in raw
 
 
 # --- Members --------------------------------------------------------------------------------------------------------

@@ -9,6 +9,8 @@ give a team place or a member role to an account they created or whose password 
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 from flask import abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.exc import IntegrityError
@@ -29,6 +31,7 @@ from ..models import PermissionSet, PermissionSetHolder, Team, TeamMember, Track
 from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
+from .people import TeamPerson, reach_counts, team_people
 from .tree import (
     ALREADY_MEMBER_MESSAGE,
     CHOOSE_ROLE_MESSAGE,
@@ -57,10 +60,6 @@ def _team_or_404(team_id: int) -> Team:
     return team
 
 
-def _counts(column) -> dict[int, int]:
-    return dict(get_session().execute(select(column, func.count()).where(column.is_not(None)).group_by(column)).all())
-
-
 def _delete_blocker(team_id: int, rows: list[TeamRow]) -> str | None:
     """Why the team cannot be deleted (spec section 6.4), or ``None``."""
     if any(row.parent_id == team_id for row in rows):
@@ -84,14 +83,37 @@ def _refuse(team: Team, message: str):
 # --- The tree -------------------------------------------------------------------------------------------------------
 
 
+def _tree_context(rows: list[TeamRow], current_id: int | None) -> dict:
+    """What the shared tree partial needs: the children, who reaches each team, and each team's search text."""
+    db = get_session()
+    names: dict[int, list[str]] = {}
+    for team_id, full_name in db.execute(
+        select(TeamMember.team_id, User.full_name)
+        .join(User, User.id == TeamMember.user_id)
+        .order_by(func.lower(User.full_name), User.id)
+    ):
+        names.setdefault(team_id, []).append(full_name)
+    return {
+        "children": children_map(rows),
+        "reach": reach_counts(db),
+        "search": {row.id: " ".join([row.name, *names.get(row.id, [])]).lower() for row in rows},
+        "current_id": current_id,
+    }
+
+
+def _parent_choice(rows: list[TeamRow], text: str | None) -> str:
+    """The id (as text) of the parent to preselect, or an empty string for the top level."""
+    parent_id = parse_id(text)
+    return str(parent_id) if parent_id is not None and parent_id in {row.id for row in rows} else ""
+
+
 def _render_index(form, errors: list[str], status: int):
     rows = load_team_rows(get_session())
     page = render_template(
         "teams/index.html",
-        children=children_map(rows),
-        member_counts=_counts(TeamMember.team_id),
-        tracker_counts=_counts(Tracker.team_id),
+        **_tree_context(rows, None),
         choices=team_choices(get_session()),
+        selected_parent=form.get("parent_id", "") if form else _parent_choice(rows, request.args.get("parent")),
         form=form,
         errors=errors,
         page_title="Teams",
@@ -141,33 +163,51 @@ def create():
 # --- A team's page --------------------------------------------------------------------------------------------------
 
 
+class PersonRow(NamedTuple):
+    """One line of the People table."""
+
+    person: TeamPerson
+    route: str  # "direct", "inherited" or "direct inherited": what the row filter matches
+    note: str | None  # "Owner from Infrastructure", for a direct member whose inherited role is higher
+
+
+def _person_row(person: TeamPerson) -> PersonRow:
+    route = " ".join(r for r, present in (("direct", person.direct_role), ("inherited", person.inherited)) if present)
+    note = None
+    if person.direct_role is not None and person.inherited:
+        top = max(person.inherited, key=lambda inherit: ROLE_ORDER[inherit.role])  # the nearest team on a tie
+        if ROLE_ORDER[top.role] > ROLE_ORDER[person.direct_role]:
+            note = f"{top.role.title()} from {top.path}"
+    return PersonRow(person, route, note)
+
+
 def _render_team(team: Team, errors: list[str], status: int, form=None):
     db = get_session()
     rows = load_team_rows(db)
     labels = team_labels(rows)
-    members = db.execute(
-        select(TeamMember.role, User)
-        .join(User, User.id == TeamMember.user_id)
-        .where(TeamMember.team_id == team.id)
-        .order_by(func.lower(User.full_name), User.id)
-    ).all()
-    member_ids = {user.id for _role, user in members}
+    people = [_person_row(person) for person in team_people(db, team.id)]
+    direct_ids = {row.person.user.id for row in people if row.person.direct_role is not None}
     candidates = [
         user
         for user in db.scalars(
             select(User).where(User.status == "active").order_by(func.lower(User.full_name), User.id)
         )
-        if user.id not in member_ids
+        if user.id not in direct_ids
     ]
     trackers = db.scalars(
         select(Tracker).where(Tracker.team_id == team.id).order_by(func.lower(Tracker.name), Tracker.id)
     ).all()
+    context = _tree_context(rows, team.id)
     page = render_template(
         "teams/team.html",
+        **context,
         team=team,
         path=labels.get(team.id, team.name),
         parent_label=labels.get(team.parent_id, TOP_LEVEL) if team.parent_id else TOP_LEVEL,
-        members=members,
+        people=people,
+        direct_count=sum(1 for row in people if row.person.direct_role is not None),
+        inherited_count=sum(1 for row in people if row.person.inherited),
+        below=context["children"].get(team.id, []),
         candidates=candidates,
         trackers=trackers,
         roles=ROLES,
