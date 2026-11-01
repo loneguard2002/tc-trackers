@@ -76,6 +76,23 @@ def _teams_and_sets(db, labels: dict[int, str]) -> tuple[dict[int, list[tuple[st
     return {user_id: sorted(items) for user_id, items in teams.items()}, sets
 
 
+def _held_sets(db, user: User, labels: dict[int, str]) -> list[tuple[str, int | None]]:
+    """The user's permission sets as ``(name, team id)``: ``None`` when held directly, else the holding team."""
+    direct = db.scalars(
+        select(PermissionSet.name)
+        .join(PermissionSetHolder, PermissionSetHolder.set_id == PermissionSet.id)
+        .where(PermissionSetHolder.user_id == user.id)
+    )
+    through = db.execute(
+        select(PermissionSet.name, PermissionSetHolder.team_id)
+        .join(PermissionSetHolder, PermissionSetHolder.set_id == PermissionSet.id)
+        .join(TeamMember, TeamMember.team_id == PermissionSetHolder.team_id)
+        .where(TeamMember.user_id == user.id)
+    )
+    found = [(name, None) for name in direct] + [(name, team_id) for name, team_id in through]
+    return sorted(found, key=lambda h: (h[0].casefold(), h[0], h[1] is not None, labels.get(h[1] or 0, "")))
+
+
 def _actions(db, actor: User, user: User) -> dict[str, bool]:
     """The actions the actor may take on the user, so the row offers only those."""
     may_act = account_refusal(db, actor, user) is None
@@ -447,9 +464,17 @@ def access(user_id: int):
     if limited:
         own = tracker_roles(db, viewer)
         shown = [entry for entry in reached if entry.tracker.id in own]
+    labels = team_labels(load_team_rows(db))
+    memberships = db.execute(select(TeamMember.team_id, TeamMember.role).where(TeamMember.user_id == user.id))
+    teams = sorted(((labels.get(team_id, ""), team_id, role) for team_id, role in memberships))
     return render_template(
         "admin/user_access.html",
         person=user,
+        actions=_actions(db, viewer, user),
+        teams=teams,
+        team_labels=labels,
+        can_view_teams=has_permission(viewer, "manage_teams"),
+        held_sets=_held_sets(db, user, labels),
         trackers=shown,
         limited=limited,
         sources=permission_sources(db, user),

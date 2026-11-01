@@ -3,7 +3,7 @@
 from sqlalchemy import event, select
 
 from tests.conftest import post
-from tracker.auth.roles import ROLE_ORDER, tracker_roles, user_role, visible_trackers
+from tracker.auth.roles import ROLE_ORDER, Route, tracker_access_routes, tracker_roles, user_role, visible_trackers
 from tracker.models import CompletionEntry, Group
 
 
@@ -262,3 +262,17 @@ def test_an_inactive_administrator_has_no_role(db, user_factory, tracker_factory
         admin = user_factory(is_admin=True, status=status)
         assert user_role(db, admin, t.id) is None
         assert tracker_roles(db, admin) == {} and visible_trackers(db, admin) == []
+
+
+def test_routes_carry_their_role(db, user_factory, tracker_factory, team_factory, add_member, give_set):
+    person = user_factory()
+    windows = team_factory(name="Windows", parent=team_factory(name="Infrastructure"))
+    add_member(windows, person, "editor")
+    give_set(["view_all_trackers"], user=person)
+    tracker_factory(name="Servers", team_id=windows.id)
+    (row,) = tracker_access_routes(db, person)
+    assert row.role == "editor"
+    assert row.routes == [
+        Route("Team Infrastructure › Windows: Editor", "editor"),
+        Route("View all trackers: Viewer", "viewer"),
+    ]

@@ -125,10 +125,15 @@ def team_access(session: Session, tracker: Tracker) -> list[TeamAccess]:
     return sorted(access, key=lambda a: (a.user.full_name.lower(), a.user.full_name, a.path, a.user.id))
 
 
+class Route(NamedTuple):
+    text: str
+    role: str  # the role this route gives; it "sets the role" when it equals the tracker's effective role
+
+
 class TrackerAccess(NamedTuple):
     tracker: Tracker
     role: str
-    routes: list[str]
+    routes: list[Route]
 
 
 def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
@@ -172,7 +177,7 @@ def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
         TrackerAccess(
             trackers[tracker_id],
             ROLE_BY_RANK[max(ROLE_ORDER[role] for role, _text in found)],
-            [text for _role, text in found],
+            [Route(text, role) for role, text in found],
         )
         for tracker_id, found in routes.items()
     ]
