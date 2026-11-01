@@ -341,7 +341,7 @@ def test_effective_access_lists_routes_and_permission_sources(
     tracker_factory(name="Servers", team_id=windows.id)
     laptops = tracker_factory(name="Laptops")
     grant(person, laptops, "viewer")
-    routes = {a.tracker.name: (a.role, a.routes) for a in tracker_access_routes(db, person)}
+    routes = {a.tracker.name: (a.role, [r.text for r in a.routes]) for a in tracker_access_routes(db, person)}
     assert routes == {
         "Laptops": ("viewer", ["Direct role: Viewer", "View all trackers: Viewer"]),
         "Servers": ("editor", ["Team Infrastructure › Windows: Editor", "View all trackers: Viewer"]),
@@ -370,7 +370,7 @@ def test_effective_access_of_an_administrator_and_of_an_inactive_user(
 ):
     tracker = tracker_factory(name="Anything")
     (row,) = tracker_access_routes(db, logged_in_admin)
-    assert (row.tracker.id, row.role, row.routes) == (tracker.id, "owner", ["Administrator"])
+    assert (row.tracker.id, row.role, [r.text for r in row.routes]) == (tracker.id, "owner", ["Administrator"])
     assert all(sources == ["Administrator"] for sources in permission_sources(db, logged_in_admin).values())
     disabled = user_factory(status="disabled")
     grant(disabled, tracker, "owner")
@@ -565,3 +565,65 @@ def test_row_actions_sit_in_a_more_menu(client, logged_in_admin, user_factory):
     # the signed-in administrator's own row offers neither Disable nor an administrator change
     own = rows[logged_in_admin.full_name]
     assert "/disable" not in own and "administrator</button>" not in own
+
+
+def _visible(client, person) -> str:
+    """The access page as the reader sees it: tags dropped, whitespace collapsed."""
+    raw = re.sub(r"<[^>]+>", " ", _access_html(client, person))
+    return re.sub(r"\s+", " ", html.unescape(raw))
+
+
+def _access_html(client, person) -> str:
+    return client.get(f"/admin/users/{person.id}/access").get_data(as_text=True)
+
+
+def test_access_page_marks_the_route_that_sets_the_role(
+    client, user_manager, user_factory, team_factory, add_member, give_set, tracker_factory, grant
+):
+    person = user_factory(full_name="Marked Person")
+    windows = team_factory(name="Windows")
+    add_member(windows, person, "editor")
+    give_set(["view_all_trackers"], user=person)
+    tracker_factory(name="Servers", team_id=windows.id)
+    give_set(["manage_teams"], user=user_manager)
+    page = _visible(client, person)
+    assert "Team Windows: Editor Sets the role" in page
+    assert "View all trackers: Viewer Sets the role" not in page and page.count("Sets the role") == 1
+    both = tracker_factory(name="Both Viewer")
+    grant(person, both, "viewer")
+    page = _visible(client, person)
+    assert "Direct role: Viewer Sets the role" in page and "View all trackers: Viewer Sets the role" in page
+
+
+def test_access_page_header_and_sections(client, user_manager, user_factory, team_factory, add_member, give_set, db):
+    local = user_factory(full_name="Local Person")
+    admin = user_factory(full_name="Admin Person", is_admin=True)
+    assert "Administrator" in _visible(client, admin) and "Administrator" not in _visible(client, local)
+    sso = user_factory(full_name="Sso Person", auth_source="sso", password_hash=None)
+    page = _visible(client, local)
+    assert f"{local.email} · Signs in with a password" in page
+    assert "Reset password" in page and "Disable" in page and "Make administrator" not in page  # manager is no admin
+    assert "Signs in with Microsoft" in _visible(client, sso)
+    assert "Reset password" not in _visible(client, sso)
+    assert "Not a member of any team." in page and "Holds no permission sets." in page
+    person = user_factory(full_name="Member Person")
+    windows = team_factory(name="Windows", parent=team_factory(name="Infrastructure"))
+    add_member(windows, person, "editor")
+    give_set(["view_activity"], user=person, name="Readers")
+    give_set(["view_all_trackers"], team=windows, name="PMO")
+    raw = _access_html(client, person)
+    page = _visible(client, person)
+    for text in (
+        "Teams",
+        "Infrastructure › Windows · Editor",
+        "Permission sets",
+        "Readers, held directly",
+        "PMO, held by team Infrastructure › Windows",
+    ):
+        assert text in page
+    assert page.index("Teams") < page.index("Permission sets")
+    assert f'href="/admin/teams/{windows.id}"' not in raw  # manage_users alone does not link teams
+    give_set(["manage_teams"], user=user_manager)
+    assert f'href="/admin/teams/{windows.id}"' in _access_html(client, person)
+    pending = user_factory(status="pending")
+    assert "Approve" in _visible(client, pending)
