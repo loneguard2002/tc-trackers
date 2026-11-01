@@ -87,10 +87,10 @@
         {{ csrf_field(csrf_token()) }}
         <div>
           <label for="user_id">Person</label>
-          <input class="select-filter" type="search" placeholder="Filter people" autocomplete="off" aria-label="Filter the list of people" data-select-filter="user_id" hidden>
           <select id="user_id" name="user_id" required>
             {% for u in candidates %}<option value="{{ u.id }}">{{ u.full_name }} ({{ u.email }})</option>{% endfor %}
           </select>
+          <input class="select-filter" type="search" placeholder="Filter people" autocomplete="off" aria-label="Filter the list of people" data-select-filter="user_id" hidden>
         </div>
         <div>
           <label for="role">Role</label>
@@ -143,7 +143,7 @@
       {% endif %}
     </section>
 
-    <details class="settings-section team-details" id="details"{% if errors %} open{% endif %}>
+    <details class="settings-section team-details" id="details"{% if open_details %} open{% endif %}>
       <summary class="settings-section-head">
         <h2 id="section-details">Details</h2>
         <p>The team's name and description, and deleting the team.</p>
