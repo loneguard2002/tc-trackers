@@ -76,6 +76,21 @@ def test_administrators_cannot_receive_a_role_and_an_unknown_role_is_refused(
     assert post(client, f"/trackers/{t.id}/roles", {"user_id": logged_in_user.id, "role": "boss"}).status_code == 400
 
 
+def test_administrator_with_a_leftover_direct_role_has_no_controls(
+    client, logged_in_admin, tracker_factory, user_factory, db
+):
+    t, admin = tracker_factory(), user_factory(is_admin=True, full_name="Ada Admin")
+    db.add(TrackerRole(user_id=admin.id, tracker_id=t.id, role="owner"))
+    db.commit()
+    page = html.unescape(client.get(f"/trackers/{t.id}/roles").get_data(as_text=True))
+    [row] = [r for r in re.findall(r"<tr data-route.*?</tr>", page, re.S) if "Ada Admin" in r]
+    assert 'data-route="admin"' in row
+    assert "data-autosubmit" not in row and 'value="remove"' not in row and "Remove access" not in row
+    assert "no effect for an administrator" in row
+    assert "Direct (0)" in page
+    assert "Administrators (2)" in page
+
+
 def test_team_access_is_sorted_and_empty_without_a_team(db, tracker_factory, team_factory, add_member, user_factory):
     top = team_factory(name="Top")
     sub = team_factory(name="Sub", parent=top)

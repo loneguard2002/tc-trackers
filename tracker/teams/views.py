@@ -181,11 +181,12 @@ def _person_row(person: TeamPerson) -> PersonRow:
     return PersonRow(person, route, note)
 
 
-def _render_team(team: Team, errors: list[str], status: int, form=None):
+def _render_team(team: Team, errors: list[str], status: int, form=None, open_details: bool = False):
     db = get_session()
     rows = load_team_rows(db)
     labels = team_labels(rows)
     people = [_person_row(person) for person in team_people(db, team.id)]
+    people.sort(key=lambda row: row.person.direct_role is None)  # direct members first; the order by name is kept
     direct_ids = {row.person.user.id for row in people if row.person.direct_role is not None}
     candidates = [
         user
@@ -216,6 +217,7 @@ def _render_team(team: Team, errors: list[str], status: int, form=None):
         delete_blocker=_delete_blocker(team.id, rows),
         form=form or {"name": team.name, "description": team.description},
         errors=errors,
+        open_details=open_details,
         page_title=team.name,
         current_page="teams",
     )
@@ -243,7 +245,7 @@ def rename(team_id: int):
         if e
     ]
     if errors:
-        return _render_team(team, errors, 400, form=submitted)
+        return _render_team(team, errors, 400, form=submitted, open_details=True)
     before = {field: getattr(team, field) for field, value in submitted.items() if getattr(team, field) != value}
     if not before:
         flash(NO_CHANGES_MESSAGE, "info")
@@ -265,7 +267,7 @@ def rename(team_id: int):
         db.commit()
     except IntegrityError:
         db.rollback()
-        return _render_team(team, [name_taken("team")], 400, form=submitted)
+        return _render_team(team, [name_taken("team")], 400, form=submitted, open_details=True)
     flash("Saved the team details.", "success")
     return _to_team(team)
 
@@ -384,7 +386,7 @@ def delete_team(team_id: int):
     blocker = _delete_blocker(team.id, rows)
     if blocker:
         db.rollback()
-        return _render_team(team, [blocker], 400)
+        return _render_team(team, [blocker], 400, open_details=True)
     labels = team_labels(rows)
     path = labels[team.id]
     parent_id = current[team.id].parent_id  # from the locked row: a move just committed has changed it

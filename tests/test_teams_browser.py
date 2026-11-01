@@ -147,3 +147,22 @@ def test_tracker_access_filters_and_gives_a_role(
     page.wait_for_load_state("networkidle")
     expect(page.locator(".flash")).to_contain_text("Updated access for Zed Zebra.")
     _clean(page)
+
+
+def test_add_member_form_labels_and_button_line_up(page, live_server, team_factory, user_factory, tracker_factory):
+    team = team_factory(name="Windows")
+    tracker = tracker_factory(name="Laptop refresh", team_id=team.id)
+    user_factory(full_name="Candidate One")
+    admin = user_factory(is_admin=True)
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, admin)
+    for url, form in (
+        (f"/admin/teams/{team.id}", "form.team-add"),
+        (f"/trackers/{tracker.id}/roles", "form.team-add"),
+    ):
+        page.goto(live_server + url)
+        top = lambda selector: page.locator(f"{form} {selector}").first.bounding_box()["y"]  # noqa: E731
+        assert abs(top("label[for=user_id]") - top("label[for=role]")) < 1
+        assert abs(top("select#user_id") - top("select#role")) < 1
+        assert abs(top("select#user_id") - top("button[type=submit]")) < 3
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

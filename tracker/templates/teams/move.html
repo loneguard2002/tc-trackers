@@ -48,7 +48,7 @@
   {% if impact %}
   <section class="settings-section" aria-labelledby="section-summary">
     <header class="settings-section-head">
-      <h2 id="section-summary">Moving {{ team.name }} below {{ target }}</h2>
+      <h2 id="section-summary">Moving {{ team.name }} {% if new_parent_id %}below {{ target }}{% else %}to the top level{% endif %}</h2>
       <p>Unchanged: members of {{ team.name }} and the teams below it keep their roles; direct roles and permission sets keep working.</p>
     </header>
   </section>
@@ -73,7 +73,7 @@
     {% endif %}
   </section>
 
-  <form class="inline-form" method="post" action="{{ url_for('teams.move', team_id=team.id) }}">
+  <form class="move-confirm" method="post" action="{{ url_for('teams.move', team_id=team.id) }}">
     {{ csrf_field(csrf_token()) }}
     <input type="hidden" name="parent_id" value="{{ new_parent_id if new_parent_id is not none else '' }}">
     <button class="button primary" type="submit">Move {{ team.name }}</button>

@@ -432,6 +432,20 @@ def test_filter_group_counts(client, logged_in_admin, team_factory, user_factory
     assert "All (3)" in text and "Direct (2)" in text and "From teams above (1)" in text
 
 
+def test_people_list_direct_members_before_those_from_teams_above(
+    client, logged_in_admin, team_factory, user_factory, add_member
+):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    add_member(infra, user_factory(full_name="Aaron Above"), "owner")
+    add_member(windows, user_factory(full_name="Zoe Direct"), "viewer")
+    add_member(infra, user_factory(full_name="Bea Above"), "viewer")
+    add_member(windows, user_factory(full_name="Carl Direct"), "viewer")
+    page = raw_of(client.get(f"/admin/teams/{windows.id}"))
+    order = [n for row in table_rows(page) for n in ("Aaron", "Bea", "Carl", "Zoe") if n in row]
+    assert order == ["Carl", "Zoe", "Aaron", "Bea"]
+
+
 def test_team_page_sections_in_order(client, logged_in_admin, team_factory):
     team = team_factory(name="Windows")
     raw = raw_of(client.get(f"/admin/teams/{team.id}"))

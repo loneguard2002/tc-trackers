@@ -21,7 +21,7 @@
         <div><dt>Owner</dt><dd>Also changes settings and manages the weekly email.</dd></div>
       </dl>
     </header>
-    {% set direct_count = access|selectattr('direct_role')|list|length %}
+    {% set direct_count = access|selectattr('direct_role')|rejectattr('admin')|list|length %}
     {% set teams_count = access|selectattr('teams')|list|length %}
     {% set sets_count = access|selectattr('view_all_sets')|list|length %}
     {% set admin_count = access|selectattr('admin')|list|length %}
@@ -38,13 +38,14 @@
         <tbody>
         {% for row in access %}
         {% set u = row.user %}
-        <tr data-route="{{ (('direct ' if row.direct_role) ~ ('team ' if row.teams) ~ ('set ' if row.view_all_sets) ~ ('admin' if row.admin))|trim }}">
+        <tr data-route="{{ (('direct ' if row.direct_role and not row.admin) ~ ('team ' if row.teams) ~ ('set ' if row.view_all_sets) ~ ('admin' if row.admin))|trim }}">
           <td><div class="member-cell">{{ person(u) }}</div></td>
           <td>{{ row.role|title }}</td>
           <td>
             <ul class="route-list">
               {% if row.admin %}<li>Administrator</li>{% endif %}
-              {% if row.direct_role %}
+              {% if row.direct_role and row.admin %}<li class="muted">Direct role: {{ row.direct_role|title }} (no effect for an administrator)</li>{% endif %}
+              {% if row.direct_role and not row.admin %}
               <li>Direct role
                 <form class="member-actions" method="post" action="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">
                   {{ csrf_field(csrf_token()) }}<input type="hidden" name="user_id" value="{{ u.id }}">
@@ -61,7 +62,7 @@
             </ul>
           </td>
           <td class="cell-actions">
-            {% if row.direct_role %}
+            {% if row.direct_role and not row.admin %}
             <form method="post" action="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">
               {{ csrf_field(csrf_token()) }}<input type="hidden" name="user_id" value="{{ u.id }}"><input type="hidden" name="role" value="remove">
               <button class="button button-small button-quiet" type="submit">Remove access</button>
@@ -81,14 +82,14 @@
       <p>Someone who reaches this tracker through a team can already open it; a direct role adds to that. Administrators have owner access everywhere, so they are not listed here.</p>
     </header>
     {% if candidates %}
-    <form class="inline-form" method="post" action="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">
+    <form class="inline-form team-add" method="post" action="{{ url_for('trackers.roles', tracker_id=tracker.id) }}">
       {{ csrf_field(csrf_token()) }}
       <div>
         <label for="user_id">Person</label>
-        <input class="select-filter" type="search" placeholder="Filter people" autocomplete="off" aria-label="Filter the list of people" data-select-filter="user_id" hidden>
         <select id="user_id" name="user_id" required>
           {% for u in candidates %}<option value="{{ u.id }}">{{ u.full_name }} ({{ u.email }})</option>{% endfor %}
         </select>
+        <input class="select-filter" type="search" placeholder="Filter people" autocomplete="off" aria-label="Filter the list of people" data-select-filter="user_id" hidden>
       </div>
       <div>
         <label for="role">Role</label>

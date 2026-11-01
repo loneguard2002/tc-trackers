@@ -36,3 +36,30 @@ def test_users_fit_without_page_scroll(page, live_server, team_factory, user_fac
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
+
+
+def test_users_table_fits_its_box_at_1440(page, live_server, team_factory, user_factory, add_member, give_set):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows servers", parent=infra)
+    apps = team_factory(name="Applications and platform engineering")
+    give_set(["manage_teams"], team=infra, name="Team managers (through Infrastructure)")
+    for n in range(4):
+        person = user_factory(
+            full_name=f"Alexandria Montgomery-Smith {n}",
+            email=f"alexandria.montgomery-smith-with-a-long-address{n}@example-corporation.example.com",
+            is_admin=n == 0,
+        )
+        add_member(windows, person, "owner")
+        add_member(apps, person, "viewer")
+        give_set(["manage_teams"], user=person, name=f"Team managers (through Infrastructure {n})")
+    admin = user_factory(is_admin=True)
+    page.set_viewport_size({"width": 1440, "height": 900})
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users")
+    box = page.locator(".section-table:has(table.user-table)")
+    fit = box.evaluate("el => [el.scrollWidth, el.clientWidth]")
+    assert fit[0] <= fit[1], fit
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    for text in ("Access", "More"):
+        button = box.locator("tbody tr").first.get_by_text(text, exact=False).first
+        assert button.bounding_box()["height"] < 40

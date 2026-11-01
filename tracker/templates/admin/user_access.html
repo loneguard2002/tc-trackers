@@ -14,7 +14,8 @@
     <header class="settings-section-head">
       <h2 id="section-access">{{ person.full_name }}</h2>
       <p>{{ person.email }} · {{ 'Signs in with Microsoft' if person.auth_source == 'sso' else 'Signs in with a password' }}</p>
-      <p><span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(person.status, 'muted') }}">{{ person.status|title }}</span>{% if person.is_admin %} <span class="badge badge-info">Administrator</span>{% endif %}</p>
+      <div class="access-head-row">
+      <span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(person.status, 'muted') }}">{{ person.status|title }}</span>{% if person.is_admin %}<span class="badge badge-info">Administrator</span>{% endif %}
       {% if actions.approve or actions.enable or actions.password or actions.set_admin or actions.disable %}
       <div class="row-tools row-tools-text">
         {% if actions.approve %}{{ action('admin.approve', 'Approve') }}{% endif %}
@@ -24,6 +25,7 @@
         {% if actions.disable %}{{ action('admin.disable', 'Disable', confirm='Disable ' ~ person.full_name ~ '? They will no longer be able to sign in.') }}{% endif %}
       </div>
       {% endif %}
+      </div>
       <p>Every tracker this person can open, with their role and each route that gives it, then every permission they hold, the teams they belong to and their permission sets.</p>
     </header>
     {% if person.status != 'active' %}
@@ -68,22 +70,24 @@
     <p class="empty-note">This person holds no permissions.</p>
     {% endif %}
     {% endif %}
-    <h3>Teams</h3>
-    {% if teams %}
-    <ul class="chips">
-      {% for path, team_id, role in teams %}<li class="status-pill">{% if can_view_teams %}<a href="{{ url_for('teams.view', team_id=team_id) }}">{{ path }}</a>{% else %}{{ path }}{% endif %} · {{ role|title }}</li>{% endfor %}
-    </ul>
-    {% else %}
-    <p class="empty-note">Not a member of any team.</p>
-    {% endif %}
-    <h3>Permission sets</h3>
-    {% if held_sets %}
-    <ul class="chips">
-      {% for name, team_id in held_sets %}<li class="status-pill">{{ name }}, {% if team_id is none %}held directly{% else %}held by team {{ team_labels.get(team_id, '') }}{% endif %}</li>{% endfor %}
-    </ul>
-    {% else %}
-    <p class="empty-note">Holds no permission sets.</p>
-    {% endif %}
+    <div class="section-body access-groups">
+      <h3>Teams</h3>
+      {% if teams %}
+      <ul class="access-list">
+        {% for path, team_id, role in teams %}<li class="status-pill">{% if can_view_teams %}<a href="{{ url_for('teams.view', team_id=team_id) }}">{{ path }}</a>{% else %}{{ path }}{% endif %} · {{ role|title }}</li>{% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty-note">Not a member of any team.</p>
+      {% endif %}
+      <h3>Permission sets</h3>
+      {% if held_sets %}
+      <ul class="access-list">
+        {% for name, team_id in held_sets %}<li class="status-pill">{{ name }}, {% if team_id is none %}held directly{% else %}held by team {{ team_labels.get(team_id, '') }}{% endif %}</li>{% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty-note">Holds no permission sets.</p>
+      {% endif %}
+    </div>
   </section>
 </div>
 {% endblock %}
