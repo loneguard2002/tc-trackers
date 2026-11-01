@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% macro change_list(heading, items, empty) %}
+<section class="settings-section" aria-labelledby="move-{{ heading|lower|replace(' ', '-') }}">
+  <header class="settings-section-head">
+    <h2 id="move-{{ heading|lower|replace(' ', '-') }}">{{ heading }}</h2>
+  </header>
+  {% if items %}
+  <ul class="move-changes">
+    {% for c in items %}
+    <li>{{ caller(c) }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-note">{{ empty }}</p>
+  {% endif %}
+</section>
+{% endmacro %}
+{% block content %}
+<h1>Move {{ team.name }}</h1>
+<p class="page-lede"><a href="{{ url_for('teams.index') }}">Teams</a> › <a href="{{ url_for('teams.view', team_id=team.id) }}">{{ path }}</a> › Move</p>
+<div class="settings settings-narrow">
+  {% if errors %}
+  <div class="form-alert" role="alert">
+    <strong>Please correct the following:</strong>
+    <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  <section class="settings-section" aria-labelledby="section-destination">
+    <header class="settings-section-head">
+      <h2 id="section-destination">Where to move it</h2>
+      <p>{% if team.parent_id %}Now below <strong>{{ parent_label }}</strong>.{% else %}Now at the <strong>top level</strong>.{% endif %} People in the teams above a team reach its trackers, so moving it changes who can see them. Choose a place to see what would change before anything does.</p>
+    </header>
+    <form class="archive-row team-move" method="get" action="{{ url_for('teams.move_preview', team_id=team.id) }}">
+      <div class="archive-text field">
+        <label for="parent_id">Move below</label>
+        <select id="parent_id" name="parent_id">
+          <option value="" {{ 'selected' if choice == '' }}>Top level</option>
+          {% for id, label in parents %}<option value="{{ id }}" {{ 'selected' if new_parent_id == id }}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="button" type="submit">Show what changes</button>
+    </form>
+    {% if notice %}<p class="section-foot-note">{{ notice }}</p>{% endif %}
+  </section>
+
+  {% if impact %}
+  <section class="settings-section" aria-labelledby="section-summary">
+    <header class="settings-section-head">
+      <h2 id="section-summary">Moving {{ team.name }} below {{ target }}</h2>
+      <p>Unchanged: members of {{ team.name }} and the teams below it keep their roles; direct roles and permission sets keep working.</p>
+    </header>
+  </section>
+  {% call(c) change_list('Lose access', impact.losses, 'No one loses access.') %}{{ c.user.full_name }} loses {{ c.before|title }} on {{ c.tracker.name }}.{% endcall %}
+  {% call(c) change_list('Gain access', impact.gains, 'No one gains access.') %}{{ c.user.full_name }} gains {{ c.after|title }} on {{ c.tracker.name }}.{% endcall %}
+  {% call(c) change_list('Role changes', impact.changes, 'No roles change.') %}{{ c.user.full_name }} goes from {{ c.before|title }} to {{ c.after|title }} on {{ c.tracker.name }}.{% endcall %}
+
+  <section class="settings-section" aria-labelledby="section-trackers">
+    <header class="settings-section-head">
+      <h2 id="section-trackers">Trackers that move</h2>
+      <p>The trackers in {{ team.name }} and the teams below it, archived ones included.</p>
+    </header>
+    {% if impact.trackers %}
+    <ul class="member-list">
+      {% for t in impact.trackers %}
+      <li class="member"><span class="member-who"><span class="member-name">{{ t.name }}</span></span>
+        {% if t.status == 'archived' %}<span class="badge badge-muted">Archived</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-note">No trackers are in this team or below it.</p>
+    {% endif %}
+  </section>
+
+  <form class="inline-form" method="post" action="{{ url_for('teams.move', team_id=team.id) }}">
+    {{ csrf_field(csrf_token()) }}
+    <input type="hidden" name="parent_id" value="{{ new_parent_id if new_parent_id is not none else '' }}">
+    <button class="button primary" type="submit">Move {{ team.name }}</button>
+    <a class="button" href="{{ url_for('teams.view', team_id=team.id) }}">Cancel</a>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

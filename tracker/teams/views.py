@@ -28,6 +28,7 @@ from ..ids import in_range, parse_id
 from ..models import PermissionSet, PermissionSetHolder, Team, TeamMember, Tracker, User
 from ..naming import description_error, name_error, name_taken
 from . import bp
+from .impact import move_impact
 from .tree import (
     ALREADY_MEMBER_MESSAGE,
     CHOOSE_ROLE_MESSAGE,
@@ -144,7 +145,6 @@ def _render_team(team: Team, errors: list[str], status: int, form=None):
     db = get_session()
     rows = load_team_rows(db)
     labels = team_labels(rows)
-    below = descendants(rows, team.id)
     members = db.execute(
         select(TeamMember.role, User)
         .join(User, User.id == TeamMember.user_id)
@@ -167,7 +167,6 @@ def _render_team(team: Team, errors: list[str], status: int, form=None):
         team=team,
         path=labels.get(team.id, team.name),
         parent_label=labels.get(team.parent_id, TOP_LEVEL) if team.parent_id else TOP_LEVEL,
-        parents=[(row.id, labels[row.id]) for row, _depth in order_tree(rows) if row.id not in below],
         members=members,
         candidates=candidates,
         trackers=trackers,
@@ -229,6 +228,60 @@ def rename(team_id: int):
         return _render_team(team, [name_taken("team")], 400, form=submitted)
     flash("Saved the team details.", "success")
     return _to_team(team)
+
+
+def _render_move(team: Team, choice: str | None, errors: list[str], status: int):
+    """The move page: the destination form and, for a valid different destination, what the move would change."""
+    db = get_session()
+    rows = load_team_rows(db)
+    labels = team_labels(rows)
+    below = descendants(rows, team.id)
+    new_parent_id = parse_id(choice) if choice else None
+    parent_label = labels.get(team.parent_id, TOP_LEVEL) if team.parent_id else TOP_LEVEL
+    impact = notice = target = None
+    if choice is not None and not errors:
+        if new_parent_id == team.parent_id:
+            notice = (
+                f"{team.name} is already at the top level."
+                if new_parent_id is None
+                else f"{team.name} is already below {parent_label}."
+            )
+        else:
+            target = labels.get(new_parent_id, TOP_LEVEL) if new_parent_id else TOP_LEVEL
+            impact = move_impact(db, team, new_parent_id)
+    page = render_template(
+        "teams/move.html",
+        team=team,
+        path=labels.get(team.id, team.name),
+        parent_label=parent_label,
+        parents=[(row.id, labels[row.id]) for row, _depth in order_tree(rows) if row.id not in below],
+        choice=choice,
+        new_parent_id=new_parent_id,
+        target=target,
+        impact=impact,
+        notice=notice,
+        errors=errors,
+        page_title=f"Move {team.name}",
+        current_page="teams",
+    )
+    return page, status
+
+
+@bp.get("/<int:team_id>/move")
+@permission_required("manage_teams")
+def move_preview(team_id: int):
+    team = _team_or_404(team_id)
+    if "parent_id" not in request.args:
+        return _render_move(team, None, [], 200)
+    choice = request.args["parent_id"].strip()
+    db = get_session()
+    new_parent_id = parse_id(choice) if choice else None
+    rows = load_team_rows(db)
+    if choice and (new_parent_id is None or new_parent_id not in {row.id for row in rows}):
+        return _render_move(team, choice, [TEAM_CHOICE_ERROR], 400)
+    if new_parent_id is not None and new_parent_id in descendants(rows, team.id):
+        return _render_move(team, choice, [CYCLE_MESSAGE], 400)
+    return _render_move(team, choice, [], 200)
 
 
 @bp.post("/<int:team_id>/move")
