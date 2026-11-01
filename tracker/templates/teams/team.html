@@ -13,7 +13,7 @@
         <h1>{{ team.name }}</h1>
         {% if team.description %}<p class="team-description">{{ team.description }}</p>{% endif %}
         <p class="team-header-counts">
-          {{ people_count(people|length) }} · {{ trackers|length }} {{ 'tracker' if trackers|length == 1 else 'trackers' }} · {{ below|length }} {{ 'team' if below|length == 1 else 'teams' }} below
+          {{ people_count(reach.get(team.id, 0)) }} · {{ trackers|length }} {{ 'tracker' if trackers|length == 1 else 'trackers' }} · {{ below|length }} {{ 'team' if below|length == 1 else 'teams' }} below
         </p>
       </div>
       <div class="team-header-actions">
