@@ -550,6 +550,23 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .member-cell { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .row-tools-text { gap: 4px; flex-wrap: wrap; }
 .row-tools-text .button-small { padding: 5px 10px; font-size: .8125rem; white-space: nowrap; }
+.user-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.user-filters input, .user-filters select { width: auto; padding: 7px 10px; font-size: .9rem; }
+.user-filter-search { flex: 1 1 14rem; }
+.user-filter-search input { width: 100%; }
+.user-filters select { max-width: 16rem; }
+.user-filter-buttons { display: flex; gap: 6px; }
+.user-count { border-top: 0; padding-bottom: 0; }
+.user-table .user-person .member-cell, .user-table .user-status { white-space: nowrap; }
+.user-table .member-who { white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 12rem; }
+.row-menu { position: relative; }
+.row-menu > summary { list-style: none; cursor: pointer; }
+.row-menu > summary::-webkit-details-marker { display: none; }
+.row-menu > summary::after { content: "\25BE"; margin-left: 6px; }
+.row-menu[open] > summary::after { content: "\25B4"; }
+.row-menu-panel { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-top: 4px; }
+.row-menu-panel .button, .row-menu-panel form .button { width: 100%; text-align: left; }
 .import-summary { margin-bottom: 20px; }
 .key-values { display: grid; margin: 0; }
 .key-values div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; padding: 10px 20px; }
