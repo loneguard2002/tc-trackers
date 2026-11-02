@@ -405,6 +405,26 @@ def test_spark_chart_takes_the_last_completed_weeks_and_marks_short_weeks():
     assert spark_chart(build_week_rows(weeks, targets, {}, 200, 0, 3, date(2026, 9, 1), 4)) is None
 
 
+def test_spark_chart_keeps_its_eight_slots_when_few_weeks_are_done():
+    from tracker.engine.calc import build_week_rows
+    from tracker.engine.weeks import week_endings
+    from tracker.trackers.views import SPARK_WEEKS, spark_chart
+
+    weeks = week_endings(date(2026, 9, 4), date(2026, 11, 6))
+    targets = {w: 10 for w in weeks}
+    actuals = {w: 12 for w in weeks}
+    full = spark_chart(build_week_rows(weeks, targets, actuals, 200, 0, 3, weeks[-1], 4))
+    chart = spark_chart(build_week_rows(weeks, targets, actuals, 200, 0, 3, weeks[1], 4))
+    assert chart["weeks"] == 2 and len(chart["bars"]) == 2
+    assert {b["width"] for b in chart["bars"]} == {full["bars"][0]["width"]}
+    assert [b["x"] for b in chart["bars"]] == [b["x"] for b in full["bars"][-2:]]
+    assert len(chart["empty"]) == SPARK_WEEKS - 2 and full["empty"] == []
+    assert all(e["x"] < chart["bars"][0]["x"] for e in chart["empty"])
+    starts = [segment.split(",")[0] for segment in chart["target"].split(" ") if segment.startswith("M")]
+    full_starts = [segment.split(",")[0] for segment in full["target"].split(" ") if segment.startswith("M")]
+    assert starts == full_starts[-2:]
+
+
 def test_archived_tracker_hidden_from_home_but_reachable(client, logged_in_admin, db, tracker_factory):
     tracker = tracker_factory(name="Old tracker")
     assert post(client, f"/trackers/{tracker.id}/archive").status_code == 302

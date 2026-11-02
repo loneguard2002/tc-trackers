@@ -104,6 +104,7 @@
       <div class="tracker-card-spark">
         {% if c.spark %}{% set s = c.spark %}
         <svg class="spark" viewBox="0 0 320 84" preserveAspectRatio="none" role="img" aria-label="Last {{ s.weeks }} weeks: actual against target">
+          {% for e in s.empty %}<rect class="spark-slot" x="{{ e.x }}" y="81" width="{{ e.width }}" height="3"/>{% endfor %}
           {% for b in s.bars %}<rect class="spark-bar{{ ' is-low' if b.low }}" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.width }}" height="{{ b.height }}"/>{% endfor %}
           {% if s.target %}<path class="spark-target" d="{{ s.target }}" vector-effect="non-scaling-stroke"/>{% endif %}
         </svg>
