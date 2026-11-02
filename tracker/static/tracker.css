@@ -911,7 +911,7 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .perm-head .page-lede { margin-bottom: 0; }
 .perm-head .button { display: inline-flex; flex: none; align-items: center; gap: 8px; font-weight: 600; }
 .perm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 20px; align-items: start; max-width: 1280px; margin-bottom: 20px; }
-.perm-card { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); transition: border-color .15s, box-shadow .15s; }
+.perm-card { display: flex; flex-direction: column; min-width: 0; scroll-margin-top: calc(var(--topbar-height) + 16px); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); transition: border-color .15s, box-shadow .15s; }
 .perm-card.is-changed { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent); }
 .perm-card-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 14px; border-bottom: 1px solid var(--border); }
 .perm-card-icon { display: grid; flex: none; place-items: center; width: 38px; height: 38px; border-radius: 9px; background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary); }

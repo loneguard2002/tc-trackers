@@ -66,9 +66,9 @@
       <h3 class="perm-group">{{ group_name }}</h3>
       {% for name in names %}{% set label, description = permissions[name] %}
       <label class="perm-row" for="cell-{{ s.id }}-{{ name }}">
-        <span class="perm-row-text"><span class="perm-row-label">{{ label }}</span><span class="perm-row-help">{{ description }}</span></span>
+        <span class="perm-row-text"><span class="perm-row-label">{{ label }}</span><span class="perm-row-help" id="help-{{ s.id }}-{{ name }}">{{ description }}</span></span>
         <input type="checkbox" id="cell-{{ s.id }}-{{ name }}" form="permission-cards-form" name="set-{{ s.id }}" value="{{ name }}"
-          {{ 'checked' if name in granted }} aria-label="{{ label }} for {{ s.name }}">
+          {{ 'checked' if name in granted }} aria-label="{{ label }} for {{ s.name }}" aria-describedby="help-{{ s.id }}-{{ name }}">
       </label>
       {% endfor %}
       {% endfor %}

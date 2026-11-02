@@ -56,3 +56,31 @@ def test_cards_fit_without_page_scroll(page, live_server, user_factory, give_set
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
+
+
+def test_cards_scroll_clear_of_the_top_bar(page, live_server, user_factory):
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(f"{live_server}/admin/permission-sets")
+    margin = page.evaluate("parseFloat(getComputedStyle(document.getElementById('new-set')).scrollMarginTop)")
+    bar = page.evaluate("document.querySelector('.topbar').getBoundingClientRect().bottom")
+    assert margin > bar
+
+
+# Before the deferred script runs, tick a box as a browser does when it restores a form after a reload or Back.
+RESTORED_TICK = """
+document.addEventListener("readystatechange", function () {
+  if (document.readyState !== "interactive") return;
+  var box = document.querySelector("article[data-set-card] input[value=manage_users]");
+  if (box) box.checked = true;
+});
+"""
+
+
+def test_ticks_restored_by_the_browser_count_as_unsaved(page, live_server, user_factory, give_set):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.add_init_script(RESTORED_TICK)
+    page.goto(f"{live_server}/admin/permission-sets")
+    card = page.locator("article[data-set-card]", has_text="PMO")
+    expect(page.locator("[data-dirty-note]")).to_have_text("Unsaved changes in 1 set")
+    expect(card.get_by_text("Changed")).to_be_visible()

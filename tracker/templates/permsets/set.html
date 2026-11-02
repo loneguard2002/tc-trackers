@@ -19,7 +19,7 @@
   <section class="settings-section" id="details" aria-labelledby="section-details">
     <header class="settings-section-head">
       <h2 id="section-details">Details</h2>
-      <p>The set's name and a note on what it is for. Change its permissions in the <a href="{{ url_for('permsets.index') }}#grid">grid</a>.</p>
+      <p>The set's name and a note on what it is for. Change its permissions on <a href="{{ url_for('permsets.index') }}#card-{{ permission_set.id }}">its card</a> on the Permission sets screen.</p>
     </header>
     {% if permissions %}
     <ul class="chips">{% for name, label in permissions %}<li class="chip">{{ label }}</li>{% endfor %}</ul>
