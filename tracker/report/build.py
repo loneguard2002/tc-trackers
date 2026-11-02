@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import NamedTuple
 
@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from ..engine.calc import GroupPosition, Headline, WeekRow, build_headline, build_week_rows, group_positions
 from ..engine.weeks import week_endings
+from ..lists.catalogue import TrackerLabels, tracker_labels
 from ..models import ReportInput, Risk, Tracker
 from ..trackers.views import load_engine_inputs
 from .charts import cumulative_chart, remaining_chart, weekly_chart
@@ -32,6 +33,7 @@ class Report:
     red_risks: int
     inputs: ReportInput | None
     charts: dict[str, bytes]
+    labels: TrackerLabels = field(default_factory=lambda: TrackerLabels(None, []))
 
 
 class Position(NamedTuple):
@@ -117,4 +119,5 @@ def build_report(session, tracker: Tracker, week_ending: date | None, today: dat
         red_risks=sum(1 for r in risks if r.rag == "Red"),
         inputs=session.get(ReportInput, (tracker.id, position.week_ending)),
         charts=charts,
+        labels=tracker_labels(session, [tracker.id])[tracker.id],
     )
