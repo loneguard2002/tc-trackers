@@ -1,64 +1,92 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, field, icon %}
+{% from "macros.html" import csrf_field, field, icon, people_count %}
 {% block content %}
-<h1>Permission sets</h1>
-<p class="page-lede">A permission set is a named bundle of permissions. People hold the permissions of every set they hold themselves or through a team they belong to. Administrators hold every permission and are the only people who change this screen.</p>
-<nav class="subnav" aria-label="Permission sets sections">
-  <a href="#grid">Permissions</a>
-  <a href="#new-set">New permission set</a>
-</nav>
-<div class="settings">
-  {% if errors %}
-  <div class="form-alert" role="alert">
-    <strong>Please correct the following:</strong>
-    <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+<div class="perm-head">
+  <div>
+    <h1>Permission sets</h1>
+    <p class="page-lede">A permission set is a named bundle of permissions. People hold the permissions of every set they hold themselves or through a team they belong to. Holding both Manage users and Manage teams gives reach close to an administrator's, so give the two together with care.</p>
   </div>
-  {% endif %}
-
-  <section class="settings-section" id="grid" aria-labelledby="section-grid">
-    <header class="settings-section-head">
-      <h2 id="section-grid">Permissions</h2>
-      <p>Tick the permissions each set grants. Saving applies every column at once. Open a set to rename it, delete it or choose who holds it.</p>
-      <p>Holding both Manage users and Manage teams gives reach close to an administrator's, so give the two together with care.</p>
+  <a class="button primary" href="#new-set">{{ icon('plus') }}New permission set</a>
+</div>
+{% if errors %}
+<div class="form-alert" role="alert">
+  <strong>Please correct the following:</strong>
+  <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% set total = permissions|length %}
+{% if sets %}
+<form id="permission-cards-form" method="post" action="{{ url_for('permsets.save_grid') }}">
+  {{ csrf_field(csrf_token()) }}
+  {% for s in sets %}<input type="hidden" name="sets" value="{{ s.id }}">{% endfor %}
+</form>
+{% endif %}
+<div class="perm-cards" data-permission-cards>
+  <article class="perm-card perm-card-builtin" aria-labelledby="card-admins">
+    <header class="perm-card-head">
+      <span class="perm-card-icon">{{ icon('admin') }}</span>
+      <div class="perm-card-title">
+        <div class="perm-card-name"><h2 id="card-admins">Administrators</h2><span class="perm-card-badge">Built in</span></div>
+        <p>Every permission, always. Only administrators change this screen.</p>
+      </div>
+      <span class="perm-card-count">{{ total }}/{{ total }}</span>
     </header>
-    {% if sets %}
-    <form method="post" action="{{ url_for('permsets.save_grid') }}">
-      {{ csrf_field(csrf_token()) }}
-      {% for s in sets %}<input type="hidden" name="sets" value="{{ s.id }}">{% endfor %}
-      <div class="section-table permission-grid">
-        <table class="table">
-          <thead>
-            <tr>
-              <th scope="col">Permission</th>
-              {% for s in sets %}<th scope="col" class="grid-set"><a href="{{ url_for('permsets.view', set_id=s.id) }}">{{ s.name }}</a></th>{% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for name, (label, description) in permissions.items() %}
-            <tr>
-              <th scope="row" class="grid-permission"><span class="grid-label">{{ label }}</span><span class="grid-description">{{ description }}</span></th>
-              {% for s in sets %}
-              <td class="grid-cell"><input type="checkbox" id="cell-{{ s.id }}-{{ name }}" name="set-{{ s.id }}" value="{{ name }}"
-                {{ 'checked' if name in held[s.id] }} aria-label="{{ label }} for {{ s.name }}"></td>
-              {% endfor %}
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <div class="perm-card-body">
+      {% for group_name, names in groups %}
+      <h3 class="perm-group">{{ group_name }}</h3>
+      {% for name in names %}{% set label, description = permissions[name] %}
+      <div class="perm-row">
+        <span class="perm-row-text"><span class="perm-row-label">{{ label }}</span><span class="perm-row-help">{{ description }}</span></span>
+        <span class="perm-row-lock" role="img" aria-label="Always held">{{ icon('lock') }}</span>
       </div>
-      <div class="settings-section-foot">
-        <button class="button primary" type="submit">Save permissions</button>
-      </div>
-    </form>
-    {% else %}
-    <p class="empty-note">No permission sets yet.</p>
-    {% endif %}
-  </section>
+      {% endfor %}
+      {% endfor %}
+    </div>
+    <footer class="perm-card-foot">
+      <span>Held by {{ people_count(admin_count) }}</span>
+      <a href="{{ url_for('admin.users') }}">Users{{ icon('chevron-right') }}</a>
+    </footer>
+  </article>
 
-  <section class="settings-section" id="new-set" aria-labelledby="section-new-set">
-    <header class="settings-section-head">
-      <h2 id="section-new-set">New permission set</h2>
-      <p>Create the set here, tick its permissions in the grid, then choose who holds it.</p>
+  {% for s in sets %}{% set granted = held[s.id] %}{% set teams, people = holder_counts[s.id] %}
+  <article class="perm-card" data-set-card aria-labelledby="card-{{ s.id }}">
+    <header class="perm-card-head">
+      <span class="perm-card-icon">{{ icon('key') }}</span>
+      <div class="perm-card-title">
+        <div class="perm-card-name"><h2 id="card-{{ s.id }}">{{ s.name }}</h2><span class="perm-card-badge perm-card-changed" data-changed hidden>Changed</span></div>
+        {% if s.description %}<p>{{ s.description }}</p>{% else %}<p class="perm-card-none">No description.</p>{% endif %}
+      </div>
+      <span class="perm-card-count" data-count>{{ granted|length }}/{{ total }}</span>
+    </header>
+    <div class="perm-card-body">
+      {% for group_name, names in groups %}
+      <h3 class="perm-group">{{ group_name }}</h3>
+      {% for name in names %}{% set label, description = permissions[name] %}
+      <label class="perm-row" for="cell-{{ s.id }}-{{ name }}">
+        <span class="perm-row-text"><span class="perm-row-label">{{ label }}</span><span class="perm-row-help">{{ description }}</span></span>
+        <input type="checkbox" id="cell-{{ s.id }}-{{ name }}" form="permission-cards-form" name="set-{{ s.id }}" value="{{ name }}"
+          {{ 'checked' if name in granted }} aria-label="{{ label }} for {{ s.name }}">
+      </label>
+      {% endfor %}
+      {% endfor %}
+    </div>
+    {% if 'manage_users' in granted and 'manage_teams' in granted %}
+    <p class="perm-card-warning">{{ icon('warning') }}<span>Holding both Manage users and Manage teams gives reach close to an administrator's.</span></p>
+    {% endif %}
+    <footer class="perm-card-foot">
+      <span>{% if teams and people %}Held by {{ teams }} team{{ 's' if teams != 1 }} and {{ people_count(people) }}{% elif teams %}Held by {{ teams }} team{{ 's' if teams != 1 }}{% elif people %}Held by {{ people_count(people) }}{% else %}Nobody holds this set yet.{% endif %}</span>
+      <a href="{{ url_for('permsets.view', set_id=s.id) }}">Holders and details{{ icon('chevron-right') }}</a>
+    </footer>
+  </article>
+  {% endfor %}
+
+  <section class="perm-card perm-card-new" id="new-set" aria-labelledby="section-new-set">
+    <header class="perm-card-head">
+      <span class="perm-card-icon">{{ icon('plus') }}</span>
+      <div class="perm-card-title">
+        <h2 id="section-new-set">New permission set</h2>
+        <p>Create it here, tick its permissions on its card, then choose who holds it.</p>
+      </div>
     </header>
     <form method="post" action="{{ url_for('permsets.create') }}">
       {{ csrf_field(csrf_token()) }}
@@ -70,10 +98,15 @@
         <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
         {% endcall %}
       </div>
-      <div class="settings-section-foot">
-        <button class="button primary" type="submit">{{ icon('plus') }}Create permission set</button>
-      </div>
+      <button class="button" type="submit">{{ icon('plus') }}Create permission set</button>
     </form>
   </section>
 </div>
+{% if sets %}
+<div class="settings-actions perm-save">
+  <span class="perm-save-lock">{{ icon('lock') }}Administrators always hold every permission.</span>
+  <span class="settings-actions-note" data-dirty-note>Saving applies every card at once.</span>
+  <button class="button primary" type="submit" form="permission-cards-form">Save permissions</button>
+</div>
+{% endif %}
 {% endblock %}

@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import admin_required, current_user
-from ..auth.permissions import PERMISSIONS
+from ..auth.permissions import PERMISSION_GROUPS, PERMISSIONS
 from ..db import get_session
 from ..ids import in_range, parse_id
 from ..models import PermissionSet, PermissionSetHolder, PermissionSetPermission, Team, User
@@ -48,17 +48,40 @@ def _permissions_of(set_ids: list[int]) -> dict[int, list[str]]:
     return {set_id: sorted(names) for set_id, names in held.items()}
 
 
-# --- The grid -------------------------------------------------------------------------------------------------------
+def _holder_counts(set_ids: list[int]) -> dict[int, tuple[int, int]]:
+    """Each set's holders as ``(teams, people)``; ``(0, 0)`` for a set nobody holds."""
+    counts: dict[int, tuple[int, int]] = {set_id: (0, 0) for set_id in set_ids}
+    rows = get_session().execute(
+        select(
+            PermissionSetHolder.set_id,
+            func.count(PermissionSetHolder.team_id),
+            func.count(PermissionSetHolder.user_id),
+        )
+        .where(PermissionSetHolder.set_id.in_(set_ids))
+        .group_by(PermissionSetHolder.set_id)
+    )
+    for set_id, teams, people in rows:
+        counts[set_id] = (teams, people)
+    return counts
+
+
+# --- The cards ------------------------------------------------------------------------------------------------------
 
 
 def _render_index(form, errors: list[str], status: int):
     db = get_session()
     sets = db.scalars(select(PermissionSet).order_by(func.lower(PermissionSet.name), PermissionSet.id)).all()
+    set_ids = [s.id for s in sets]
     page = render_template(
         "permsets/index.html",
         sets=sets,
-        held=_permissions_of([s.id for s in sets]),
+        held=_permissions_of(set_ids),
+        holder_counts=_holder_counts(set_ids),
+        admin_count=db.scalar(
+            select(func.count()).select_from(User).where(User.is_admin.is_(True), User.status == "active")
+        ),
         permissions=PERMISSIONS,
+        groups=PERMISSION_GROUPS,
         form=form,
         errors=errors,
         page_title="Permission sets",

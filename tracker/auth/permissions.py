@@ -36,6 +36,13 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "view_activity": ("View activity", "Read the Activity screen."),
 }
 
+# How the Permission sets screen groups the permissions on each card. Every permission appears in exactly one group.
+PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("People and teams", ("manage_users", "manage_teams")),
+    ("Trackers", ("create_trackers", "import_workbooks", "view_all_trackers")),
+    ("Application", ("manage_email_settings", "view_activity")),
+)
+
 
 def user_permissions(session: Session, user: User) -> frozenset[str]:
     """Every permission the user holds; nothing for a user who is not active."""
