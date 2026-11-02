@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import delete, select
 
 from tests.conftest import post
-from tracker.auth.permissions import PERMISSIONS, user_permissions
+from tracker.auth.permissions import PERMISSION_GROUPS, PERMISSIONS, user_permissions
 from tracker.models import AuditLog, PermissionSet, PermissionSetHolder, PermissionSetPermission
 
 ENDPOINTS = [
@@ -255,3 +255,67 @@ def test_removing_a_holder_removed_at_the_same_moment(client, logged_in_admin, d
 def test_permission_sets_screen_warns_about_users_and_teams_together(client, logged_in_admin):
     page = text_of(client.get("/admin/permission-sets"))
     assert "Holding both Manage users and Manage teams gives reach close to an administrator's" in page
+
+
+# --- The cards ------------------------------------------------------------------------------------------------------
+
+
+def cards(page: str) -> list[str]:
+    return page.split("data-set-card")[1:]
+
+
+def test_permission_groups_cover_every_permission_once():
+    assert [name for name, _ in PERMISSION_GROUPS] == ["People and teams", "Trackers", "Application"]
+    grouped = [p for _, keys in PERMISSION_GROUPS for p in keys]
+    assert sorted(grouped) == sorted(PERMISSIONS) and len(grouped) == len(set(grouped))
+
+
+def test_index_shows_the_locked_administrators_card_then_a_card_per_set(client, logged_in_admin, db):
+    pmo = make_set(db, "PMO", ["view_activity"])
+    make_set(db, "Auditors", [])
+    page = text_of(client.get("/admin/permission-sets"))
+    assert page.index("Administrators") < page.index("Auditors") < page.index("PMO")
+    assert "Built in" in page and "7/7" in page and "Every permission, always." in page
+    assert "1/7" in page and "0/7" in page and "No description." in page
+    assert 'aria-label="View activity for PMO"' in page and f'name="set-{pmo.id}"' in page
+    assert "People and teams" in page and "Application" in page
+    assert len(cards(page)) == 2 and "data-permission-cards" in page
+    assert "Saving applies every card at once." in page
+
+
+def test_cards_count_holders(client, logged_in_admin, db, user_factory, team_factory, give_set):
+    both = give_set(["view_activity"], team=team_factory(name="Ops"), name="Both")
+    give_set(["view_activity"], user=user_factory(), name="Solo")
+    db.add(PermissionSetHolder(set_id=both.id, user_id=user_factory().id))
+    db.add(PermissionSetHolder(set_id=both.id, user_id=user_factory().id))
+    db.commit()
+    make_set(db, "Empty", [])
+    user_factory(is_admin=True)
+    user_factory(is_admin=True, status="disabled")
+    page = text_of(client.get("/admin/permission-sets"))
+    assert "Held by 1 team and 2 people" in page and "Held by 1 person" in page
+    assert "Nobody holds this set yet." in page
+    assert "Held by 2 people" in page  # the signed-in administrator and one more active one
+
+
+def test_card_warns_only_where_a_set_grants_users_and_teams(client, logged_in_admin, db):
+    make_set(db, "Both", ["manage_users", "manage_teams"])
+    make_set(db, "One", ["manage_users"])
+    page = text_of(client.get("/admin/permission-sets"))
+    warning = "Holding both Manage users and Manage teams gives reach close to an administrator's."
+    both, one = cards(page)
+    assert warning in both and warning not in one
+
+
+def test_no_sets_still_shows_administrators_and_new_set_cards(client, logged_in_admin):
+    page = text_of(client.get("/admin/permission-sets"))
+    assert "Administrators" in page and 'id="new-set"' in page and 'href="#new-set"' in page
+    assert "Save permissions" not in page
+
+
+def test_failed_create_keeps_the_typed_name_in_the_new_set_card(client, logged_in_admin, db):
+    make_set(db, "PMO", [])
+    response = post(client, "/admin/permission-sets", {"name": "pmo", "description": "Again"})
+    page = text_of(response)
+    assert response.status_code == 400 and 'id="new-set"' in page and 'value="pmo"' in page
+    assert len(cards(page)) == 1
