@@ -27,7 +27,8 @@ from ..auth.guards import (
 )
 from ..db import get_session
 from ..ids import in_range, parse_id
-from ..models import PermissionSet, PermissionSetHolder, Team, TeamMember, Tracker, User
+from ..lists.catalogue import location_choices, location_label, parse_location, team_places
+from ..models import Location, PermissionSet, PermissionSetHolder, Region, Team, TeamMember, Tracker, User
 from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
@@ -73,6 +74,22 @@ def _to_team(team: Team):
     return redirect(url_for("teams.view", team_id=team.id))
 
 
+def _place_text(location: Location | None) -> str | None:
+    """A location as the Activity names it, "Geneva, Switzerland (EMEA)", or ``None`` when unset."""
+    if location is None:
+        return None
+    region = get_session().get(Region, location.region_id)
+    return f"{location_label(location.city, location.country)} ({region.code})"
+
+
+def _place_form(team: Team) -> dict[str, str]:
+    """The Region and Location choices to preselect for a team: its own, or none when unset."""
+    location = get_session().get(Location, team.location_id) if team.location_id else None
+    if location is None:
+        return {"region_id": "", "location_id": ""}
+    return {"region_id": str(location.region_id), "location_id": str(location.id)}
+
+
 def _refuse(team: Team, message: str):
     """A refusal by a guard: the change is rolled back and the message shown on the team's page."""
     get_session().rollback()
@@ -98,6 +115,7 @@ def _tree_context(rows: list[TeamRow], current_id: int | None) -> dict:
         "reach": reach_counts(db),
         "search": {row.id: " ".join([row.name, *names.get(row.id, [])]).lower() for row in rows},
         "current_id": current_id,
+        "places": team_places(db),
     }
 
 
@@ -113,6 +131,7 @@ def _render_index(form, errors: list[str], status: int):
         "teams/index.html",
         **_tree_context(rows, None),
         choices=team_choices(get_session()),
+        place_choices=location_choices(get_session()),
         selected_parent=form.get("parent_id", "") if form else _parent_choice(rows, request.args.get("parent")),
         form=form,
         errors=errors,
@@ -135,11 +154,17 @@ def create():
     name = request.form.get("name", "").strip()
     description = request.form.get("description", "").strip()
     parent, parent_error = parse_team_id(db, request.form.get("parent_id"))
-    errors = [e for e in (name_error(db, Team, name, "team"), description_error(description), parent_error) if e]
+    location, location_error = parse_location(db, request.form.get("region_id"), request.form.get("location_id"), None)
+    errors = [
+        e
+        for e in (name_error(db, Team, name, "team"), description_error(description), parent_error, location_error)
+        if e
+    ]
     if errors:
         return _render_index(request.form, errors, 400)
     parent_path = team_labels(load_team_rows(db)).get(parent.id, parent.name) if parent else None
-    team = Team(name=name, description=description, parent_id=parent.id if parent else None)
+    place = _place_text(location)
+    team = Team(name=name, description=description, parent_id=parent.id if parent else None, location_id=location.id)
     db.add(team)
     try:
         db.flush()
@@ -150,12 +175,17 @@ def create():
             action="team_created",
             entity="team",
             entity_id=team.id,
-            detail={"name": name, "parent": parent_path},
+            detail={"name": name, "parent": parent_path, "location": place},
         )
         db.commit()
-    except IntegrityError:  # the same name was taken, or the parent deleted, at the same moment
+    except IntegrityError:  # the same name was taken, or the parent or location deleted, at the same moment
         db.rollback()
-        return _render_index(request.form, [name_error(db, Team, name, "team") or TEAM_CHOICE_ERROR], 400)
+        error = (
+            name_error(db, Team, name, "team")
+            or parse_location(db, request.form.get("region_id"), request.form.get("location_id"), None)[1]
+            or TEAM_CHOICE_ERROR
+        )
+        return _render_index(request.form, [error], 400)
     flash(f"Created the team {name}.", "success")
     return _to_team(team)
 
@@ -215,7 +245,9 @@ def _render_team(team: Team, errors: list[str], status: int, form=None, open_det
         can_add=current_user().is_admin or not team_holds_sets(db, team.id),
         add_refusal=TEAM_WITH_SETS_MESSAGE,
         delete_blocker=_delete_blocker(team.id, rows),
-        form=form or {"name": team.name, "description": team.description},
+        place_choices=location_choices(db, team.location_id),
+        place=context["places"].get(team.id),
+        form=form or {"name": team.name, "description": team.description, **_place_form(team)},
         errors=errors,
         open_details=open_details,
         page_title=team.name,
@@ -239,21 +271,32 @@ def rename(team_id: int):
         "name": request.form.get("name", "").strip(),
         "description": request.form.get("description", "").strip(),
     }
+    region_text, location_text = request.form.get("region_id", ""), request.form.get("location_id", "")
+    form = {**submitted, "region_id": region_text.strip(), "location_id": location_text.strip()}
+    location, location_error = parse_location(db, region_text, location_text, team.location_id)
     errors = [
         e
-        for e in (name_error(db, Team, submitted["name"], "team", team.id), description_error(submitted["description"]))
+        for e in (
+            name_error(db, Team, submitted["name"], "team", team.id),
+            description_error(submitted["description"]),
+            location_error,
+        )
         if e
     ]
     if errors:
-        return _render_team(team, errors, 400, form=submitted, open_details=True)
+        return _render_team(team, errors, 400, form=form, open_details=True)
     before = {field: getattr(team, field) for field, value in submitted.items() if getattr(team, field) != value}
+    after = {field: submitted[field] for field in before}
+    if location.id != team.location_id:
+        before["location"] = _place_text(db.get(Location, team.location_id) if team.location_id else None)
+        after["location"] = _place_text(location)
     if not before:
         flash(NO_CHANGES_MESSAGE, "info")
         return _to_team(team)
-    after = {field: submitted[field] for field in before}
     path = _team_path(team)  # as it was before the change
-    for field, value in after.items():
+    for field, value in submitted.items():
         setattr(team, field, value)
+    team.location_id = location.id
     record(
         db,
         user_id=current_user().id,
@@ -265,9 +308,10 @@ def rename(team_id: int):
     )
     try:
         db.commit()
-    except IntegrityError:
+    except IntegrityError:  # the same name was taken, or the location deleted, at the same moment
         db.rollback()
-        return _render_team(team, [name_taken("team")], 400, form=submitted, open_details=True)
+        error = parse_location(db, region_text, location_text, team.location_id)[1] or name_taken("team")
+        return _render_team(team, [error], 400, form=form, open_details=True)
     flash("Saved the team details.", "success")
     return _to_team(team)
 

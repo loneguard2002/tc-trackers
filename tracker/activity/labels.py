@@ -21,7 +21,7 @@ ACTION_LABELS: dict[str, str] = {
     "user_admin_changed": "Administrator flag changed",
     "user_name_synced": "User name updated from Microsoft",
     "team_created": "Team created",
-    "team_renamed": "Team renamed",
+    "team_renamed": "Team details changed",
     "team_moved": "Team moved",
     "team_deleted": "Team deleted",
     "team_member_added": "Team member added",

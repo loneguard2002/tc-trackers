@@ -11,6 +11,7 @@
     <header class="team-header settings-section">
       <div class="team-header-text">
         <h1>{{ team.name }}</h1>
+        {% if place %}<p class="team-header-place">{{ place.region_code }} · {{ place.location }}</p>{% else %}<p class="team-header-place is-unset">Region not set</p>{% endif %}
         {% if team.description %}<p class="team-description">{{ team.description }}</p>{% endif %}
         <p class="team-header-counts">
           {{ people_count(reach.get(team.id, 0)) }} · {{ trackers|length }} {{ 'tracker' if trackers|length == 1 else 'trackers' }} · {{ below|length }} {{ 'team' if below|length == 1 else 'teams' }} below
@@ -146,7 +147,7 @@
     <details class="settings-section team-details" id="details"{% if open_details %} open{% endif %}>
       <summary class="settings-section-head">
         <h2 id="section-details">Details</h2>
-        <p>The team's name and description, and deleting the team.</p>
+        <p>The team's name, description, region and location, and deleting the team.</p>
       </summary>
       <form method="post" action="{{ url_for('teams.rename', team_id=team.id) }}">
         {{ csrf_field(csrf_token()) }}
@@ -157,6 +158,7 @@
           {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
           <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
           {% endcall %}
+          {% include "teams/_place_fields.html" %}
         </div>
         <div class="settings-section-foot">
           <button class="button primary" type="submit">Save details</button>

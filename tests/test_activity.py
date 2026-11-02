@@ -116,7 +116,7 @@ def test_rows_with_deleted_people_or_trackers_and_any_detail_shape_render(client
     add(db, action="login", detail={"before": ["a"], "after": None})
     body = text_of(client.get(URL))
     assert "mystery" in body and "viewer" in body and "nested" in body
-    assert "Team renamed" in body
+    assert "Team details changed" in body
 
 
 def test_tracker_names_shown_to_a_view_activity_holder_without_access(

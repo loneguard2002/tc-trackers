@@ -1,0 +1,24 @@
+{#- The Region and Location drop-downs, shared by New team and Edit details. Expects place_choices (location_choices)
+    and form. The Location list holds every offered location, grouped by region, so it works without JavaScript;
+    admin.js shows only the chosen region's group. Retired entries appear only where the team already uses them. -#}
+{% from "macros.html" import field %}
+{% set offered = place_choices|selectattr('locations')|list %}
+<div class="field-pair">
+  {% call field('Region', 'Choose it first to narrow the locations.', 'region_id') %}
+  <select id="region_id" name="region_id" required aria-describedby="region_id-help" data-region-select>
+    <option value="" {{ 'selected' if not form.get('region_id') }}>Choose a region</option>
+    {% for r in offered %}<option value="{{ r.id }}" {{ 'selected' if form.get('region_id') == r.id|string }}>{{ r.code }} – {{ r.name }}{% if r.retired %} (retired){% endif %}</option>{% endfor %}
+  </select>
+  {% endcall %}
+  {% call field('Location', 'The city and country the team works in.', 'location_id') %}
+  <select id="location_id" name="location_id" required aria-describedby="location_id-help" data-location-select>
+    <option value="" {{ 'selected' if not form.get('location_id') }}>Choose a location</option>
+    {% for r in offered %}
+    <optgroup label="{{ r.code }} – {{ r.name }}{% if r.retired %} (retired){% endif %}" data-region="{{ r.id }}">
+      {% for id, label, retired in r.locations %}<option value="{{ id }}" {{ 'selected' if form.get('location_id') == id|string }}>{{ label }}{% if retired %} (retired){% endif %}</option>{% endfor %}
+    </optgroup>
+    {% endfor %}
+  </select>
+  {% endcall %}
+</div>
+{% if not offered %}<p class="field-help">No locations are available yet. An administrator adds them on the Regions and locations screen.</p>{% endif %}

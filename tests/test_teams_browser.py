@@ -166,3 +166,40 @@ def test_add_member_form_labels_and_button_line_up(page, live_server, team_facto
         assert abs(top("select#user_id") - top("select#role")) < 1
         assert abs(top("select#user_id") - top("button[type=submit]")) < 3
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+
+def test_new_team_location_narrows_to_the_chosen_region(
+    page, live_server, user_factory, region_factory, location_factory
+):
+    emea, apac = region_factory("EMEA"), region_factory("APAC")
+    geneva = location_factory(emea)
+    singapore = location_factory(apac, city="Singapore", country="Singapore")
+    _open(page, live_server, user_factory(is_admin=True), "/admin/teams")
+
+    def shown_groups():
+        return page.eval_on_selector_all(
+            "#location_id optgroup", "groups => groups.filter(g => !g.hidden).map(g => g.dataset.region)"
+        )
+
+    assert shown_groups() == []
+    page.select_option("#region_id", str(emea.id))
+    assert shown_groups() == [str(emea.id)]
+    page.select_option("#location_id", str(geneva.id))
+    page.select_option("#region_id", str(apac.id))
+    assert shown_groups() == [str(apac.id)]
+    assert page.eval_on_selector("#location_id", "s => s.value") == ""
+    page.select_option("#location_id", str(singapore.id))
+    page.fill("#name", "Desktop")
+    page.get_by_role("button", name="Create team").click()
+    page.wait_for_load_state("networkidle")
+    expect(page.locator(".flash")).to_contain_text("Created the team Desktop.")
+    expect(page.locator(".team-header")).to_contain_text("APAC · Singapore, Singapore")
+    expect(page.locator("[data-tree] .team-place").first).to_have_text("APAC · Singapore")
+    page.set_viewport_size({"width": 390, "height": 900})
+    page.goto(page.url.split("#")[0] + "#details")
+    expect(page.locator("#location_id")).to_be_visible()
+    assert page.eval_on_selector("#location_id", "s => s.value") == str(singapore.id)
+    for url in (page.url, f"{live_server}/admin/teams"):
+        page.goto(url)
+        assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"), url
+    _clean(page)
