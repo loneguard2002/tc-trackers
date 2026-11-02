@@ -3,6 +3,7 @@
 import html
 import re
 
+import pytest
 from sqlalchemy import delete, func, select, update
 
 from tests.conftest import post, sign_in
@@ -38,6 +39,17 @@ def parent_of(db, team) -> int | None:
 def move_options(page: str) -> list[str]:
     select_html = re.search(r'<select id="parent_id".*?</select>', page, re.S).group(0)
     return re.findall(r'<option value="(\d*)"', select_html)
+
+
+@pytest.fixture
+def place(region_factory, location_factory) -> dict[str, str]:
+    """The Region and Location form fields of one region and location, for posts whose point is not the place."""
+    region = region_factory("EMEA")
+    location = location_factory(region)
+    return {"region_id": str(region.id), "location_id": str(location.id)}
+
+
+PLACE_TEXT = "Geneva, Switzerland (EMEA)"
 
 
 def holder(user_factory, give_set, client):
@@ -114,55 +126,57 @@ def test_tree_is_nested_with_people_counts(client, logged_in_admin, team_factory
     assert "0 people" in infra_item
 
 
-def test_create_team_logs_team_created(client, logged_in_admin, db, team_factory):
+def test_create_team_logs_team_created(client, logged_in_admin, db, team_factory, place):
     infra = team_factory(name="Infrastructure")
     response = post(
-        client, "/admin/teams", {"name": "  Windows ", "description": "Desktops", "parent_id": str(infra.id)}
+        client,
+        "/admin/teams",
+        {"name": "  Windows ", "description": "Desktops", "parent_id": str(infra.id), **place},
     )
     assert response.status_code == 302
     team = db.scalar(select(Team).where(Team.name == "Windows"))
     assert team.parent_id == infra.id and team.description == "Desktops"
     [entry] = entries(db, "team_created")
     assert entry.user_id == logged_in_admin.id and entry.entity == "team" and entry.entity_id == str(team.id)
-    assert entry.detail == {"name": "Windows", "parent": "Infrastructure"}
+    assert entry.detail == {"name": "Windows", "parent": "Infrastructure", "location": PLACE_TEXT}
 
 
-def test_create_top_level_team_logs_no_parent(client, logged_in_admin, db):
-    assert post(client, "/admin/teams", {"name": "Applications", "parent_id": ""}).status_code == 302
+def test_create_top_level_team_logs_no_parent(client, logged_in_admin, db, place):
+    assert post(client, "/admin/teams", {"name": "Applications", "parent_id": "", **place}).status_code == 302
     [entry] = entries(db, "team_created")
-    assert entry.detail == {"name": "Applications", "parent": None}
+    assert entry.detail == {"name": "Applications", "parent": None, "location": PLACE_TEXT}
 
 
-def test_create_with_a_malformed_or_missing_parent_is_400(client, logged_in_admin, db):
+def test_create_with_a_malformed_or_missing_parent_is_400(client, logged_in_admin, db, place):
     for parent in ("abc", "99999", "99999999999999999999"):
-        page = post(client, "/admin/teams", {"name": "Windows", "parent_id": parent})
+        page = post(client, "/admin/teams", {"name": "Windows", "parent_id": parent, **place})
         assert page.status_code == 400 and "Choose a team from the list." in text_of(page)
     assert db.scalar(select(func.count()).select_from(Team)) == 0
 
 
-def test_team_name_unique_ignoring_case_and_spaces(client, logged_in_admin, team_factory, db):
+def test_team_name_unique_ignoring_case_and_spaces(client, logged_in_admin, team_factory, db, place):
     team_factory(name="Windows")
-    page = post(client, "/admin/teams", {"name": " windows "})
+    page = post(client, "/admin/teams", {"name": " windows ", **place})
     assert page.status_code == 400 and "A team with that name already exists." in page.get_data(as_text=True)
     assert db.scalar(select(func.count()).select_from(Team)) == 1
 
 
-def test_team_name_required_and_at_most_100_characters(client, logged_in_admin, db):
-    page = post(client, "/admin/teams", {"name": "   "})
+def test_team_name_required_and_at_most_100_characters(client, logged_in_admin, db, place):
+    page = post(client, "/admin/teams", {"name": "   ", **place})
     assert page.status_code == 400 and "Enter a team name." in text_of(page)
-    page = post(client, "/admin/teams", {"name": "x" * 101})
+    page = post(client, "/admin/teams", {"name": "x" * 101, **place})
     assert page.status_code == 400 and "A team name can be at most 100 characters." in text_of(page)
     assert db.scalar(select(func.count()).select_from(Team)) == 0
     assert entries(db) == []
 
 
-def test_team_description_at_most_500_characters(client, logged_in_admin, db, team_factory):
+def test_team_description_at_most_500_characters(client, logged_in_admin, db, team_factory, place):
     message = "A description can be at most 500 characters."
-    page = post(client, "/admin/teams", {"name": "Windows", "description": "x" * 501})
+    page = post(client, "/admin/teams", {"name": "Windows", "description": "x" * 501, **place})
     assert page.status_code == 400 and message in text_of(page)
     assert db.scalar(select(func.count()).select_from(Team)) == 0
-    team = team_factory(name="Linux")
-    page = post(client, f"/admin/teams/{team.id}/rename", {"name": "Linux", "description": "x" * 501})
+    team = team_factory(name="Linux", location_id=int(place["location_id"]))
+    page = post(client, f"/admin/teams/{team.id}/rename", {"name": "Linux", "description": "x" * 501, **place})
     assert page.status_code == 400 and message in text_of(page)
     db.expire_all()
     assert db.get(Team, team.id).description == ""
@@ -172,14 +186,16 @@ def test_team_description_at_most_500_characters(client, logged_in_admin, db, te
 # --- Renaming and moving --------------------------------------------------------------------------------------------
 
 
-def test_rename_logs_before_and_after(client, logged_in_admin, db, team_factory):
-    team = team_factory(name="Windows", description="Desktops")
-    response = post(client, f"/admin/teams/{team.id}/rename", {"name": "Windows clients", "description": "Desktops"})
+def test_rename_logs_before_and_after(client, logged_in_admin, db, team_factory, place):
+    team = team_factory(name="Windows", description="Desktops", location_id=int(place["location_id"]))
+    response = post(
+        client, f"/admin/teams/{team.id}/rename", {"name": "Windows clients", "description": "Desktops", **place}
+    )
     assert response.status_code == 302
     [entry] = entries(db, "team_renamed")
     assert entry.detail == {"team": "Windows", "before": {"name": "Windows"}, "after": {"name": "Windows clients"}}
     assert entry.entity == "team" and entry.entity_id == str(team.id)
-    post(client, f"/admin/teams/{team.id}/rename", {"name": "Windows clients", "description": "Laptops"})
+    post(client, f"/admin/teams/{team.id}/rename", {"name": "Windows clients", "description": "Laptops", **place})
     assert entries(db, "team_renamed")[-1].detail == {
         "team": "Windows clients",
         "before": {"description": "Desktops"},
@@ -187,16 +203,17 @@ def test_rename_logs_before_and_after(client, logged_in_admin, db, team_factory)
     }
 
 
-def test_rename_without_changes_logs_nothing(client, logged_in_admin, db, team_factory):
-    team = team_factory(name="Windows")
-    assert post(client, f"/admin/teams/{team.id}/rename", {"name": " Windows ", "description": ""}).status_code == 302
+def test_rename_without_changes_logs_nothing(client, logged_in_admin, db, team_factory, place):
+    team = team_factory(name="Windows", location_id=int(place["location_id"]))
+    data = {"name": " Windows ", "description": "", **place}
+    assert post(client, f"/admin/teams/{team.id}/rename", data).status_code == 302
     assert entries(db) == []
 
 
-def test_rename_to_another_teams_name_refused(client, logged_in_admin, db, team_factory):
+def test_rename_to_another_teams_name_refused(client, logged_in_admin, db, team_factory, place):
     team_factory(name="Windows")
     team = team_factory(name="Linux")
-    page = post(client, f"/admin/teams/{team.id}/rename", {"name": "WINDOWS"})
+    page = post(client, f"/admin/teams/{team.id}/rename", {"name": "WINDOWS", **place})
     assert page.status_code == 400 and "A team with that name already exists." in text_of(page)
     db.expire_all()
     assert db.get(Team, team.id).name == "Linux"
@@ -446,7 +463,7 @@ def test_people_list_direct_members_before_those_from_teams_above(
     assert order == ["Carl", "Zoe", "Aaron", "Bea"]
 
 
-def test_team_page_sections_in_order(client, logged_in_admin, team_factory):
+def test_team_page_sections_in_order(client, logged_in_admin, team_factory, place):
     team = team_factory(name="Windows")
     raw = raw_of(client.get(f"/admin/teams/{team.id}"))
     headings = re.findall(r"<h2[^>]*>(.*?)</h2>", raw, re.S)
@@ -458,7 +475,7 @@ def test_team_page_sections_in_order(client, logged_in_admin, team_factory):
     ]
     [tag] = re.findall(r"<details\b[^>]*>", raw)
     assert not re.search(r"\sopen\b", tag)
-    bad = post(client, f"/admin/teams/{team.id}/rename", {"name": ""})
+    bad = post(client, f"/admin/teams/{team.id}/rename", {"name": "", **place})
     assert bad.status_code == 400
     [tag] = re.findall(r"<details\b[^>]*>", raw_of(bad))
     assert re.search(r"\sopen\b", tag)
@@ -722,16 +739,18 @@ def test_team_moved_names_the_team_by_its_path(client, logged_in_admin, db, team
     }
 
 
-def test_very_long_ids_are_400_not_500(client, logged_in_admin, db, team_factory):
+def test_very_long_ids_are_400_not_500(client, logged_in_admin, db, team_factory, place):
     team = team_factory(name="Windows")
-    assert post(client, "/admin/teams", {"name": "New", "parent_id": LONG_ID}).status_code == 400
+    assert post(client, "/admin/teams", {"name": "New", "parent_id": LONG_ID, **place}).status_code == 400
     assert post(client, f"/admin/teams/{team.id}/move", {"parent_id": LONG_ID}).status_code == 400
     assert post(client, f"/admin/teams/{team.id}/members", {"user_id": LONG_ID, "role": "viewer"}).status_code == 400
     assert post(client, f"/admin/teams/{team.id}/move", {"parent_id": str(2**31)}).status_code == 400
     assert entries(db) == [] and db.scalar(select(func.count()).select_from(Team)) == 1
 
 
-def test_create_under_a_parent_deleted_at_the_same_moment(client, logged_in_admin, db, team_factory, monkeypatch):
+def test_create_under_a_parent_deleted_at_the_same_moment(
+    client, logged_in_admin, db, team_factory, monkeypatch, place
+):
     parent = team_factory(name="Going")
     original = team_views.load_team_rows
 
@@ -742,7 +761,7 @@ def test_create_under_a_parent_deleted_at_the_same_moment(client, logged_in_admi
         return original(session, lock)
 
     monkeypatch.setattr(team_views, "load_team_rows", delete_parent_first)
-    page = post(client, "/admin/teams", {"name": "Child", "parent_id": str(parent.id)})
+    page = post(client, "/admin/teams", {"name": "Child", "parent_id": str(parent.id), **place})
     assert page.status_code == 400 and TEAM_CHOICE_ERROR in text_of(page)
     assert "already exists" not in text_of(page)
     assert db.scalar(select(func.count()).select_from(Team)) == 0 and entries(db) == []

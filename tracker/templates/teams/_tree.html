@@ -1,4 +1,5 @@
-{#- The team tree card, shared by the Teams index and a team's page. Expects children, reach, search and current_id. -#}
+{#- The team tree card, shared by the Teams index and a team's page. Expects children, reach, search, current_id and
+    places. -#}
 {% from "macros.html" import people_count %}
 {% macro level(parent_id) -%}
 <ul class="{{ 'team-tree' if parent_id is none else 'team-tree-children' }}">
@@ -6,6 +7,8 @@
   <li data-search="{{ search.get(row.id, '') }}">
     <div class="team-node">
       <a class="cell-title" href="{{ url_for('teams.view', team_id=row.id) }}"{% if row.id == current_id %} aria-current="page"{% endif %}>{{ row.name }}</a>
+      {% set place = places.get(row.id) %}
+      {% if place %}<span class="team-place">{{ place.region_code }} · {{ place.city }}</span>{% else %}<span class="team-place is-unset">Region not set</span>{% endif %}
       <span class="team-counts">{{ people_count(reach.get(row.id, 0)) }}</span>
     </div>
     {% if children.get(row.id) %}{{ level(row.id) }}{% endif %}

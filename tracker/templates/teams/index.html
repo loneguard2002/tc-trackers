@@ -42,6 +42,7 @@
             </select>
             {% endcall %}
           </div>
+          {% include "teams/_place_fields.html" %}
           {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
           <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
           {% endcall %}

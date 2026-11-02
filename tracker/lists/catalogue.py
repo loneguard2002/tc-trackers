@@ -33,6 +33,7 @@ class Place(NamedTuple):
     location: str
     region_id: int
     region_code: str
+    city: str
 
 
 def team_places(session: Session) -> dict[int, Place]:
@@ -43,7 +44,7 @@ def team_places(session: Session) -> dict[int, Place]:
         .join(Region, Location.region_id == Region.id)
     )
     return {
-        team_id: Place(location_id, location_label(city, country), region_id, code)
+        team_id: Place(location_id, location_label(city, country), region_id, code, city)
         for team_id, location_id, city, country, region_id, code in rows
     }
 

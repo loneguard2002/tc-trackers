@@ -69,6 +69,27 @@
     });
   });
 
+  // select[data-region-select] narrows the select[data-location-select] of its form: only the optgroup whose
+  // data-region is the chosen region stays shown (none while no region is chosen), and a chosen location that is now
+  // hidden is cleared. Without JavaScript every group shows, and the server refuses a location from another region.
+  each(document.querySelectorAll("select[data-region-select]"), function (regionSelect) {
+    var locationSelect = regionSelect.form ? regionSelect.form.querySelector("select[data-location-select]") : null;
+    if (!locationSelect) return;
+
+    function narrow() {
+      each(locationSelect.querySelectorAll("optgroup[data-region]"), function (group) {
+        var other = group.getAttribute("data-region") !== regionSelect.value;
+        group.hidden = other;
+        group.disabled = other;
+      });
+      var chosen = locationSelect.options[locationSelect.selectedIndex];
+      if (chosen && chosen.parentNode.disabled) locationSelect.value = "";
+    }
+
+    regionSelect.addEventListener("change", narrow);
+    narrow();
+  });
+
   // A <details> holding the target of the address (or of an a[data-open-details] link) opens, so the section is seen.
   function openFor(target) {
     var details = target && target.closest ? target.closest("details") : null;
