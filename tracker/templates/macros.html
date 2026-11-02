@@ -90,3 +90,8 @@
 
 {# "1 person" or "3 people": how many people reach a team. #}
 {% macro people_count(n) -%}{{ n }} {{ 'person' if n == 1 else 'people' }}{%- endmacro %}
+
+{# A tracker's business line and regions, after the team when one is given: "Desktop · Tradition brokerage · EMEA". #}
+{% macro labels_text(labels, team=None) -%}
+{{ (([team] if team else []) + [labels.business_line or 'Business line not set', labels.regions|join(', ') or 'Regions not set'])|join(' · ') }}
+{%- endmacro %}

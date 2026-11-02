@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import bar, icon, rag_dot, rag_tone %}
+{% from "macros.html" import bar, icon, labels_text, rag_dot, rag_tone %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='home.js', v=app_version) }}" defer></script>
 {% endblock %}
@@ -66,13 +66,32 @@
       {%- if dot is not none %}{{ rag_dot(dot or none) }}{% endif %}{{ label }}<span class="chip-count">{{ count }}</span></button>
     {% endfor %}
   </div>
+  {% set opts = filter_options %}
   <div class="home-tools-right">
-    <label for="home-sort">Sort</label>
-    <select id="home-sort" data-home-sort>
-      <option value="attention">Needs attention first</option>
-      <option value="name">Name</option>
-      <option value="target">Target date</option>
-    </select>
+    <div class="home-tool">
+      <label for="home-line">Business line</label>
+      <select id="home-line" data-home-line autocomplete="off">
+        <option value="all">All</option>
+        {% for id, name in opts.lines %}<option value="{{ id }}">{{ name }}</option>{% endfor %}
+        {% if opts.line_unset %}<option value="none">Not set</option>{% endif %}
+      </select>
+    </div>
+    <div class="home-tool">
+      <label for="home-region">Region</label>
+      <select id="home-region" data-home-region autocomplete="off">
+        <option value="all">All</option>
+        {% for id, code in opts.regions %}<option value="{{ id }}">{{ code }}</option>{% endfor %}
+        {% if opts.regions_unset %}<option value="none">Not set</option>{% endif %}
+      </select>
+    </div>
+    <div class="home-tool">
+      <label for="home-sort">Sort</label>
+      <select id="home-sort" data-home-sort>
+        <option value="attention">Needs attention first</option>
+        <option value="name">Name</option>
+        <option value="target">Target date</option>
+      </select>
+    </div>
     <div class="toggle" role="group" aria-label="Layout">
       <button type="button" data-layout="cards" aria-pressed="true">Cards</button>
       <button type="button" data-layout="list" aria-pressed="false">List</button>
@@ -87,12 +106,13 @@
   {% set can_edit = c.role in ('editor', 'owner') and t.status == 'active' %}
   <article class="tracker-card tracker-card-{{ tone }}{{ ' is-archived' if t.status == 'archived' }}" data-card
     data-status="{{ tone }}" data-behind="{{ 'true' if c.behind else 'false' }}" data-inputs="{{ 'true' if c.inputs_missing else 'false' }}"
+    data-line="{{ c.line_data }}" data-regions="{{ c.regions_data }}"
     data-name="{{ t.name|lower }}" data-target="{{ h.target_completion.isoformat() if h.target_completion else '9999-12-31' }}" data-attention="{{ c.attention }}">
     <header class="tracker-card-head">
       <h2 class="tracker-card-title"><a href="{{ url_for('report.view', tracker_id=t.id) }}">{{ t.name }}</a>
         {% if c.role %}<span class="role-tag">{{ c.role|capitalize }}</span>{% endif %}
         {% if t.status == 'archived' %}<span class="role-tag">Archived</span>{% endif %}</h2>
-      {% if c.team %}<p class="tracker-card-team">{{ c.team }}</p>{% endif %}
+      <p class="tracker-card-team">{{ labels_text(c.labels, c.team) }}</p>
       <p class="tracker-card-status">{{ rag_dot(c.status) }}<span><span class="status-word">{{ c.status or 'Not set' }}</span>: <span class="{{ '' if dvt is none else ('tone-danger' if dvt > 0 else 'tone-success') }}">{{ h.verdict }}</span></span></p>
     </header>
     <div class="tracker-card-progress">
@@ -136,9 +156,9 @@
       {% for c in cards %}
       {% set t = c.tracker %}{% set h = c.headline %}{% set tone = rag_tone(c.status) %}
       <tr class="tracker-row tracker-row-{{ tone }}" data-card data-status="{{ tone }}" data-behind="{{ 'true' if c.behind else 'false' }}" data-inputs="{{ 'true' if c.inputs_missing else 'false' }}"
-        data-name="{{ t.name|lower }}" data-target="{{ h.target_completion.isoformat() if h.target_completion else '9999-12-31' }}" data-attention="{{ c.attention }}">
+        data-line="{{ c.line_data }}" data-regions="{{ c.regions_data }}" data-name="{{ t.name|lower }}" data-target="{{ h.target_completion.isoformat() if h.target_completion else '9999-12-31' }}" data-attention="{{ c.attention }}">
         <td class="tracker-row-status"><span class="rag-label">{{ rag_dot(c.status) }}{{ c.status or 'Not set' }}</span></td>
-        <td><a class="cell-title" href="{{ url_for('report.view', tracker_id=t.id) }}">{{ t.name }}</a><span class="cell-sub">{{ h.verdict }}{{ ' · Archived' if t.status == 'archived' }}</span></td>
+        <td><a class="cell-title" href="{{ url_for('report.view', tracker_id=t.id) }}">{{ t.name }}</a><span class="cell-sub">{{ h.verdict }}{{ ' · Archived' if t.status == 'archived' }}</span><span class="cell-sub">{{ labels_text(c.labels, c.team) }}</span></td>
         <td class="tracker-row-progress">{{ bar(h.completed, h.total_scope, label=(h.pct_complete|pct) ~ ' complete') }}<span class="cell-sub">{{ h.pct_complete|pct }} · {{ h.completed|num }} of {{ h.total_scope|num }}</span></td>
         <td>{{ h.this_week_actual|dash }} / {{ h.this_week_target|dash }}</td>
         <td class="tracker-row-forecast">{{ forecast_fact(h) }}</td>

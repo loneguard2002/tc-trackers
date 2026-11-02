@@ -39,7 +39,19 @@ from ..lists.catalogue import (
     tracker_labels,
     tracker_region_ids,
 )
-from ..models import CompletionEntry, Group, Recipient, ReportInput, Risk, Tracker, TrackerRole, User, Week
+from ..models import (
+    CompletionEntry,
+    Group,
+    Recipient,
+    Region,
+    ReportInput,
+    Risk,
+    Tracker,
+    TrackerRegion,
+    TrackerRole,
+    User,
+    Week,
+)
 from ..teams.tree import TEAM_CHOICE_ERROR, load_team_rows, parse_team_id, team_choices, team_labels
 from . import bp
 from .forms import (
@@ -243,6 +255,32 @@ def _written_weeks(session, tracker_ids: list[int]) -> set[tuple[int, date]]:
     )
 
 
+def _tracker_regions(session, tracker_ids: list[int]) -> dict[int, list[tuple[int, str]]]:
+    """Each tracker's regions as (id, code), in code order: the home filter data and the Region choices."""
+    regions: dict[int, list[tuple[int, str]]] = {tracker_id: [] for tracker_id in tracker_ids}
+    if tracker_ids:
+        for tracker_id, region_id, code in session.execute(
+            select(TrackerRegion.tracker_id, Region.id, Region.code)
+            .join(Region, TrackerRegion.region_id == Region.id)
+            .where(TrackerRegion.tracker_id.in_(tracker_ids))
+            .order_by(func.lower(Region.code), Region.id)
+        ):
+            regions[tracker_id].append((region_id, code))
+    return regions
+
+
+def _filter_options(cards: list[dict], regions: dict[int, list[tuple[int, str]]]) -> dict:
+    """The Business line and Region choices: those the shown cards use, by name or code, and whether any lacks one."""
+    lines = {c["tracker"].business_line_id: c["labels"].business_line for c in cards if c["labels"].business_line}
+    used = {region for c in cards for region in regions[c["tracker"].id]}
+    return {
+        "lines": sorted(lines.items(), key=lambda item: (item[1].lower(), item[0])),
+        "regions": sorted(used, key=lambda item: (item[1].lower(), item[0])),
+        "line_unset": any(not c["labels"].business_line for c in cards),
+        "regions_unset": any(not regions[c["tracker"].id] for c in cards),
+    }
+
+
 @login_required
 def home():
     from ..report.build import compute_position  # local import: the report package imports this module
@@ -259,6 +297,8 @@ def home():
     written = _written_weeks(db, ids)
     today = date.today()
     team_names = {row.id: row.name for row in load_team_rows(db)}
+    labels = tracker_labels(db, ids)
+    regions = _tracker_regions(db, ids)
     cards = []
     for t in trackers:
         position = compute_position(db, t, None, today)
@@ -281,6 +321,9 @@ def home():
             "entry_stale": live and (last_entry is None or (today - last_entry).days > 7),
             "behind": dvt is not None and dvt > 0,
             "spark": spark_chart(position.rows),
+            "labels": labels[t.id],
+            "line_data": str(t.business_line_id) if t.business_line_id is not None else "none",
+            "regions_data": " " + (" ".join(str(region_id) for region_id, _ in regions[t.id]) or "none") + " ",
         }
         card["attention"] = (
             (10 if t.status != "active" else 0)
@@ -293,6 +336,7 @@ def home():
     return render_template(
         "home.html",
         cards=cards,
+        filter_options=_filter_options(cards, regions),
         show_archived=show_archived,
         today=today,
         page_title="Trackers",

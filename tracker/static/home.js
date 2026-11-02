@@ -1,5 +1,6 @@
-// Trackers home: filter chips, sorting and the cards/list switch. Without JavaScript the toolbar stays hidden and
-// every tracker shows as a card, in "needs attention first" order (the server's order).
+// Trackers home: filter chips, the Business line and Region filters, sorting and the cards/list switch. Without
+// JavaScript the toolbar stays hidden and every tracker shows as a card, in "needs attention first" order (the
+// server's order).
 (function () {
   "use strict";
 
@@ -11,6 +12,8 @@
 
   var rows = list.querySelector("tbody");
   var sort = tools.querySelector("[data-home-sort]");
+  var lineSelect = tools.querySelector("[data-home-line]");
+  var regionSelect = tools.querySelector("[data-home-region]");
   var state = { filter: "all", layout: "cards" };
 
   try {
@@ -29,6 +32,14 @@
     inputs: function (el) { return el.dataset.inputs === "true"; }
   };
 
+  // The chip, the business line and the region must all match; a region matches any tracker that covers it.
+  function matches(el) {
+    if (!TESTS[state.filter](el)) return false;
+    if (lineSelect && lineSelect.value !== "all" && el.dataset.line !== lineSelect.value) return false;
+    if (regionSelect && regionSelect.value !== "all" && (el.dataset.regions || "").indexOf(" " + regionSelect.value + " ") === -1) return false;
+    return true;
+  }
+
   function compare(a, b) {
     var key = sort.value;
     if (key === "name") return a.dataset.name.localeCompare(b.dataset.name);
@@ -41,7 +52,7 @@
     items.sort(compare).forEach(function (item) { container.appendChild(item); });
     var shown = 0;
     items.forEach(function (item) {
-      var match = TESTS[state.filter](item);
+      var match = matches(item);
       item.hidden = !match;
       if (match) shown += 1;
     });
@@ -80,6 +91,12 @@
     });
   });
   sort.addEventListener("change", render);
+  // The filters start at All on every visit, even when the browser restores a previous choice.
+  [lineSelect, regionSelect].forEach(function (select) {
+    if (!select) return;
+    select.value = "all";
+    select.addEventListener("change", render);
+  });
 
   tools.hidden = false;
   render();
