@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field, field, icon %}
+{% from "lists/_entry.html" import state_actions %}
+{% block content %}
+<h1>Regions and locations</h1>
+<p class="page-lede">Teams are placed at a location, and each location belongs to one region. Trackers say which regions they cover.</p>
+{% if errors %}
+<div class="form-alert" role="alert">
+  <strong>Please correct the following:</strong>
+  <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% for r in regions %}
+{% set rkey = 'region-%d'|format(r.id) %}
+{% set rf = form if editing == rkey else {} %}
+{% set places = locations[r.id] %}
+{% set covered = tracker_counts.get(r.id, 0) %}
+<section class="settings-section" id="region-{{ r.id }}" aria-labelledby="region-{{ r.id }}-title">
+  <header class="settings-section-head">
+    <h2 id="region-{{ r.id }}-title">{{ r.code }}{% if r.retired %} <span class="badge badge-muted">Retired</span>{% endif %}</h2>
+    <p>{{ r.name }} · {{ places|length }} location{{ 's' if places|length != 1 }} · covered by {{ covered }} tracker{{ 's' if covered != 1 }}</p>
+  </header>
+  {% if places %}
+  <ul class="member-list">
+    {% for loc in places %}
+    {% set lkey = 'location-%d'|format(loc.id) %}
+    {% set lf = form if editing == lkey else {} %}
+    {% set used = team_counts.get(loc.id, 0) %}
+    {% set label = loc.city ~ ', ' ~ loc.country %}
+    <li class="member" id="location-{{ loc.id }}">
+      <span class="member-who"><span class="member-name">{{ label }}{% if loc.retired %} <span class="badge badge-muted">Retired</span>{% endif %}</span></span>
+      <span class="team-counts">{{ used }} team{{ 's' if used != 1 }}</span>
+      <details class="list-edit"{% if editing == lkey %} open{% endif %}>
+        <summary class="button button-small">{{ icon('edit') }}Edit<span class="sr-only"> {{ label }}</span></summary>
+        <div class="list-edit-body">
+          <form class="list-edit-form" method="post" action="{{ url_for('lists.update_location', location_id=loc.id) }}">
+            {{ csrf_field(csrf_token()) }}
+            {% call field('City', '', 'city-' ~ loc.id) %}
+            <input id="city-{{ loc.id }}" name="city" value="{{ lf.get('city', loc.city) }}" maxlength="100" required>
+            {% endcall %}
+            {% call field('Country', '', 'country-' ~ loc.id) %}
+            <input id="country-{{ loc.id }}" name="country" value="{{ lf.get('country', loc.country) }}" maxlength="100" required>
+            {% endcall %}
+            {% set chosen = lf.get('region_id', loc.region_id|string) %}
+            {% set help = 'Used by %d team%s. Changing the region moves them to it.'|format(used, '' if used == 1 else 's') if used else '' %}
+            {% call field('Region', help, 'region-of-' ~ loc.id) %}
+            <select id="region-of-{{ loc.id }}" name="region_id"{% if help %} aria-describedby="region-of-{{ loc.id }}-help"{% endif %}>
+              {% for o in regions if not o.retired or o.id == loc.region_id %}<option value="{{ o.id }}"{% if chosen == o.id|string %} selected{% endif %}>{{ o.code }}{% if o.retired %} (retired){% endif %}</option>{% endfor %}
+            </select>
+            {% endcall %}
+            <button class="button primary" type="submit" name="action" value="save">Save</button>
+          </form>
+          {{ state_actions(url_for('lists.update_location', location_id=loc.id), loc.retired, 'the location ' ~ label, location_in_use if used else '') }}
+        </div>
+      </details>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-note">No locations in this region yet.</p>
+  {% endif %}
+  {% set nkey = 'new-location-%d'|format(r.id) %}
+  {% set nf = form if editing == nkey else {} %}
+  <form class="inline-form list-add" method="post" action="{{ url_for('lists.create_location', region_id=r.id) }}">
+    {{ csrf_field(csrf_token()) }}
+    <div>
+      <label for="new-city-{{ r.id }}">City</label>
+      <input id="new-city-{{ r.id }}" name="city" value="{{ nf.get('city', '') }}" maxlength="100" required>
+    </div>
+    <div>
+      <label for="new-country-{{ r.id }}">Country</label>
+      <input id="new-country-{{ r.id }}" name="country" value="{{ nf.get('country', '') }}" maxlength="100" required>
+    </div>
+    <button class="button" type="submit">{{ icon('plus') }}Add location<span class="sr-only"> to {{ r.code }}</span></button>
+  </form>
+  <details class="list-edit list-edit-region"{% if editing == rkey %} open{% endif %}>
+    <summary class="button button-small">{{ icon('edit') }}Edit region<span class="sr-only"> {{ r.code }}</span></summary>
+    <div class="list-edit-body">
+      <form class="list-edit-form" method="post" action="{{ url_for('lists.update_region', region_id=r.id) }}">
+        {{ csrf_field(csrf_token()) }}
+        {% call field('Short name', '', 'code-' ~ r.id) %}
+        <input id="code-{{ r.id }}" name="code" value="{{ rf.get('code', r.code) }}" maxlength="20" required>
+        {% endcall %}
+        {% call field('Name', '', 'name-' ~ r.id) %}
+        <input id="name-{{ r.id }}" name="name" value="{{ rf.get('name', r.name) }}" maxlength="100" required>
+        {% endcall %}
+        <button class="button primary" type="submit" name="action" value="save">Save</button>
+      </form>
+      {{ state_actions(url_for('lists.update_region', region_id=r.id), r.retired, 'the region ' ~ r.code, region_in_use if places or covered else '') }}
+    </div>
+  </details>
+</section>
+{% else %}
+<section class="settings-section" aria-labelledby="section-no-regions">
+  <header class="settings-section-head"><h2 id="section-no-regions">No regions yet</h2></header>
+  <p class="empty-note">Add the first region below, then add its locations.</p>
+</section>
+{% endfor %}
+
+{% set nf = form if editing == 'new-region' else {} %}
+<section class="settings-section" id="new-region" aria-labelledby="section-new-region">
+  <header class="settings-section-head">
+    <h2 id="section-new-region">New region</h2>
+    <p>A short name such as EMEA, and the full name.</p>
+  </header>
+  <form method="post" action="{{ url_for('lists.create_region') }}">
+    {{ csrf_field(csrf_token()) }}
+    <div class="field-stack">
+      <div class="field-pair">
+        {% call field('Short name', 'Unique, at most 20 characters.', 'code') %}
+        <input id="code" name="code" value="{{ nf.get('code', '') }}" maxlength="20" required aria-describedby="code-help">
+        {% endcall %}
+        {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
+        <input id="name" name="name" value="{{ nf.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
+        {% endcall %}
+      </div>
+    </div>
+    <div class="settings-section-foot">
+      <button class="button primary" type="submit">{{ icon('plus') }}Add region</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

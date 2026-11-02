@@ -25,6 +25,7 @@ from .db import get_session, init_db
 from .entries import bp as entries_bp
 from .formatting import register_filters
 from .importer import bp as importer_bp
+from .lists import bp as lists_bp
 from .mail import bp as mail_bp
 from .models import User
 from .permsets import bp as permsets_bp
@@ -70,6 +71,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(teams_bp)
+    app.register_blueprint(lists_bp)
     app.register_blueprint(permsets_bp)
     app.register_blueprint(activity_bp)
     app.register_blueprint(trackers_bp)

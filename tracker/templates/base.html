@@ -42,14 +42,17 @@
       {% set show_users = can('manage_users') %}
       {% set show_permsets = current_user.is_admin %}
       {% set show_teams = can('manage_teams') %}
+      {% set show_lists = current_user.is_admin %}
       {% set show_import = can('import_workbooks') %}
       {% set show_smtp = can('manage_email_settings') %}
       {% set show_activity = can('view_activity') %}
-      {% if show_users or show_permsets or show_teams or show_import or show_smtp or show_activity %}
+      {% if show_users or show_permsets or show_teams or show_lists or show_import or show_smtp or show_activity %}
       <span class="nav-heading">Administration</span>
       {% if show_users %}{{ nav_link('users', 'admin.users', 'Users', 'users') }}{% endif %}
       {% if show_permsets %}{{ nav_link('permsets', 'permsets.index', 'Permission sets', 'key') }}{% endif %}
       {% if show_teams %}{{ nav_link('teams', 'teams.index', 'Teams', 'teams') }}{% endif %}
+      {% if show_lists %}{{ nav_link('regions', 'lists.regions', 'Regions and locations', 'globe') }}{% endif %}
+      {% if show_lists %}{{ nav_link('business_lines', 'lists.business_lines', 'Business lines', 'briefcase') }}{% endif %}
       {% if show_import %}{{ nav_link('import', 'importer.upload', 'Import workbook', 'upload') }}{% endif %}
       {% if show_smtp %}{{ nav_link('smtp', 'admin.smtp', 'Email settings', 'mail') }}{% endif %}
       {% if show_activity %}{{ nav_link('activity', 'activity.index', 'Activity', 'activity') }}{% endif %}

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field, field, icon %}
+{% from "lists/_entry.html" import state_actions %}
+{% block content %}
+<h1>Business lines</h1>
+<p class="page-lede">Every tracker belongs to one business line.</p>
+{% if errors %}
+<div class="form-alert" role="alert">
+  <strong>Please correct the following:</strong>
+  <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<section class="settings-section" id="lines" aria-labelledby="section-lines">
+  <header class="settings-section-head">
+    <h2 id="section-lines">Business lines</h2>
+    <p>A retired business line stays on the trackers that use it but cannot be chosen for others.</p>
+  </header>
+  {% if lines %}
+  <ul class="member-list">
+    {% for b in lines %}
+    {% set key = 'line-%d'|format(b.id) %}
+    {% set bf = form if editing == key else {} %}
+    {% set used = tracker_counts.get(b.id, 0) %}
+    <li class="member" id="line-{{ b.id }}">
+      <span class="member-who"><span class="member-name">{{ b.name }}{% if b.retired %} <span class="badge badge-muted">Retired</span>{% endif %}</span></span>
+      <span class="team-counts">{{ used }} tracker{{ 's' if used != 1 }}</span>
+      <details class="list-edit"{% if editing == key %} open{% endif %}>
+        <summary class="button button-small">{{ icon('edit') }}Edit<span class="sr-only"> {{ b.name }}</span></summary>
+        <div class="list-edit-body">
+          <form class="list-edit-form" method="post" action="{{ url_for('lists.update_business_line', line_id=b.id) }}">
+            {{ csrf_field(csrf_token()) }}
+            {% call field('Name', '', 'name-' ~ b.id) %}
+            <input id="name-{{ b.id }}" name="name" value="{{ bf.get('name', b.name) }}" maxlength="100" required>
+            {% endcall %}
+            <button class="button primary" type="submit" name="action" value="save">Save</button>
+          </form>
+          {{ state_actions(url_for('lists.update_business_line', line_id=b.id), b.retired, 'the business line ' ~ b.name, business_line_in_use if used else '') }}
+        </div>
+      </details>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-note">No business lines yet. Add the first one below.</p>
+  {% endif %}
+</section>
+
+{% set nf = form if editing == 'new-line' else {} %}
+<section class="settings-section" id="new-line" aria-labelledby="section-new-line">
+  <header class="settings-section-head">
+    <h2 id="section-new-line">New business line</h2>
+  </header>
+  <form method="post" action="{{ url_for('lists.create_business_line') }}">
+    {{ csrf_field(csrf_token()) }}
+    <div class="field-stack">
+      {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
+      <input id="name" name="name" value="{{ nf.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
+      {% endcall %}
+    </div>
+    <div class="settings-section-foot">
+      <button class="button primary" type="submit">{{ icon('plus') }}Add business line</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

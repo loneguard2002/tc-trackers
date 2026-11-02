@@ -970,3 +970,20 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .activity-retention { justify-content: space-between; align-items: flex-end; }
 .activity-retention .field { margin: 0; flex: 1 1 320px; }
 .route-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+
+/* Administered lists (regions, locations, business lines): each entry folds out its edit form under it, and a
+   region's add-location row sits below its locations. An opened entry takes the full width of its row. */
+.list-edit > summary { list-style: none; }
+.list-edit > summary::-webkit-details-marker { display: none; }
+.list-edit[open] { flex: 1 1 100%; }
+.list-edit-body { display: grid; gap: 12px; margin-top: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.list-edit-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); align-items: end; gap: 12px; }
+.list-edit-form > .button { justify-self: start; }
+.list-edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.list-edit-actions form { margin: 0; }
+.list-edit-note { margin: 0; color: var(--muted); font-size: .8125rem; }
+.list-edit-region { padding: 12px 20px; border-top: 1px solid var(--border); }
+.list-add { padding: 16px 20px; border-top: 1px solid var(--border); }
+@media (max-width: 720px) {
+  .list-edit-region, .list-add { padding-left: 16px; padding-right: 16px; }
+}
