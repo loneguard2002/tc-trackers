@@ -170,15 +170,21 @@ STATUS_ATTENTION = {"Red": 0, "Amber": 2, "Green": 3}
 
 
 def spark_chart(rows: list[WeekRow]) -> dict | None:
-    """Bars and target segments for the home card's chart of the last completed weeks (SVG user units)."""
+    """Bars and target segments for the home card's chart of the last completed weeks (SVG user units).
+
+    The chart always has SPARK_WEEKS slots, newest on the right, so a tracker with few weeks done keeps narrow bars;
+    the slots before its first week are returned as `empty` for a faint stub on the baseline.
+    """
     done = [r for r in rows if r.state == COMPLETE][-SPARK_WEEKS:]
     if not done:
         return None
     peak = max([r.actual or 0 for r in done] + [r.target or 0 for r in done]) or 1
     scale = (SPARK_HEIGHT - SPARK_HEADROOM) / (peak * 1.05)
-    step = SPARK_WIDTH / len(done)
+    step = SPARK_WIDTH / SPARK_WEEKS
+    offset = SPARK_WEEKS - len(done)
+    empty = [{"x": round(i * step + 4, 1), "width": round(step - 8, 1)} for i in range(offset)]
     bars, target = [], []
-    for i, row in enumerate(done):
+    for i, row in enumerate(done, start=offset):
         actual = row.actual or 0
         height = actual * scale
         bars.append(
@@ -194,7 +200,14 @@ def spark_chart(rows: list[WeekRow]) -> dict | None:
             y = round(SPARK_HEIGHT - row.target * scale, 1)
             target.append(f"M{round(i * step + 1, 1)},{y} H{round((i + 1) * step - 1, 1)}")
     last = done[-1]
-    return {"bars": bars, "target": " ".join(target), "weeks": len(done), "actual": last.actual, "goal": last.target}
+    return {
+        "bars": bars,
+        "empty": empty,
+        "target": " ".join(target),
+        "weeks": len(done),
+        "actual": last.actual,
+        "goal": last.target,
+    }
 
 
 def _risk_counts(session, tracker_ids: list[int]) -> dict[int, tuple[int, int]]:
