@@ -86,13 +86,12 @@
   });
 
   // [data-permission-cards] holds article[data-set-card] cards whose tick boxes belong to one save form. Each change
-  // updates the card's [data-count] ("2/7"), marks a card whose boxes differ from the page as loaded (.is-changed and
-  // its [data-changed] badge), and sets [data-dirty-note] to how many sets have unsaved changes.
+  // updates the card's [data-count] ("2/7"), marks a card whose boxes differ from the saved state (defaultChecked, so
+  // ticks a browser restores after a reload or Back count as unsaved) with .is-changed and its [data-changed] badge,
+  // and sets [data-dirty-note] to how many sets have unsaved changes.
   each(document.querySelectorAll("[data-permission-cards]"), function (grid) {
     var cards = grid.querySelectorAll("article[data-set-card]");
     var note = document.querySelector("[data-dirty-note]");
-    var boxes = grid.querySelectorAll("article[data-set-card] input[type=checkbox]");
-    each(boxes, function (box) { box.setAttribute("data-was", box.checked ? "1" : "0"); });
 
     function refresh() {
       var changed = 0;
@@ -102,7 +101,7 @@
         var differs = false;
         each(inputs, function (box) {
           if (box.checked) ticked += 1;
-          if ((box.checked ? "1" : "0") !== box.getAttribute("data-was")) differs = true;
+          if (box.checked !== box.defaultChecked) differs = true;
         });
         card.querySelector("[data-count]").textContent = ticked + "/" + inputs.length;
         card.classList.toggle("is-changed", differs);

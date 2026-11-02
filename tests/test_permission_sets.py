@@ -319,3 +319,16 @@ def test_failed_create_keeps_the_typed_name_in_the_new_set_card(client, logged_i
     page = text_of(response)
     assert response.status_code == 400 and 'id="new-set"' in page and 'value="pmo"' in page
     assert len(cards(page)) == 1
+
+
+def test_set_page_links_to_its_card(client, logged_in_admin, db):
+    s = make_set(db, "PMO", [])
+    page = text_of(client.get(f"/admin/permission-sets/{s.id}"))
+    assert f"/admin/permission-sets#card-{s.id}" in page and "#grid" not in page
+
+
+def test_tick_boxes_are_described_by_the_permission_help(client, logged_in_admin, db):
+    s = make_set(db, "PMO", [])
+    page = text_of(client.get("/admin/permission-sets"))
+    assert f'aria-describedby="help-{s.id}-view_activity"' in page
+    assert f'id="help-{s.id}-view_activity"' in page
