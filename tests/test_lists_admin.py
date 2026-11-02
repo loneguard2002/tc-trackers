@@ -206,8 +206,8 @@ def test_team_count_help_is_singular_and_omitted_without_teams(
     location_factory(region, "Zurich")
     team_factory("A", location_id=used.id)
     page = text_of(client.get("/admin/regions"))
-    assert "Used by 1 team. Changing the region moves them to it." in page
-    assert page.count("Changing the region moves them to it.") == 1
+    assert "Used by 1 team. Changing the region moves the team with it." in page
+    assert "Changing the region moves them to it." not in page
 
 
 def test_renaming_a_location_logs_without_a_team_count(
@@ -477,3 +477,17 @@ def test_activity_labels_for_the_lists():
         assert action_label(f"{prefix}_retired") == f"{noun} retired"
         assert action_label(f"{prefix}_restored") == f"{noun} restored"
         assert action_label(f"{prefix}_deleted") == f"{noun} deleted"
+
+
+def test_in_use_note_is_not_shown_beside_restore(
+    client, logged_in_admin, region_factory, location_factory, team_factory
+):
+    region = region_factory("OLD", retired=True)
+    team_factory("A", location_id=location_factory(region).id)
+    retired_page = text_of(client.get("/admin/regions"))
+    assert "Restore" in retired_page
+    assert "Teams use this location, so it can only be retired." in retired_page
+    assert "This region has locations or trackers, so it can only be retired." not in retired_page
+    active = region_factory("EMEA")
+    team_factory("B", location_id=location_factory(active, "Zurich").id)
+    assert "This region has locations or trackers, so it can only be retired." in text_of(client.get("/admin/regions"))

@@ -13,7 +13,9 @@
     <button class="button button-small" type="submit">{{ icon('archive') }}Retire</button>
     {% endif %}
   </form>
-  {% if blocker %}
+  {% if blocker and retired %}
+  {# Nothing to explain beside Restore. #}
+  {% elif blocker %}
   <p class="list-edit-note">{{ blocker }}</p>
   {% else %}
   <form method="post" action="{{ url }}" data-confirm="Delete {{ what }}? This cannot be undone.">
