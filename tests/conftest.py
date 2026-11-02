@@ -13,9 +13,12 @@ from tracker.app import create_app
 from tracker.auth.passwords import hash_password
 from tracker.models import (
     Base,
+    BusinessLine,
+    Location,
     PermissionSet,
     PermissionSetHolder,
     PermissionSetPermission,
+    Region,
     Team,
     TeamMember,
     Tracker,
@@ -127,6 +130,39 @@ def user_factory(db):
         db.add(user)
         db.commit()
         return user
+
+    return make
+
+
+@pytest.fixture
+def region_factory(db):
+    def make(code: str = "EMEA", name: str | None = None, retired: bool = False) -> Region:
+        region = Region(code=code, name=name or f"{code} region", retired=retired)
+        db.add(region)
+        db.commit()
+        return region
+
+    return make
+
+
+@pytest.fixture
+def location_factory(db):
+    def make(region: Region, city: str = "Geneva", country: str = "Switzerland", retired: bool = False) -> Location:
+        location = Location(region_id=region.id, city=city, country=country, retired=retired)
+        db.add(location)
+        db.commit()
+        return location
+
+    return make
+
+
+@pytest.fixture
+def business_line_factory(db):
+    def make(name: str = "Tradition brokerage", retired: bool = False) -> BusinessLine:
+        line = BusinessLine(name=name, retired=retired)
+        db.add(line)
+        db.commit()
+        return line
 
     return make
 
