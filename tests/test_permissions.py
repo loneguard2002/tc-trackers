@@ -106,9 +106,9 @@ def test_anonymous_user_is_sent_to_sign_in(client):
     assert response.status_code == 302 and "/login" in response.headers["Location"]
 
 
-def test_create_trackers_holder_creates_a_tracker(client, logged_in_user, give_set, db):
+def test_create_trackers_holder_creates_a_tracker(client, logged_in_user, give_set, db, labels_form):
     give_set(["create_trackers"], user=logged_in_user)
-    response = post(client, "/trackers/new", TRACKER_FORM)
+    response = post(client, "/trackers/new", {**TRACKER_FORM, **labels_form})
     assert response.status_code == 302
     assert db.scalar(select(Tracker).where(Tracker.name == "Rollout")) is not None
 

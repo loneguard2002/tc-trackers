@@ -1,0 +1,39 @@
+{#- The Business line drop-down and the Regions tick boxes, shared by New tracker and Settings (stacked fields) and the
+    import confirmation (settings rows, with label_rows set). Expects form, business_line_choices, region_choices and
+    chosen_regions (the ticked ids as text). Retired entries appear only where the tracker already uses them. -#}
+{% from "macros.html" import field, setting %}
+{% set label_rows = label_rows is defined and label_rows %}
+{% set row = setting if label_rows else field %}
+{% call row('Business line', '', 'business_line_id') %}
+<select id="business_line_id" name="business_line_id" required>
+  <option value="" {{ 'selected' if not form.get('business_line_id') }}>Choose a business line</option>
+  {% for id, name, retired in business_line_choices %}<option value="{{ id }}" {{ 'selected' if form.get('business_line_id')|string == id|string }}>{{ name }}{% if retired %} (retired){% endif %}</option>{% endfor %}
+</select>
+{% endcall %}
+{% set help = 'Choose every region the tracker covers. In a later release, people given a region will see its trackers, so changing the regions changes who can see this tracker.' %}
+{% macro boxes() %}
+  {% if region_choices %}
+  <div class="check-row">
+    {% for r in region_choices %}
+    <label><input type="checkbox" name="region_ids" value="{{ r.id }}" {{ 'checked' if r.id|string in chosen_regions }}>{{ r.code }} – {{ r.name }}{% if r.retired %} (retired){% endif %}</label>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="field-help">No regions are available yet. An administrator adds them on the Regions and locations screen.</p>
+  {% endif %}
+{% endmacro %}
+{% if label_rows %}
+<div class="setting-row" role="group" aria-labelledby="region_ids-label" aria-describedby="region_ids-help">
+  <div class="setting-label">
+    <span class="setting-title" id="region_ids-label">Regions</span>
+    <p class="setting-help" id="region_ids-help">{{ help }}</p>
+  </div>
+  <div class="setting-control">{{ boxes() }}</div>
+</div>
+{% else %}
+<fieldset class="field" aria-describedby="region_ids-help">
+  <legend class="field-label">Regions</legend>
+  <p class="field-help" id="region_ids-help">{{ help }}</p>
+  {{ boxes() }}
+</fieldset>
+{% endif %}

@@ -168,6 +168,13 @@ def business_line_factory(db):
 
 
 @pytest.fixture
+def labels_form(region_factory, business_line_factory) -> dict:
+    """A business line and a region, as the New tracker, Settings and import-confirm forms post them."""
+    line, region = business_line_factory(), region_factory()
+    return {"business_line_id": str(line.id), "region_ids": [str(region.id)]}
+
+
+@pytest.fixture
 def team_factory(db):
     counter = {"n": 0}
 

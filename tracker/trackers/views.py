@@ -29,6 +29,16 @@ from ..db import get_session
 from ..engine.calc import COMPLETE, GroupInput, Headline, WeekRow, build_headline, build_week_rows, group_positions
 from ..engine.weeks import week_endings
 from ..ids import parse_id
+from ..lists.catalogue import (
+    business_line_choices,
+    parse_business_line,
+    parse_regions,
+    region_choices,
+    set_tracker_regions,
+    team_places,
+    tracker_labels,
+    tracker_region_ids,
+)
 from ..models import CompletionEntry, Group, Recipient, ReportInput, Risk, Tracker, TrackerRole, User, Week
 from ..teams.tree import TEAM_CHOICE_ERROR, load_team_rows, parse_team_id, team_choices, team_labels
 from . import bp
@@ -306,6 +316,8 @@ def _defaults_form() -> dict:
         "target_completion": "",
         "completed_before_first": "0",
         "moving_average_weeks": "3",
+        "business_line_id": "",
+        "region_ids": [],
     }
 
 
@@ -324,7 +336,21 @@ def _form_from_tracker(t: Tracker) -> dict:
         "schedule_enabled": "1" if t.schedule_enabled else "",
         "send_time": t.send_time.strftime("%H:%M"),
         "send_timezone": t.send_timezone,
+        "business_line_id": str(t.business_line_id or ""),
+        "region_ids": [str(region_id) for region_id in tracker_region_ids(get_session(), t.id)],
     }
+
+
+def _parse_labels(db, form, tracker: Tracker | None):
+    """The business line and regions posted on New tracker or Settings, with their errors; the tracker's current
+    entries stay valid even when retired since."""
+    line, line_error = parse_business_line(
+        db, form.get("business_line_id"), tracker.business_line_id if tracker else None
+    )
+    regions, regions_error = parse_regions(
+        db, form.getlist("region_ids"), tracker_region_ids(db, tracker.id) if tracker else ()
+    )
+    return line, regions, [error for error in (line_error, regions_error) if error]
 
 
 @bp.route("/trackers/new", methods=["GET", "POST"])
@@ -336,13 +362,16 @@ def new():
         team, team_error = parse_team_id(db, request.form.get("team_id"))
         if team_error:
             errors.append(team_error)
+        line, regions, label_errors = _parse_labels(db, request.form, None)
+        errors += label_errors
         if not errors:
             actor = current_user()
             team_path = team_labels(load_team_rows(db)).get(team.id, team.name) if team else None
-            tracker = Tracker(**values, team_id=team.id if team else None)
+            tracker = Tracker(**values, team_id=team.id if team else None, business_line_id=line.id)
             db.add(tracker)
             try:
                 db.flush()
+                set_tracker_regions(db, tracker.id, [region.id for region in regions])
                 record(
                     db,
                     user_id=actor.id,
@@ -350,7 +379,12 @@ def new():
                     action="tracker_created",
                     entity="tracker",
                     entity_id=tracker.id,
-                    detail={"name": tracker.name, "team": team_path},
+                    detail={
+                        "name": tracker.name,
+                        "team": team_path,
+                        "business_line": line.name,
+                        "regions": [region.code for region in regions],
+                    },
                 )
                 give_creator_ownership(db, tracker, actor)
                 db.commit()
@@ -471,9 +505,16 @@ def _team_path(tracker: Tracker | None) -> str | None:
     return team_labels(load_team_rows(get_session())).get(tracker.team_id)
 
 
+def _chosen_region_ids(form) -> set[str]:
+    """The ticked regions of a posted form (repeated fields) or of a form built in the view (a list)."""
+    chosen = form.getlist("region_ids") if hasattr(form, "getlist") else form.get("region_ids", [])
+    return {str(region_id) for region_id in chosen}
+
+
 def _render_settings(tracker: Tracker | None, form, errors: list[str], status: int = 200):
     template = "trackers/settings.html" if tracker is not None else "trackers/new.html"
-    locked = tracker is not None and _has_entries(get_session(), tracker)
+    db = get_session()
+    locked = tracker is not None and _has_entries(db, tracker)
     return (
         render_template(
             template,
@@ -482,7 +523,13 @@ def _render_settings(tracker: Tracker | None, form, errors: list[str], status: i
             errors=errors,
             weekdays=list(enumerate(WEEKDAYS)),
             weekday_locked=locked,
-            team_choices=team_choices(get_session()),
+            team_choices=team_choices(db),
+            team_regions={team_id: place.region_id for team_id, place in team_places(db).items()}
+            if tracker is None
+            else {},
+            business_line_choices=business_line_choices(db, tracker.business_line_id if tracker else None),
+            region_choices=region_choices(db, tracker_region_ids(db, tracker.id) if tracker else ()),
+            chosen_regions=_chosen_region_ids(form),
             team_path=_team_path(tracker),
             live=_settings_live(get_session(), tracker) if tracker is not None else None,
             page_title="New tracker" if tracker is None else f"{tracker.name} settings",
@@ -552,14 +599,24 @@ def settings(tracker_id: int):
         low, high = _data_range(db, tracker)
         if low is not None and (low < values["first_week_ending"] or high > values["last_week_ending"]):
             errors.append("Data exists outside the new week range. Widen the range to include it.")
+    line, regions, label_errors = _parse_labels(db, request.form, tracker)
+    errors += label_errors
     if errors:
         return _render_settings(tracker, request.form, errors, status=400)
+    before = tracker_labels(db, [tracker.id])[tracker.id]
     changed = {}
     for field, new_value in values.items():
         old_value = getattr(tracker, field)
         if old_value != new_value:
             changed[field] = [_jsonable(old_value), _jsonable(new_value)]
             setattr(tracker, field, new_value)
+    if line.id != tracker.business_line_id:
+        changed["business_line"] = [before.business_line, line.name]
+        tracker.business_line_id = line.id
+    region_ids = {region.id for region in regions}
+    if region_ids != tracker_region_ids(db, tracker.id):
+        changed["regions"] = [before.regions, [region.code for region in regions]]
+        set_tracker_regions(db, tracker.id, region_ids)
     if changed:
         record(
             db,

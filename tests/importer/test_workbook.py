@@ -328,26 +328,32 @@ def _upload(client, data=None):
     )
 
 
-def test_upload_shows_preview_then_confirm_creates_tracker(client, logged_in_admin, db):
+def test_upload_shows_preview_then_confirm_creates_tracker(client, logged_in_admin, db, labels_form):
     assert client.get("/import").status_code == 200
     response = _upload(client)
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "Site A" in html and "accept_mismatch" not in html
     token = html.split('name="payload" value="')[1].split('"')[0]
-    done = post(client, "/import/confirm", {"payload": token, "name": "Rollout", "unit_label": "x", "group_label": "L"})
+    done = post(
+        client,
+        "/import/confirm",
+        {"payload": token, "name": "Rollout", "unit_label": "x", "group_label": "L", **labels_form},
+    )
     assert done.status_code == 302
     assert db.scalars(select(Tracker).where(Tracker.name == "Rollout")).one() is not None
 
 
-def test_confirm_with_mismatch_needs_acceptance(client, logged_in_admin, db):
+def test_confirm_with_mismatch_needs_acceptance(client, logged_in_admin, db, labels_form):
     html = _upload(client, workbook_bytes(deployed_site_a=136)).get_data(as_text=True)
     assert "accept_mismatch" in html
     token = html.split('name="payload" value="')[1].split('"')[0]
-    refused = post(client, "/import/confirm", {"payload": token, "name": "Rollout"})
+    refused = post(client, "/import/confirm", {"payload": token, "name": "Rollout", **labels_form})
     assert refused.status_code == 400
     assert db.scalars(select(Tracker)).first() is None
-    accepted = post(client, "/import/confirm", {"payload": token, "name": "Rollout", "accept_mismatch": "1"})
+    accepted = post(
+        client, "/import/confirm", {"payload": token, "name": "Rollout", "accept_mismatch": "1", **labels_form}
+    )
     assert accepted.status_code == 302
 
 

@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ..auth import current_user, permission_required
 from ..db import get_session
+from ..lists.catalogue import business_line_choices, parse_business_line, parse_regions, region_choices
 from ..teams.tree import TEAM_CHOICE_ERROR, parse_team_id, team_choices
 from ..trackers.views import WEEKDAYS
 from . import bp
@@ -45,6 +46,9 @@ def _render_confirm(preview: ImportPreview, token: str, form, error: str | None 
             error=error,
             weekdays=WEEKDAYS,
             team_choices=team_choices(get_session()),
+            business_line_choices=business_line_choices(get_session()),
+            region_choices=region_choices(get_session()),
+            chosen_regions=set(form.getlist("region_ids")) if hasattr(form, "getlist") else set(),
             page_title="Confirm import",
             current_page="import",
         ),
@@ -89,8 +93,11 @@ def confirm():
     accept = form.get("accept_mismatch") == "1"
     db = get_session()
     team, team_error = parse_team_id(db, form.get("team_id"))
-    if team_error:
-        return _render_confirm(parsed, token, form, team_error, 400)
+    line, line_error = parse_business_line(db, form.get("business_line_id"), None)
+    regions, regions_error = parse_regions(db, form.getlist("region_ids"), ())
+    errors = [error for error in (team_error, line_error, regions_error) if error]
+    if errors:
+        return _render_confirm(parsed, token, form, " ".join(errors), 400)
     try:
         tracker = create_tracker_from_preview(
             db,
@@ -101,9 +108,11 @@ def confirm():
             user_id=current_user().id,
             accept_mismatch=accept,
             team_id=team.id if team else None,
+            business_line_id=line.id,
+            region_ids=[region.id for region in regions],
         )
         db.commit()
-    except IntegrityError:  # the team was deleted at the same moment
+    except IntegrityError:  # the team (or a chosen entry) was deleted at the same moment
         db.rollback()
         return _render_confirm(parsed, token, form, TEAM_CHOICE_ERROR, 400)
     except ImportMismatch as exc:

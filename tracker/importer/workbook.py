@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 import re
 import zipfile
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from fractions import Fraction
@@ -23,6 +24,7 @@ from sqlalchemy.orm import Session
 from ..audit import record
 from ..auth.roles import give_creator_ownership
 from ..engine.weeks import max_last_week_ending, report_date_to_week_ending, week_endings
+from ..lists.catalogue import set_tracker_regions, tracker_labels
 from ..models import Group, ReportInput, Risk, Tracker, User, Week
 
 SHEET_SETTINGS = "Settings"
@@ -432,8 +434,11 @@ def create_tracker_from_preview(
     user_id: int,
     accept_mismatch: bool,
     team_id: int | None = None,
+    business_line_id: int | None = None,
+    region_ids: Collection[int] = (),
 ) -> Tracker:
-    """Add the tracker and its history to ``session`` (the caller commits)."""
+    """Add the tracker and its history to ``session`` (the caller commits). The caller checks the business line and
+    regions; the command-line import passes neither, so the tracker shows them as not set until its next save."""
     name = name.strip()
     if not name:
         raise ImportError_("A tracker name is required.")
@@ -458,9 +463,12 @@ def create_tracker_from_preview(
         completed_before_first=s["completed_before_first"],
         moving_average_weeks=s["moving_average_weeks"],
         team_id=team_id,
+        business_line_id=business_line_id,
     )
     session.add(tracker)
     session.flush()
+    set_tracker_regions(session, tracker.id, region_ids)
+    labels = tracker_labels(session, [tracker.id])[tracker.id]
 
     group_ids: dict[str, int] = {}
     for order, item in enumerate(preview.groups):
@@ -496,6 +504,8 @@ def create_tracker_from_preview(
             "risks": len(preview.risks),
             "mismatch": preview.mismatch,
             "mismatch_accepted": preview.mismatch != 0,
+            "business_line": labels.business_line,
+            "regions": labels.regions,
         },
     )
     give_creator_ownership(session, tracker, session.get(User, user_id))  # logged after the import, as on New tracker
