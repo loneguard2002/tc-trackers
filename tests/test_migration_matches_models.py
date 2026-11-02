@@ -75,3 +75,12 @@ def test_migration_creates_access_indexes_and_backfill():
         r"AND audit_log\.entity_id = users\.id::text",
         sql,
     )
+
+
+def test_migration_creates_list_indexes_and_seeds_business_lines():
+    sql = _offline_sql()
+    assert "CREATE UNIQUE INDEX uq_regions_code_lower ON regions (lower(code))" in sql
+    assert "CREATE UNIQUE INDEX uq_regions_name_lower ON regions (lower(name))" in sql
+    assert "CREATE UNIQUE INDEX uq_locations_city_country_lower ON locations (lower(city), lower(country))" in sql
+    assert "CREATE UNIQUE INDEX uq_business_lines_name_lower ON business_lines (lower(name))" in sql
+    assert "'Tradition brokerage'" in sql and "'TraditionData'" in sql

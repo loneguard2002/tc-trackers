@@ -64,6 +64,47 @@ class User(Base):
         return value.strip().lower()
 
 
+class Region(Base):
+    __tablename__ = "regions"
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    code: Mapped[str] = mapped_column(Text)
+    name: Mapped[str] = mapped_column(Text)
+    retired: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    created_at: Mapped[datetime] = _now()
+
+
+Index("uq_regions_code_lower", func.lower(Region.code), unique=True)
+Index("uq_regions_name_lower", func.lower(Region.name), unique=True)
+
+
+class Location(Base):
+    __tablename__ = "locations"
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    region_id: Mapped[int] = mapped_column(ForeignKey("regions.id", ondelete="RESTRICT"))
+    city: Mapped[str] = mapped_column(Text)
+    country: Mapped[str] = mapped_column(Text)
+    retired: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    created_at: Mapped[datetime] = _now()
+
+
+Index("uq_locations_city_country_lower", func.lower(Location.city), func.lower(Location.country), unique=True)
+Index("ix_locations_region_id", Location.region_id)
+
+
+class BusinessLine(Base):
+    __tablename__ = "business_lines"
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    retired: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    created_at: Mapped[datetime] = _now()
+
+
+Index("uq_business_lines_name_lower", func.lower(BusinessLine.name), unique=True)
+
+
 class Team(Base):
     __tablename__ = "teams"
 
@@ -71,11 +112,13 @@ class Team(Base):
     name: Mapped[str] = mapped_column(Text)
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id", ondelete="RESTRICT"))
+    location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = _now()
 
 
 Index("uq_teams_name_lower", func.lower(Team.name), unique=True)
 Index("ix_teams_parent_id", Team.parent_id)
+Index("ix_teams_location_id", Team.location_id)
 
 
 class TeamMember(Base):
@@ -144,6 +187,7 @@ class Tracker(Base):
         CheckConstraint("last_week_ending - first_week_ending <= 357", name="span_52_weeks"),
         CheckConstraint("moving_average_weeks BETWEEN 1 AND 12", name="moving_average_weeks"),
         Index("ix_trackers_team_id", "team_id"),
+        Index("ix_trackers_business_line_id", "business_line_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
@@ -162,7 +206,16 @@ class Tracker(Base):
     send_timezone: Mapped[str] = mapped_column(Text, default="Europe/London", server_default="Europe/London")
     schedule_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     team_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id", ondelete="RESTRICT"))
+    business_line_id: Mapped[int | None] = mapped_column(ForeignKey("business_lines.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = _now()
+
+
+class TrackerRegion(Base):
+    __tablename__ = "tracker_regions"
+    __table_args__ = (Index("ix_tracker_regions_region_id", "region_id"),)
+
+    tracker_id: Mapped[int] = mapped_column(ForeignKey("trackers.id", ondelete="CASCADE"), primary_key=True)
+    region_id: Mapped[int] = mapped_column(ForeignKey("regions.id", ondelete="RESTRICT"), primary_key=True)
 
 
 class TrackerRole(Base):
