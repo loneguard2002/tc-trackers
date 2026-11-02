@@ -48,9 +48,9 @@ def holder(user_factory, give_set, client):
     return user
 
 
-def test_creator_without_admin_becomes_owner_and_it_is_logged(client, logged_in_user, give_set, db):
+def test_creator_without_admin_becomes_owner_and_it_is_logged(client, logged_in_user, give_set, db, labels_form):
     give_set(["create_trackers"], user=logged_in_user)
-    post(client, "/trackers/new", SETTINGS)
+    post(client, "/trackers/new", {**SETTINGS, **labels_form})
     tracker = db.scalars(select(Tracker)).one()
     assert db.get(TrackerRole, (logged_in_user.id, tracker.id)).role == "owner"
     entry = db.scalars(select(AuditLog).where(AuditLog.action == "role_set")).one()
@@ -59,11 +59,11 @@ def test_creator_without_admin_becomes_owner_and_it_is_logged(client, logged_in_
     assert logged == ["tracker_created", "role_set"]
 
 
-def test_new_tracker_in_a_team_or_none(client, logged_in_admin, team_factory, db):
+def test_new_tracker_in_a_team_or_none(client, logged_in_admin, team_factory, db, labels_form):
     parent = team_factory(name="Infrastructure")
     child = team_factory(name="Windows", parent=parent)
-    assert post(client, "/trackers/new", {**SETTINGS, "team_id": str(child.id)}).status_code == 302
-    assert post(client, "/trackers/new", {**SETTINGS, "name": "Other", "team_id": ""}).status_code == 302
+    assert post(client, "/trackers/new", {**SETTINGS, **labels_form, "team_id": str(child.id)}).status_code == 302
+    assert post(client, "/trackers/new", {**SETTINGS, **labels_form, "name": "Other", "team_id": ""}).status_code == 302
     first, second = db.scalars(select(Tracker).order_by(Tracker.id)).all()
     assert first.team_id == child.id and second.team_id is None
     created = entries(db, "tracker_created")
@@ -71,9 +71,9 @@ def test_new_tracker_in_a_team_or_none(client, logged_in_admin, team_factory, db
     assert 'name="team_id"' in client.get("/trackers/new").get_data(as_text=True)
 
 
-def test_new_tracker_with_an_unknown_team_is_refused(client, logged_in_admin, db):
+def test_new_tracker_with_an_unknown_team_is_refused(client, logged_in_admin, db, labels_form):
     for value in ("9999", "abc"):
-        response = post(client, "/trackers/new", {**SETTINGS, "team_id": value})
+        response = post(client, "/trackers/new", {**SETTINGS, **labels_form, "team_id": value})
         assert response.status_code == 400 and CHOICE_ERROR in text_of(response)
     assert db.scalars(select(Tracker)).first() is None
 
@@ -87,7 +87,7 @@ def confirm_page(client) -> str:
     ).get_data(as_text=True)
 
 
-def test_import_confirmation_sets_team_and_owner(client, user_factory, give_set, team_factory, db):
+def test_import_confirmation_sets_team_and_owner(client, user_factory, give_set, team_factory, db, labels_form):
     team = team_factory(name="Network")
     user = user_factory()
     give_set(["import_workbooks"], user=user)
@@ -101,7 +101,7 @@ def test_import_confirmation_sets_team_and_owner(client, user_factory, give_set,
             content_type="multipart/form-data",
         )
         token = page.get_data(as_text=True).split('name="payload" value="')[1].split('"')[0]
-        return post(client, "/import/confirm", {"payload": token, "name": "Rollout", **extra})
+        return post(client, "/import/confirm", {"payload": token, "name": "Rollout", **labels_form, **extra})
 
     page = html.unescape(confirm_page(client))
     assert 'name="team_id"' in page and "You become its owner." in page and "As an administrator" not in page
@@ -115,7 +115,7 @@ def test_import_confirmation_sets_team_and_owner(client, user_factory, give_set,
     assert db.scalars(select(Tracker)).all() == [tracker]
 
 
-def test_import_confirmation_by_an_administrator_gives_no_role(client, logged_in_admin, db):
+def test_import_confirmation_by_an_administrator_gives_no_role(client, logged_in_admin, db, labels_form):
     page = post(
         client,
         "/import",
@@ -125,7 +125,7 @@ def test_import_confirmation_by_an_administrator_gives_no_role(client, logged_in
     assert "As an administrator, you can already open every tracker." in text_of(page)
     assert "You become its owner." not in text_of(page)
     token = page.get_data(as_text=True).split('name="payload" value="')[1].split('"')[0]
-    assert post(client, "/import/confirm", {"payload": token, "name": "Rollout"}).status_code == 302
+    assert post(client, "/import/confirm", {"payload": token, "name": "Rollout", **labels_form}).status_code == 302
     tracker = db.scalars(select(Tracker)).one()
     assert db.get(TrackerRole, (logged_in_admin.id, tracker.id)) is None
 
@@ -232,8 +232,8 @@ def test_home_card_shows_the_team_name(client, logged_in_admin, tracker_factory,
 # --- Final review fixes ---------------------------------------------------------------------------------------------
 
 
-def test_a_very_long_team_id_is_400(client, logged_in_admin, tracker_factory, db):
-    response = post(client, "/trackers/new", {**SETTINGS, "team_id": "9" * 5000})
+def test_a_very_long_team_id_is_400(client, logged_in_admin, tracker_factory, db, labels_form):
+    response = post(client, "/trackers/new", {**SETTINGS, **labels_form, "team_id": "9" * 5000})
     assert response.status_code == 400 and CHOICE_ERROR in text_of(response)
     t = tracker_factory()
     assert post(client, f"/trackers/{t.id}/team", {"team_id": "9" * 5000}).status_code == 400
@@ -253,12 +253,14 @@ def delete_team_on_first_read(monkeypatch, module, db, team):
     monkeypatch.setattr(module, "load_team_rows", delete_first)
 
 
-def test_a_tracker_created_in_a_team_deleted_at_the_same_moment(client, logged_in_admin, team_factory, db, monkeypatch):
+def test_a_tracker_created_in_a_team_deleted_at_the_same_moment(
+    client, logged_in_admin, team_factory, db, monkeypatch, labels_form
+):
     from tracker.trackers import views as tracker_views
 
     team = team_factory(name="Going")
     delete_team_on_first_read(monkeypatch, tracker_views, db, team)
-    response = post(client, "/trackers/new", {**SETTINGS, "team_id": str(team.id)})
+    response = post(client, "/trackers/new", {**SETTINGS, **labels_form, "team_id": str(team.id)})
     assert response.status_code == 400 and CHOICE_ERROR in text_of(response)
     assert db.scalars(select(Tracker)).first() is None and entries(db, "tracker_created") == []
 
@@ -276,7 +278,7 @@ def test_a_tracker_moved_into_a_team_deleted_at_the_same_moment(
 
 
 def test_a_workbook_imported_into_a_team_deleted_at_the_same_moment(
-    client, logged_in_admin, team_factory, db, monkeypatch
+    client, logged_in_admin, team_factory, db, monkeypatch, labels_form
 ):
     from tracker.importer import views as importer_views
 
@@ -297,6 +299,8 @@ def test_a_workbook_imported_into_a_team_deleted_at_the_same_moment(
         return found
 
     monkeypatch.setattr(importer_views, "parse_team_id", delete_after_parsing)
-    response = post(client, "/import/confirm", {"payload": token, "name": "Rollout", "team_id": str(team.id)})
+    response = post(
+        client, "/import/confirm", {"payload": token, "name": "Rollout", "team_id": str(team.id), **labels_form}
+    )
     assert response.status_code == 400 and CHOICE_ERROR in text_of(response)
     assert db.scalars(select(Tracker)).first() is None

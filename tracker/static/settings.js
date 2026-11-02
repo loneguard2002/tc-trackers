@@ -39,7 +39,12 @@
   function value(name) {
     var field = els[name];
     if (!field) return "";
-    if (field instanceof RadioNodeList) return field.value;
+    if (field instanceof RadioNodeList) {
+      if (field[0] && field[0].type !== "checkbox") return field.value;
+      // Several tick boxes share the name (the regions): the value is the ticked ones together.
+      return Array.prototype.filter.call(field, function (box) { return box.checked; })
+        .map(function (box) { return box.value; }).join(",");
+    }
     if (field.type === "checkbox") return field.checked ? "on" : "";
     return field.value.trim();
   }

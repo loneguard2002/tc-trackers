@@ -122,6 +122,7 @@
         {% for id, label in team_choices %}<option value="{{ id }}" {{ 'selected' if form.get('team_id')|string == id|string }}>{{ label }}</option>{% endfor %}
       </select>
       {% endcall %}
+      {% with label_rows = true %}{% include "trackers/_label_fields.html" %}{% endwith %}
       {% if preview.mismatch != 0 %}
       {% call setting('Import regardless', 'The figures differ by ' ~ preview.mismatch|abs|num ~ '. Turn this on to import them as they are.', 'accept_mismatch') %}
       <span class="switch">

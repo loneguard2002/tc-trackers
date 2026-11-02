@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from conftest import browser_sign_in
+from playwright.sync_api import expect
 
 pytestmark = pytest.mark.browser
 
@@ -186,3 +187,38 @@ def test_outline_moves_with_the_underline(page, owner_page):
     page.evaluate("window.scrollTo(0, 0)")
     page.wait_for_timeout(400)
     assert outlined_sections(page) == ["general"]
+
+
+def test_new_tracker_ticks_the_team_region_until_a_box_is_changed(
+    page, live_server, user_factory, team_factory, region_factory, location_factory, business_line_factory
+):
+    emea, apac = region_factory("EMEA", "Europe"), region_factory("APAC", "Asia Pacific")
+    desktop = team_factory(name="Desktop", location_id=location_factory(emea).id)
+    network = team_factory(name="Network", location_id=location_factory(apac, "Singapore", "Singapore").id)
+    business_line_factory()
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.set_viewport_size({"width": 390, "height": 900})
+    page.goto(f"{live_server}/trackers/new")
+    emea_box, apac_box = page.get_by_label("EMEA – Europe"), page.get_by_label("APAC – Asia Pacific")
+    expect(emea_box).not_to_be_checked()
+    page.select_option("#team_id", str(desktop.id))
+    expect(emea_box).to_be_checked()
+    expect(apac_box).not_to_be_checked()
+    emea_box.uncheck()
+    page.select_option("#team_id", str(network.id))
+    expect(apac_box).not_to_be_checked()
+    expect(emea_box).not_to_be_checked()
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+    apac_box.check()
+    page.fill("#name", "Rollout")
+    page.fill("#start_date", "2026-09-04")
+    page.fill("#last_week_ending", "2026-12-25")
+    page.select_option("#business_line_id", label="Tradition brokerage")
+    page.get_by_role("button", name="Create tracker").click()
+    expect(page.get_by_text("Tracker created.")).to_be_visible()
+    expect(page.get_by_label("APAC – Asia Pacific")).to_be_checked()
+    note = page.locator("[data-dirty-note]")
+    expect(note).to_have_text("No unsaved changes")
+    page.get_by_label("EMEA – Europe").check()
+    expect(note).to_have_text("1 setting changed, not saved yet")
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")

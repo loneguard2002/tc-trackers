@@ -705,6 +705,11 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .field :where(input, select, textarea) { padding: 7px 10px; font-size: .9rem; }
 .field textarea { resize: vertical; }
 .field-optional { color: var(--muted); font-weight: 400; }
+fieldset.field { padding: 0; border: 0; }
+fieldset.field > legend { padding: 0; }
+.check-row { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.check-row label { display: inline-flex; align-items: center; gap: 8px; min-width: 0; min-height: 32px; font-size: .875rem; font-weight: 400; overflow-wrap: anywhere; cursor: pointer; }
+.check-row input { flex: none; width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--primary); cursor: pointer; }
 .field-stack { display: grid; gap: 16px; padding: 16px 20px 20px; }
 .field-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .field-short input { max-width: 10rem; }

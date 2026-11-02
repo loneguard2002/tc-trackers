@@ -46,8 +46,8 @@ def audit_actions(db, tracker_id):
     return [a for a in db.scalars(select(AuditLog).where(AuditLog.tracker_id == tracker_id).order_by(AuditLog.id))]
 
 
-def test_admin_creates_tracker_without_a_role(client, logged_in_admin, db):
-    response = post(client, "/trackers/new", SETTINGS)
+def test_admin_creates_tracker_without_a_role(client, logged_in_admin, db, labels_form):
+    response = post(client, "/trackers/new", {**SETTINGS, **labels_form})
     assert response.status_code == 302
     tracker = db.scalars(select(Tracker)).one()
     assert db.get(TrackerRole, (logged_in_admin.id, tracker.id)) is None
@@ -59,43 +59,45 @@ def test_non_admin_cannot_create_tracker(client, logged_in_user):
     assert post(client, "/trackers/new", SETTINGS).status_code == 403
 
 
-def test_first_week_snaps_to_week_ending_day(client, logged_in_admin, db):
-    post(client, "/trackers/new", SETTINGS)  # Wednesday 2 Sep 2026, Friday week-ending
+def test_first_week_snaps_to_week_ending_day(client, logged_in_admin, db, labels_form):
+    post(client, "/trackers/new", {**SETTINGS, **labels_form})  # Wednesday 2 Sep 2026, Friday week-ending
     assert db.scalars(select(Tracker)).one().first_week_ending == date(2026, 9, 4)
 
 
-def test_last_week_beyond_52_rejected(client, logged_in_admin, db):
-    response = post(client, "/trackers/new", {**SETTINGS, "last_week_ending": "2027-12-31"})
+def test_last_week_beyond_52_rejected(client, logged_in_admin, db, labels_form):
+    response = post(client, "/trackers/new", {**SETTINGS, **labels_form, "last_week_ending": "2027-12-31"})
     assert response.status_code == 400
     assert b"52 weeks" in response.data
     assert db.scalars(select(Tracker)).first() is None
 
 
-def test_weekday_change_refused_with_entries(client, logged_in_admin, db, tracker_factory):
+def test_weekday_change_refused_with_entries(client, logged_in_admin, db, tracker_factory, labels_form):
     tracker = tracker_factory()
     group = make_group(db, tracker)
     add_entry(db, tracker, group, date(2026, 9, 1), 3, date(2026, 9, 4))
-    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "week_ending_weekday": "3"})
+    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **labels_form, "week_ending_weekday": "3"})
     assert response.status_code == 400
     assert b"The week-ending day cannot change once entries exist." in response.data
     db.refresh(tracker)
     assert tracker.week_ending_weekday == 4
 
 
-def test_settings_saved_and_audited(client, logged_in_admin, db, tracker_factory):
+def test_settings_saved_and_audited(client, logged_in_admin, db, tracker_factory, labels_form):
     tracker = tracker_factory()
-    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "name": "Renamed"})
+    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **labels_form, "name": "Renamed"})
     assert response.status_code == 302
     db.refresh(tracker)
     assert tracker.name == "Renamed"
     assert any(a.action == "settings_updated" and "name" in a.detail for a in audit_actions(db, tracker.id))
 
 
-def test_settings_refuse_range_excluding_entries(client, logged_in_admin, db, tracker_factory):
+def test_settings_refuse_range_excluding_entries(client, logged_in_admin, db, tracker_factory, labels_form):
     tracker = tracker_factory()
     group = make_group(db, tracker)
     add_entry(db, tracker, group, date(2026, 12, 20), 3, date(2026, 12, 25))
-    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "last_week_ending": "2026-12-11"})
+    response = post(
+        client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **labels_form, "last_week_ending": "2026-12-11"}
+    )
     assert response.status_code == 400
     assert b"outside the new week range" in response.data
 
@@ -442,12 +444,12 @@ def test_archive_is_admin_only(client, logged_in_user, tracker_factory, grant):
     assert post(client, f"/trackers/{tracker.id}/archive").status_code == 403
 
 
-def test_archived_tracker_refuses_changes(client, logged_in_admin, db, tracker_factory, user_factory):
+def test_archived_tracker_refuses_changes(client, logged_in_admin, db, tracker_factory, user_factory, labels_form):
     tracker = tracker_factory(status="archived")
     group = make_group(db, tracker, baseline=10)
     other = user_factory()
     follow = {"follow_redirects": True}
-    page = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "name": "Changed"}, **follow)
+    page = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **labels_form, "name": "Changed"}, **follow)
     assert b"This tracker is archived." in page.data
     page = post(
         client,
@@ -539,11 +541,11 @@ def test_tracker_summary_uses_default_report_week(db, tracker_factory):
     assert early.completed == 0
 
 
-def test_schedule_settings_saved_and_audited(client, logged_in_admin, db, tracker_factory):
+def test_schedule_settings_saved_and_audited(client, logged_in_admin, db, tracker_factory, labels_form):
     from datetime import time
 
     tracker = tracker_factory()
-    data = {**SETTINGS, "schedule_enabled": "1", "send_time": "08:30", "send_timezone": "Europe/Zurich"}
+    data = {**SETTINGS, **labels_form, "schedule_enabled": "1", "send_time": "08:30", "send_timezone": "Europe/Zurich"}
     assert post(client, f"/trackers/{tracker.id}/settings", data).status_code == 302
     db.refresh(tracker)
     assert tracker.schedule_enabled and tracker.send_time == time(8, 30) and tracker.send_timezone == "Europe/Zurich"
@@ -551,70 +553,74 @@ def test_schedule_settings_saved_and_audited(client, logged_in_admin, db, tracke
     assert {"schedule_enabled", "send_time", "send_timezone"} <= set(changed)
 
 
-def test_schedule_settings_reject_bad_time_and_zone(client, logged_in_admin, db, tracker_factory):
+def test_schedule_settings_reject_bad_time_and_zone(client, logged_in_admin, db, tracker_factory, labels_form):
     tracker = tracker_factory()
     for bad in ({"send_time": "5pm"}, {"send_timezone": "Mars/Olympus"}):
-        assert post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **bad}).status_code == 400
+        assert post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **labels_form, **bad}).status_code == 400
     db.refresh(tracker)
     assert not tracker.schedule_enabled
 
 
-def test_schedule_settings_refused_when_archived(client, logged_in_admin, db, tracker_factory):
+def test_schedule_settings_refused_when_archived(client, logged_in_admin, db, tracker_factory, labels_form):
     tracker = tracker_factory(status="archived")
-    post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "schedule_enabled": "1"})
+    post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **labels_form, "schedule_enabled": "1"})
     db.refresh(tracker)
     assert not tracker.schedule_enabled
 
 
-def test_weekday_locked_by_target_only(client, logged_in_admin, db, tracker_factory):
+def test_weekday_locked_by_target_only(client, logged_in_admin, db, tracker_factory, labels_form):
     tracker = tracker_factory()
     db.add(Week(tracker_id=tracker.id, week_ending=date(2026, 9, 4), target=10))
     db.commit()
-    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "week_ending_weekday": "3"})
+    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **labels_form, "week_ending_weekday": "3"})
     assert response.status_code == 400
     assert b"The week-ending day cannot change once entries exist." in response.data
 
 
-def test_weekday_locked_by_imported_actual_only(client, logged_in_admin, db, tracker_factory):
+def test_weekday_locked_by_imported_actual_only(client, logged_in_admin, db, tracker_factory, labels_form):
     tracker = tracker_factory()
     db.add(Week(tracker_id=tracker.id, week_ending=date(2026, 9, 4), imported_actual=5))
     db.commit()
-    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "week_ending_weekday": "3"})
+    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **labels_form, "week_ending_weekday": "3"})
     assert response.status_code == 400
 
 
-def test_weekday_locked_by_weekly_input_only(client, logged_in_admin, db, tracker_factory):
+def test_weekday_locked_by_weekly_input_only(client, logged_in_admin, db, tracker_factory, labels_form):
     tracker = tracker_factory()
     db.add(ReportInput(tracker_id=tracker.id, week_ending=date(2026, 9, 4), status="Green"))
     db.commit()
-    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "week_ending_weekday": "3"})
+    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **labels_form, "week_ending_weekday": "3"})
     assert response.status_code == 400
     assert b"The week-ending day cannot change once entries exist." in response.data
 
 
-def test_range_check_includes_targets(client, logged_in_admin, db, tracker_factory):
+def test_range_check_includes_targets(client, logged_in_admin, db, tracker_factory, labels_form):
     tracker = tracker_factory()
     db.add(Week(tracker_id=tracker.id, week_ending=date(2026, 12, 25), target=10))
     db.commit()
-    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "last_week_ending": "2026-12-11"})
+    response = post(
+        client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **labels_form, "last_week_ending": "2026-12-11"}
+    )
     assert response.status_code == 400
     assert b"outside the new week range" in response.data
 
 
-def test_range_check_includes_weekly_inputs(client, logged_in_admin, db, tracker_factory):
+def test_range_check_includes_weekly_inputs(client, logged_in_admin, db, tracker_factory, labels_form):
     tracker = tracker_factory()
     db.add(ReportInput(tracker_id=tracker.id, week_ending=date(2026, 12, 25), status="Amber"))
     db.commit()
-    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "last_week_ending": "2026-12-11"})
+    response = post(
+        client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **labels_form, "last_week_ending": "2026-12-11"}
+    )
     assert response.status_code == 400
     assert b"outside the new week range" in response.data
 
 
-def test_settings_save_when_data_is_inside_range(client, logged_in_admin, db, tracker_factory):
+def test_settings_save_when_data_is_inside_range(client, logged_in_admin, db, tracker_factory, labels_form):
     tracker = tracker_factory()
     db.add(ReportInput(tracker_id=tracker.id, week_ending=date(2026, 9, 11), status="Amber"))
     db.commit()
-    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, "name": "Still fine"})
+    response = post(client, f"/trackers/{tracker.id}/settings", {**SETTINGS, **labels_form, "name": "Still fine"})
     assert response.status_code == 302
 
 

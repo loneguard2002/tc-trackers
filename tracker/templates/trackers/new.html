@@ -1,4 +1,7 @@
 {% extends "base.html" %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='tracker-new.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
 <h1>New tracker</h1>
 <p class="page-lede">Set up what the tracker counts and the weeks it covers. Everything here can be changed later in Settings.</p>
