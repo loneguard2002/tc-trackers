@@ -43,7 +43,7 @@
             <input id="country-{{ loc.id }}" name="country" value="{{ lf.get('country', loc.country) }}" maxlength="100" required>
             {% endcall %}
             {% set chosen = lf.get('region_id', loc.region_id|string) %}
-            {% set help = 'Used by %d team%s. Changing the region moves them to it.'|format(used, '' if used == 1 else 's') if used else '' %}
+            {% set help = ('Used by 1 team. Changing the region moves the team with it.' if used == 1 else 'Used by %d teams. Changing the region moves them to it.'|format(used)) if used else '' %}
             {% call field('Region', help, 'region-of-' ~ loc.id) %}
             <select id="region-of-{{ loc.id }}" name="region_id"{% if help %} aria-describedby="region-of-{{ loc.id }}-help"{% endif %}>
               {% for o in regions if not o.retired or o.id == loc.region_id %}<option value="{{ o.id }}"{% if chosen == o.id|string %} selected{% endif %}>{{ o.code }}{% if o.retired %} (retired){% endif %}</option>{% endfor %}
