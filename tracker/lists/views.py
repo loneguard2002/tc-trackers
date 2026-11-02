@@ -1,1 +1,448 @@
-"""Screens for the administered lists (added in a later task)."""
+"""Screens for the administered lists (spec section 1): regions with their locations, and business lines.
+
+Administrators only. An entry nothing uses can be deleted; one in use can only be retired, and the delete is refused
+again on the server (the foreign keys restrict it too, so a use added at the same moment refuses it on commit). Every
+change is committed with its activity entry in one transaction. Moving a location to another region moves the teams
+placed there, so its entry counts them.
+"""
+
+from __future__ import annotations
+
+from flask import abort, flash, redirect, render_template, request, url_for
+from sqlalchemy import exists, func, select
+from sqlalchemy.exc import IntegrityError
+
+from ..audit import NO_CHANGES_MESSAGE, change, record
+from ..auth import admin_required, current_user
+from ..db import get_session
+from ..ids import in_range, parse_id
+from ..models import BusinessLine, Location, Region, Team, Tracker, TrackerRegion
+from ..naming import MAX_NAME_LENGTH, name_error
+from . import bp
+from .catalogue import location_label
+
+manage_lists_required = admin_required
+
+MAX_CODE_LENGTH = 20
+REGION_CODE_REQUIRED = "Enter a region short name."
+REGION_CODE_TOO_LONG = f"A region short name can be at most {MAX_CODE_LENGTH} characters."
+REGION_CODE_TAKEN = "A region with that short name already exists."
+REGION_CHOICE_ERROR = "Choose a region from the list."
+LOCATION_TAKEN = "A location with that city and country already exists."
+REGION_IN_USE = "This region has locations or trackers, so it can only be retired."
+LOCATION_IN_USE = "Teams use this location, so it can only be retired."
+BUSINESS_LINE_IN_USE = "Trackers use this business line, so it can only be retired."
+ACTIONS = ("save", "retire", "restore", "delete")
+
+
+def _or_404(model, entry_id: int):
+    entry = get_session().get(model, entry_id) if in_range(entry_id) else None
+    if entry is None:
+        abort(404)
+    return entry
+
+
+def _action() -> str:
+    action = request.form.get("action", "")
+    if action not in ACTIONS:
+        abort(400, description="Choose save, retire, restore or delete.")
+    return action
+
+
+def _log(*, action: str, entity: str, entity_id: int, detail: dict) -> None:
+    record(
+        get_session(),
+        user_id=current_user().id,
+        tracker_id=None,
+        action=action,
+        entity=entity,
+        entity_id=entity_id,
+        detail=detail,
+    )
+
+
+def _changed(entry, submitted: dict) -> tuple[dict, dict]:
+    """The fields ``submitted`` changes, as ``(before, after)``; both empty when nothing changes."""
+    before = {field: getattr(entry, field) for field, value in submitted.items() if getattr(entry, field) != value}
+    return before, {field: submitted[field] for field in before}
+
+
+def _set_retired(entry, action: str, noun: str, label: str, entity: str, detail: dict) -> None:
+    """Retire or restore (``action``); nothing is written when the entry is already so."""
+    retired = action == "retire"
+    if entry.retired == retired:
+        flash(NO_CHANGES_MESSAGE, "info")
+        return
+    entry.retired = retired
+    logged = f"{entity}_{'retired' if retired else 'restored'}"  # region_retired, location_restored, ...
+    _log(action=logged, entity=entity, entity_id=entry.id, detail=detail)
+    get_session().commit()
+    flash(f"{'Retired' if retired else 'Restored'} the {noun} {label}.", "success")
+
+
+def _text_error(value: str, noun: str) -> str | None:
+    if not value:
+        return f"Enter a {noun}."
+    if len(value) > MAX_NAME_LENGTH:
+        return f"A {noun} can be at most {MAX_NAME_LENGTH} characters."
+    return None
+
+
+# --- Regions and locations ------------------------------------------------------------------------------------------
+
+
+def _region_errors(code: str, name: str, exclude_id: int | None = None) -> list[str]:
+    db = get_session()
+    if not code:
+        code_error = REGION_CODE_REQUIRED
+    elif len(code) > MAX_CODE_LENGTH:
+        code_error = REGION_CODE_TOO_LONG
+    else:
+        code_error = REGION_CODE_TAKEN if name_error(db, Region, code, "region", exclude_id, Region.code) else None
+    return [e for e in (code_error, name_error(db, Region, name, "region", exclude_id)) if e]
+
+
+def _location_errors(city: str, country: str, exclude_id: int | None = None) -> list[str]:
+    errors = [e for e in (_text_error(city, "city"), _text_error(country, "country")) if e]
+    if errors:
+        return errors
+    query = select(Location.id).where(
+        func.lower(Location.city) == func.lower(city), func.lower(Location.country) == func.lower(country)
+    )
+    if exclude_id is not None:
+        query = query.where(Location.id != exclude_id)
+    return [LOCATION_TAKEN] if get_session().scalar(query.limit(1)) is not None else []
+
+
+def _region_form() -> dict:
+    return {"code": request.form.get("code", "").strip(), "name": request.form.get("name", "").strip()}
+
+
+def _location_form() -> dict:
+    return {"city": request.form.get("city", "").strip(), "country": request.form.get("country", "").strip()}
+
+
+def _region_in_use(region_id: int) -> bool:
+    db = get_session()
+    return bool(
+        db.scalar(select(exists().where(Location.region_id == region_id)))
+        or db.scalar(select(exists().where(TrackerRegion.region_id == region_id)))
+    )
+
+
+def _team_count(location_id: int) -> int:
+    return get_session().scalar(select(func.count()).select_from(Team).where(Team.location_id == location_id)) or 0
+
+
+def _render_regions(errors: list[str], status: int, form: dict | None = None, editing: str = ""):
+    """The page; ``editing`` names the form whose submitted values (``form``) are shown again, opened."""
+    db = get_session()
+    regions = db.scalars(select(Region).order_by(func.lower(Region.code), Region.id)).all()
+    locations: dict[int, list[Location]] = {region.id: [] for region in regions}
+    for location in db.scalars(
+        select(Location).order_by(func.lower(Location.city), func.lower(Location.country), Location.id)
+    ):
+        locations.setdefault(location.region_id, []).append(location)  # a region added since is not shown
+    teams = dict(
+        db.execute(
+            select(Team.location_id, func.count()).where(Team.location_id.is_not(None)).group_by(Team.location_id)
+        ).all()
+    )
+    trackers = dict(db.execute(select(TrackerRegion.region_id, func.count()).group_by(TrackerRegion.region_id)).all())
+    page = render_template(
+        "lists/regions.html",
+        regions=regions,
+        locations=locations,
+        team_counts=teams,
+        tracker_counts=trackers,
+        region_in_use=REGION_IN_USE,
+        location_in_use=LOCATION_IN_USE,
+        form=form or {},
+        editing=editing,
+        errors=errors,
+        page_title="Regions and locations",
+        current_page="regions",
+    )
+    return page, status
+
+
+def _to_regions(anchor: str | None = None):
+    return redirect(url_for("lists.regions", _anchor=anchor))
+
+
+@bp.get("/regions")
+@manage_lists_required
+def regions():
+    return _render_regions([], 200)
+
+
+@bp.post("/regions")
+@manage_lists_required
+def create_region():
+    db = get_session()
+    submitted = _region_form()
+    errors = _region_errors(submitted["code"], submitted["name"])
+    if errors:
+        return _render_regions(errors, 400, submitted, "new-region")
+    region = Region(**submitted)
+    db.add(region)
+    try:
+        db.flush()
+        _log(action="region_created", entity="region", entity_id=region.id, detail={"region": region.code})
+        db.commit()
+    except IntegrityError:  # the same short name or name was taken at the same moment
+        db.rollback()
+        errors = _region_errors(submitted["code"], submitted["name"]) or [REGION_CODE_TAKEN]
+        return _render_regions(errors, 400, submitted, "new-region")
+    flash(f"Added the region {region.code}.", "success")
+    return _to_regions(f"region-{region.id}")
+
+
+@bp.post("/regions/<int:region_id>")
+@manage_lists_required
+def update_region(region_id: int):
+    region = _or_404(Region, region_id)
+    db = get_session()
+    action = _action()
+    code = region.code
+    if action == "delete":
+        if _region_in_use(region.id):
+            return _render_regions([REGION_IN_USE], 400)
+        _log(action="region_deleted", entity="region", entity_id=region.id, detail={"region": code})
+        db.delete(region)
+        try:
+            db.commit()
+        except IntegrityError:  # a location or tracker took it up at the same moment
+            db.rollback()
+            return _render_regions([REGION_IN_USE], 400)
+        flash(f"Deleted the region {code}.", "success")
+        return _to_regions()
+    if action in ("retire", "restore"):
+        _set_retired(region, action, "region", code, "region", {"region": code})
+        return _to_regions(f"region-{region.id}")
+    submitted = _region_form()
+    errors = _region_errors(submitted["code"], submitted["name"], region.id)
+    if errors:
+        return _render_regions(errors, 400, submitted, f"region-{region.id}")
+    before, after = _changed(region, submitted)
+    if not before:
+        flash(NO_CHANGES_MESSAGE, "info")
+        return _to_regions(f"region-{region.id}")
+    for field, value in after.items():
+        setattr(region, field, value)
+    _log(
+        action="region_changed", entity="region", entity_id=region.id, detail={"region": code, **change(before, after)}
+    )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        errors = _region_errors(submitted["code"], submitted["name"], region.id) or [REGION_CODE_TAKEN]
+        return _render_regions(errors, 400, submitted, f"region-{region.id}")
+    flash(f"Saved the region {region.code}.", "success")
+    return _to_regions(f"region-{region.id}")
+
+
+@bp.post("/regions/<int:region_id>/locations")
+@manage_lists_required
+def create_location(region_id: int):
+    region = _or_404(Region, region_id)
+    db = get_session()
+    submitted = _location_form()
+    editing = f"new-location-{region.id}"
+    errors = _location_errors(submitted["city"], submitted["country"])
+    if errors:
+        return _render_regions(errors, 400, submitted, editing)
+    location = Location(region_id=region.id, **submitted)
+    db.add(location)
+    label = location_label(location.city, location.country)
+    try:
+        db.flush()
+        _log(
+            action="location_created",
+            entity="location",
+            entity_id=location.id,
+            detail={"location": label, "region": region.code},
+        )
+        db.commit()
+    except IntegrityError:  # the same city and country were added at the same moment
+        db.rollback()
+        errors = _location_errors(submitted["city"], submitted["country"]) or [LOCATION_TAKEN]
+        return _render_regions(errors, 400, submitted, editing)
+    flash(f"Added the location {label} to {region.code}.", "success")
+    return _to_regions(f"region-{region.id}")
+
+
+def _parse_region(text: str | None, current_id: int) -> Region | None:
+    """The chosen region: an active one, or the location's current one even when retired."""
+    region_id = parse_id(text)
+    region = get_session().get(Region, region_id) if region_id is not None else None
+    if region is None or (region.retired and region.id != current_id):
+        return None
+    return region
+
+
+@bp.post("/locations/<int:location_id>")
+@manage_lists_required
+def update_location(location_id: int):
+    location = _or_404(Location, location_id)
+    db = get_session()
+    action = _action()
+    region = db.get(Region, location.region_id)
+    label = location_label(location.city, location.country)
+    named = {"location": label, "region": region.code}
+    if action == "delete":
+        if _team_count(location.id):
+            return _render_regions([LOCATION_IN_USE], 400)
+        _log(action="location_deleted", entity="location", entity_id=location.id, detail=named)
+        db.delete(location)
+        try:
+            db.commit()
+        except IntegrityError:  # a team was placed there at the same moment
+            db.rollback()
+            return _render_regions([LOCATION_IN_USE], 400)
+        flash(f"Deleted the location {label}.", "success")
+        return _to_regions(f"region-{region.id}")
+    if action in ("retire", "restore"):
+        _set_retired(location, action, "location", label, "location", named)
+        return _to_regions(f"location-{location.id}")
+    submitted = _location_form()
+    submitted_region = request.form.get("region_id", "").strip()
+    editing = f"location-{location.id}"
+    shown = {**submitted, "region_id": submitted_region}
+    errors = _location_errors(submitted["city"], submitted["country"], location.id)
+    new_region = _parse_region(submitted_region, location.region_id)
+    if new_region is None:
+        errors.append(REGION_CHOICE_ERROR)
+    if errors:
+        return _render_regions(errors, 400, shown, editing)
+    before, after = _changed(location, submitted)
+    if new_region.id != region.id:
+        before["region"], after["region"] = region.code, new_region.code
+    if not before:
+        flash(NO_CHANGES_MESSAGE, "info")
+        return _to_regions(editing)
+    detail = {"location": label, **change(before, after)}
+    if "region" in before:
+        detail["teams"] = _team_count(location.id)
+    location.city, location.country, location.region_id = submitted["city"], submitted["country"], new_region.id
+    _log(action="location_changed", entity="location", entity_id=location.id, detail=detail)
+    try:
+        db.commit()
+    except IntegrityError:  # the same city and country were saved at the same moment
+        db.rollback()
+        return _render_regions([LOCATION_TAKEN], 400, shown, editing)
+    flash(f"Saved the location {location_label(location.city, location.country)}.", "success")
+    return _to_regions(editing)
+
+
+# --- Business lines -------------------------------------------------------------------------------------------------
+
+
+def _line_error(name: str, exclude_id: int | None = None) -> str | None:
+    return name_error(get_session(), BusinessLine, name, "business line", exclude_id)
+
+
+def _render_business_lines(errors: list[str], status: int, form: dict | None = None, editing: str = ""):
+    db = get_session()
+    lines = db.scalars(select(BusinessLine).order_by(func.lower(BusinessLine.name), BusinessLine.id)).all()
+    trackers = dict(
+        db.execute(
+            select(Tracker.business_line_id, func.count())
+            .where(Tracker.business_line_id.is_not(None))
+            .group_by(Tracker.business_line_id)
+        ).all()
+    )
+    page = render_template(
+        "lists/business_lines.html",
+        lines=lines,
+        tracker_counts=trackers,
+        business_line_in_use=BUSINESS_LINE_IN_USE,
+        form=form or {},
+        editing=editing,
+        errors=errors,
+        page_title="Business lines",
+        current_page="business_lines",
+    )
+    return page, status
+
+
+def _to_business_lines(anchor: str | None = None):
+    return redirect(url_for("lists.business_lines", _anchor=anchor))
+
+
+@bp.get("/business-lines")
+@manage_lists_required
+def business_lines():
+    return _render_business_lines([], 200)
+
+
+@bp.post("/business-lines")
+@manage_lists_required
+def create_business_line():
+    db = get_session()
+    name = request.form.get("name", "").strip()
+    error = _line_error(name)
+    if error:
+        return _render_business_lines([error], 400, {"name": name}, "new-line")
+    line = BusinessLine(name=name)
+    db.add(line)
+    try:
+        db.flush()
+        _log(action="business_line_created", entity="business_line", entity_id=line.id, detail={"business_line": name})
+        db.commit()
+    except IntegrityError:  # the same name was taken at the same moment
+        db.rollback()
+        error = _line_error(name) or "A business line with that name already exists."
+        return _render_business_lines([error], 400, {"name": name}, "new-line")
+    flash(f"Added the business line {name}.", "success")
+    return _to_business_lines(f"line-{line.id}")
+
+
+@bp.post("/business-lines/<int:line_id>")
+@manage_lists_required
+def update_business_line(line_id: int):
+    line = _or_404(BusinessLine, line_id)
+    db = get_session()
+    action = _action()
+    name = line.name
+    named = {"business_line": name}
+    editing = f"line-{line.id}"
+    if action == "delete":
+        if db.scalar(select(exists().where(Tracker.business_line_id == line.id))):
+            return _render_business_lines([BUSINESS_LINE_IN_USE], 400)
+        _log(action="business_line_deleted", entity="business_line", entity_id=line.id, detail=named)
+        db.delete(line)
+        try:
+            db.commit()
+        except IntegrityError:  # a tracker took it up at the same moment
+            db.rollback()
+            return _render_business_lines([BUSINESS_LINE_IN_USE], 400)
+        flash(f"Deleted the business line {name}.", "success")
+        return _to_business_lines()
+    if action in ("retire", "restore"):
+        _set_retired(line, action, "business line", name, "business_line", named)
+        return _to_business_lines(editing)
+    submitted = {"name": request.form.get("name", "").strip()}
+    error = _line_error(submitted["name"], line.id)
+    if error:
+        return _render_business_lines([error], 400, submitted, editing)
+    before, after = _changed(line, submitted)
+    if not before:
+        flash(NO_CHANGES_MESSAGE, "info")
+        return _to_business_lines(editing)
+    line.name = submitted["name"]
+    _log(
+        action="business_line_changed",
+        entity="business_line",
+        entity_id=line.id,
+        detail={**named, **change(before, after)},
+    )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        error = _line_error(submitted["name"], line.id) or "A business line with that name already exists."
+        return _render_business_lines([error], 400, submitted, editing)
+    flash(f"Saved the business line {line.name}.", "success")
+    return _to_business_lines(editing)
