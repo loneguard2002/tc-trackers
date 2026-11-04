@@ -12,6 +12,9 @@
   {% endcall %}
 </div>
 {%- endmacro %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
 <div class="list-page">
   <header class="list-head">
@@ -22,20 +25,20 @@
     <a class="button primary" href="{{ url_for('lists.new_region') }}" data-dialog-open="add">{{ icon('plus') }}Add region</a>
   </header>
 
-  {% if errors and not dialog %}
+  {% if page_errors %}
   <div class="form-alert" role="alert">
     <strong>Please correct the following:</strong>
-    <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    <ul class="form-error">{% for e in page_errors %}<li>{{ e }}</li>{% endfor %}</ul>
   </div>
   {% endif %}
 
   {% set adding = dialog == 'add' %}
-  {% call list_dialog('add', 'Add region', url_for('lists.create_region'), adding, errors if adding else [], 'Create region', url_for('lists.regions')) %}
+  {% call list_dialog('add', 'Add region', url_for('lists.create_region'), adding, dialog_errors if adding else [], 'Create region', url_for('lists.regions')) %}
   {{ region_fields('add', form if adding else {}, field_errors if adding else {}) }}
   {% endcall %}
 
   {% set edit_open = dialog == 'edit' and editing %}
-  {% call list_dialog('edit', 'Edit region ' ~ editing.code if edit_open else 'Edit region', url_for('lists.update_region', region_id=editing.id) if edit_open else '', edit_open, errors if edit_open else [], 'Save', url_for('lists.regions')) %}
+  {% call list_dialog('edit', 'Edit region ' ~ editing.code if edit_open else 'Edit region', url_for('lists.update_region', region_id=editing.id) if edit_open else '', edit_open, dialog_errors if edit_open else [], 'Save', url_for('lists.regions'), 'Edit region') %}
   {{ region_fields('edit', form if edit_open else {}, field_errors if edit_open else {}) }}
   {% endcall %}
 

@@ -1003,7 +1003,7 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .list-tools:not(:has(> :not([hidden]))) { display: none; }
 .list-search { max-width: 320px; }
 .list-status { gap: 6px; margin-left: auto; }  /* the search and region filter on the left, the status buttons on the right */
-.list-region { width: auto; max-width: 18rem; padding: 7px 10px; font-size: .9rem; }
+.list-region { width: auto; min-width: 0; max-width: 18rem; padding: 7px 10px; font-size: .9rem; }
 .list-status .chip { min-height: 32px; padding: 3px 10px; }
 .list-table table { min-width: 640px; }
 .list-table th { vertical-align: middle; }
@@ -1048,8 +1048,9 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
 .list-dialog-head h2 { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; }
 .list-dialog-body { display: grid; gap: 16px; padding: 18px 20px 20px; container-type: inline-size; }
 .list-dialog-body > .form-alert { margin: 0; }
-/* Code and Name side by side down to a narrow phone; inputs aligned along the bottom, as only Code has help. */
-.list-dialog-body .field-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); align-items: end; }
+/* Code and Name side by side down to a narrow phone. Help and errors sit below each input, so the labels and the
+   inputs line up along the top. */
+.list-dialog-body .field-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); align-items: start; }
 @container (max-width: 440px) {
   .list-dialog-body .field-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -1057,11 +1058,13 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
   .list-dialog-body .field-pair { grid-template-columns: minmax(0, 1fr); }
 }
 .list-dialog-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
-.field-error { margin: -2px 0 6px; color: var(--danger); font-size: .8125rem; font-weight: 600; }
+.field-error { margin: 6px 0 0; color: var(--danger); font-size: .8125rem; font-weight: 600; }
+.list-dialog .field-help { margin: 6px 0 0; }
 .field.has-error :where(input, select, textarea) { border-color: var(--danger); }
 @media (max-width: 720px) {
   .list-tools, .list-foot { padding-left: 16px; padding-right: 16px; }
   .list-search, .list-region { flex: 1 1 100%; max-width: none; }
+  .list-status { margin-left: 0; }  /* on a line of its own below the search, so it starts at the left */
   .list-dialog-head { padding-left: 16px; }
   .list-dialog-body, .list-dialog-foot { padding-left: 16px; padding-right: 16px; }
   .list-dialog-foot .button { flex: 1; text-align: center; }

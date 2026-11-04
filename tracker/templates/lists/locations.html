@@ -5,8 +5,8 @@
 {{ r.code }} — {{ r.name }}{% if r.retired %} (retired){% endif %}
 {%- endmacro %}
 {#- The Add or Edit dialog's fields: Region; Code and Name side by side; Country with its flag. ``offered`` holds the
-    regions to list: the active ones, plus on Edit the location's own retired region; on the closed Edit dialog every
-    retired region is listed hidden and disabled (data-retired), for lists.js to offer to its own locations only.
+    regions to list as (region, held back) pairs: the active ones, and on Edit every retired region too (data-retired),
+    held back (hidden and disabled) except the location's own, for lists.js to offer to its own locations only.
     ``note`` is the Edit dialog's team note, or None on Add. -#}
 {% macro location_fields(prefix, values, errors, offered, note=None) -%}
 {% set chosen_region = values.get('region_id', '') %}
@@ -15,7 +15,7 @@
 {% call dialog_field('Region', '', prefix ~ '-region', region_errors) %}
 <select id="{{ prefix }}-region" name="region_id" required{% if region_described %} aria-describedby="{{ region_described|join(' ') }}"{% endif %}{% if region_errors %} aria-invalid="true"{% endif %}>
   <option value=""{% if not chosen_region %} selected{% endif %}>Choose a region</option>
-  {% for r, held in offered %}<option value="{{ r.id }}"{% if chosen_region == r.id|string %} selected{% endif %}{% if held %} hidden disabled data-retired{% endif %}>{{ region_label(r) }}</option>{% endfor %}
+  {% for r, held in offered %}<option value="{{ r.id }}"{% if chosen_region == r.id|string %} selected{% endif %}{% if held %} hidden disabled{% endif %}{% if r.retired %} data-retired{% endif %}>{{ region_label(r) }}</option>{% endfor %}
 </select>
 {% if note is not none %}<p class="field-help list-dialog-note" id="{{ prefix }}-region-note" data-team-note data-note-one="{{ note_one }}" data-note-many="{{ note_many }}"{% if not note %} hidden{% endif %}>{{ note }}</p>{% endif %}
 {% endcall %}
@@ -44,6 +44,9 @@
 </div>
 {% endcall %}
 {%- endmacro %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
 <div class="list-page">
   <header class="list-head">
@@ -54,21 +57,21 @@
     <a class="button primary" href="{{ url_for('lists.new_location') }}" data-dialog-open="add">{{ icon('plus') }}Add location</a>
   </header>
 
-  {% if errors and not dialog %}
+  {% if page_errors %}
   <div class="form-alert" role="alert">
     <strong>Please correct the following:</strong>
-    <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    <ul class="form-error">{% for e in page_errors %}<li>{{ e }}</li>{% endfor %}</ul>
   </div>
   {% endif %}
 
   {% set adding = dialog == 'add' %}
-  {% call list_dialog('add', 'Add location', url_for('lists.create_location'), adding, errors if adding else [], 'Create location', url_for('lists.locations')) %}
+  {% call list_dialog('add', 'Add location', url_for('lists.create_location'), adding, dialog_errors if adding else [], 'Create location', url_for('lists.locations')) %}
   {{ location_fields('add', form if adding else {}, field_errors if adding else {}, add_regions) }}
   {% endcall %}
 
   {% set edit_open = dialog == 'edit' and editing %}
   {% set edit_note = edit_note_text if edit_open else '' %}
-  {% call list_dialog('edit', 'Edit location ' ~ (editing.code or editing.city) if edit_open else 'Edit location', url_for('lists.update_location', location_id=editing.id) if edit_open else '', edit_open, errors if edit_open else [], 'Save', url_for('lists.locations')) %}
+  {% call list_dialog('edit', 'Edit location ' ~ (editing.code or editing.city) if edit_open else 'Edit location', url_for('lists.update_location', location_id=editing.id) if edit_open else '', edit_open, dialog_errors if edit_open else [], 'Save', url_for('lists.locations'), 'Edit location') %}
   {{ location_fields('edit', form if edit_open else {}, field_errors if edit_open else {}, edit_regions, edit_note) }}
   {% endcall %}
 
