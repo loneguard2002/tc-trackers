@@ -8,6 +8,7 @@ from tracker.lists.catalogue import (
     REGIONS_REQUIRED,
     TrackerLabels,
     location_choices,
+    location_label,
     parse_business_line,
     parse_location,
     parse_regions,
@@ -37,7 +38,7 @@ def test_a_retired_location_is_accepted_only_where_it_is_already_used(db, region
 
 def test_a_kept_location_in_a_retired_region_reads_as_retired(db, region_factory, location_factory):
     gone = region_factory("LATAM", retired=True)
-    kept = location_factory(gone, city="Lima", country="Peru")
+    kept = location_factory(gone, city="Lima", country_code="PE")
     assert location_choices(db) == []
     options = location_choices(db, keep_id=kept.id)
     assert [(o.code, o.retired) for o in options] == [("LATAM", True)]
@@ -77,3 +78,8 @@ def test_tracker_labels_and_team_places(
     }
     assert team_places(db)[team.id].location == "Geneva, Switzerland"
     assert team_places(db)[team.id].region_code == "EMEA"
+
+
+def test_location_label_names_the_country_or_leaves_it_out():
+    assert location_label("Geneva", "CH") == "Geneva, Switzerland"
+    assert location_label("Geneva", None) == "Geneva"

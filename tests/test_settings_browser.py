@@ -194,7 +194,7 @@ def test_new_tracker_ticks_the_team_region_until_a_box_is_changed(
 ):
     emea, apac = region_factory("EMEA", "Europe"), region_factory("APAC", "Asia Pacific")
     desktop = team_factory(name="Desktop", location_id=location_factory(emea).id)
-    network = team_factory(name="Network", location_id=location_factory(apac, "Singapore", "Singapore").id)
+    network = team_factory(name="Network", location_id=location_factory(apac, "Singapore", "SG").id)
     business_line_factory()
     browser_sign_in(page, live_server, user_factory(is_admin=True))
     page.set_viewport_size({"width": 390, "height": 900})
@@ -229,7 +229,7 @@ def test_new_tracker_region_tick_follows_the_team_until_a_box_is_changed(
 ):
     emea, apac = region_factory("EMEA", "Europe"), region_factory("APAC", "Asia Pacific")
     desktop = team_factory(name="Desktop", location_id=location_factory(emea).id)
-    network = team_factory(name="Network", location_id=location_factory(apac, "Singapore", "Singapore").id)
+    network = team_factory(name="Network", location_id=location_factory(apac, "Singapore", "SG").id)
     business_line_factory()
     browser_sign_in(page, live_server, user_factory(is_admin=True))
     page.goto(f"{live_server}/trackers/new")

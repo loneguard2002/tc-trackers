@@ -84,12 +84,14 @@ class Location(Base):
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
     region_id: Mapped[int] = mapped_column(ForeignKey("regions.id", ondelete="RESTRICT"))
     city: Mapped[str] = mapped_column(Text)
-    country: Mapped[str] = mapped_column(Text)
+    code: Mapped[str | None] = mapped_column(Text)
+    country_code: Mapped[str | None] = mapped_column(Text)
     retired: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = _now()
 
 
-Index("uq_locations_city_country_lower", func.lower(Location.city), func.lower(Location.country), unique=True)
+Index("uq_locations_code_lower", func.lower(Location.code), unique=True)
+Index("uq_locations_city_country_code", func.lower(Location.city), Location.country_code, unique=True)
 Index("ix_locations_region_id", Location.region_id)
 
 

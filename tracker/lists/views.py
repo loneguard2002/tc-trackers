@@ -8,6 +8,8 @@ placed there, so its entry counts them.
 
 from __future__ import annotations
 
+import re
+
 from flask import abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
@@ -20,6 +22,7 @@ from ..models import BusinessLine, Location, Region, Team, Tracker, TrackerRegio
 from ..naming import MAX_NAME_LENGTH, name_error
 from . import bp
 from .catalogue import location_label
+from .countries import country_name, parse_country
 
 manage_lists_required = admin_required
 
@@ -28,6 +31,9 @@ REGION_CODE_REQUIRED = "Enter a region short name."
 REGION_CODE_TOO_LONG = f"A region short name can be at most {MAX_CODE_LENGTH} characters."
 REGION_CODE_TAKEN = "A region with that short name already exists."
 REGION_CHOICE_ERROR = "Choose a region from the list."
+LOCATION_CODE_REQUIRED = "Enter a location code."
+LOCATION_CODE_FORMAT = "A location code is 2 to 6 letters, such as LON."
+LOCATION_CODE_TAKEN = "A location with that code already exists."
 LOCATION_TAKEN = "A location with that city and country already exists."
 REGION_IN_USE = "This region has locations or trackers, so it can only be retired."
 LOCATION_IN_USE = "Teams use this location, so it can only be retired."
@@ -102,16 +108,34 @@ def _region_errors(code: str, name: str, exclude_id: int | None = None) -> list[
     return [e for e in (code_error, name_error(db, Region, name, "region", exclude_id)) if e]
 
 
-def _location_errors(city: str, country: str, exclude_id: int | None = None) -> list[str]:
-    errors = [e for e in (_text_error(city, "city"), _text_error(country, "country")) if e]
-    if errors:
-        return errors
-    query = select(Location.id).where(
-        func.lower(Location.city) == func.lower(city), func.lower(Location.country) == func.lower(country)
-    )
-    if exclude_id is not None:
-        query = query.where(Location.id != exclude_id)
-    return [LOCATION_TAKEN] if get_session().scalar(query.limit(1)) is not None else []
+def _location_errors(
+    code: str, city: str, country_text: str, exclude_id: int | None = None
+) -> tuple[list[str], str | None]:
+    """The errors for a submitted location, and the parsed country code (None when it is not a listed one)."""
+    db = get_session()
+    errors: list[str] = []
+    if not code:
+        errors.append(LOCATION_CODE_REQUIRED)
+    elif not re.fullmatch(r"[A-Z]{2,6}", code):
+        errors.append(LOCATION_CODE_FORMAT)
+    else:
+        query = select(Location.id).where(func.lower(Location.code) == code.lower())
+        if exclude_id is not None:
+            query = query.where(Location.id != exclude_id)
+        if db.scalar(query.limit(1)) is not None:
+            errors.append(LOCATION_CODE_TAKEN)
+    city_error = _text_error(city, "city")
+    country_code, country_error = parse_country(country_text)
+    errors += [e for e in (city_error, country_error) if e]
+    if city_error is None and country_code is not None:
+        query = select(Location.id).where(
+            func.lower(Location.city) == city.lower(), Location.country_code == country_code
+        )
+        if exclude_id is not None:
+            query = query.where(Location.id != exclude_id)
+        if db.scalar(query.limit(1)) is not None:
+            errors.append(LOCATION_TAKEN)
+    return errors, country_code
 
 
 def _region_form() -> dict:
@@ -119,7 +143,11 @@ def _region_form() -> dict:
 
 
 def _location_form() -> dict:
-    return {"city": request.form.get("city", "").strip(), "country": request.form.get("country", "").strip()}
+    return {
+        "code": request.form.get("code", "").strip().upper(),
+        "city": request.form.get("city", "").strip(),
+        "country_code": request.form.get("country_code", "").strip(),
+    }
 
 
 def _region_in_use(region_id: int) -> bool:
@@ -140,7 +168,7 @@ def _render_regions(errors: list[str], status: int, form: dict | None = None, ed
     regions = db.scalars(select(Region).order_by(func.lower(Region.code), Region.id)).all()
     locations: dict[int, list[Location]] = {region.id: [] for region in regions}
     for location in db.scalars(
-        select(Location).order_by(func.lower(Location.city), func.lower(Location.country), Location.id)
+        select(Location).order_by(func.lower(Location.city), Location.country_code, Location.id)
     ):
         locations.setdefault(location.region_id, []).append(location)  # a region added since is not shown
     teams = dict(
@@ -157,6 +185,7 @@ def _render_regions(errors: list[str], status: int, form: dict | None = None, ed
         tracker_counts=trackers,
         region_in_use=REGION_IN_USE,
         location_in_use=LOCATION_IN_USE,
+        location_label=location_label,
         form=form or {},
         editing=editing,
         errors=errors,
@@ -250,24 +279,26 @@ def create_location(region_id: int):
     db = get_session()
     submitted = _location_form()
     editing = f"new-location-{region.id}"
-    errors = _location_errors(submitted["city"], submitted["country"])
+    errors, country_code = _location_errors(submitted["code"], submitted["city"], submitted["country_code"])
     if errors:
         return _render_regions(errors, 400, submitted, editing)
-    location = Location(region_id=region.id, **submitted)
+    location = Location(region_id=region.id, code=submitted["code"], city=submitted["city"], country_code=country_code)
     db.add(location)
-    label = location_label(location.city, location.country)
+    label = location_label(location.city, location.country_code)
     try:
         db.flush()
         _log(
             action="location_created",
             entity="location",
             entity_id=location.id,
-            detail={"location": label, "region": region.code},
+            detail={"location": label, "code": location.code, "region": region.code},
         )
         db.commit()
     except IntegrityError:  # the same city and country were added at the same moment
         db.rollback()
-        errors = _location_errors(submitted["city"], submitted["country"]) or [LOCATION_TAKEN]
+        errors = _location_errors(submitted["code"], submitted["city"], submitted["country_code"])[0] or [
+            LOCATION_TAKEN
+        ]
         return _render_regions(errors, 400, submitted, editing)
     flash(f"Added the location {label} to {region.code}.", "success")
     return _to_regions(f"region-{region.id}")
@@ -289,7 +320,7 @@ def update_location(location_id: int):
     db = get_session()
     action = _action()
     region = db.get(Region, location.region_id)
-    label = location_label(location.city, location.country)
+    label = location_label(location.city, location.country_code)
     named = {"location": label, "region": region.code}
     if action == "delete":
         if _team_count(location.id):
@@ -310,13 +341,17 @@ def update_location(location_id: int):
     submitted_region = request.form.get("region_id", "").strip()
     editing = f"location-{location.id}"
     shown = {**submitted, "region_id": submitted_region}
-    errors = _location_errors(submitted["city"], submitted["country"], location.id)
+    errors, country_code = _location_errors(
+        submitted["code"], submitted["city"], submitted["country_code"], location.id
+    )
     new_region = _parse_region(submitted_region, location.region_id)
     if new_region is None:
         errors.append(REGION_CHOICE_ERROR)
     if errors:
         return _render_regions(errors, 400, shown, editing)
-    before, after = _changed(location, submitted)
+    before, after = _changed(location, {"code": submitted["code"], "city": submitted["city"]})
+    if location.country_code != country_code:
+        before["country"], after["country"] = country_name(location.country_code), country_name(country_code)
     if new_region.id != region.id:
         before["region"], after["region"] = region.code, new_region.code
     if not before:
@@ -325,14 +360,16 @@ def update_location(location_id: int):
     detail = {"location": label, **change(before, after)}
     if "region" in before:
         detail["teams"] = _team_count(location.id)
-    location.city, location.country, location.region_id = submitted["city"], submitted["country"], new_region.id
+    location.code, location.city, location.country_code = submitted["code"], submitted["city"], country_code
+    location.region_id = new_region.id
     _log(action="location_changed", entity="location", entity_id=location.id, detail=detail)
     try:
         db.commit()
-    except IntegrityError:  # the same city and country were saved at the same moment
+    except IntegrityError:  # the same code, or city and country, were saved at the same moment
         db.rollback()
-        return _render_regions([LOCATION_TAKEN], 400, shown, editing)
-    flash(f"Saved the location {location_label(location.city, location.country)}.", "success")
+        errors = _location_errors(submitted["code"], submitted["city"], submitted["country_code"], location.id)[0]
+        return _render_regions(errors or [LOCATION_TAKEN], 400, shown, editing)
+    flash(f"Saved the location {location_label(location.city, location.country_code)}.", "success")
     return _to_regions(editing)
 
 

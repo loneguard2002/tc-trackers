@@ -79,7 +79,7 @@ def _place_text(location: Location | None) -> str | None:
     if location is None:
         return None
     region = get_session().get(Region, location.region_id)
-    return f"{location_label(location.city, location.country)} ({region.code})"
+    return f"{location_label(location.city, location.country_code)} ({region.code})"
 
 
 def _place_form(team: Team) -> dict[str, str]:
