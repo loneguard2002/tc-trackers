@@ -981,8 +981,7 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .activity-retention .field { margin: 0; flex: 1 1 320px; }
 .route-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 
-/* Administered lists (regions, locations, business lines): each entry folds out its edit form under it, and a
-   region's add-location row sits below its locations. An opened entry takes the full width of its row. */
+/* Business lines: each entry folds out its edit form under it. An opened entry takes the full width of its row. */
 .list-edit > summary { list-style: none; }
 .list-edit > summary::-webkit-details-marker { display: none; }
 .list-edit[open] { flex: 1 1 100%; }
@@ -992,8 +991,59 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .list-edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .list-edit-actions form { margin: 0; }
 .list-edit-note { margin: 0; color: var(--muted); font-size: .8125rem; }
-.list-edit-region { padding: 12px 20px; border-top: 1px solid var(--border); }
-.list-add { padding: 16px 20px; border-top: 1px solid var(--border); }
+
+/* Regions and Locations tables (lists/_table.html): title and Add button, then a panel holding the search, the
+   status buttons, the table and its footer line. The search, status and sort buttons stay hidden without JavaScript. */
+.list-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
+.list-head .page-lede { margin: 0; }
+.list-head > .button { flex: none; white-space: nowrap; }
+.list-page > .form-alert { margin-bottom: 20px; }
+.list-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.list-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.list-tools:not(:has(> :not([hidden]))) { display: none; }
+.list-search { max-width: 320px; }
+.list-status { gap: 6px; }
+.list-status .chip { min-height: 32px; padding: 3px 10px; }
+.list-table table { min-width: 640px; }
+.list-table th { vertical-align: middle; }
+.list-table th.num { text-align: right; }
+.list-name { min-width: 12rem; font-weight: 600; }
+.list-table tr.is-retired .list-name { font-weight: 400; }
+.sort-button { display: inline-flex; align-items: center; gap: 4px; margin: -4px -6px; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.sort-button:hover { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
+.sort-button .icon { width: 14px; height: 14px; }
+.sort-button .icon path { opacity: .45; }
+th[aria-sort="ascending"] .sort-button, th[aria-sort="descending"] .sort-button { color: var(--text); }
+th[aria-sort="ascending"] .sort-button .icon path:first-child, th[aria-sort="descending"] .sort-button .icon path:last-child { opacity: 1; }
+th[aria-sort="ascending"] .sort-button .icon path:last-child, th[aria-sort="descending"] .sort-button .icon path:first-child { opacity: 0; }
+.code-badge { display: inline-flex; align-items: center; gap: 7px; padding: 2px 9px 2px 7px; border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); border-radius: 6px; background: color-mix(in srgb, var(--primary) 8%, var(--surface)); color: var(--text); font: 700 .8125rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .03em; white-space: nowrap; }
+.code-badge-mark { flex: none; width: 10px; height: 10px; border-radius: 2px; background: var(--primary); }
+.code-badge.is-fallback { border-style: dashed; border-color: var(--border); background: transparent; color: var(--muted); font-weight: 600; }
+.code-badge.is-fallback .code-badge-mark { background: var(--muted); opacity: .5; }
+.list-table tr.is-retired .code-badge-mark { background: var(--muted); }
+.count-pill { display: inline-block; min-width: 28px; padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); font-size: .8125rem; font-weight: 600; text-align: center; text-decoration: none; }
+a.count-pill { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
+a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transparent); text-decoration: underline; }
+.list-table .row-tools { justify-content: flex-start; }  /* Edit and Retire stay in line whether or not Delete shows */
+.list-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin: 0; padding: 10px 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; }
+
+/* The Add and Edit dialogs. Opened by lists.js they are modal, centred over a dimmed page. Without JavaScript the
+   server renders one open, which is not modal: it then sits in the page above the table as a raised card. */
+.list-dialog { width: min(560px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: 0 18px 48px -12px color-mix(in srgb, var(--topbar-bg) 45%, transparent); }
+.list-dialog::backdrop { background: color-mix(in srgb, var(--topbar-bg) 55%, transparent); }
+.list-dialog:not(:modal) { position: relative; z-index: 1; width: 100%; max-width: 560px; max-height: none; margin: 0 auto 20px; }
+.list-dialog form { margin: 0; }
+.list-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 14px 14px 20px; border-bottom: 1px solid var(--border); }
+.list-dialog-head h2 { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; }
+.list-dialog-body { display: grid; gap: 16px; padding: 18px 20px 20px; container-type: inline-size; }
+.list-dialog-body > .form-alert { margin: 0; }
+.list-dialog-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
+.field-error { margin: -2px 0 6px; color: var(--danger); font-size: .8125rem; font-weight: 600; }
+.field.has-error :where(input, select, textarea) { border-color: var(--danger); }
 @media (max-width: 720px) {
-  .list-edit-region, .list-add { padding-left: 16px; padding-right: 16px; }
+  .list-tools, .list-foot { padding-left: 16px; padding-right: 16px; }
+  .list-search { max-width: none; }
+  .list-dialog-head { padding-left: 16px; }
+  .list-dialog-body, .list-dialog-foot { padding-left: 16px; padding-right: 16px; }
+  .list-dialog-foot .button { flex: 1; text-align: center; }
 }

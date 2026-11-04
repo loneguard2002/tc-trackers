@@ -1,0 +1,119 @@
+{% from "macros.html" import csrf_field, icon %}
+{# The pieces of the Regions and Locations tables and their Add and Edit dialogs. Without JavaScript the table shows
+   every row in the server's order, and the search, status buttons and sort buttons stay hidden; lists.js reveals them
+   and works from the data attributes rendered here. #}
+
+{# A short code in a badge with a coloured square before it. ``fallback`` (for example the first letters of a city)
+   is shown muted when no code is set. #}
+{% macro code_badge(code, fallback='') -%}
+{% if code %}<span class="code-badge"><span class="code-badge-mark" aria-hidden="true"></span>{{ code }}</span>
+{%- else %}<span class="code-badge is-fallback" title="Code not set"><span class="code-badge-mark" aria-hidden="true"></span>{{ fallback }}<span class="sr-only"> (code not set)</span></span>{% endif %}
+{%- endmacro %}
+
+{% macro status_badge(retired) -%}
+{% if retired %}<span class="badge badge-muted">Retired</span>{% else %}<span class="badge badge-success">Active</span>{% endif %}
+{%- endmacro %}
+
+{# A count in a pill, as a link when ``href`` is given; ``label`` completes it for screen readers ("2 teams in EMEA"). #}
+{% macro count_pill(n, href=None, label='') -%}
+{% if href %}<a class="count-pill" href="{{ href }}">{{ n }}{% if label %}<span class="sr-only"> {{ label }}</span>{% endif %}</a>
+{%- else %}<span class="count-pill">{{ n }}{% if label %}<span class="sr-only"> {{ label }}</span>{% endif %}</span>{% endif %}
+{%- endmacro %}
+
+{# The search box for the table ``target_id``. #}
+{% macro search_box(target_id, label) -%}
+<div class="search-field list-search" data-search-for="{{ target_id }}" hidden>
+  <label class="sr-only" for="{{ target_id }}-search">{{ label }}</label>
+  {{ icon('search') }}
+  <input id="{{ target_id }}-search" type="search" placeholder="{{ label }}" autocomplete="off" data-search-input>
+</div>
+{%- endmacro %}
+
+{# All / Active / Retired, each with the number of rows it would show in its [data-count]. #}
+{% macro status_filters(target_id, noun) -%}
+<div class="chips list-status" role="group" aria-label="Show {{ noun }} by status" data-status-for="{{ target_id }}" hidden>
+  {% for value, text in (('all', 'All'), ('active', 'Active'), ('retired', 'Retired')) %}
+  <button class="chip" type="button" data-status="{{ value }}" aria-pressed="{{ 'true' if value == 'all' else 'false' }}">{{ text }} <span class="chip-count" data-count></span></button>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{# A column heading. Without JavaScript it is plain text; lists.js shows the sort button and hides the text. #}
+{% macro sort_header(label, key, class_name='') -%}
+<th scope="col" aria-sort="none"{% if class_name %} class="{{ class_name }}"{% endif %}><button type="button" class="sort-button" data-sort="{{ key }}" hidden>{{ label }}{{ icon('sort') }}</button><span data-sort-label>{{ label }}</span></th>
+{%- endmacro %}
+
+{# The line under the table: "Showing 2 of 2 regions" and "2 active". ``total`` and ``active`` are the server's
+   counts, which lists.js updates as rows are filtered. #}
+{% macro table_foot(noun_plural, total=0, active=0) -%}
+<p class="list-foot"><span>Showing <span data-shown>{{ total }}</span> of <span data-total>{{ total }}</span> {{ noun_plural }}</span><span><span data-active>{{ active }}</span> active</span></p>
+{%- endmacro %}
+
+{# Edit, Retire or Restore, and Delete when nothing uses the entry. ``what`` names it, for example "the region EMEA".
+   Without JavaScript Edit opens the edit page; lists.js opens the Edit dialog instead. #}
+{% macro row_actions(edit_url, state_url, retired, what, in_use) -%}
+<div class="row-tools">
+  <a class="tool-button" href="{{ edit_url }}" data-dialog-open="edit" title="Edit">{{ icon('edit') }}<span class="sr-only">Edit {{ what }}</span></a>
+  <form method="post" action="{{ state_url }}">
+    {{ csrf_field(csrf_token()) }}
+    {% if retired %}
+    <input type="hidden" name="action" value="restore">
+    <button class="tool-button" type="submit" title="Restore">{{ icon('restore') }}<span class="sr-only">Restore {{ what }}</span></button>
+    {% else %}
+    <input type="hidden" name="action" value="retire">
+    <button class="tool-button" type="submit" title="Retire">{{ icon('archive') }}<span class="sr-only">Retire {{ what }}</span></button>
+    {% endif %}
+  </form>
+  {% if not in_use %}
+  <form method="post" action="{{ state_url }}" data-confirm="Delete {{ what }}? This cannot be undone.">
+    {{ csrf_field(csrf_token()) }}
+    <input type="hidden" name="action" value="delete">
+    <button class="tool-button is-danger" type="submit" title="Delete">{{ icon('trash') }}<span class="sr-only">Delete {{ what }}</span></button>
+  </form>
+  {% endif %}
+</div>
+{%- endmacro %}
+
+{# The Add or Edit dialog (``name`` "add" or "edit"), holding the form; the call body is the fields. The server
+   renders it open (with data-reopen, for lists.js to reopen it as a modal) when it was submitted with errors, or on
+   its own page without JavaScript. ``action`` is left out of a closed Edit dialog until lists.js fills it. #}
+{% macro list_dialog(name, title, action, is_open, errors, submit_label, cancel_url) -%}
+<dialog id="{{ name }}-dialog" class="list-dialog" aria-labelledby="{{ name }}-dialog-title"{% if is_open %} open data-reopen{% endif %}>
+  <form method="post"{% if action %} action="{{ action }}"{% endif %}>
+    {{ csrf_field(csrf_token()) }}
+    {% if name == 'edit' %}<input type="hidden" name="action" value="save">{% endif %}
+    <header class="list-dialog-head">
+      <h2 id="{{ name }}-dialog-title">{{ title }}</h2>
+      <a class="tool-button" href="{{ cancel_url }}" data-dialog-close title="Close">{{ icon('close') }}<span class="sr-only">Close</span></a>
+    </header>
+    <div class="list-dialog-body">
+      {% if errors %}
+      <div class="form-alert" role="alert">
+        <strong>Please correct the following:</strong>
+        <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+      {{ caller() }}
+    </div>
+    <footer class="list-dialog-foot">
+      <a class="button" href="{{ cancel_url }}" data-dialog-close>Cancel</a>
+      <button class="button primary" type="submit">{{ submit_label }}</button>
+    </footer>
+  </form>
+</dialog>
+{%- endmacro %}
+
+{# One dialog field: the label, the help, the field's own errors (``errors``), then the control (the call body). The
+   control should carry aria-describedby=described_by(for_id, help, errors) and aria-invalid when there are errors. #}
+{% macro dialog_field(label, help, for_id, errors=(), row_class='') -%}
+<div class="field{{ ' ' ~ row_class if row_class }}{{ ' has-error' if errors }}">
+  <label for="{{ for_id }}">{{ label }}</label>
+  {% if help %}<p class="field-help" id="{{ for_id }}-help">{{ help }}</p>{% endif %}
+  {% if errors %}<p class="field-error" id="{{ for_id }}-error">{{ errors|join(' ') }}</p>{% endif %}
+  {{ caller() }}
+</div>
+{%- endmacro %}
+
+{% macro described_by(for_id, help, errors) -%}
+{{ (([for_id ~ '-help'] if help else []) + ([for_id ~ '-error'] if errors else []))|join(' ') }}
+{%- endmacro %}
