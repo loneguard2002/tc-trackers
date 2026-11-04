@@ -152,7 +152,7 @@ _location_codes = itertools.count()
 
 def _next_location_code() -> str:
     n = next(_location_codes)
-    return "".join(string.ascii_uppercase[(n // 26**i) % 26] for i in (2, 1, 0))
+    return "Q" + "".join(string.ascii_uppercase[(n // 26**i) % 26] for i in (1, 0))
 
 
 @pytest.fixture
@@ -160,7 +160,7 @@ def location_factory(db):
     def make(
         region: Region, city: str = "Geneva", country_code: str = "CH", code: str | None = None, retired: bool = False
     ) -> Location:
-        if code is None:  # a unique, letters-only code per call: AAA, AAB, ...
+        if code is None:  # a letters-only code per call, QAA, QAB, ..., never a real-looking one such as LON
             code = _next_location_code()
         location = Location(region_id=region.id, city=city, country_code=country_code, code=code, retired=retired)
         db.add(location)
