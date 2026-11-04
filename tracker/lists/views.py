@@ -27,14 +27,14 @@ from .countries import COUNTRIES, country_name, flag_path, parse_country
 manage_lists_required = admin_required
 
 MAX_CODE_LENGTH = 20
-REGION_CODE_REQUIRED = "Enter a region short name."
-REGION_CODE_TOO_LONG = f"A region short name can be at most {MAX_CODE_LENGTH} characters."
-REGION_CODE_TAKEN = "A region with that short name already exists."
+REGION_CODE_REQUIRED = "Enter a region code."
+REGION_CODE_TOO_LONG = f"A region code can be at most {MAX_CODE_LENGTH} characters."
+REGION_CODE_TAKEN = "A region with that code already exists."
 REGION_CHOICE_ERROR = "Choose a region from the list."
 LOCATION_CODE_REQUIRED = "Enter a location code."
 LOCATION_CODE_FORMAT = "A location code is 2 to 6 letters, such as LON."
 LOCATION_CODE_TAKEN = "A location with that code already exists."
-LOCATION_TAKEN = "A location with that city and country already exists."
+LOCATION_TAKEN = "A location with that name and country already exists."
 REGION_IN_USE = "This region has locations or trackers, so it can only be retired."
 LOCATION_IN_USE = "Teams use this location, so it can only be retired."
 TEAM_NOTE_ONE = "Used by 1 team. Changing the region moves the team with it."
@@ -136,7 +136,7 @@ def _location_errors(
             query = query.where(Location.id != exclude_id)
         if db.scalar(query.limit(1)) is not None:
             errors["code"] = [LOCATION_CODE_TAKEN]
-    city_error = _text_error(city, "city")
+    city_error = _text_error(city, "location name")
     if city_error:
         errors["city"] = [city_error]
     country_code, country_error = parse_country(country_text)
@@ -259,7 +259,7 @@ def create_region():
         db.flush()
         _log(action="region_created", entity="region", entity_id=region.id, detail={"region": region.code})
         db.commit()
-    except IntegrityError:  # the same short name or name was taken at the same moment
+    except IntegrityError:  # the same code or name was taken at the same moment
         db.rollback()
         errors = _region_errors(submitted["code"], submitted["name"]) or {"code": [REGION_CODE_TAKEN]}
         return _render_regions(400, field_errors=errors, form=submitted, dialog="add")

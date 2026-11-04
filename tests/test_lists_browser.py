@@ -90,7 +90,7 @@ def test_search_filters_rows_and_counts(page, live_server, user_factory, region_
     search.fill("lon")
     expect(page.locator(ROWS)).to_have_count(1)
     assert _names(page) == ["London"]
-    assert _foot(page) == "Showing 1 of 3 locations 1 active"
+    assert _foot(page) == "Showing 1 of 3 locations 3 active"  # every active row, whatever is shown
     expect(_chip(page, "all")).to_have_text("1")
     expect(_chip(page, "active")).to_have_text("1")
 
@@ -139,13 +139,14 @@ def test_status_and_region_filters_combine(page, live_server, user_factory, plac
     expect(retired).to_have_attribute("aria-pressed", "true")
     expect(page.locator('[data-status-for] button[data-status="all"]')).to_have_attribute("aria-pressed", "false")
     assert sorted(_names(page)) == ["Geneva", "Tokyo"]
+    assert _foot(page) == "Showing 2 of 4 locations 2 active"  # the active count ignores the filters
     page.select_option("#locations-table-region", str(places["apac"].id))
     assert _names(page) == ["Tokyo"]
     # The counts follow the region filter: APAC has one active and one retired location.
     expect(_chip(page, "all")).to_have_text("2")
     expect(_chip(page, "active")).to_have_text("1")
     expect(_chip(page, "retired")).to_have_text("1")
-    assert _foot(page) == "Showing 1 of 4 locations 0 active"
+    assert _foot(page) == "Showing 1 of 4 locations 2 active"
     page.locator('[data-status-for] button[data-status="active"]').click()
     assert _names(page) == ["Singapore"]
     page.select_option("#locations-table-region", "")
@@ -184,7 +185,7 @@ def test_region_query_presets_filter(page, live_server, user_factory, places):
 
     expect(page.locator("#locations-table-region")).to_have_value(str(places["apac"].id))
     assert sorted(_names(page)) == ["Singapore", "Tokyo"]
-    assert _foot(page) == "Showing 2 of 4 locations 1 active"
+    assert _foot(page) == "Showing 2 of 4 locations 2 active"
     _clean(page)
 
 
@@ -193,14 +194,64 @@ def test_regions_table_search_and_sort(page, live_server, user_factory, places):
 
     page.locator("#regions-table-search").fill("asia")
     assert _names(page, "regions-table") == ["Asia Pacific"]
-    assert _foot(page) == "Showing 1 of 3 regions 1 active"
+    assert _foot(page) == "Showing 1 of 3 regions 2 active"
     page.locator("#regions-table-search").fill("")
     page.locator('[data-status-for] button[data-status="retired"]').click()
     assert _names(page, "regions-table") == ["Old region"]
     page.locator('[data-status-for] button[data-status="all"]').click()
-    page.locator('button[data-sort="code"]').click()
-    page.locator('button[data-sort="code"]').click()
+    page.locator('button[data-sort="code"]').click()  # already in code order, so the first click reverses it
     assert _names(page, "regions-table") == ["Old region", "Europe, Middle East and Africa", "Asia Pacific"]
+    page.locator('button[data-sort="code"]').click()
+    assert _names(page, "regions-table") == ["Asia Pacific", "Europe, Middle East and Africa", "Old region"]
+    _clean(page)
+
+
+@pytest.mark.parametrize(
+    "url, table, default, first_click",
+    [
+        # Server order: region code, then city. Descending by region keeps the cities in the server's order.
+        ("/admin/locations", "locations-table", "region", ["Geneva", "London", "Singapore", "Tokyo"]),
+        ("/admin/regions", "regions-table", "code", ["Old region", "Europe, Middle East and Africa", "Asia Pacific"]),
+    ],
+)
+def test_the_server_order_column_starts_sorted(
+    page, live_server, user_factory, places, url, table, default, first_click
+):
+    _open(page, live_server, user_factory(is_admin=True), url)
+
+    headers = page.locator(f"#{table} thead th:has(button.sort-button)")
+    expect(headers.first).to_have_attribute("aria-sort", re.compile("."))
+    states = headers.evaluate_all(
+        "hs => hs.map(h => [h.querySelector('button').dataset.sort, h.getAttribute('aria-sort')])"
+    )
+    assert {key: state for key, state in states if state != "none"} == {default: "ascending"}
+    page.locator(f'#{table} button[data-sort="{default}"]').click()
+    expect(page.locator(f"#{table} th:has(button[data-sort='{default}'])")).to_have_attribute("aria-sort", "descending")
+    assert _names(page, table) == first_click
+    _clean(page)
+
+
+def test_a_line_says_when_nothing_matches(page, live_server, user_factory, places):
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+
+    note = page.locator("[data-no-match]")
+    expect(note).to_be_hidden()
+    page.locator("#locations-table-search").fill("zzz")
+    expect(page.locator(ROWS)).to_have_count(0)
+    expect(note).to_be_visible()
+    expect(note).to_have_text("No locations match.")
+    assert _foot(page) == "Showing 0 of 4 locations 2 active"
+    page.locator("#locations-table-search").fill("")
+    expect(note).to_be_hidden()
+    page.select_option("#locations-table-region", str(places["old"].id))  # OLD has no locations
+    expect(note).to_be_visible()
+    page.select_option("#locations-table-region", "")
+    expect(note).to_be_hidden()
+
+    page.goto(f"{live_server}/admin/regions")
+    page.locator("#regions-table-search").fill("zzz")
+    expect(page.locator("[data-no-match]")).to_have_text("No regions match.")
+    expect(page.locator("[data-no-match]")).to_be_visible()
     _clean(page)
 
 
@@ -255,6 +306,27 @@ def test_add_dialog_clears_what_an_earlier_error_left(page, live_server, user_fa
     expect(page.locator("#add-dialog .field-error")).to_have_count(0)
     expect(page.locator("#add-dialog .form-alert")).to_have_count(0)
     assert page.locator("#add-code").get_attribute("aria-invalid") is None
+    _clean(page)
+
+
+def test_add_after_an_error_shows_the_help_again(page, live_server, user_factory, places):
+    """While the code has an error the help is hidden (the error repeats it); the next Add brings the help back."""
+    _open(page, live_server, user_factory(is_admin=True), "/admin/regions")
+
+    page.get_by_role("link", name="Add region").click()
+    page.fill("#add-code", "emea")  # taken
+    page.fill("#add-name", "Elsewhere")
+    page.locator("#add-dialog").get_by_role("button", name="Create region").click()
+    page.wait_for_load_state("networkidle")
+
+    expect(page.locator("#add-code-error")).to_be_visible()
+    expect(page.locator("#add-code-help")).to_be_hidden()
+    expect(page.locator("#add-code")).to_have_attribute("aria-describedby", "add-code-error")
+    page.locator("#add-dialog").get_by_role("link", name="Cancel").click()
+    page.get_by_role("link", name="Add region").click()
+    expect(page.locator("#add-code-error")).to_have_count(0)
+    expect(page.locator("#add-code-help")).to_be_visible()
+    expect(page.locator("#add-code")).to_have_attribute("aria-describedby", "add-code-help")
     _clean(page)
 
 
@@ -342,12 +414,33 @@ def test_edit_error_reopens_modal_edit_dialog(page, live_server, db, user_factor
     expect(page.locator("#edit-code")).to_have_value("L0N")
     expect(page.locator("#edit-code")).to_be_focused()
     expect(page.locator("#add-dialog")).to_be_hidden()
-    url = page.url
+    assert page.url.endswith(f"/admin/locations/{lon.id}")  # where the form was sent
     page.locator("#edit-dialog").get_by_role("link", name="Cancel").click()
     expect(page.locator("#edit-dialog")).to_be_hidden()
-    assert page.url == url  # closed without leaving the page
+    # Closed without leaving the page; the address is the table's again, so a reload does not reopen the dialog.
+    expect(page).to_have_url(re.compile(r"/admin/locations$"))
+    page.reload()
+    expect(page.locator("#edit-dialog")).to_be_hidden()
     db.expire_all()
     assert db.get(Location, lon.id).code == "LON"
+    _clean(page)
+
+
+def test_escape_after_a_region_edit_error_restores_the_address(page, live_server, db, user_factory, places):
+    emea = places["emea"]
+    _open(page, live_server, user_factory(is_admin=True), "/admin/regions")
+
+    page.locator(f"#region-{emea.id} a.row-edit").click()
+    page.fill("#edit-code", "apac")  # taken
+    page.locator("#edit-dialog").get_by_role("button", name="Save").click()
+    page.wait_for_load_state("networkidle")
+    expect(page.locator("#edit-code-error")).to_be_visible()
+    assert page.url.endswith(f"/admin/regions/{emea.id}")
+    page.keyboard.press("Escape")
+    expect(page.locator("#edit-dialog")).to_be_hidden()
+    expect(page).to_have_url(re.compile(r"/admin/regions$"))
+    db.expire_all()
+    assert db.get(Region, emea.id).code == "EMEA"
     _clean(page)
 
 
@@ -439,7 +532,7 @@ def test_new_page_reopens_its_dialog_as_a_modal(page, live_server, user_factory,
     expect(page.locator("#add-code")).to_be_focused()
     page.locator("#add-dialog").get_by_role("link", name="Close").click()
     expect(page.locator("#add-dialog")).to_be_hidden()
-    assert page.url.endswith("/admin/regions/new")
+    expect(page).to_have_url(re.compile(r"/admin/regions$"))
     _clean(page)
 
 
@@ -447,9 +540,18 @@ def test_delete_still_asks_first(page, live_server, db, user_factory, places):
     tyo = places["tyo"]
     _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
 
-    page.once("dialog", lambda dialog: dialog.accept())
+    messages = []
+
+    def accept(dialog):
+        messages.append(dialog.message)
+        dialog.accept()
+
+    page.on("dialog", accept)
     page.locator(f"#location-{tyo.id}").get_by_role("button", name=re.compile("^Delete")).click()
     page.wait_for_load_state("networkidle")
+    assert len(messages) == 1
+    assert "Delete the location" in messages[0] and "Tokyo, Japan" in messages[0]
+    expect(page.locator(f"#location-{tyo.id}")).to_have_count(0)
     expect(page.locator(".flash")).to_contain_text("Deleted the location Tokyo")
     assert _location_count(db) == 3
     _clean(page)

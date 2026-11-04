@@ -1,3 +1,4 @@
+import unicodedata
 from pathlib import Path
 
 from tracker.lists.countries import (
@@ -15,7 +16,21 @@ def test_list_has_every_iso_code_once_sorted_by_name():
     assert len(COUNTRIES) == 249
     assert all(len(c) == 2 and c.isupper() for c in COUNTRIES)
     names = list(COUNTRIES.values())
-    assert names == sorted(names, key=str.casefold)
+    assert names == sorted(names, key=_sort_key)
+    # Accented letters sort with their plain letter, not after Z.
+    for before, name, after in (
+        ("Costa Rica", "Côte d'Ivoire", "Croatia"),
+        ("Cuba", "Curaçao", "Cyprus"),
+        ("Republic of the Congo", "Réunion", "Romania"),
+        ("Tunisia", "Türkiye", "Turkmenistan"),
+    ):
+        at = names.index(name)
+        assert names[at - 1 : at + 2] == [before, name, after]
+
+
+def _sort_key(name: str) -> str:
+    """The name without its accents, ignoring case."""
+    return "".join(c for c in unicodedata.normalize("NFKD", name) if not unicodedata.combining(c)).casefold()
 
 
 def test_names():
