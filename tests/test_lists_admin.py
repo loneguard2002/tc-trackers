@@ -10,14 +10,18 @@ from sqlalchemy import select
 from tests.conftest import post
 from tracker.audit import NO_CHANGES_MESSAGE
 from tracker.lists.catalogue import team_places
-from tracker.lists.countries import COUNTRY_CHOICE_ERROR, COUNTRY_REQUIRED
+from tracker.lists.countries import COUNTRIES, COUNTRY_CHOICE_ERROR, COUNTRY_REQUIRED
 from tracker.lists.views import (
     LOCATION_CODE_FORMAT,
     LOCATION_CODE_REQUIRED,
     LOCATION_CODE_TAKEN,
+    LOCATION_IN_USE,
     LOCATION_TAKEN,
+    REGION_CHOICE_ERROR,
     REGION_CODE_REQUIRED,
     REGION_CODE_TAKEN,
+    REGION_CODE_TOO_LONG,
+    REGION_IN_USE,
 )
 from tracker.models import AuditLog, BusinessLine, Location, Region, TrackerRegion
 
@@ -73,7 +77,7 @@ def test_lists_are_for_administrators_only(client, logged_in_user, give_set, db,
     assert post(client, "/admin/regions", {"code": "EMEA", "name": "Europe"}).status_code == 403
     for url, data in (
         (f"/admin/regions/{region.id}", {"action": "delete"}),
-        (f"/admin/regions/{region.id}/locations", {"code": "TYO", "city": "Tokyo", "country_code": "JP"}),
+        ("/admin/locations", {"region_id": str(region.id), "code": "TYO", "city": "Tokyo", "country_code": "JP"}),
         (f"/admin/locations/{location.id}", {"action": "retire"}),
         ("/admin/business-lines", {"name": "Brokerage"}),
     ):
@@ -98,10 +102,13 @@ def test_admin_adds_a_region_and_a_location_and_both_are_logged(client, logged_i
     assert response.headers["Location"].endswith(f"/admin/regions#region-{region.id}")
     assert (region.code, region.name, region.retired) == ("EMEA", "Europe, Middle East and Africa", False)
     response = post(
-        client, f"/admin/regions/{region.id}/locations", {"code": " gva ", "city": " Geneva ", "country_code": "ch"}
+        client,
+        "/admin/locations",
+        {"region_id": str(region.id), "code": " gva ", "city": " Geneva ", "country_code": "ch"},
     )
     assert response.status_code == 302
     location = db.scalars(select(Location)).one()
+    assert response.headers["Location"].endswith(f"/admin/locations#location-{location.id}")
     assert (location.region_id, location.code, location.city, location.country_code) == (
         region.id,
         "GVA",
@@ -146,23 +153,21 @@ def test_region_fields_are_required_and_limited(client, logged_in_admin, db):
 
 def test_location_fields_are_required_and_limited(client, logged_in_admin, db, region_factory):
     region = region_factory()
-    response = post(client, f"/admin/regions/{region.id}/locations", {"code": "", "city": "", "country_code": " "})
+    response = post(
+        client, "/admin/locations", {"region_id": str(region.id), "code": "", "city": "", "country_code": " "}
+    )
     assert response.status_code == 400
     page = text_of(response)
     assert "Enter a location code." in page and "Enter a city." in page and "Choose a country." in page
     response = post(
-        client, f"/admin/regions/{region.id}/locations", {"code": "LON", "city": "x" * 101, "country_code": "GB"}
+        client,
+        "/admin/locations",
+        {"region_id": str(region.id), "code": "LON", "city": "x" * 101, "country_code": "GB"},
     )
     assert response.status_code == 400
     page = text_of(response)
     assert "A city can be at most 100 characters." in page
     assert db.scalars(select(Location)).all() == []
-    assert (
-        post(
-            client, "/admin/regions/999999/locations", {"code": "TYO", "city": "Tokyo", "country_code": "JP"}
-        ).status_code
-        == 404
-    )
 
 
 def test_duplicate_names_are_refused_ignoring_case(
@@ -178,7 +183,7 @@ def test_duplicate_names_are_refused_ignoring_case(
     assert "A region with that short name already exists." in page
     assert "A region with that name already exists." in page
     response = post(
-        client, f"/admin/regions/{apac.id}/locations", {"code": "GVA", "city": "geneva", "country_code": "CH"}
+        client, "/admin/locations", {"region_id": str(apac.id), "code": "GVA", "city": "geneva", "country_code": "CH"}
     )
     assert response.status_code == 400
     assert "A location with that city and country already exists." in text_of(response)
@@ -202,7 +207,7 @@ def test_a_concurrent_duplicate_gives_the_same_message(client, logged_in_admin, 
     region_factory("EMEA", "Europe")
     from tracker.lists import views
 
-    monkeypatch.setattr(views, "_region_errors", lambda *args, **kwargs: [])  # the check passes; the index refuses
+    monkeypatch.setattr(views, "_region_errors", lambda *args, **kwargs: {})  # the check passes; the index refuses
     response = post(client, "/admin/regions", {"code": "emea", "name": "Elsewhere"})
     assert response.status_code == 400
     assert "A region with that short name already exists." in text_of(response)
@@ -459,7 +464,9 @@ def test_regions_table_lists_counts_and_status(client, logged_in_admin, region_f
     edit = json.loads(html.unescape(re.search(r"data-edit='([^']*)'", row).group(1)))
     assert edit == {"code": "EMEA", "name": "Europe, Middle East and Africa", "action": f"/admin/regions/{emea.id}"}
     assert 'href="/admin/teams"' in row
+    assert f'<a class="count-pill" href="/admin/locations?region={emea.id}">2<' in row
     assert f'href="/admin/regions/{emea.id}/edit" data-dialog-open="edit"' in row
+    assert '</svg>Edit<span class="sr-only"> EMEA</span></a>' in row
     assert 'href="/admin/regions/new" data-dialog-open="add"' in page
     for column in ("Code", "Name", "Locations", "Teams", "Status"):
         assert f'data-sort="{column.lower()}" hidden' in page
@@ -588,8 +595,8 @@ def test_regions_page_has_no_inline_script_or_style(client, logged_in_admin, reg
 def _add_location(client, region, code="GVA", city="Geneva", country_code="CH"):
     return post(
         client,
-        f"/admin/regions/{region.id}/locations",
-        {"code": code, "city": city, "country_code": country_code},
+        "/admin/locations",
+        {"region_id": str(region.id), "code": code, "city": city, "country_code": country_code},
     )
 
 
@@ -688,6 +695,410 @@ def test_location_activity_names_code_and_country(client, logged_in_admin, db, r
     }
 
 
+def test_region_errors_show_beside_their_fields(client, logged_in_admin):
+    response = post(client, "/admin/regions", {"code": "x" * 21, "name": ""})
+    assert response.status_code == 400
+    dialog = dialog_of(text_of(response), "add")[1]
+    assert f'<p class="field-error" id="add-code-error">{REGION_CODE_TOO_LONG}</p>' in dialog
+    assert '<p class="field-error" id="add-name-error">Enter a region name.</p>' in dialog
+    summary = dialog[dialog.index("Please correct the following:") : dialog.index("</ul>")]
+    assert summary.index(REGION_CODE_TOO_LONG) < summary.index("Enter a region name.")
+
+
+# --- The Locations table and its dialogs ----------------------------------------------------------------------------
+
+
+def edit_data(row: str) -> dict:
+    return json.loads(html.unescape(re.search(r"data-edit='([^']*)'", row).group(1)))
+
+
+def team_note(dialog: str) -> tuple[str, str]:
+    """The opening tag and the text of the Edit dialog's team note."""
+    match = re.search(r"(<p [^>]*data-team-note[^>]*>)(.*?)</p>", dialog, re.S)
+    return match.group(1), match.group(2)
+
+
+def select_of(dialog: str, name: str) -> str:
+    start = dialog.index(f'name="{name}"')
+    return dialog[dialog.rindex("<select", 0, start) : dialog.index("</select>", start)]
+
+
+def test_locations_table_shows_code_region_country_flag_teams(
+    client, logged_in_admin, region_factory, location_factory, team_factory
+):
+    emea = region_factory("EMEA", "Europe, Middle East and Africa")
+    london = location_factory(emea, "London", "GB", code="LON")
+    team_factory("A", location_id=london.id)
+    team_factory("B", location_id=london.id)
+    response = client.get("/admin/locations")
+    assert response.status_code == 200
+    page = text_of(response)
+    assert "<h1>Locations</h1>" in page and "<title>Locations · Progress Tracker</title>" in page
+    assert "Teams are placed at a location, and each location belongs to one region." in page
+    assert 'href="/admin/locations/new" data-dialog-open="add"' in page and "Add location</a>" in page
+    row = row_of(page, f"location-{london.id}")
+    assert cells_of(row)[:6] == [
+        "LON",
+        "London",
+        "EMEA — Europe, Middle East and Africa",
+        "United Kingdom",
+        "2",
+        "Active",
+    ]
+    flag = re.search(r"<img [^>]*>", row).group(0)
+    assert re.search(r'src="[^"]*/flags/gb\.svg"', flag)
+    assert 'alt=""' in flag and 'width="20"' in flag and 'height="15"' in flag
+    assert 'class="code-badge"' in row and "is-fallback" not in row
+    assert 'data-search="lon london emea europe, middle east and africa united kingdom"' in row
+    assert 'data-status="active"' in row and f'data-region="{emea.id}"' in row
+    for attribute in (
+        'data-sort-code="LON"',
+        'data-sort-name="London"',
+        'data-sort-region="EMEA"',
+        'data-sort-country="United Kingdom"',
+        'data-sort-teams="2"',
+        'data-sort-status="active"',
+    ):
+        assert attribute in row
+    assert edit_data(row) == {
+        "code": "LON",
+        "city": "London",
+        "country_code": "GB",
+        "region_id": emea.id,
+        "teams": 2,
+        "action": f"/admin/locations/{london.id}",
+    }
+    assert 'href="/admin/teams"' in row
+    assert f'href="/admin/locations/{london.id}/edit" data-dialog-open="edit"' in row
+    assert '</svg>Edit<span class="sr-only"> London, United Kingdom</span></a>' in row
+    for column in ("Code", "Name", "Region", "Country", "Teams", "Status"):
+        assert f'data-sort="{column.lower()}" hidden' in page
+    text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split())
+    assert "Showing 1 of 1 locations" in text and "1 active" in text
+
+
+def test_locations_are_ordered_by_region_then_city_and_filtered_by_region(
+    client, logged_in_admin, region_factory, location_factory
+):
+    emea = region_factory("emea", "Europe, Middle East and Africa")
+    apac = region_factory("APAC", "Asia Pacific")
+    old = region_factory("OLD", "Old region", retired=True)
+    zurich = location_factory(emea, "Zurich", "CH")
+    geneva = location_factory(emea, "geneva", "CH")
+    tokyo = location_factory(apac, "Tokyo", "JP")
+    basel = location_factory(old, "Basel", "CH", retired=True)
+    page = text_of(client.get(f"/admin/locations?region={apac.id}"))
+    order = [page.index(f'id="location-{place.id}"') for place in (tokyo, geneva, zurich, basel)]
+    assert order == sorted(order)
+    assert 'class="is-retired"' in row_of(page, f"location-{basel.id}")
+    assert 'data-status="retired"' in row_of(page, f"location-{basel.id}")
+    tools = page[page.index('<div class="list-tools">') : page.index("<table")]
+    assert 'data-search-for="locations-table"' in tools and 'data-status-for="locations-table"' in tools
+    tag = re.search(r"<select [^>]*data-region-filter[^>]*>", tools).group(0)
+    assert " hidden" in tag and 'aria-label="Filter by region"' in tag
+    options = re.findall(r"<option [^>]*>[^<]*</option>", tools)
+    assert options == [
+        '<option value="">All regions</option>',
+        f'<option value="{apac.id}" selected>APAC — Asia Pacific</option>',
+        f'<option value="{emea.id}">emea — Europe, Middle East and Africa</option>',
+        f'<option value="{old.id}">OLD — Old region (retired)</option>',
+    ]
+    text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split())
+    assert "Showing 4 of 4 locations" in text and "3 active" in text
+
+
+def test_location_without_code_or_country_shows_fallbacks(
+    client, logged_in_admin, db, region_factory, location_factory
+):
+    region = region_factory("EMEA")
+    place = location_factory(region, "London", None)
+    place.code = None
+    db.commit()
+    page = text_of(client.get("/admin/locations"))
+    row = row_of(page, f"location-{place.id}")
+    assert '<span class="code-badge is-fallback" title="Code not set">' in row
+    cells = cells_of(row)
+    assert cells[0] == "LON" and cells[3] == "Country not set"
+    assert '<span class="muted">Country not set</span>' in row and "<img" not in row
+    assert 'data-sort-code=""' in row and 'data-sort-country=""' in row
+    assert 'data-search="london emea emea region"' in row
+    assert edit_data(row)["code"] == "" and edit_data(row)["country_code"] == ""
+
+
+def test_locations_table_says_when_there_are_none(client, logged_in_admin, region_factory):
+    page = text_of(client.get("/admin/locations"))
+    assert "No locations yet." in page and "<table" not in page
+    assert "Add a region first." in page and 'href="/admin/regions">Add a region first.</a>' in page
+    region_factory("OLD", retired=True)
+    assert "Add a region first." in text_of(client.get("/admin/locations"))
+    region_factory("EMEA")
+    page = text_of(client.get("/admin/locations"))
+    assert "No locations yet." in page and "Add a region first." not in page
+
+
+def test_create_location_posts_to_locations(client, logged_in_admin, db, region_factory):
+    region = region_factory("EMEA")
+    response = post(
+        client,
+        "/admin/locations",
+        {"region_id": str(region.id), "code": "lon", "city": "London", "country_code": "GB"},
+    )
+    assert response.status_code == 302
+    location = db.scalars(select(Location)).one()
+    assert response.headers["Location"].endswith(f"/admin/locations#location-{location.id}")
+    assert (location.region_id, location.code, location.city, location.country_code) == (
+        region.id,
+        "LON",
+        "London",
+        "GB",
+    )
+    entry = entries(db, "location_created")[0]
+    assert entry.detail == {"location": "London, United Kingdom", "code": "LON", "region": "EMEA"}
+
+
+def test_old_create_route_is_gone(client, logged_in_admin, db, region_factory):
+    region = region_factory("EMEA")
+    response = post(
+        client, f"/admin/regions/{region.id}/locations", {"code": "LON", "city": "London", "country_code": "GB"}
+    )
+    assert response.status_code in (404, 405)
+    assert db.scalars(select(Location)).all() == []
+
+
+def test_create_location_refuses_retired_or_unknown_region(client, logged_in_admin, db, region_factory):
+    region_factory("EMEA")
+    old = region_factory("OLD", retired=True)
+    for region_id in (str(old.id), "999999", "x", ""):
+        response = post(
+            client,
+            "/admin/locations",
+            {"region_id": region_id, "code": "LON", "city": "London", "country_code": "GB"},
+        )
+        assert response.status_code == 400
+        page = text_of(response)
+        tag, dialog = dialog_of(page, "add")
+        assert is_open(tag) and "data-reopen" in tag and not is_open(dialog_of(page, "edit")[0])
+        assert f'<p class="field-error" id="add-region-error">{REGION_CHOICE_ERROR}</p>' in dialog
+        assert 'value="LON"' in dialog and 'value="London"' in dialog
+        assert '<option value="GB" selected>United Kingdom (GB)</option>' in dialog
+    assert db.scalars(select(Location)).all() == []
+    assert entries(db) == []
+
+
+def test_location_country_error_shows_beside_country(client, logged_in_admin, region_factory):
+    region = region_factory("EMEA")
+    response = post(
+        client, "/admin/locations", {"region_id": str(region.id), "code": "LON", "city": "London", "country_code": ""}
+    )
+    assert response.status_code == 400
+    dialog = dialog_of(text_of(response), "add")[1]
+    assert f'<p class="field-error" id="add-country-error">{COUNTRY_REQUIRED}</p>' in dialog
+    assert 'aria-describedby="add-country-error" aria-invalid="true"' in dialog
+    assert "field-error" not in dialog.split('id="add-code"')[0].split('for="add-code"')[1]
+
+
+def test_country_options_cover_the_list(client, logged_in_admin, region_factory):
+    emea = region_factory("EMEA", "Europe, Middle East and Africa")
+    region_factory("OLD", retired=True)
+    page = text_of(client.get("/admin/locations/new"))
+    tag, dialog = dialog_of(page, "add")
+    assert is_open(tag) and "data-reopen" in tag and ">Add location</h2>" in dialog
+    assert 'action="/admin/locations"' in dialog and ">Create location</button>" in dialog and ">Cancel</a>" in dialog
+    countries = select_of(dialog, "country_code")
+    options = re.findall(r"<option [^>]*>", countries)
+    assert len(options) == len(COUNTRIES) + 1 == 250
+    assert '<option value="" selected>Choose a country</option>' in countries
+    assert '<option value="GB">United Kingdom (GB)</option>' in countries
+    assert re.search(r"<img [^>]*data-flag-preview[^>]*hidden", dialog)
+    regions = select_of(dialog, "region_id")
+    assert f'<option value="{emea.id}">EMEA — Europe, Middle East and Africa</option>' in regions
+    assert "OLD" not in regions
+    assert "2 to 6 letters, such as LON." in dialog
+    labels = re.findall(r'<label for="add-([a-z]+)">([^<]+)</label>', dialog)
+    assert labels == [("region", "Region"), ("code", "Code"), ("city", "Name"), ("country", "Country")]
+    assert "data-team-note" not in dialog
+
+
+def test_edit_location_page_opens_filled_edit_dialog(client, logged_in_admin, region_factory, location_factory):
+    emea = region_factory("EMEA")
+    london = location_factory(emea, "London", "GB", code="LON")
+    response = client.get(f"/admin/locations/{london.id}/edit")
+    assert response.status_code == 200
+    page = text_of(response)
+    tag, dialog = dialog_of(page, "edit")
+    assert is_open(tag) and "data-reopen" in tag and not is_open(dialog_of(page, "add")[0])
+    assert "Edit location LON</h2>" in dialog and f'action="/admin/locations/{london.id}"' in dialog
+    assert 'name="code" value="LON"' in dialog and 'name="city" value="London"' in dialog
+    assert '<option value="GB" selected>United Kingdom (GB)</option>' in dialog
+    assert f'<option value="{emea.id}" selected>' in select_of(dialog, "region_id")
+    flag = re.search(r"<img [^>]*data-flag-preview[^>]*>", dialog).group(0)
+    assert re.search(r'src="[^"]*/flags/gb\.svg"', flag) and " hidden" not in flag
+    assert 'width="28"' in flag and 'height="21"' in flag
+    assert 'name="action" value="save"' in dialog and ">Save</button>" in dialog
+    assert client.get("/admin/locations/999999/edit").status_code == 404
+
+
+def test_edit_dialog_on_the_locations_list_is_closed_and_empty(
+    client, logged_in_admin, region_factory, location_factory
+):
+    emea = region_factory("EMEA")
+    old = region_factory("OLD", retired=True)
+    location_factory(emea)
+    location_factory(old, "Basel")
+    page = client.get("/admin/locations").get_data(as_text=True)
+    for name in ("add", "edit"):
+        assert not is_open(dialog_of(page, name)[0])
+    dialog = dialog_of(page, "edit")[1]
+    assert 'name="code" value=""' in dialog and 'name="city" value=""' in dialog
+    regions = select_of(dialog, "region_id")
+    # A retired region is there for lists.js to offer to its own locations only.
+    assert f'<option value="{old.id}" hidden disabled data-retired>OLD — OLD region (retired)</option>' in regions
+    assert f'<option value="{emea.id}">EMEA — EMEA region</option>' in regions
+    tag, text = team_note(dialog)
+    assert " hidden" in tag and text == ""
+    ids = re.findall(r'\sid="([^"]+)"', page)
+    assert len(ids) == len(set(ids))
+
+
+def test_edit_location_in_retired_region_offers_it_and_saves_unchanged(
+    client, logged_in_admin, db, region_factory, location_factory
+):
+    region_factory("EMEA")
+    old = region_factory("OLD", "Old region", retired=True)
+    region_factory("GONE", "Gone region", retired=True)
+    place = location_factory(old, "Basel", "CH", code="BSL")
+    page = text_of(client.get(f"/admin/locations/{place.id}/edit"))
+    regions = select_of(dialog_of(page, "edit")[1], "region_id")
+    assert f'<option value="{old.id}" selected>OLD — Old region (retired)</option>' in regions
+    assert "GONE" not in regions
+    assert "OLD" not in select_of(dialog_of(page, "add")[1], "region_id")
+    response = post(
+        client,
+        f"/admin/locations/{place.id}",
+        {"action": "save", "code": "BSL", "city": "Basel", "country_code": "CH", "region_id": str(old.id)},
+    )
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(f"/admin/locations#location-{place.id}")
+    assert NO_CHANGES_MESSAGE in text_of(client.get("/admin/locations"))
+    assert entries(db) == []
+
+
+def test_edit_location_error_reopens_its_dialog(client, logged_in_admin, db, region_factory, location_factory):
+    emea = region_factory("EMEA")
+    london = location_factory(emea, "London", "GB", code="LON")
+    response = post(
+        client,
+        f"/admin/locations/{london.id}",
+        {"action": "save", "code": "l0n", "city": "Londres", "country_code": "FR", "region_id": str(emea.id)},
+    )
+    assert response.status_code == 400
+    page = text_of(response)
+    tag, dialog = dialog_of(page, "edit")
+    assert is_open(tag) and "data-reopen" in tag and not is_open(dialog_of(page, "add")[0])
+    assert "Edit location LON</h2>" in dialog and f'action="/admin/locations/{london.id}"' in dialog
+    assert 'name="code" value="L0N"' in dialog and 'name="city" value="Londres"' in dialog
+    assert '<option value="FR" selected>France (FR)</option>' in dialog
+    assert f'<p class="field-error" id="edit-code-error">{LOCATION_CODE_FORMAT}</p>' in dialog
+    assert "Please correct the following:" in dialog
+    assert fresh(db, Location, london.id).city == "London"
+
+
+@pytest.mark.parametrize(
+    "teams, note",
+    [
+        (0, ""),
+        (1, "Used by 1 team. Changing the region moves the team with it."),
+        (2, "Used by 2 teams. Changing the region moves them to it."),
+    ],
+)
+def test_edit_location_shows_team_move_note(
+    client, logged_in_admin, region_factory, location_factory, team_factory, teams, note
+):
+    place = location_factory(region_factory("EMEA"))
+    for i in range(teams):
+        team_factory(f"Team {i}", location_id=place.id)
+    dialog = dialog_of(text_of(client.get(f"/admin/locations/{place.id}/edit")), "edit")[1]
+    tag, text = team_note(dialog)
+    assert text == note
+    assert (" hidden" in tag) == (not note)
+    assert 'data-note-one="Used by 1 team. Changing the region moves the team with it."' in tag
+    assert 'data-note-many="Used by {n} teams. Changing the region moves them to it."' in tag
+    assert 'id="edit-region-note"' in tag and "edit-region-note" in select_of(dialog, "region_id")
+    if not note:
+        assert "Used by" not in dialog.replace(tag, "")
+
+
+def test_location_delete_only_when_unused(client, logged_in_admin, region_factory, location_factory, team_factory):
+    region = region_factory("EMEA")
+    used = location_factory(region, "London", "GB")
+    unused = location_factory(region, "Paris", "FR")
+    team_factory("A", location_id=used.id)
+    page = text_of(client.get("/admin/locations"))
+    row = row_of(page, f"location-{used.id}")
+    assert 'value="delete"' not in row and 'value="retire"' in row
+    assert f'<span class="tool-button is-disabled row-tool-slot" title="{LOCATION_IN_USE}">' in row
+    row = row_of(page, f"location-{unused.id}")
+    confirm = "Delete the location Paris, France? This cannot be undone."
+    assert f'action="/admin/locations/{unused.id}" data-confirm="{confirm}"' in row
+    assert "row-tool-slot" not in row
+
+
+def test_location_refusals_show_above_the_locations_table(
+    client, logged_in_admin, region_factory, location_factory, team_factory
+):
+    place = location_factory(region_factory("EMEA"))
+    team_factory("A", location_id=place.id)
+    response = post(client, f"/admin/locations/{place.id}", {"action": "delete"})
+    assert response.status_code == 400
+    page = text_of(response)
+    assert "<h1>Locations</h1>" in page
+    assert page.index(LOCATION_IN_USE) < page.index("<table")
+    for name in ("add", "edit"):
+        assert not is_open(dialog_of(page, name)[0])
+    response = post(client, f"/admin/locations/{place.id}", {"action": "retire"})
+    assert response.headers["Location"].endswith(f"/admin/locations#location-{place.id}")
+
+
+def test_locations_pages_need_administrator(client, logged_in_user, give_set, db, region_factory, location_factory):
+    region = region_factory("EMEA")
+    place = location_factory(region)
+    give_set(["manage_teams", "manage_users"], user=logged_in_user)
+    for url in ("/admin/locations", "/admin/locations/new", f"/admin/locations/{place.id}/edit"):
+        assert client.get(url).status_code == 403
+    data = {"region_id": str(region.id), "code": "TYO", "city": "Tokyo", "country_code": "JP"}
+    assert post(client, "/admin/locations", data).status_code == 403
+    assert len(db.scalars(select(Location)).all()) == 1
+    with client.session_transaction() as session:
+        session.clear()
+    for url in ("/admin/locations", "/admin/locations/new", f"/admin/locations/{place.id}/edit"):
+        response = client.get(url)
+        assert response.status_code == 302 and "/login" in response.headers["Location"]
+
+
+def test_locations_page_has_no_inline_script_or_style(
+    client, logged_in_admin, region_factory, location_factory, team_factory
+):
+    region = region_factory("EMEA")
+    region_factory("OLD", retired=True)
+    place = location_factory(region)
+    team_factory("A", location_id=place.id)
+    pages = [
+        client.get(url) for url in ("/admin/locations", "/admin/locations/new", f"/admin/locations/{place.id}/edit")
+    ]
+    pages.append(post(client, "/admin/locations", {"region_id": "", "code": "", "city": "", "country_code": ""}))
+    for response in pages:
+        page = response.get_data(as_text=True)
+        assert re.findall(r"<script(?![^>]*\ssrc=)", page) == []
+        assert " style=" not in page
+        assert re.search(r"\son[a-z]+\s*=", page) is None
+
+
+def test_team_form_points_to_the_locations_screen(client, logged_in_admin):
+    page = text_of(client.get("/admin/teams"))
+    assert "No locations are available yet. An administrator adds them on the Locations screen." in page
+    assert "Regions and locations" not in page
+
+
 # --- Business lines -------------------------------------------------------------------------------------------------
 
 
@@ -736,7 +1147,7 @@ def test_nav_shows_the_lists_to_administrators_only(client, logged_in_user, give
     give_set(["manage_teams", "manage_users"], user=logged_in_user)
     page = client.get("/").get_data(as_text=True)
     assert 'href="/admin/regions"' not in page and 'href="/admin/business-lines"' not in page
-    assert 'data-label="Regions"' not in page
+    assert 'data-label="Regions"' not in page and 'href="/admin/locations"' not in page
 
     from tests.conftest import sign_in
 
@@ -746,8 +1157,12 @@ def test_nav_shows_the_lists_to_administrators_only(client, logged_in_user, give
     assert 'data-label="Regions"' in page and "<span>Regions</span>" in page and "Business lines" in page
     assert "Regions and locations" not in page
     assert page.index('href="/admin/teams"') < page.index('href="/admin/regions"')
-    assert page.index('href="/admin/regions"') < page.index('href="/admin/business-lines"')
+    assert page.index('href="/admin/regions"') < page.index('href="/admin/locations"')
+    assert page.index('href="/admin/locations"') < page.index('href="/admin/business-lines"')
+    assert 'data-label="Locations"' in page and "<span>Locations</span>" in page
     assert 'class="nav-link active" href="/admin/regions"' in page
+    page = client.get("/admin/locations").get_data(as_text=True)
+    assert 'class="nav-link active" href="/admin/locations"' in page
     page = client.get("/admin/business-lines").get_data(as_text=True)
     assert 'class="nav-link active" href="/admin/business-lines"' in page
 
@@ -774,4 +1189,6 @@ def test_used_regions_offer_retire_or_restore_but_no_delete(
     retired_row, active_row = row_of(page, f"region-{region.id}"), row_of(page, f"region-{active.id}")
     assert 'value="restore"' in retired_row and 'value="retire"' in active_row
     assert 'value="delete"' not in retired_row and 'value="delete"' not in active_row
-    assert "This region has locations or trackers, so it can only be retired." not in page
+    for row in (retired_row, active_row):  # a muted slot keeps Delete's place and says why it is missing
+        assert f'<span class="tool-button is-disabled row-tool-slot" title="{REGION_IN_USE}">' in row
+        assert f'<span class="sr-only">{REGION_IN_USE}</span>' in row

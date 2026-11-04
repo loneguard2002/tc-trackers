@@ -22,7 +22,7 @@ from ..models import BusinessLine, Location, Region, Team, Tracker, TrackerRegio
 from ..naming import MAX_NAME_LENGTH, name_error
 from . import bp
 from .catalogue import location_label
-from .countries import country_name, parse_country
+from .countries import COUNTRIES, country_name, flag_path, parse_country
 
 manage_lists_required = admin_required
 
@@ -30,7 +30,6 @@ MAX_CODE_LENGTH = 20
 REGION_CODE_REQUIRED = "Enter a region short name."
 REGION_CODE_TOO_LONG = f"A region short name can be at most {MAX_CODE_LENGTH} characters."
 REGION_CODE_TAKEN = "A region with that short name already exists."
-REGION_CODE_ERRORS = (REGION_CODE_REQUIRED, REGION_CODE_TOO_LONG, REGION_CODE_TAKEN)
 REGION_CHOICE_ERROR = "Choose a region from the list."
 LOCATION_CODE_REQUIRED = "Enter a location code."
 LOCATION_CODE_FORMAT = "A location code is 2 to 6 letters, such as LON."
@@ -38,6 +37,8 @@ LOCATION_CODE_TAKEN = "A location with that code already exists."
 LOCATION_TAKEN = "A location with that city and country already exists."
 REGION_IN_USE = "This region has locations or trackers, so it can only be retired."
 LOCATION_IN_USE = "Teams use this location, so it can only be retired."
+TEAM_NOTE_ONE = "Used by 1 team. Changing the region moves the team with it."
+TEAM_NOTE_MANY = "Used by {n} teams. Changing the region moves them to it."  # lists.js fills in {n} too
 BUSINESS_LINE_IN_USE = "Trackers use this business line, so it can only be retired."
 ACTIONS = ("save", "retire", "restore", "delete")
 
@@ -97,8 +98,16 @@ def _text_error(value: str, noun: str) -> str | None:
 
 # --- Regions and locations ------------------------------------------------------------------------------------------
 
+# Errors for a submitted entry, by field ("code", "name", ...), in the order the fields appear; only fields with errors.
+FieldErrors = dict[str, list[str]]
 
-def _region_errors(code: str, name: str, exclude_id: int | None = None) -> list[str]:
+
+def _summary(errors: FieldErrors) -> list[str]:
+    """Every message, field by field, for the list at the top of the dialog."""
+    return [message for messages in errors.values() for message in messages]
+
+
+def _region_errors(code: str, name: str, exclude_id: int | None = None) -> FieldErrors:
     db = get_session()
     if not code:
         code_error = REGION_CODE_REQUIRED
@@ -106,28 +115,33 @@ def _region_errors(code: str, name: str, exclude_id: int | None = None) -> list[
         code_error = REGION_CODE_TOO_LONG
     else:
         code_error = REGION_CODE_TAKEN if name_error(db, Region, code, "region", exclude_id, Region.code) else None
-    return [e for e in (code_error, name_error(db, Region, name, "region", exclude_id)) if e]
+    found = {"code": code_error, "name": name_error(db, Region, name, "region", exclude_id)}
+    return {field: [error] for field, error in found.items() if error}
 
 
 def _location_errors(
     code: str, city: str, country_text: str, exclude_id: int | None = None
-) -> tuple[list[str], str | None]:
-    """The errors for a submitted location, and the parsed country code (None when it is not a listed one)."""
+) -> tuple[FieldErrors, str | None]:
+    """The errors for a submitted location by field ("code", "city", "country_code"), and the parsed country code
+    (None when it is not a listed one). A city and country already used shows beside the city."""
     db = get_session()
-    errors: list[str] = []
+    errors: FieldErrors = {}
     if not code:
-        errors.append(LOCATION_CODE_REQUIRED)
+        errors["code"] = [LOCATION_CODE_REQUIRED]
     elif not re.fullmatch(r"[A-Z]{2,6}", code):
-        errors.append(LOCATION_CODE_FORMAT)
+        errors["code"] = [LOCATION_CODE_FORMAT]
     else:
         query = select(Location.id).where(func.lower(Location.code) == code.lower())
         if exclude_id is not None:
             query = query.where(Location.id != exclude_id)
         if db.scalar(query.limit(1)) is not None:
-            errors.append(LOCATION_CODE_TAKEN)
+            errors["code"] = [LOCATION_CODE_TAKEN]
     city_error = _text_error(city, "city")
+    if city_error:
+        errors["city"] = [city_error]
     country_code, country_error = parse_country(country_text)
-    errors += [e for e in (city_error, country_error) if e]
+    if country_error:
+        errors["country_code"] = [country_error]
     if city_error is None and country_code is not None:
         query = select(Location.id).where(
             func.lower(Location.city) == city.lower(), Location.country_code == country_code
@@ -135,7 +149,7 @@ def _location_errors(
         if exclude_id is not None:
             query = query.where(Location.id != exclude_id)
         if db.scalar(query.limit(1)) is not None:
-            errors.append(LOCATION_TAKEN)
+            errors["city"] = [LOCATION_TAKEN]
     return errors, country_code
 
 
@@ -145,9 +159,10 @@ def _region_form() -> dict:
 
 def _location_form() -> dict:
     return {
+        "region_id": request.form.get("region_id", "").strip(),
         "code": request.form.get("code", "").strip().upper(),
         "city": request.form.get("city", "").strip(),
-        "country_code": request.form.get("country_code", "").strip(),
+        "country_code": request.form.get("country_code", "").strip().upper(),
     }
 
 
@@ -164,38 +179,40 @@ def _team_count(location_id: int) -> int:
 
 
 def _render_regions(
-    errors: list[str], status: int, form: dict | None = None, dialog: str | None = None, edit_id: int | None = None
+    errors: FieldErrors | list[str],
+    status: int,
+    form: dict | None = None,
+    dialog: str | None = None,
+    edit_id: int | None = None,
 ):
     """The Regions table. ``dialog`` ("add" or "edit") names the dialog rendered open, showing ``form`` (the typed
-    values) and ``errors`` beside its fields; ``edit_id`` is the region the Edit dialog saves. Without a dialog the
-    errors show above the table."""
+    values) and ``errors`` (by field) beside its fields; ``edit_id`` is the region the Edit dialog saves. Without a
+    dialog, ``errors`` is a list shown above the table."""
     db = get_session()
     regions = db.scalars(select(Region).order_by(func.lower(Region.code), Region.id)).all()
     locations = dict(db.execute(select(Location.region_id, func.count()).group_by(Location.region_id)).all())
     teams = dict(
         db.execute(
             select(Location.region_id, func.count(Team.id))
+            .select_from(Team)
             .join(Location, Team.location_id == Location.id)
             .group_by(Location.region_id)
         ).all()
     )
     trackers = dict(db.execute(select(TrackerRegion.region_id, func.count()).group_by(TrackerRegion.region_id)).all())
     editing = db.get(Region, edit_id) if dialog == "edit" else None
-    field_errors: dict[str, list[str]] = {}
-    if dialog:
-        for error in errors:
-            field_errors.setdefault("code" if error in REGION_CODE_ERRORS else "name", []).append(error)
     page = render_template(
         "lists/regions.html",
         regions=regions,
         location_counts=locations,
         team_counts=teams,
         tracker_counts=trackers,
+        region_in_use=REGION_IN_USE,
         dialog=dialog,
         editing=editing,
         form=form or {},
-        errors=errors,
-        field_errors=field_errors,
+        errors=_summary(errors) if dialog else errors,
+        field_errors=errors if dialog else {},
         page_title="Regions",
         current_page="regions",
     )
@@ -215,14 +232,14 @@ def regions():
 @bp.get("/regions/new")
 @manage_lists_required
 def new_region():
-    return _render_regions([], 200, dialog="add")
+    return _render_regions({}, 200, dialog="add")
 
 
 @bp.get("/regions/<int:region_id>/edit")
 @manage_lists_required
 def edit_region(region_id: int):
     region = _or_404(Region, region_id)
-    return _render_regions([], 200, {"code": region.code, "name": region.name}, "edit", region.id)
+    return _render_regions({}, 200, {"code": region.code, "name": region.name}, "edit", region.id)
 
 
 @bp.post("/regions")
@@ -241,7 +258,7 @@ def create_region():
         db.commit()
     except IntegrityError:  # the same short name or name was taken at the same moment
         db.rollback()
-        errors = _region_errors(submitted["code"], submitted["name"]) or [REGION_CODE_TAKEN]
+        errors = _region_errors(submitted["code"], submitted["name"]) or {"code": [REGION_CODE_TAKEN]}
         return _render_regions(errors, 400, submitted, "add")
     flash(f"Added the region {region.code}.", "success")
     return _to_regions(f"region-{region.id}")
@@ -286,21 +303,123 @@ def update_region(region_id: int):
         db.commit()
     except IntegrityError:
         db.rollback()
-        errors = _region_errors(submitted["code"], submitted["name"], region.id) or [REGION_CODE_TAKEN]
+        errors = _region_errors(submitted["code"], submitted["name"], region.id) or {"code": [REGION_CODE_TAKEN]}
         return _render_regions(errors, 400, submitted, "edit", region.id)
     flash(f"Saved the region {region.code}.", "success")
     return _to_regions(f"region-{region.id}")
 
 
-@bp.post("/regions/<int:region_id>/locations")
+def _parse_region(text: str | None, current_id: int | None = None) -> Region | None:
+    """The chosen region: an active one, or the location's current one (``current_id``) even when retired."""
+    region_id = parse_id(text)
+    region = get_session().get(Region, region_id) if region_id is not None else None
+    if region is None or (region.retired and region.id != current_id):
+        return None
+    return region
+
+
+def _render_locations(
+    errors: FieldErrors | list[str],
+    status: int,
+    form: dict | None = None,
+    dialog: str | None = None,
+    edit_id: int | None = None,
+):
+    """The Locations table, ordered by region code and then city. ``dialog``, ``form``, ``errors`` and ``edit_id``
+    work as for :func:`_render_regions`."""
+    db = get_session()
+    regions = db.scalars(select(Region).order_by(func.lower(Region.code), Region.id)).all()
+    locations = db.scalars(
+        select(Location)
+        .join(Region, Location.region_id == Region.id)
+        .order_by(func.lower(Region.code), Region.id, func.lower(Location.city), Location.id)
+    ).all()
+    teams = dict(
+        db.execute(
+            select(Team.location_id, func.count()).where(Team.location_id.is_not(None)).group_by(Team.location_id)
+        ).all()
+    )
+    editing = db.get(Location, edit_id) if dialog == "edit" else None
+    # (region, held back) pairs. The open Edit dialog lists the location's own retired region; the closed one lists
+    # every retired region held back (hidden and disabled) for lists.js to offer to that region's locations only.
+    edit_regions = [
+        (r, r.retired and editing is None)
+        for r in regions
+        if not r.retired or editing is None or r.id == editing.region_id
+    ]
+    used = teams.get(editing.id, 0) if editing is not None else 0
+    note = TEAM_NOTE_ONE if used == 1 else TEAM_NOTE_MANY.replace("{n}", str(used)) if used > 1 else ""
+    page = render_template(
+        "lists/locations.html",
+        regions=regions,
+        add_regions=[(r, False) for r in regions if not r.retired],
+        edit_regions=edit_regions,
+        edit_note_text=note,
+        note_one=TEAM_NOTE_ONE,
+        note_many=TEAM_NOTE_MANY,
+        regions_by_id={region.id: region for region in regions},
+        locations=locations,
+        team_counts=teams,
+        location_in_use=LOCATION_IN_USE,
+        chosen_region=request.args.get("region", ""),
+        countries=COUNTRIES,
+        country_name=country_name,
+        flag_path=flag_path,
+        location_label=location_label,
+        dialog=dialog,
+        editing=editing,
+        form=form or {},
+        errors=_summary(errors) if dialog else errors,
+        field_errors=errors if dialog else {},
+        page_title="Locations",
+        current_page="locations",
+    )
+    return page, status
+
+
+def _to_locations(anchor: str | None = None):
+    return redirect(url_for("lists.locations", _anchor=anchor))
+
+
+def _location_values(location: Location) -> dict:
+    return {
+        "region_id": str(location.region_id),
+        "code": location.code or "",
+        "city": location.city,
+        "country_code": location.country_code or "",
+    }
+
+
+@bp.get("/locations")
 @manage_lists_required
-def create_location(region_id: int):
-    region = _or_404(Region, region_id)
+def locations():
+    return _render_locations([], 200)
+
+
+@bp.get("/locations/new")
+@manage_lists_required
+def new_location():
+    return _render_locations({}, 200, dialog="add")
+
+
+@bp.get("/locations/<int:location_id>/edit")
+@manage_lists_required
+def edit_location(location_id: int):
+    location = _or_404(Location, location_id)
+    return _render_locations({}, 200, _location_values(location), "edit", location.id)
+
+
+@bp.post("/locations")
+@manage_lists_required
+def create_location():
     db = get_session()
     submitted = _location_form()
-    errors, country_code = _location_errors(submitted["code"], submitted["city"], submitted["country_code"])
+    region = _parse_region(submitted["region_id"])
+    errors: FieldErrors = {} if region else {"region_id": [REGION_CHOICE_ERROR]}
+    found, country_code = _location_errors(submitted["code"], submitted["city"], submitted["country_code"])
+    errors.update(found)
     if errors:
-        return _render_regions(errors, 400)
+        return _render_locations(errors, 400, submitted, "add")
     location = Location(region_id=region.id, code=submitted["code"], city=submitted["city"], country_code=country_code)
     db.add(location)
     label = location_label(location.city, location.country_code)
@@ -313,23 +432,12 @@ def create_location(region_id: int):
             detail={"location": label, "code": location.code, "region": region.code},
         )
         db.commit()
-    except IntegrityError:  # the same city and country were added at the same moment
+    except IntegrityError:  # the same code, or city and country, were added at the same moment
         db.rollback()
-        errors = _location_errors(submitted["code"], submitted["city"], submitted["country_code"])[0] or [
-            LOCATION_TAKEN
-        ]
-        return _render_regions(errors, 400)
+        errors = _location_errors(submitted["code"], submitted["city"], submitted["country_code"])[0]
+        return _render_locations(errors or {"city": [LOCATION_TAKEN]}, 400, submitted, "add")
     flash(f"Added the location {label} to {region.code}.", "success")
-    return _to_regions(f"region-{region.id}")
-
-
-def _parse_region(text: str | None, current_id: int) -> Region | None:
-    """The chosen region: an active one, or the location's current one even when retired."""
-    region_id = parse_id(text)
-    region = get_session().get(Region, region_id) if region_id is not None else None
-    if region is None or (region.retired and region.id != current_id):
-        return None
-    return region
+    return _to_locations(f"location-{location.id}")
 
 
 @bp.post("/locations/<int:location_id>")
@@ -341,32 +449,29 @@ def update_location(location_id: int):
     region = db.get(Region, location.region_id)
     label = location_label(location.city, location.country_code)
     named = {"location": label, "region": region.code}
+    anchor = f"location-{location.id}"
     if action == "delete":
         if _team_count(location.id):
-            return _render_regions([LOCATION_IN_USE], 400)
+            return _render_locations([LOCATION_IN_USE], 400)
         _log(action="location_deleted", entity="location", entity_id=location.id, detail=named)
         db.delete(location)
         try:
             db.commit()
         except IntegrityError:  # a team was placed there at the same moment
             db.rollback()
-            return _render_regions([LOCATION_IN_USE], 400)
+            return _render_locations([LOCATION_IN_USE], 400)
         flash(f"Deleted the location {label}.", "success")
-        return _to_regions(f"region-{region.id}")
+        return _to_locations()
     if action in ("retire", "restore"):
         _set_retired(location, action, "location", label, "location", named)
-        return _to_regions(f"location-{location.id}")
+        return _to_locations(anchor)
     submitted = _location_form()
-    submitted_region = request.form.get("region_id", "").strip()
-    anchor = f"location-{location.id}"
-    errors, country_code = _location_errors(
-        submitted["code"], submitted["city"], submitted["country_code"], location.id
-    )
-    new_region = _parse_region(submitted_region, location.region_id)
-    if new_region is None:
-        errors.append(REGION_CHOICE_ERROR)
+    new_region = _parse_region(submitted["region_id"], location.region_id)
+    errors: FieldErrors = {} if new_region else {"region_id": [REGION_CHOICE_ERROR]}
+    found, country_code = _location_errors(submitted["code"], submitted["city"], submitted["country_code"], location.id)
+    errors.update(found)
     if errors:
-        return _render_regions(errors, 400)
+        return _render_locations(errors, 400, submitted, "edit", location.id)
     before, after = _changed(location, {"code": submitted["code"], "city": submitted["city"]})
     if location.country_code != country_code:
         before["country"], after["country"] = country_name(location.country_code), country_name(country_code)
@@ -374,7 +479,7 @@ def update_location(location_id: int):
         before["region"], after["region"] = region.code, new_region.code
     if not before:
         flash(NO_CHANGES_MESSAGE, "info")
-        return _to_regions(anchor)
+        return _to_locations(anchor)
     detail = {"location": label, **change(before, after)}
     if "region" in before:
         detail["teams"] = _team_count(location.id)
@@ -386,9 +491,9 @@ def update_location(location_id: int):
     except IntegrityError:  # the same code, or city and country, were saved at the same moment
         db.rollback()
         errors = _location_errors(submitted["code"], submitted["city"], submitted["country_code"], location.id)[0]
-        return _render_regions(errors or [LOCATION_TAKEN], 400)
+        return _render_locations(errors or {"city": [LOCATION_TAKEN]}, 400, submitted, "edit", location.id)
     flash(f"Saved the location {location_label(location.city, location.country_code)}.", "success")
-    return _to_regions(anchor)
+    return _to_locations(anchor)
 
 
 # --- Business lines -------------------------------------------------------------------------------------------------

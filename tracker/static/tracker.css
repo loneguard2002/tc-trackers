@@ -999,10 +999,11 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .list-head > .button { flex: none; white-space: nowrap; }
 .list-page > .form-alert { margin-bottom: 20px; }
 .list-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
-.list-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.list-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
 .list-tools:not(:has(> :not([hidden]))) { display: none; }
 .list-search { max-width: 320px; }
-.list-status { gap: 6px; }
+.list-status { gap: 6px; margin-left: auto; }  /* the search and region filter on the left, the status buttons on the right */
+.list-region { width: auto; max-width: 18rem; padding: 7px 10px; font-size: .9rem; }
 .list-status .chip { min-height: 32px; padding: 3px 10px; }
 .list-table table { min-width: 640px; }
 .list-table th { vertical-align: middle; }
@@ -1024,7 +1025,17 @@ th[aria-sort="ascending"] .sort-button .icon path:last-child, th[aria-sort="desc
 .count-pill { display: inline-block; min-width: 28px; padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); font-size: .8125rem; font-weight: 600; text-align: center; text-decoration: none; }
 a.count-pill { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
 a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transparent); text-decoration: underline; }
-.list-table .row-tools { justify-content: flex-start; }  /* Edit and Retire stay in line whether or not Delete shows */
+.list-table .row-tools { justify-content: flex-start; flex-wrap: nowrap; }
+.list-table .row-edit { margin-right: 4px; padding: 5px 10px; font-size: .8125rem; white-space: nowrap; }
+.list-table .row-edit .icon { width: 14px; height: 14px; margin-right: 5px; }
+/* .row-tool-slot (a .tool-button.is-disabled span) takes Delete's place when the entry is in use; its title and
+   screen-reader text say why. */
+.list-region-cell { min-width: 14rem; }
+.country-cell { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.country-flag, .country-flag-preview { flex: none; border-radius: 2px; box-shadow: 0 0 0 1px var(--border); object-fit: cover; }
+.country-pick { display: flex; align-items: center; gap: 10px; }
+.country-pick select { flex: 1 1 auto; min-width: 0; }
+.list-dialog-note { margin: 6px 0 0; }
 .list-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin: 0; padding: 10px 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; }
 
 /* The Add and Edit dialogs. Opened by lists.js they are modal, centred over a dimmed page. Without JavaScript the
@@ -1037,12 +1048,20 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
 .list-dialog-head h2 { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; }
 .list-dialog-body { display: grid; gap: 16px; padding: 18px 20px 20px; container-type: inline-size; }
 .list-dialog-body > .form-alert { margin: 0; }
+/* Code and Name side by side down to a narrow phone; inputs aligned along the bottom, as only Code has help. */
+.list-dialog-body .field-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); align-items: end; }
+@container (max-width: 440px) {
+  .list-dialog-body .field-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container (max-width: 300px) {
+  .list-dialog-body .field-pair { grid-template-columns: minmax(0, 1fr); }
+}
 .list-dialog-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
 .field-error { margin: -2px 0 6px; color: var(--danger); font-size: .8125rem; font-weight: 600; }
 .field.has-error :where(input, select, textarea) { border-color: var(--danger); }
 @media (max-width: 720px) {
   .list-tools, .list-foot { padding-left: 16px; padding-right: 16px; }
-  .list-search { max-width: none; }
+  .list-search, .list-region { flex: 1 1 100%; max-width: none; }
   .list-dialog-head { padding-left: 16px; }
   .list-dialog-body, .list-dialog-foot { padding-left: 16px; padding-right: 16px; }
   .list-dialog-foot .button { flex: 1; text-align: center; }
