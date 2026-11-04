@@ -72,7 +72,7 @@ def test_a_place_error_joins_the_other_errors_and_the_choice_is_kept(
 def test_a_location_from_another_region_is_refused(client, logged_in_admin, db, region_factory, location_factory):
     emea, apac = region_factory("EMEA"), region_factory("APAC")
     geneva = location_factory(emea)
-    singapore = location_factory(apac, city="Singapore", country="Singapore")
+    singapore = location_factory(apac, city="Singapore", country_code="SG")
     page = post(client, "/admin/teams", {"name": "Desktop", **place_of(apac, geneva)})
     assert page.status_code == 400 and LOCATION_REGION_MISMATCH in text_of(page)
     assert db.scalar(select(func.count()).select_from(Team)) == 0 and entries(db, "team_created") == []
@@ -173,7 +173,7 @@ def test_the_place_fields_group_locations_by_region(client, logged_in_admin, reg
     region_factory("LATAM")  # no locations: not offered
     location_factory(emea, city="Zurich")
     location_factory(emea, city="Geneva")
-    location_factory(apac, city="Singapore", country="Singapore")
+    location_factory(apac, city="Singapore", country_code="SG")
     page = text_of(client.get("/admin/teams"))
     regions = select_html(page, "region_id")
     assert re.search(r"<select [^>]*\brequired\b", regions) and "data-region-select" in regions
@@ -215,7 +215,7 @@ def test_location_change_is_logged_as_a_details_change(
 ):
     emea, apac = region_factory("EMEA"), region_factory("APAC")
     geneva = location_factory(emea)
-    singapore = location_factory(apac, city="Singapore", country="Singapore")
+    singapore = location_factory(apac, city="Singapore", country_code="SG")
     team = team_factory("Desktop")
     assert (
         post(client, f"/admin/teams/{team.id}/rename", {"name": "Desktop", **place_of(emea, geneva)}).status_code == 302

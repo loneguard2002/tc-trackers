@@ -2,11 +2,19 @@
 
 import html
 
+import pytest
 from sqlalchemy import select
 
 from tests.conftest import post
 from tracker.audit import NO_CHANGES_MESSAGE
 from tracker.lists.catalogue import team_places
+from tracker.lists.countries import COUNTRY_CHOICE_ERROR, COUNTRY_REQUIRED
+from tracker.lists.views import (
+    LOCATION_CODE_FORMAT,
+    LOCATION_CODE_REQUIRED,
+    LOCATION_CODE_TAKEN,
+    LOCATION_TAKEN,
+)
 from tracker.models import AuditLog, BusinessLine, Location, Region, TrackerRegion
 
 
@@ -38,7 +46,7 @@ def test_lists_are_for_administrators_only(client, logged_in_user, give_set, db,
     location = location_factory(region)
     for url, data in (
         (f"/admin/regions/{region.id}", {"action": "delete"}),
-        (f"/admin/regions/{region.id}/locations", {"city": "Tokyo", "country": "Japan"}),
+        (f"/admin/regions/{region.id}/locations", {"code": "TYO", "city": "Tokyo", "country_code": "JP"}),
         (f"/admin/locations/{location.id}", {"action": "retire"}),
         ("/admin/business-lines", {"name": "Brokerage"}),
     ):
@@ -60,17 +68,24 @@ def test_admin_adds_a_region_and_a_location_and_both_are_logged(client, logged_i
     assert response.status_code == 302
     region = db.scalars(select(Region)).one()
     assert (region.code, region.name, region.retired) == ("EMEA", "Europe, Middle East and Africa", False)
-    response = post(client, f"/admin/regions/{region.id}/locations", {"city": " Geneva ", "country": "Switzerland"})
+    response = post(
+        client, f"/admin/regions/{region.id}/locations", {"code": " gva ", "city": " Geneva ", "country_code": "ch"}
+    )
     assert response.status_code == 302
     location = db.scalars(select(Location)).one()
-    assert (location.region_id, location.city, location.country) == (region.id, "Geneva", "Switzerland")
+    assert (location.region_id, location.code, location.city, location.country_code) == (
+        region.id,
+        "GVA",
+        "Geneva",
+        "CH",
+    )
     logged = entries(db)
     assert [e.action for e in logged] == ["region_created", "location_created"]
     assert [e.entity for e in logged] == ["region", "location"]
     assert [e.entity_id for e in logged] == [str(region.id), str(location.id)]
     assert all(e.tracker_id is None and e.user_id == logged_in_admin.id for e in logged)
     assert logged[0].detail == {"region": "EMEA"}
-    assert logged[1].detail == {"location": "Geneva, Switzerland", "region": "EMEA"}
+    assert logged[1].detail == {"location": "Geneva, Switzerland", "code": "GVA", "region": "EMEA"}
     page = text_of(client.get("/admin/regions"))
     assert "<h1>Regions and locations</h1>" in page
     lede = "Teams are placed at a location, and each location belongs to one region."
@@ -83,9 +98,9 @@ def test_regions_and_locations_are_listed_in_order_ignoring_case(
     client, logged_in_admin, region_factory, location_factory
 ):
     emea, apac = region_factory("emea"), region_factory("APAC")
-    location_factory(emea, "zurich", "Switzerland")
-    location_factory(emea, "Geneva", "Switzerland")
-    location_factory(emea, "london", "United Kingdom")
+    location_factory(emea, "zurich", "CH")
+    location_factory(emea, "Geneva", "CH")
+    location_factory(emea, "london", "GB")
     page = text_of(client.get("/admin/regions"))
     assert page.index(apac.name) < page.index(emea.name)
     assert page.index("Geneva, Switzerland") < page.index("london, United Kingdom") < page.index("zurich, Switzerland")
@@ -109,16 +124,23 @@ def test_region_fields_are_required_and_limited(client, logged_in_admin, db):
 
 def test_location_fields_are_required_and_limited(client, logged_in_admin, db, region_factory):
     region = region_factory()
-    response = post(client, f"/admin/regions/{region.id}/locations", {"city": "", "country": " "})
+    response = post(client, f"/admin/regions/{region.id}/locations", {"code": "", "city": "", "country_code": " "})
     assert response.status_code == 400
     page = text_of(response)
-    assert "Enter a city." in page and "Enter a country." in page
-    response = post(client, f"/admin/regions/{region.id}/locations", {"city": "x" * 101, "country": "y" * 101})
+    assert "Enter a location code." in page and "Enter a city." in page and "Choose a country." in page
+    response = post(
+        client, f"/admin/regions/{region.id}/locations", {"code": "LON", "city": "x" * 101, "country_code": "GB"}
+    )
     assert response.status_code == 400
     page = text_of(response)
-    assert "A city can be at most 100 characters." in page and "A country can be at most 100 characters." in page
+    assert "A city can be at most 100 characters." in page
     assert db.scalars(select(Location)).all() == []
-    assert post(client, "/admin/regions/999999/locations", {"city": "Tokyo", "country": "Japan"}).status_code == 404
+    assert (
+        post(
+            client, "/admin/regions/999999/locations", {"code": "TYO", "city": "Tokyo", "country_code": "JP"}
+        ).status_code
+        == 404
+    )
 
 
 def test_duplicate_names_are_refused_ignoring_case(
@@ -126,14 +148,16 @@ def test_duplicate_names_are_refused_ignoring_case(
 ):
     emea = region_factory("EMEA", "Europe, Middle East and Africa")
     apac = region_factory("APAC")
-    location_factory(emea, "Geneva", "Switzerland")
+    location_factory(emea, "Geneva", "CH")
     business_line_factory("Tradition brokerage")
     response = post(client, "/admin/regions", {"code": "emea", "name": "europe, middle east and africa"})
     assert response.status_code == 400
     page = text_of(response)
     assert "A region with that short name already exists." in page
     assert "A region with that name already exists." in page
-    response = post(client, f"/admin/regions/{apac.id}/locations", {"city": "geneva", "country": "SWITZERLAND"})
+    response = post(
+        client, f"/admin/regions/{apac.id}/locations", {"code": "GVA", "city": "geneva", "country_code": "CH"}
+    )
     assert response.status_code == 400
     assert "A location with that city and country already exists." in text_of(response)
     response = post(client, "/admin/business-lines", {"name": "TRADITION BROKERAGE"})
@@ -187,7 +211,7 @@ def test_moving_a_location_moves_its_teams_and_logs_the_count(
     response = post(
         client,
         f"/admin/locations/{place.id}",
-        {"action": "save", "city": "Geneva", "country": "Switzerland", "region_id": str(apac.id)},
+        {"action": "save", "code": place.code, "city": "Geneva", "country_code": "CH", "region_id": str(apac.id)},
     )
     assert response.status_code == 302
     db.expire_all()
@@ -219,7 +243,7 @@ def test_renaming_a_location_logs_without_a_team_count(
     response = post(
         client,
         f"/admin/locations/{place.id}",
-        {"action": "save", "city": "Genève", "country": "Switzerland", "region_id": str(region.id)},
+        {"action": "save", "code": place.code, "city": "Genève", "country_code": "CH", "region_id": str(region.id)},
     )
     assert response.status_code == 302
     entry = entries(db, "location_changed")[0]
@@ -239,7 +263,7 @@ def test_a_location_cannot_move_to_a_retired_or_unknown_region(
         response = post(
             client,
             f"/admin/locations/{place.id}",
-            {"action": "save", "city": "Geneva", "country": "Switzerland", "region_id": region_id},
+            {"action": "save", "code": place.code, "city": "Geneva", "country_code": "CH", "region_id": region_id},
         )
         assert response.status_code == 400
         assert "Choose a region from the list." in text_of(response)
@@ -258,7 +282,7 @@ def test_a_location_in_a_retired_region_keeps_its_region_when_saved(
     response = post(
         client,
         f"/admin/locations/{place.id}",
-        {"action": "save", "city": "Basel", "country": "Switzerland", "region_id": str(old.id)},
+        {"action": "save", "code": place.code, "city": "Basel", "country_code": "CH", "region_id": str(old.id)},
     )
     assert response.status_code == 302
     assert fresh(db, Location, place.id).city == "Basel"
@@ -395,7 +419,7 @@ def test_saving_unchanged_writes_no_entry(
         (f"/admin/regions/{region.id}", {"action": "save", "code": " EMEA ", "name": "Europe"}),
         (
             f"/admin/locations/{place.id}",
-            {"action": "save", "city": "Geneva", "country": "Switzerland", "region_id": str(region.id)},
+            {"action": "save", "code": place.code, "city": "Geneva", "country_code": "CH", "region_id": str(region.id)},
         ),
         (f"/admin/business-lines/{line.id}", {"action": "save", "name": "Tradition brokerage"}),
     ):
@@ -403,6 +427,110 @@ def test_saving_unchanged_writes_no_entry(
         assert response.status_code == 200
         assert NO_CHANGES_MESSAGE in text_of(response)
     assert entries(db) == []
+
+
+def _add_location(client, region, code="GVA", city="Geneva", country_code="CH"):
+    return post(
+        client,
+        f"/admin/regions/{region.id}/locations",
+        {"code": code, "city": city, "country_code": country_code},
+    )
+
+
+def test_location_code_is_trimmed_and_upper_cased(client, logged_in_admin, db, region_factory):
+    region = region_factory()
+    assert _add_location(client, region, " lon ", "London", " gb ").status_code == 302
+    location = db.scalars(select(Location)).one()
+    assert (location.code, location.country_code) == ("LON", "GB")
+
+
+@pytest.mark.parametrize("code", ["L", "LONDONX", "L0N", "LO N"])
+def test_location_code_format(client, logged_in_admin, db, region_factory, code):
+    response = _add_location(client, region_factory(), code)
+    assert response.status_code == 400
+    assert LOCATION_CODE_FORMAT in text_of(response)
+    assert db.scalars(select(Location)).all() == []
+
+
+def test_location_code_taken_ignoring_case(client, logged_in_admin, db, region_factory, location_factory):
+    region = region_factory()
+    location_factory(region, "Geneva", "CH", code="GVA")
+    response = _add_location(client, region, "Gva", "Zurich")
+    assert response.status_code == 400
+    assert LOCATION_CODE_TAKEN in text_of(response)
+    assert len(db.scalars(select(Location)).all()) == 1
+
+
+def test_location_country_required_and_listed(client, logged_in_admin, db, region_factory):
+    region = region_factory()
+    response = _add_location(client, region, country_code="")
+    assert response.status_code == 400 and COUNTRY_REQUIRED in text_of(response)
+    response = _add_location(client, region, country_code="ZZ")
+    assert response.status_code == 400 and COUNTRY_CHOICE_ERROR in text_of(response)
+    assert db.scalars(select(Location)).all() == []
+
+
+def test_same_city_and_country_refused(client, logged_in_admin, db, region_factory, location_factory):
+    region = region_factory()
+    location_factory(region, "Geneva", "CH")
+    response = _add_location(client, region, "GVB", "geneva", "CH")
+    assert response.status_code == 400
+    assert LOCATION_TAKEN in text_of(response)
+
+
+def test_same_city_other_country_allowed(client, logged_in_admin, db, region_factory, location_factory):
+    region = region_factory()
+    location_factory(region, "London", "GB")
+    assert _add_location(client, region, "LDN", "London", "CA").status_code == 302
+    assert len(db.scalars(select(Location)).all()) == 2
+
+
+def test_old_location_without_code_must_get_one_on_save(client, logged_in_admin, db, region_factory, location_factory):
+    region = region_factory()
+    place = location_factory(region, "Geneva", None, code=None)
+    place.code = None
+    db.commit()
+    response = post(
+        client,
+        f"/admin/locations/{place.id}",
+        {"action": "save", "code": "", "city": "Geneva", "country_code": "", "region_id": str(region.id)},
+    )
+    assert response.status_code == 400
+    page = text_of(response)
+    assert LOCATION_CODE_REQUIRED in page and COUNTRY_REQUIRED in page
+
+
+def test_old_location_without_code_can_retire_restore_delete(
+    client, logged_in_admin, db, region_factory, location_factory
+):
+    region = region_factory()
+    place = location_factory(region, "Geneva", None)
+    place.code = None
+    db.commit()
+    assert "Geneva" in text_of(client.get("/admin/regions"))
+    for action in ("retire", "restore"):
+        assert post(client, f"/admin/locations/{place.id}", {"action": action}).status_code == 302
+    assert post(client, f"/admin/locations/{place.id}", {"action": "delete"}).status_code == 302
+    assert fresh(db, Location, place.id) is None
+
+
+def test_location_activity_names_code_and_country(client, logged_in_admin, db, region_factory, location_factory):
+    emea, apac = region_factory("EMEA"), region_factory("APAC")
+    place = location_factory(emea, "London", "GB", code="LON")
+    assert _add_location(client, emea, "PAR", "Paris", "FR").status_code == 302
+    assert entries(db, "location_created")[0].detail == {"location": "Paris, France", "code": "PAR", "region": "EMEA"}
+    response = post(
+        client,
+        f"/admin/locations/{place.id}",
+        {"action": "save", "code": "ldn", "city": "London", "country_code": "CA", "region_id": str(apac.id)},
+    )
+    assert response.status_code == 302
+    assert entries(db, "location_changed")[0].detail == {
+        "location": "London, United Kingdom",
+        "before": {"code": "LON", "country": "United Kingdom", "region": "EMEA"},
+        "after": {"code": "LDN", "country": "Canada", "region": "APAC"},
+        "teams": 0,
+    }
 
 
 # --- Business lines -------------------------------------------------------------------------------------------------

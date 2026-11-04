@@ -27,7 +27,7 @@
     {% set lkey = 'location-%d'|format(loc.id) %}
     {% set lf = form if editing == lkey else {} %}
     {% set used = team_counts.get(loc.id, 0) %}
-    {% set label = loc.city ~ ', ' ~ loc.country %}
+    {% set label = location_label(loc.city, loc.country_code) %}
     <li class="member" id="location-{{ loc.id }}">
       <span class="member-who"><span class="member-name">{{ label }}{% if loc.retired %} <span class="badge badge-muted">Retired</span>{% endif %}</span></span>
       <span class="team-counts">{{ used }} team{{ 's' if used != 1 }}</span>
@@ -39,8 +39,11 @@
             {% call field('City', '', 'city-' ~ loc.id) %}
             <input id="city-{{ loc.id }}" name="city" value="{{ lf.get('city', loc.city) }}" maxlength="100" required>
             {% endcall %}
-            {% call field('Country', '', 'country-' ~ loc.id) %}
-            <input id="country-{{ loc.id }}" name="country" value="{{ lf.get('country', loc.country) }}" maxlength="100" required>
+            {% call field('Code', '', 'code-' ~ loc.id) %}
+            <input id="code-{{ loc.id }}" name="code" value="{{ lf.get('code', loc.code or '') }}" maxlength="6" required>
+            {% endcall %}
+            {% call field('Country code', '', 'country-' ~ loc.id) %}
+            <input id="country-{{ loc.id }}" name="country_code" value="{{ lf.get('country_code', loc.country_code or '') }}" maxlength="2" required>
             {% endcall %}
             {% set chosen = lf.get('region_id', loc.region_id|string) %}
             {% set help = ('Used by 1 team. Changing the region moves the team with it.' if used == 1 else 'Used by %d teams. Changing the region moves them to it.'|format(used)) if used else '' %}
@@ -69,8 +72,12 @@
       <input id="new-city-{{ r.id }}" name="city" value="{{ nf.get('city', '') }}" maxlength="100" required>
     </div>
     <div>
-      <label for="new-country-{{ r.id }}">Country</label>
-      <input id="new-country-{{ r.id }}" name="country" value="{{ nf.get('country', '') }}" maxlength="100" required>
+      <label for="new-code-{{ r.id }}">Code</label>
+      <input id="new-code-{{ r.id }}" name="code" value="{{ nf.get('code', '') }}" maxlength="6" required>
+    </div>
+    <div>
+      <label for="new-country-{{ r.id }}">Country code</label>
+      <input id="new-country-{{ r.id }}" name="country_code" value="{{ nf.get('country_code', '') }}" maxlength="2" required>
     </div>
     <button class="button" type="submit">{{ icon('plus') }}Add location<span class="sr-only"> to {{ r.code }}</span></button>
   </form>

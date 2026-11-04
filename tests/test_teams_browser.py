@@ -173,7 +173,7 @@ def test_new_team_location_narrows_to_the_chosen_region(
 ):
     emea, apac = region_factory("EMEA"), region_factory("APAC")
     geneva = location_factory(emea)
-    singapore = location_factory(apac, city="Singapore", country="Singapore")
+    singapore = location_factory(apac, city="Singapore", country_code="SG")
     _open(page, live_server, user_factory(is_admin=True), "/admin/teams")
 
     def shown_groups():

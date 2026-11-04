@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..ids import parse_id
 from ..models import BusinessLine, Location, Region, Team, Tracker, TrackerRegion
+from .countries import country_name
 
 LOCATION_REQUIRED = "Choose a region and a location."
 LOCATION_CHOICE_ERROR = "Choose a location from the list."
@@ -24,8 +25,10 @@ REGIONS_REQUIRED = "Tick at least one region."
 REGIONS_CHOICE_ERROR = "Choose regions from the list."
 
 
-def location_label(city: str, country: str) -> str:
-    return f"{city}, {country}"
+def location_label(city: str, country_code: str | None) -> str:
+    """ "Geneva, Switzerland", or just the city while the country is unset."""
+    country = country_name(country_code)
+    return f"{city}, {country}" if country else city
 
 
 class Place(NamedTuple):
@@ -39,13 +42,13 @@ class Place(NamedTuple):
 def team_places(session: Session) -> dict[int, Place]:
     """Team id to its place, for teams that have a location."""
     rows = session.execute(
-        select(Team.id, Location.id, Location.city, Location.country, Region.id, Region.code)
+        select(Team.id, Location.id, Location.city, Location.country_code, Region.id, Region.code)
         .join(Location, Team.location_id == Location.id)
         .join(Region, Location.region_id == Region.id)
     )
     return {
-        team_id: Place(location_id, location_label(city, country), region_id, code, city)
-        for team_id, location_id, city, country, region_id, code in rows
+        team_id: Place(location_id, location_label(city, country_code), region_id, code, city)
+        for team_id, location_id, city, country_code, region_id, code in rows
     }
 
 
@@ -63,14 +66,14 @@ def location_choices(session: Session, keep_id: int | None = None) -> list[Regio
     for region in session.scalars(select(Region).order_by(func.lower(Region.code), Region.id)):
         options[region.id] = RegionOption(region.id, region.code, region.name, region.retired, [])
     locations = session.scalars(
-        select(Location).order_by(func.lower(Location.city), func.lower(Location.country), Location.id)
+        select(Location).order_by(func.lower(Location.city), Location.country_code, Location.id)
     )
     for location in locations:
         region = options[location.region_id]
         if location.id != keep_id and (location.retired or region.retired):
             continue
         region.locations.append(
-            (location.id, location_label(location.city, location.country), location.retired or region.retired)
+            (location.id, location_label(location.city, location.country_code), location.retired or region.retired)
         )
     # Labels sort as "city, country", so order the result by label rather than by city alone.
     for region in options.values():
