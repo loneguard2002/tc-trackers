@@ -57,6 +57,11 @@ def test_upgrade_refuses_two_rows_that_become_the_same_place(db, at_revision_000
     db.commit()
     with pytest.raises(RuntimeError, match="London"):
         command.upgrade(alembic_config(), "head")
+    # The refusal leaves the database as it was: still at 0004, with the typed countries.
+    db.rollback()
+    assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0004"
+    got = sorted(db.execute(text("SELECT city, country FROM locations")).all())
+    assert got == [("London", "United Kingdom"), ("london", "UK")]
 
 
 def test_downgrade_restores_country_names(db):

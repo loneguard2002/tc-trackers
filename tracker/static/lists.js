@@ -14,7 +14,8 @@
   // Each table's rows carry data-search (lower-case text), data-status ("active" or "retired"), data-region (Locations)
   // and data-sort-<key>. A row shows when it contains the typed text (a plain substring, never a pattern), is in the
   // chosen region, and has the chosen status. Each status button counts the rows the search and region filter leave
-  // for that status; the footer counts the rows shown, all rows, and the active rows shown.
+  // for that status; the footer counts the rows shown, all rows, and all active rows (whatever is shown, as the total
+  // is). A line inside the table's frame says so when no row is shown.
   function setUpTable(table) {
     var id = table.id;
     var body = table.tBodies[0];
@@ -29,6 +30,7 @@
     var regionFilter = document.querySelector('select[data-region-filter="' + id + '"]');
     var panel = table.closest(".list-panel");
     var foot = panel ? panel.querySelector(".list-foot") : null;
+    var noMatch = panel ? panel.querySelector("[data-no-match]") : null;
     var status = "all";
 
     each(buttons, function (button) {
@@ -54,11 +56,10 @@
         }
         var show = found && (status === "all" || rowStatus === status);
         item.row.hidden = !show;
-        if (show) {
-          shown += 1;
-          if (rowStatus === "active") active += 1;
-        }
+        if (show) shown += 1;
+        if (rowStatus === "active") active += 1;
       });
+      if (noMatch) noMatch.hidden = shown !== 0;
       each(buttons, function (button) {
         var count = button.querySelector("[data-count]");
         if (count) count.textContent = String(counts[button.getAttribute("data-status")] || 0);
@@ -93,11 +94,15 @@
 
     // A header's sort button orders the rows by its data-sort-<key>: numbers as numbers, text in the reader's
     // language ignoring case; a second click reverses the order. Rows that compare equal keep the server's order.
-    var headers = table.querySelectorAll("thead th[aria-sort]");
-    each(headers, function (header) {
+    // The rows arrive in the order of the column marked data-sort-default, so that column starts "ascending" and its
+    // first click reverses it.
+    var headers = Array.prototype.filter.call(table.querySelectorAll("thead th"), function (header) {
+      return Boolean(header.querySelector("button.sort-button[data-sort]"));
+    });
+    headers.forEach(function (header) {
       var button = header.querySelector("button.sort-button[data-sort]");
-      if (!button) return;
       var label = header.querySelector("[data-sort-label]");
+      header.setAttribute("aria-sort", header.hasAttribute("data-sort-default") ? "ascending" : "none");
       button.hidden = false;
       if (label) label.hidden = true;
       button.addEventListener("click", function () {
@@ -114,7 +119,7 @@
             : first.localeCompare(second, undefined, { sensitivity: "base", numeric: true });
           return order * sign || a.index - b.index;
         });
-        each(headers, function (other) { other.setAttribute("aria-sort", "none"); });
+        headers.forEach(function (other) { other.setAttribute("aria-sort", "none"); });
         header.setAttribute("aria-sort", direction);
         sorted.forEach(function (item) { body.appendChild(item.row); });
       });
@@ -145,7 +150,8 @@
   }
 
   // Remove the errors an earlier submission left: the list at the top, each field's message, the red borders, and
-  // the references to the messages from aria-describedby.
+  // the references to the messages from aria-describedby. A field's help, hidden while its error said the same, is
+  // shown again and described by once more.
   function clearErrors(dialog) {
     var gone = [];
     each(dialog.querySelectorAll(".list-dialog-body > .form-alert, .field-error"), function (element) {
@@ -158,6 +164,12 @@
       var kept = (control.getAttribute("aria-describedby") || "").split(" ").filter(function (ref) {
         return ref !== "" && gone.indexOf(ref) === -1;
       });
+      var field = control.closest(".field");
+      var help = field && control.id ? field.querySelector('.field-help[id="' + control.id + '-help"]') : null;
+      if (help) {
+        help.hidden = false;
+        if (kept.indexOf(help.id) === -1) kept.unshift(help.id);
+      }
       if (kept.length) {
         control.setAttribute("aria-describedby", kept.join(" "));
       } else {
@@ -273,7 +285,20 @@
     });
   });
 
+  // A dialog the server rendered open sits at the address its form was sent to (or its own /new or /edit page).
+  // Closing it, by Escape, Cancel or the close button, puts back the table's address, so that a reload shows the
+  // table rather than the dialog.
   each(document.querySelectorAll("dialog[data-reopen]"), function (dialog) {
-    if (canBeModal(dialog)) showModal(dialog);
+    if (!canBeModal(dialog)) return;
+    var back = dialog.querySelector("[data-dialog-close][href]");
+    dialog.addEventListener("close", function () {
+      // showModal() below first closes the dialog the server rendered open; that close event arrives once the
+      // dialog is open again as a modal, and is not the reader's.
+      if (dialog.open) return;
+      if (back && window.history && typeof window.history.replaceState === "function") {
+        window.history.replaceState(null, "", back.getAttribute("href"));
+      }
+    });
+    showModal(dialog);
   });
 })();

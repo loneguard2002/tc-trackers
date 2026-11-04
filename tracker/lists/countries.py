@@ -9,7 +9,8 @@ from __future__ import annotations
 COUNTRY_REQUIRED = "Choose a country."
 COUNTRY_CHOICE_ERROR = "Choose a country from the list."
 
-# Upper-case ISO 3166-1 alpha-2 code -> name, ordered by name (case-insensitive).
+# Upper-case ISO 3166-1 alpha-2 code -> name, ordered by name ignoring case and accents (Côte d'Ivoire among the
+# Cs, before Croatia).
 COUNTRIES: dict[str, str] = {
     "AF": "Afghanistan",
     "AX": "Aland Islands",
@@ -63,12 +64,12 @@ COUNTRIES: dict[str, str] = {
     "KM": "Comoros",
     "CK": "Cook Islands",
     "CR": "Costa Rica",
+    "CI": "Côte d'Ivoire",
     "HR": "Croatia",
     "CU": "Cuba",
     "CW": "Curaçao",
     "CY": "Cyprus",
     "CZ": "Czech Republic",
-    "CI": "Côte d'Ivoire",
     "CD": "Democratic Republic of the Congo",
     "DK": "Denmark",
     "DJ": "Djibouti",
@@ -190,10 +191,10 @@ COUNTRIES: dict[str, str] = {
     "PR": "Puerto Rico",
     "QA": "Qatar",
     "CG": "Republic of the Congo",
+    "RE": "Réunion",
     "RO": "Romania",
     "RU": "Russia",
     "RW": "Rwanda",
-    "RE": "Réunion",
     "BL": "Saint Barthélemy",
     "SH": "Saint Helena, Ascension and Tristan da Cunha",
     "KN": "Saint Kitts and Nevis",
@@ -238,10 +239,10 @@ COUNTRIES: dict[str, str] = {
     "TO": "Tonga",
     "TT": "Trinidad and Tobago",
     "TN": "Tunisia",
+    "TR": "Türkiye",
     "TM": "Turkmenistan",
     "TC": "Turks and Caicos Islands",
     "TV": "Tuvalu",
-    "TR": "Türkiye",
     "UG": "Uganda",
     "UA": "Ukraine",
     "AE": "United Arab Emirates",

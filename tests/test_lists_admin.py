@@ -3,6 +3,7 @@
 import html
 import json
 import re
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -141,11 +142,11 @@ def test_region_fields_are_required_and_limited(client, logged_in_admin, db):
     assert response.status_code == 400
     page = text_of(response)
     assert "Please correct the following:" in page
-    assert "Enter a region short name." in page and "Enter a region name." in page
+    assert "Enter a region code." in page and "Enter a region name." in page
     response = post(client, "/admin/regions", {"code": "x" * 21, "name": "y" * 101})
     assert response.status_code == 400
     page = text_of(response)
-    assert "A region short name can be at most 20 characters." in page
+    assert "A region code can be at most 20 characters." in page
     assert "A region name can be at most 100 characters." in page
     assert post(client, "/admin/regions", {"code": "x" * 20, "name": "y" * 100}).status_code == 302
     assert len(entries(db, "region_created")) == 1
@@ -158,7 +159,7 @@ def test_location_fields_are_required_and_limited(client, logged_in_admin, db, r
     )
     assert response.status_code == 400
     page = text_of(response)
-    assert "Enter a location code." in page and "Enter a city." in page and "Choose a country." in page
+    assert "Enter a location code." in page and "Enter a location name." in page and "Choose a country." in page
     response = post(
         client,
         "/admin/locations",
@@ -166,7 +167,7 @@ def test_location_fields_are_required_and_limited(client, logged_in_admin, db, r
     )
     assert response.status_code == 400
     page = text_of(response)
-    assert "A city can be at most 100 characters." in page
+    assert "A location name can be at most 100 characters." in page
     assert db.scalars(select(Location)).all() == []
 
 
@@ -180,20 +181,20 @@ def test_duplicate_names_are_refused_ignoring_case(
     response = post(client, "/admin/regions", {"code": "emea", "name": "europe, middle east and africa"})
     assert response.status_code == 400
     page = text_of(response)
-    assert "A region with that short name already exists." in page
+    assert "A region with that code already exists." in page
     assert "A region with that name already exists." in page
     response = post(
         client, "/admin/locations", {"region_id": str(apac.id), "code": "GVA", "city": "geneva", "country_code": "CH"}
     )
     assert response.status_code == 400
-    assert "A location with that city and country already exists." in text_of(response)
+    assert "A location with that name and country already exists." in text_of(response)
     response = post(client, "/admin/business-lines", {"name": "TRADITION BROKERAGE"})
     assert response.status_code == 400
     assert "A business line with that name already exists." in text_of(response)
     # Saving another entry under a taken name is refused in the same words.
     response = post(client, f"/admin/regions/{apac.id}", {"action": "save", "code": "Emea", "name": "Asia Pacific"})
     assert response.status_code == 400
-    assert "A region with that short name already exists." in text_of(response)
+    assert "A region with that code already exists." in text_of(response)
     assert db.scalar(select(Region.code).where(Region.id == apac.id)) == "APAC"
     assert len(db.scalars(select(Location)).all()) == 1
     assert entries(db) == []
@@ -210,7 +211,7 @@ def test_a_concurrent_duplicate_gives_the_same_message(client, logged_in_admin, 
     monkeypatch.setattr(views, "_region_errors", lambda *args, **kwargs: {})  # the check passes; the index refuses
     response = post(client, "/admin/regions", {"code": "emea", "name": "Elsewhere"})
     assert response.status_code == 400
-    assert "A region with that short name already exists." in text_of(response)
+    assert "A region with that code already exists." in text_of(response)
     assert len(db.scalars(select(Region)).all()) == 1
 
 
@@ -470,6 +471,10 @@ def test_regions_table_lists_counts_and_status(client, logged_in_admin, region_f
     assert 'href="/admin/regions/new" data-dialog-open="add"' in page
     for column in ("Code", "Name", "Locations", "Teams", "Status"):
         assert f'data-sort="{column.lower()}" hidden' in page
+    # The server's order is by code; lists.js marks that column sorted (no sort control without JavaScript).
+    assert "aria-sort" not in page
+    assert re.findall(r'<th [^>]*data-sort-default[^>]*><button [^>]*data-sort="(\w+)"', page) == ["code"]
+    assert '<p class="list-no-match" data-no-match hidden>No regions match.</p>' in page
     text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split())
     assert "Showing 2 of 2 regions" in text and "1 active" in text
 
@@ -550,7 +555,7 @@ def test_add_error_reopens_add_dialog_with_typed_values(client, logged_in_admin,
     assert is_open(tag) and "data-reopen" in tag and not is_open(dialog_of(page, "edit")[0])
     assert 'value="emea"' in dialog and 'value="Typed &lt;name&gt;"' in dialog
     assert REGION_CODE_TAKEN in dialog
-    assert 'aria-invalid="true"' in dialog and 'aria-describedby="add-code-help add-code-error"' in dialog
+    assert 'aria-invalid="true"' in dialog and 'aria-describedby="add-code-error"' in dialog
     assert len(db.scalars(select(Region)).all()) == 1
 
 
@@ -774,6 +779,10 @@ def test_locations_table_shows_code_region_country_flag_teams(
     assert '</svg>Edit<span class="sr-only"> London, United Kingdom</span></a>' in row
     for column in ("Code", "Name", "Region", "Country", "Teams", "Status"):
         assert f'data-sort="{column.lower()}" hidden' in page
+    # The server's order is by region; lists.js marks that column sorted (no sort control without JavaScript).
+    assert "aria-sort" not in page
+    assert re.findall(r'<th [^>]*data-sort-default[^>]*><button [^>]*data-sort="(\w+)"', page) == ["region"]
+    assert '<p class="list-no-match" data-no-match hidden>No locations match.</p>' in page
     text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split())
     assert "Showing 1 of 1 locations" in text and "1 active" in text
 
@@ -1003,7 +1012,13 @@ def test_dialog_help_and_errors_follow_their_inputs(client, logged_in_admin, reg
         control = dialog.index('id="add-code"')
         assert dialog.index('<label for="add-code">') < control < dialog.index('id="add-code-error"')
         assert control < dialog.index('id="add-code-help"')
-        assert 'aria-describedby="add-code-help add-code-error"' in dialog
+        # The error says what the help says, so the help is hidden and left out of aria-describedby; lists.js shows
+        # it again when the next Add or Edit clears the error.
+        assert '<p class="field-help" id="add-code-help" hidden>' in dialog
+        assert 'aria-describedby="add-code-error"' in dialog
+        fresh_dialog = dialog_of(text_of(client.get(url)), "add")[1]
+        assert '<p class="field-help" id="add-code-help">' in fresh_dialog
+        assert 'aria-describedby="add-code-help"' in fresh_dialog
 
 
 def test_edit_location_error_reopens_its_dialog(client, logged_in_admin, db, region_factory, location_factory):
@@ -1216,3 +1231,17 @@ def test_used_regions_offer_retire_or_restore_but_no_delete(
     for row in (retired_row, active_row):  # a muted slot keeps Delete's place and says why it is missing
         assert f'<span class="tool-button is-disabled row-tool-slot" title="{REGION_IN_USE}">' in row
         assert f'<span class="sr-only">{REGION_IN_USE}</span>' in row
+
+
+def test_location_code_inputs_show_capitals_as_typed(client, logged_in_admin, region_factory, location_factory):
+    """The server upper-cases a location code, so its Code inputs show capitals as they are typed (tracker.css). A
+    region code keeps the case it is given, so its inputs show it as typed."""
+    location_factory(region_factory("EMEA"), "London", "GB", code="LON")
+    for url, styled in (("/admin/locations", True), ("/admin/regions", False)):
+        page = client.get(url).get_data(as_text=True)
+        for prefix in ("add", "edit"):
+            tag = re.search(rf'<input id="{prefix}-code"[^>]*>', page).group(0)
+            assert ('class="code-input"' in tag) is styled, (url, prefix)
+            assert ('autocapitalize="characters"' in tag) is styled and "style=" not in tag
+    css = (Path(__file__).parent.parent / "tracker" / "static" / "tracker.css").read_text()
+    assert re.search(r"\.code-input \{[^}]*text-transform: uppercase", css)

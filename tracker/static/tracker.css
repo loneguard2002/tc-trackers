@@ -1036,6 +1036,8 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
 .country-pick { display: flex; align-items: center; gap: 10px; }
 .country-pick select { flex: 1 1 auto; min-width: 0; }
 .list-dialog-note { margin: 6px 0 0; }
+.list-no-match { margin: 0; padding: 20px; color: var(--muted); font-size: .875rem; text-align: center; }
+.code-input { text-transform: uppercase; }  /* the server upper-cases a location code; show it so as it is typed */
 .list-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin: 0; padding: 10px 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; }
 
 /* The Add and Edit dialogs. Opened by lists.js they are modal, centred over a dimmed page. Without JavaScript the

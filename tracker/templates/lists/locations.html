@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import icon %}
-{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, sort_header, table_foot, row_actions, list_dialog, dialog_field, described_by %}
+{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_foot, row_actions, list_dialog, dialog_field, described_by %}
 {% macro region_label(r) -%}
 {{ r.code }} — {{ r.name }}{% if r.retired %} (retired){% endif %}
 {%- endmacro %}
@@ -22,7 +22,7 @@
 <div class="field-pair">
   {% set code_help = '2 to 6 letters, such as LON.' %}
   {% call dialog_field('Code', code_help, prefix ~ '-code', errors.get('code', [])) %}
-  <input id="{{ prefix }}-code" name="code" value="{{ values.get('code', '') }}" maxlength="6" required autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="{{ described_by(prefix ~ '-code', code_help, errors.get('code')) }}"{% if errors.get('code') %} aria-invalid="true"{% endif %}>
+  <input id="{{ prefix }}-code" class="code-input" name="code" value="{{ values.get('code', '') }}" maxlength="6" required autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="{{ described_by(prefix ~ '-code', code_help, errors.get('code')) }}"{% if errors.get('code') %} aria-invalid="true"{% endif %}>
   {% endcall %}
   {% call dialog_field('Name', '', prefix ~ '-city', errors.get('city', [])) %}
   <input id="{{ prefix }}-city" name="city" value="{{ values.get('city', '') }}" maxlength="100" required autocomplete="off"{% if errors.get('city') %} aria-describedby="{{ prefix }}-city-error" aria-invalid="true"{% endif %}>
@@ -91,7 +91,7 @@
         <thead><tr>
           {{ sort_header('Code', 'code') }}
           {{ sort_header('Name', 'name') }}
-          {{ sort_header('Region', 'region') }}
+          {{ sort_header('Region', 'region', default=True) }}
           {{ sort_header('Country', 'country') }}
           {{ sort_header('Teams', 'teams', 'num') }}
           {{ sort_header('Status', 'status') }}
@@ -118,6 +118,7 @@
         {% endfor %}
         </tbody>
       </table>
+      {{ no_match('No locations match.') }}
     </div>
     {{ table_foot('locations', locations|length, locations|rejectattr('retired')|list|length) }}
     {% else %}

@@ -38,13 +38,20 @@
 </div>
 {%- endmacro %}
 
-{# A column heading. Without JavaScript it is plain text; lists.js shows the sort button and hides the text. #}
-{% macro sort_header(label, key, class_name='') -%}
-<th scope="col" aria-sort="none"{% if class_name %} class="{{ class_name }}"{% endif %}><button type="button" class="sort-button" data-sort="{{ key }}" hidden>{{ label }}{{ icon('sort') }}</button><span data-sort-label>{{ label }}</span></th>
+{# A column heading. Without JavaScript it is plain text with no aria-sort (there is nothing to sort with); lists.js
+   shows the sort button, hides the text and sets aria-sort, "ascending" on the column marked ``default`` (the one the
+   server orders the rows by) and "none" on the others. #}
+{% macro sort_header(label, key, class_name='', default=False) -%}
+<th scope="col"{% if class_name %} class="{{ class_name }}"{% endif %}{% if default %} data-sort-default{% endif %}><button type="button" class="sort-button" data-sort="{{ key }}" hidden>{{ label }}{{ icon('sort') }}</button><span data-sort-label>{{ label }}</span></th>
 {%- endmacro %}
 
 {# The line under the table: "Showing 2 of 2 regions" and "2 active". ``total`` and ``active`` are the server's
-   counts, which lists.js updates as rows are filtered. #}
+   counts of all rows and all active rows; lists.js updates "Showing" as rows are filtered. #}
+{# The line inside the table's frame that lists.js shows when the search and filters leave no rows. #}
+{% macro no_match(text) -%}
+<p class="list-no-match" data-no-match hidden>{{ text }}</p>
+{%- endmacro %}
+
 {% macro table_foot(noun_plural, total=0, active=0) -%}
 <p class="list-foot"><span>Showing <span data-shown>{{ total }}</span> of <span data-total>{{ total }}</span> {{ noun_plural }}</span><span><span data-active>{{ active }}</span> active</span></p>
 {%- endmacro %}
@@ -110,16 +117,18 @@
 
 {# One dialog field: the label, the control (the call body), then the field's own errors (``errors``) and the help.
    Help and errors sit below the control, so the labels and inputs of fields side by side line up. The control should
-   carry aria-describedby=described_by(for_id, help, errors) and aria-invalid when there are errors. #}
+   carry aria-describedby=described_by(for_id, help, errors) and aria-invalid when there are errors. While the field
+   has errors the help is hidden and left out of aria-describedby, because the error says it again; it is still
+   rendered, so that lists.js can show it when the next Add or Edit clears the errors. #}
 {% macro dialog_field(label, help, for_id, errors=(), row_class='') -%}
 <div class="field{{ ' ' ~ row_class if row_class }}{{ ' has-error' if errors }}">
   <label for="{{ for_id }}">{{ label }}</label>
   {{ caller() }}
   {% if errors %}<p class="field-error" id="{{ for_id }}-error">{{ errors|join(' ') }}</p>{% endif %}
-  {% if help %}<p class="field-help" id="{{ for_id }}-help">{{ help }}</p>{% endif %}
+  {% if help %}<p class="field-help" id="{{ for_id }}-help"{% if errors %} hidden{% endif %}>{{ help }}</p>{% endif %}
 </div>
 {%- endmacro %}
 
 {% macro described_by(for_id, help, errors) -%}
-{{ (([for_id ~ '-help'] if help else []) + ([for_id ~ '-error'] if errors else []))|join(' ') }}
+{{ ([for_id ~ '-error'] if errors else ([for_id ~ '-help'] if help else []))|join(' ') }}
 {%- endmacro %}
