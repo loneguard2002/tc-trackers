@@ -588,6 +588,7 @@ def test_regions_page_has_no_inline_script_or_style(client, logged_in_admin, reg
     for response in pages:
         page = response.get_data(as_text=True)
         assert re.findall(r"<script(?![^>]*\ssrc=)", page) == []
+        assert re.search(r'<script src="/static/lists\.js[^"]*" defer>', page)
         assert " style=" not in page
         assert re.search(r"\son[a-z]+\s*=", page) is None
 
@@ -965,13 +966,21 @@ def test_edit_location_in_retired_region_offers_it_and_saves_unchanged(
 ):
     region_factory("EMEA")
     old = region_factory("OLD", "Old region", retired=True)
-    region_factory("GONE", "Gone region", retired=True)
+    gone = region_factory("GONE", "Gone region", retired=True)
     place = location_factory(old, "Basel", "CH", code="BSL")
     page = text_of(client.get(f"/admin/locations/{place.id}/edit"))
+    # The location's own retired region is offered; every other retired region is there hidden and disabled, for
+    # lists.js to offer to its own locations when the dialog is reused for another row.
+    own = f'<option value="{old.id}" selected data-retired>OLD — Old region (retired)</option>'
+    held = f'<option value="{gone.id}" hidden disabled data-retired>GONE — Gone region (retired)</option>'
     regions = select_of(dialog_of(page, "edit")[1], "region_id")
-    assert f'<option value="{old.id}" selected>OLD — Old region (retired)</option>' in regions
-    assert "GONE" not in regions
+    assert own in regions and held in regions
     assert "OLD" not in select_of(dialog_of(page, "add")[1], "region_id")
+    errors = {"action": "save", "code": "B5L", "city": "Basel", "country_code": "CH", "region_id": str(old.id)}
+    regions = select_of(
+        dialog_of(text_of(post(client, f"/admin/locations/{place.id}", errors)), "edit")[1], "region_id"
+    )
+    assert own in regions and held in regions
     response = post(
         client,
         f"/admin/locations/{place.id}",
@@ -981,6 +990,20 @@ def test_edit_location_in_retired_region_offers_it_and_saves_unchanged(
     assert response.headers["Location"].endswith(f"/admin/locations#location-{place.id}")
     assert NO_CHANGES_MESSAGE in text_of(client.get("/admin/locations"))
     assert entries(db) == []
+
+
+def test_dialog_help_and_errors_follow_their_inputs(client, logged_in_admin, region_factory):
+    """Help and errors sit below the input, so the labels of fields side by side line up."""
+    region_factory("EMEA")
+    for url, data in (
+        ("/admin/regions", {"code": "", "name": "Europe"}),
+        ("/admin/locations", {"region_id": "", "code": "l0n", "city": "London", "country_code": "GB"}),
+    ):
+        dialog = dialog_of(text_of(post(client, url, data)), "add")[1]
+        control = dialog.index('id="add-code"')
+        assert dialog.index('<label for="add-code">') < control < dialog.index('id="add-code-error"')
+        assert control < dialog.index('id="add-code-help"')
+        assert 'aria-describedby="add-code-help add-code-error"' in dialog
 
 
 def test_edit_location_error_reopens_its_dialog(client, logged_in_admin, db, region_factory, location_factory):
@@ -1089,6 +1112,7 @@ def test_locations_page_has_no_inline_script_or_style(
     for response in pages:
         page = response.get_data(as_text=True)
         assert re.findall(r"<script(?![^>]*\ssrc=)", page) == []
+        assert re.search(r'<script src="/static/lists\.js[^"]*" defer>', page)
         assert " style=" not in page
         assert re.search(r"\son[a-z]+\s*=", page) is None
 

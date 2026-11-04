@@ -80,14 +80,15 @@
 
 {# The Add or Edit dialog (``name`` "add" or "edit"), holding the form; the call body is the fields. The server
    renders it open (with data-reopen, for lists.js to reopen it as a modal) when it was submitted with errors, or on
-   its own page without JavaScript. ``action`` is left out of a closed Edit dialog until lists.js fills it. #}
-{% macro list_dialog(name, title, action, is_open, errors, submit_label, cancel_url) -%}
+   its own page without JavaScript. ``action`` is left out of a closed Edit dialog until lists.js fills it, and
+   ``title_prefix`` ("Edit location") is what lists.js puts before the entry's code in the title. #}
+{% macro list_dialog(name, title, action, is_open, errors, submit_label, cancel_url, title_prefix='') -%}
 <dialog id="{{ name }}-dialog" class="list-dialog" aria-labelledby="{{ name }}-dialog-title"{% if is_open %} open data-reopen{% endif %}>
   <form method="post"{% if action %} action="{{ action }}"{% endif %}>
     {{ csrf_field(csrf_token()) }}
     {% if name == 'edit' %}<input type="hidden" name="action" value="save">{% endif %}
     <header class="list-dialog-head">
-      <h2 id="{{ name }}-dialog-title">{{ title }}</h2>
+      <h2 id="{{ name }}-dialog-title"{% if title_prefix %} data-title-prefix="{{ title_prefix }}"{% endif %}>{{ title }}</h2>
       <a class="tool-button" href="{{ cancel_url }}" data-dialog-close title="Close">{{ icon('close') }}<span class="sr-only">Close</span></a>
     </header>
     <div class="list-dialog-body">
@@ -107,14 +108,15 @@
 </dialog>
 {%- endmacro %}
 
-{# One dialog field: the label, the help, the field's own errors (``errors``), then the control (the call body). The
-   control should carry aria-describedby=described_by(for_id, help, errors) and aria-invalid when there are errors. #}
+{# One dialog field: the label, the control (the call body), then the field's own errors (``errors``) and the help.
+   Help and errors sit below the control, so the labels and inputs of fields side by side line up. The control should
+   carry aria-describedby=described_by(for_id, help, errors) and aria-invalid when there are errors. #}
 {% macro dialog_field(label, help, for_id, errors=(), row_class='') -%}
 <div class="field{{ ' ' ~ row_class if row_class }}{{ ' has-error' if errors }}">
   <label for="{{ for_id }}">{{ label }}</label>
-  {% if help %}<p class="field-help" id="{{ for_id }}-help">{{ help }}</p>{% endif %}
-  {% if errors %}<p class="field-error" id="{{ for_id }}-error">{{ errors|join(' ') }}</p>{% endif %}
   {{ caller() }}
+  {% if errors %}<p class="field-error" id="{{ for_id }}-error">{{ errors|join(' ') }}</p>{% endif %}
+  {% if help %}<p class="field-help" id="{{ for_id }}-help">{{ help }}</p>{% endif %}
 </div>
 {%- endmacro %}
 
