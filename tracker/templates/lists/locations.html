@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon %}
+{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, sort_header, table_foot, row_actions, list_dialog, dialog_field, described_by %}
+{% macro region_label(r) -%}
+{{ r.code }} — {{ r.name }}{% if r.retired %} (retired){% endif %}
+{%- endmacro %}
+{#- The Add or Edit dialog's fields: Region; Code and Name side by side; Country with its flag. ``offered`` holds the
+    regions to list: the active ones, plus on Edit the location's own retired region; on the closed Edit dialog every
+    retired region is listed hidden and disabled (data-retired), for lists.js to offer to its own locations only.
+    ``note`` is the Edit dialog's team note, or None on Add. -#}
+{% macro location_fields(prefix, values, errors, offered, note=None) -%}
+{% set chosen_region = values.get('region_id', '') %}
+{% set region_errors = errors.get('region_id', []) %}
+{% set region_described = ([prefix ~ '-region-note'] if note is not none else []) + ([prefix ~ '-region-error'] if region_errors else []) %}
+{% call dialog_field('Region', '', prefix ~ '-region', region_errors) %}
+<select id="{{ prefix }}-region" name="region_id" required{% if region_described %} aria-describedby="{{ region_described|join(' ') }}"{% endif %}{% if region_errors %} aria-invalid="true"{% endif %}>
+  <option value=""{% if not chosen_region %} selected{% endif %}>Choose a region</option>
+  {% for r, held in offered %}<option value="{{ r.id }}"{% if chosen_region == r.id|string %} selected{% endif %}{% if held %} hidden disabled data-retired{% endif %}>{{ region_label(r) }}</option>{% endfor %}
+</select>
+{% if note is not none %}<p class="field-help list-dialog-note" id="{{ prefix }}-region-note" data-team-note data-note-one="{{ note_one }}" data-note-many="{{ note_many }}"{% if not note %} hidden{% endif %}>{{ note }}</p>{% endif %}
+{% endcall %}
+<div class="field-pair">
+  {% set code_help = '2 to 6 letters, such as LON.' %}
+  {% call dialog_field('Code', code_help, prefix ~ '-code', errors.get('code', [])) %}
+  <input id="{{ prefix }}-code" name="code" value="{{ values.get('code', '') }}" maxlength="6" required autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="{{ described_by(prefix ~ '-code', code_help, errors.get('code')) }}"{% if errors.get('code') %} aria-invalid="true"{% endif %}>
+  {% endcall %}
+  {% call dialog_field('Name', '', prefix ~ '-city', errors.get('city', [])) %}
+  <input id="{{ prefix }}-city" name="city" value="{{ values.get('city', '') }}" maxlength="100" required autocomplete="off"{% if errors.get('city') %} aria-describedby="{{ prefix }}-city-error" aria-invalid="true"{% endif %}>
+  {% endcall %}
+</div>
+{% set chosen_country = values.get('country_code', '') %}
+{% set country_errors = errors.get('country_code', []) %}
+{% call dialog_field('Country', '', prefix ~ '-country', country_errors) %}
+<div class="country-pick">
+  <select id="{{ prefix }}-country" name="country_code" required data-country-select{% if country_errors %} aria-describedby="{{ prefix }}-country-error" aria-invalid="true"{% endif %}>
+    <option value=""{% if chosen_country not in countries %} selected{% endif %}>Choose a country</option>
+    {% for code, name in countries.items() %}<option value="{{ code }}"{% if chosen_country == code %} selected{% endif %}>{{ name }} ({{ code }})</option>{% endfor %}
+  </select>
+  {% if chosen_country in countries %}
+  <img class="country-flag-preview" src="{{ url_for('static', filename=flag_path(chosen_country)) }}" alt="" width="28" height="21" data-flag-preview data-flag-base="{{ url_for('static', filename='flags/') }}">
+  {% else %}
+  <img class="country-flag-preview" alt="" width="28" height="21" data-flag-preview data-flag-base="{{ url_for('static', filename='flags/') }}" hidden>
+  {% endif %}
+</div>
+{% endcall %}
+{%- endmacro %}
+{% block content %}
+<div class="list-page">
+  <header class="list-head">
+    <div>
+      <h1>Locations</h1>
+      <p class="page-lede">Teams are placed at a location, and each location belongs to one region.</p>
+    </div>
+    <a class="button primary" href="{{ url_for('lists.new_location') }}" data-dialog-open="add">{{ icon('plus') }}Add location</a>
+  </header>
+
+  {% if errors and not dialog %}
+  <div class="form-alert" role="alert">
+    <strong>Please correct the following:</strong>
+    <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  {% set adding = dialog == 'add' %}
+  {% call list_dialog('add', 'Add location', url_for('lists.create_location'), adding, errors if adding else [], 'Create location', url_for('lists.locations')) %}
+  {{ location_fields('add', form if adding else {}, field_errors if adding else {}, add_regions) }}
+  {% endcall %}
+
+  {% set edit_open = dialog == 'edit' and editing %}
+  {% set edit_note = edit_note_text if edit_open else '' %}
+  {% call list_dialog('edit', 'Edit location ' ~ (editing.code or editing.city) if edit_open else 'Edit location', url_for('lists.update_location', location_id=editing.id) if edit_open else '', edit_open, errors if edit_open else [], 'Save', url_for('lists.locations')) %}
+  {{ location_fields('edit', form if edit_open else {}, field_errors if edit_open else {}, edit_regions, edit_note) }}
+  {% endcall %}
+
+  <section class="list-panel" aria-labelledby="locations-heading">
+    <h2 class="sr-only" id="locations-heading">All locations</h2>
+    {% if locations %}
+    <div class="list-tools">
+      {{ search_box('locations-table', 'Search locations') }}
+      <select id="locations-table-region" class="list-region" aria-label="Filter by region" data-region-filter="locations-table" hidden>
+        <option value="">All regions</option>
+        {% for r in regions %}<option value="{{ r.id }}"{% if chosen_region == r.id|string %} selected{% endif %}>{{ region_label(r) }}</option>{% endfor %}
+      </select>
+      {{ status_filters('locations-table', 'locations') }}
+    </div>
+    <div class="section-table list-table">
+      <table id="locations-table">
+        <thead><tr>
+          {{ sort_header('Code', 'code') }}
+          {{ sort_header('Name', 'name') }}
+          {{ sort_header('Region', 'region') }}
+          {{ sort_header('Country', 'country') }}
+          {{ sort_header('Teams', 'teams', 'num') }}
+          {{ sort_header('Status', 'status') }}
+          <th scope="col"><span class="sr-only">Actions</span></th>
+        </tr></thead>
+        <tbody>
+        {% for loc in locations %}
+        {% set region = regions_by_id[loc.region_id] %}
+        {% set country = country_name(loc.country_code) or '' %}
+        {% set label = location_label(loc.city, loc.country_code) %}
+        {% set teams = team_counts.get(loc.id, 0) %}
+        {% set status = 'retired' if loc.retired else 'active' %}
+        {% set search = [loc.code or '', loc.city, region.code, region.name, country]|select|join(' ')|lower %}
+        {% set edit_data = {'code': loc.code or '', 'city': loc.city, 'country_code': loc.country_code or '', 'region_id': loc.region_id, 'teams': teams, 'action': url_for('lists.update_location', location_id=loc.id)} %}
+        <tr id="location-{{ loc.id }}"{% if loc.retired %} class="is-retired"{% endif %} data-search="{{ search }}" data-status="{{ status }}" data-region="{{ loc.region_id }}" data-sort-code="{{ loc.code or '' }}" data-sort-name="{{ loc.city }}" data-sort-region="{{ region.code }}" data-sort-country="{{ country }}" data-sort-teams="{{ teams }}" data-sort-status="{{ status }}" data-edit='{{ edit_data|tojson }}'>
+          <td>{{ code_badge(loc.code, loc.city[:3]|upper) }}</td>
+          <td class="list-name">{{ loc.city }}</td>
+          <td class="list-region-cell">{{ region.code }} — {{ region.name }}{% if region.retired %} <span class="muted">(retired)</span>{% endif %}</td>
+          <td>{% if country %}<span class="country-cell"><img class="country-flag" src="{{ url_for('static', filename=flag_path(loc.country_code)) }}" alt="" width="20" height="15">{{ country }}</span>{% else %}<span class="muted">Country not set</span>{% endif %}</td>
+          <td class="num">{{ count_pill(teams, url_for('teams.index'), 'team' ~ ('s' if teams != 1) ~ ' at ' ~ loc.city) }}</td>
+          <td>{{ status_badge(loc.retired) }}</td>
+          <td class="cell-actions">{{ row_actions(url_for('lists.edit_location', location_id=loc.id), url_for('lists.update_location', location_id=loc.id), loc.retired, 'the location ' ~ label, label, location_in_use if teams else '') }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ table_foot('locations', locations|length, locations|rejectattr('retired')|list|length) }}
+    {% else %}
+    <p class="empty-note">No locations yet.{% if not add_regions %} <a href="{{ url_for('lists.regions') }}">Add a region first.</a>{% endif %}</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

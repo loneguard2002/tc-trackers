@@ -49,11 +49,13 @@
 <p class="list-foot"><span>Showing <span data-shown>{{ total }}</span> of <span data-total>{{ total }}</span> {{ noun_plural }}</span><span><span data-active>{{ active }}</span> active</span></p>
 {%- endmacro %}
 
-{# Edit, Retire or Restore, and Delete when nothing uses the entry. ``what`` names it, for example "the region EMEA".
-   Without JavaScript Edit opens the edit page; lists.js opens the Edit dialog instead. #}
-{% macro row_actions(edit_url, state_url, retired, what, in_use) -%}
+{# Edit, Retire or Restore, and Delete when nothing uses the entry. ``what`` names the entry in a sentence ("the
+   region EMEA"), ``name`` on its own ("EMEA"). When the entry is in use, ``in_use_reason`` says why it cannot be
+   deleted, in a muted slot that keeps Delete's place so the columns stay aligned. Without JavaScript Edit opens the
+   edit page; lists.js opens the Edit dialog instead. #}
+{% macro row_actions(edit_url, state_url, retired, what, name, in_use_reason='') -%}
 <div class="row-tools">
-  <a class="tool-button" href="{{ edit_url }}" data-dialog-open="edit" title="Edit">{{ icon('edit') }}<span class="sr-only">Edit {{ what }}</span></a>
+  <a class="button button-small row-edit" href="{{ edit_url }}" data-dialog-open="edit">{{ icon('edit') }}Edit<span class="sr-only"> {{ name }}</span></a>
   <form method="post" action="{{ state_url }}">
     {{ csrf_field(csrf_token()) }}
     {% if retired %}
@@ -64,7 +66,9 @@
     <button class="tool-button" type="submit" title="Retire">{{ icon('archive') }}<span class="sr-only">Retire {{ what }}</span></button>
     {% endif %}
   </form>
-  {% if not in_use %}
+  {% if in_use_reason %}
+  <span class="tool-button is-disabled row-tool-slot" title="{{ in_use_reason }}">{{ icon('trash') }}<span class="sr-only">{{ in_use_reason }}</span></span>
+  {% else %}
   <form method="post" action="{{ state_url }}" data-confirm="Delete {{ what }}? This cannot be undone.">
     {{ csrf_field(csrf_token()) }}
     <input type="hidden" name="action" value="delete">

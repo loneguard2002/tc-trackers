@@ -65,11 +65,10 @@
         <tr id="region-{{ r.id }}"{% if r.retired %} class="is-retired"{% endif %} data-search="{{ (r.code ~ ' ' ~ r.name)|lower }}" data-status="{{ status }}" data-sort-code="{{ r.code }}" data-sort-name="{{ r.name }}" data-sort-locations="{{ places }}" data-sort-teams="{{ teams }}" data-sort-status="{{ status }}" data-edit='{{ edit_data|tojson }}'>
           <td>{{ code_badge(r.code) }}</td>
           <td class="list-name">{{ r.name }}</td>
-          {# Task 4 links this count to the Locations page filtered to the region. #}
-          <td class="num">{{ count_pill(places, None, 'location' ~ ('s' if places != 1) ~ ' in ' ~ r.code) }}</td>
+          <td class="num">{{ count_pill(places, url_for('lists.locations', region=r.id), 'location' ~ ('s' if places != 1) ~ ' in ' ~ r.code) }}</td>
           <td class="num">{{ count_pill(teams, url_for('teams.index'), 'team' ~ ('s' if teams != 1) ~ ' in ' ~ r.code) }}</td>
           <td>{{ status_badge(r.retired) }}</td>
-          <td class="cell-actions">{{ row_actions(url_for('lists.edit_region', region_id=r.id), url_for('lists.update_region', region_id=r.id), r.retired, 'the region ' ~ r.code, places or tracker_counts.get(r.id, 0)) }}</td>
+          <td class="cell-actions">{{ row_actions(url_for('lists.edit_region', region_id=r.id), url_for('lists.update_region', region_id=r.id), r.retired, 'the region ' ~ r.code, r.code, region_in_use if places or tracker_counts.get(r.id, 0) else '') }}</td>
         </tr>
         {% endfor %}
         </tbody>
