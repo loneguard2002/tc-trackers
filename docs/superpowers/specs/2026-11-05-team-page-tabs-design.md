@@ -1,7 +1,7 @@
 # Team page: actions in the header, tabs below
 
 Status: draft for the owner's approval, 5 November 2026. Mockup: https://claude.ai/artifact/5cbGV5ew2jWLLCtHRzzJSy
-(version 12).
+(version 13).
 
 ## Why
 
@@ -13,8 +13,9 @@ possible from here, so teams are easier to rearrange.
 ## What changes
 
 1. **Header card, compact** (owner, 5 November 2026: the first version wasted space).
-   - Left: the name (26 px), then one line of small pills and text: the region code with the location ("EMEA ·
-     London, United Kingdom", or "GLOBAL" alone), "Under Group technology" (links), and the description in grey.
+   - Left: the name (26 px) with the description in grey to its right on the same line (it wraps below on a narrow
+     screen), then one line of small pills: the region code with the location ("EMEA · London, United Kingdom", or
+     "GLOBAL" alone) and "Under Group technology" (links).
    - Right, on the same row: **Edit details** (pencil) and **Higher teams** (tree icon), a thin divider, then
      **Delete team** as a red-outlined trash icon button with the label "Delete team" for screen readers and as a
      tooltip. On a phone the row wraps under the name.
