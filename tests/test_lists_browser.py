@@ -603,12 +603,12 @@ def test_no_horizontal_scroll_at_390(page, live_server, user_factory, places):
     for url in ("/admin/locations", "/admin/regions", "/admin/business-lines"):
         page.goto(f"{live_server}{url}")
         assert page.evaluate("document.scrollingElement.scrollWidth") <= 390, url
-        tabs = page.locator('nav[aria-label="Lists"] a.tab')
+        tabs = page.locator('nav.tabs a.tab')
         assert tabs.count() == 3
         for index in range(3):  # every tab is fully on screen, with no scrolling of the bar
             box = tabs.nth(index).bounding_box()
             assert box["x"] >= 0 and box["x"] + box["width"] <= 390, (url, index, box)
-        assert page.evaluate("document.querySelector('nav[aria-label=Lists]').scrollLeft") == 0, url
+        assert page.evaluate("document.querySelector('nav.tabs').scrollLeft") == 0, url
         page.locator("a[data-dialog-open=add]").click()
         assert page.evaluate("document.scrollingElement.scrollWidth") <= 390, url
     _clean(page)
