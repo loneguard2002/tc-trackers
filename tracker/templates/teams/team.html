@@ -74,7 +74,7 @@
       </header>
       {% endif %}
       <nav class="tabs team-tabs" aria-label="Team sections">
-        {% for key, label, count in (('people', 'People', people|length), ('below', 'Teams below', below|length), ('trackers', 'Trackers', trackers|length)) %}
+        {% for key, label, count in (('people', 'People', active_people), ('below', 'Teams below', below|length), ('trackers', 'Trackers', trackers|length)) %}
         <a class="tab{{ ' active' if key == tab }}" href="{{ url_for('teams.view', team_id=team.id, tab=key) }}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }} <span class="tab-count">{{ count }}</span></a>
         {% endfor %}
       </nav>

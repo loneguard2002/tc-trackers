@@ -378,7 +378,7 @@ def test_inactive_direct_members_keep_their_row_with_a_status_badge(
     add_member(team, gone, "viewer")
     row = row_for(raw_of(client.get(f"/admin/teams/{team.id}")), "Dora Disabled")
     assert "Disabled" in row and "<select" in row and "Remove" in row
-    assert re.search(r"People\s*<span class=\"tab-count\">1</span>", raw_of(client.get(f"/admin/teams/{team.id}")))
+    assert re.search(r"People\s*<span class=\"tab-count\">0</span>", raw_of(client.get(f"/admin/teams/{team.id}")))
 
 
 def test_filter_group_counts(client, logged_in_admin, team_factory, user_factory, add_member):

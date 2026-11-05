@@ -48,7 +48,8 @@ from . import bp
 from .impact import move_impact
 from .people import TeamPerson, reach_counts, team_people
 from .tracker_moves import (
-    TRACKER_CHOICE_ERROR,
+    TEAM_DELETED_MESSAGE,
+    TRACKERS_CHANGED_MESSAGE,
     moving_trackers,
     parse_trackers,
     picker_trackers,
@@ -324,6 +325,7 @@ def _render_team(
         team=team,
         under=_higher_teams(labels, _row(rows, team).parent_ids),
         people=people,
+        active_people=sum(1 for row in people if row.person.user.status == "active"),
         direct_count=sum(1 for row in people if row.person.direct_role is not None),
         inherited_count=sum(1 for row in people if row.person.inherited),
         below=below,
@@ -388,6 +390,18 @@ def _chosen_trackers(team: Team, texts: list[str]):
     return trackers, None
 
 
+def _move_race(team_id: int):
+    """After a move failed because someone changed the trackers or deleted the team at the same moment: roll back and
+    say which, on the picker again or, when the team is gone, on the Teams page."""
+    db = get_session()
+    db.rollback()
+    if db.scalar(select(Team.id).where(Team.id == team_id)) is None:
+        flash(TEAM_DELETED_MESSAGE, "danger")
+        return redirect(url_for("teams.index"))
+    flash(TRACKERS_CHANGED_MESSAGE, "danger")
+    return redirect(url_for("teams.view", team_id=team_id, tab="trackers", add=1))
+
+
 @bp.get("/<int:team_id>/trackers", endpoint="move_trackers")
 @permission_required("manage_teams")
 def preview_tracker_moves(team_id: int):
@@ -398,12 +412,16 @@ def preview_tracker_moves(team_id: int):
         return refusal
     db = get_session()
     region = team_region(db, team)
+    try:  # the preview makes the move in a savepoint, which fails like the move itself
+        impact = tracker_move_impact(db, team, trackers)
+    except (IntegrityError, StaleDataError):
+        return _move_race(team_id)  # not team.id: the failed flush leaves the session to be rolled back first
     page = render_template(
         "teams/move_trackers.html",
         team=team,
         moving=moving_trackers(db, team, trackers),
         region=region.code if region else None,
-        impact=tracker_move_impact(db, team, trackers),
+        impact=impact,
         page_title=f"Move trackers to {team.name}",
         current_page="teams",
     )
@@ -422,21 +440,15 @@ def confirm_tracker_moves(team_id: int):
     back = redirect(url_for("teams.view", team_id=team.id, tab="trackers"))
     names, team_name = [tracker.name for tracker in trackers], team.name
     before = snapshot_access(db, actor)
-    try:  # flushed by the guard's query, so a team deleted at the same moment fails there or on commit
+    try:  # flushed by the guard's query, so a change made at the same moment fails there or on commit
         apply_tracker_moves(db, actor, team, trackers)
         if raises_own_access(db, actor, before):
             db.rollback()
             flash(SELF_PROMOTION_MESSAGE, "danger")
             return back
         db.commit()
-    except IntegrityError:  # the team was deleted at the same moment
-        db.rollback()
-        flash(TEAM_CHOICE_ERROR, "danger")
-        return back
-    except StaleDataError:  # a tracker was deleted at the same moment
-        db.rollback()
-        flash(TRACKER_CHOICE_ERROR, "danger")
-        return back
+    except (IntegrityError, StaleDataError):  # the team or a tracker was deleted, or a region added, at that moment
+        return _move_race(team_id)  # not team.id: the failed flush leaves the session to be rolled back first
     moved = names[0] if len(names) == 1 else f"{len(names)} trackers"
     flash(f"Moved {moved} to {team_name}.", "success")
     return back
@@ -557,6 +569,7 @@ def _render_parents(
         impact=impact,
         notice=notice,
         back=back,
+        back_name=next((row.name for row in rows if row.id == back), None),
         errors=errors,
         page_title=f"Higher teams for {team.name}",
         current_page="teams",
@@ -575,6 +588,9 @@ def parents(team_id: int):
     parent_id, error, notice = _judge_change(load_team_rows(get_session()), team, action, request.args[action].strip())
     if error:
         return _render_parents(team, [error], 400, back=back)
+    if notice and back is not None:  # someone made or undid the change already: nothing to confirm
+        flash(notice, "info")
+        return redirect(url_for("teams.view", team_id=back, tab="below"))
     return _render_parents(team, [], 200, (action, parent_id), notice, back)
 
 
@@ -597,7 +613,9 @@ def change_parents(team_id: int):
         if error:
             return _render_parents(team, [error], 400, back=back)
         flash(notice, "info")
-        return redirect(url_for("teams.parents", team_id=team.id, back=back))
+        if back is not None:
+            return redirect(url_for("teams.view", team_id=back, tab="below"))
+        return redirect(url_for("teams.parents", team_id=team.id))
     actor = current_user()
     before = snapshot_access(db, actor)
     if action == "add":

@@ -29,6 +29,10 @@ from .tree import load_team_rows, team_labels
 
 CHOOSE_TRACKERS_MESSAGE = "Choose at least one tracker."
 TRACKER_CHOICE_ERROR = "Choose trackers from the list. A tracker may have been moved or deleted at the same moment."
+TRACKERS_CHANGED_MESSAGE = (
+    "Nothing was moved: someone moved, changed or deleted one of these trackers at the same moment. Choose them again."
+)
+TEAM_DELETED_MESSAGE = "Nothing was moved: someone deleted the team at the same moment."
 
 
 class MovingTracker(NamedTuple):

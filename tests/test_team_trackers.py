@@ -3,14 +3,22 @@
 import re
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import post, sign_in
 from tests.test_teams import entries, flat, holder, raw_of, text_of
 from tracker.auth.guards import SELF_PROMOTION_MESSAGE
 from tracker.ids import MAX_ID
-from tracker.models import Region, Tracker, TrackerRegion
-from tracker.teams.tracker_moves import CHOOSE_TRACKERS_MESSAGE, TRACKER_CHOICE_ERROR, tracker_move_impact
+from tracker.models import Region, Team, Tracker, TrackerRegion
+from tracker.teams import views
+from tracker.teams.tracker_moves import (
+    CHOOSE_TRACKERS_MESSAGE,
+    TEAM_DELETED_MESSAGE,
+    TRACKER_CHOICE_ERROR,
+    TRACKERS_CHANGED_MESSAGE,
+    tracker_move_impact,
+)
 
 
 @pytest.fixture
@@ -271,3 +279,62 @@ def test_row_remove_puts_the_tracker_in_no_team_and_returns(client, logged_in_ad
     response = post(client, f"/trackers/{setup['old'].id}/team", {"team_id": "", "next": "team", "team": "abc"})
     assert response.status_code == 302 and response.headers["Location"].endswith("/")
     assert team_of(db, setup["old"]) is None
+
+
+def gone_after_the_choice(monkeypatch, db, model, row_id):
+    """Delete the row from another connection just after the request has read the chosen trackers."""
+    real = views.parse_trackers
+
+    def parse(*args):
+        found = real(*args)
+        db.execute(delete(model).where(model.id == row_id))
+        db.commit()
+        return found
+
+    monkeypatch.setattr(views, "parse_trackers", parse)
+
+
+@pytest.mark.parametrize("method", ["get", "post"])
+def test_a_tracker_deleted_at_the_same_moment_moves_nothing(client, logged_in_admin, db, monkeypatch, setup, method):
+    team, payroll, laptops = setup["infra"], setup["payroll"], setup["laptops"]
+    gone_after_the_choice(monkeypatch, db, Tracker, payroll.id)
+    if method == "get":
+        response = client.get(f"{moves(team)}?{query(payroll, laptops)}")
+    else:
+        response = post(client, moves(team), {"tracker_id": [str(payroll.id), str(laptops.id)]})
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(f"/admin/teams/{team.id}?tab=trackers&add=1")
+    assert TRACKERS_CHANGED_MESSAGE in text_of(client.get(response.headers["Location"]))
+    db.expire_all()
+    assert db.get(Tracker, laptops.id).team_id == setup["apps"].id
+    assert entries(db, "tracker_team_changed") == []
+
+
+@pytest.mark.parametrize("method", ["get", "post"])
+def test_a_team_deleted_at_the_same_moment_moves_nothing(
+    client, logged_in_admin, db, monkeypatch, team_factory, setup, method
+):
+    empty = team_factory(name="Empty")
+    payroll = setup["payroll"]
+    gone_after_the_choice(monkeypatch, db, Team, empty.id)
+    if method == "get":
+        response = client.get(f"{moves(empty)}?{query(payroll)}")
+    else:
+        response = post(client, moves(empty), {"tracker_id": str(payroll.id)})
+    assert response.status_code == 302 and response.headers["Location"].endswith("/admin/teams")
+    assert TEAM_DELETED_MESSAGE in text_of(client.get(response.headers["Location"]))
+    db.expire_all()
+    assert db.get(Tracker, payroll.id).team_id is None
+
+
+def test_a_region_added_at_the_same_moment_gives_the_tracker_message(client, logged_in_admin, db, monkeypatch, setup):
+    """The unique tracker region refuses the move when someone adds the same region in between; the team is fine."""
+
+    def clash(*args):
+        raise IntegrityError("INSERT INTO tracker_regions", {}, Exception("duplicate key"))
+
+    monkeypatch.setattr(views, "apply_tracker_moves", clash)
+    team, payroll = setup["infra"], setup["payroll"]
+    response = post(client, moves(team), {"tracker_id": str(payroll.id)})
+    assert response.headers["Location"].endswith(f"/admin/teams/{team.id}?tab=trackers&add=1")
+    assert TRACKERS_CHANGED_MESSAGE in text_of(client.get(response.headers["Location"]))
