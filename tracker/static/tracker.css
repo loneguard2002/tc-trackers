@@ -672,6 +672,10 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 /* The tab's card: the light-blue panel on top (Add member, New team), then search, table and pager. */
 .team-panel { margin-bottom: 20px; }
 .team-add-panel { padding: 14px 20px; border-top: 0; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--primary) 7%, var(--surface)); }
+.team-add-below { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; }
+.team-add-below label { display: block; margin: 0 0 3px; font-size: .8125rem; font-weight: 600; }
+.team-add-below select { min-width: 220px; max-width: 100%; padding: 7px 10px; font-size: .9rem; }
+.team-add-below .role-note { align-self: center; padding: 0 2px; }
 .team-add-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin: 0; color: var(--muted); font-size: .875rem; }
 .team-panel .list-table table { min-width: 560px; }
 .team-panel .list-table td.num, .team-panel .list-table .num { text-align: right; font-variant-numeric: tabular-nums; }

@@ -5,7 +5,8 @@ import re
 import pytest
 
 from tests.conftest import post
-from tests.test_teams import flat, header_of, raw_of, text_of
+from tests.test_teams import entries, flat, header_of, parents_of, raw_of, text_of
+from tracker.teams.tree import TEAM_CHOICE_ERROR
 from tracker.teams.views import HAS_CHILDREN_MESSAGE
 
 
@@ -217,3 +218,97 @@ def test_teams_below_and_trackers_tables_columns(
     assert f'href="/trackers/{old.id}/roles"' in old_row
     group = raw[raw.index('data-status-for="trackers-table"') :]
     assert flat(group[group.index(">") + 1 : group.index("</div>")]) == "All 2 Active 1 Archived 1"
+
+
+@pytest.fixture
+def estate(team_factory):
+    """Top above Infra above Windows above Patching; Infra also has Apps below it; Other and Solo stand apart."""
+    top = team_factory(name="Top")
+    infra = team_factory(name="Infra", parent=top)
+    windows = team_factory(name="Windows", parent=infra)
+    patching = team_factory(name="Patching", parent=windows)
+    apps = team_factory(name="Apps", parent=infra)
+    other = team_factory(name="Other")
+    solo = team_factory(name="Solo")
+    return {
+        "top": top,
+        "infra": infra,
+        "windows": windows,
+        "patching": patching,
+        "apps": apps,
+        "other": other,
+        "solo": solo,
+    }
+
+
+def below_url(team, **query) -> str:
+    extra = "".join(f"&{key}={value}" for key, value in query.items())
+    return f"/admin/teams/{team.id}?tab=below{extra}"
+
+
+def test_top_panel_offers_existing_teams_without_loops(client, logged_in_admin, estate):
+    raw = raw_of(client.get(below_url(estate["infra"])))
+    panel = raw[raw.index('id="tab-below"') : raw.index('id="below-table"')]
+    assert panel.index("team-add-panel") < panel.index("list-tools")
+    text = flat(panel)
+    assert "Existing team" in text and "Add selected team" in text and " or " in text and "New team" in text
+    assert text.index("Add selected team") < text.index("New team")
+    select = re.search(r'<select id="below_team_id" name="team_id".*?</select>', panel, re.S).group(0)
+    names = re.findall(r"<option[^>]*>([^<]*)</option>", select)
+    assert [n.strip() for n in names] == ["Other", "Patching", "Solo"]  # not Infra, Top (higher), Windows, Apps (below)
+    assert f'action="/admin/teams/{estate["infra"].id}/below"' in panel and 'method="get"' in panel
+    assert f"parent={estate['infra'].id}" in panel
+
+
+def test_add_selected_team_previews_then_returns_to_the_tab(client, logged_in_admin, db, estate):
+    infra, solo = estate["infra"], estate["solo"]
+    response = client.get(f"/admin/teams/{infra.id}/below?team_id={solo.id}")
+    assert response.status_code == 302
+    preview = f"/admin/teams/{solo.id}/parents?add={infra.id}&back={infra.id}"
+    assert response.headers["Location"].endswith(preview)
+    page = client.get(preview)
+    raw = raw_of(page)
+    assert "Adding Solo under Infra" in text_of(page)
+    assert f'name="back" value="{infra.id}"' in raw
+    assert f'href="/admin/teams/{infra.id}?tab=below"' in raw  # Cancel
+    done = post(
+        client, f"/admin/teams/{solo.id}/parents", {"action": "add", "parent_id": str(infra.id), "back": str(infra.id)}
+    )
+    assert done.status_code == 302 and done.headers["Location"].endswith(f"/admin/teams/{infra.id}?tab=below")
+    assert parents_of(db, solo) == {infra.id}
+    assert len(entries(db, "team_parent_added")) == 1
+
+
+@pytest.mark.parametrize("value", ["", "x", "999999"])
+def test_add_selected_team_without_a_real_team_is_refused(client, logged_in_admin, estate, value):
+    response = client.get(f"/admin/teams/{estate['infra'].id}/below?team_id={value}")
+    assert response.status_code == 400
+    assert TEAM_CHOICE_ERROR in text_of(response) and 'id="tab-below"' in raw_of(response)
+
+
+def test_row_remove_previews_then_returns(client, logged_in_admin, db, estate):
+    infra, apps = estate["infra"], estate["apps"]
+    raw = raw_of(client.get(below_url(infra)))
+    row = next(r for r in re.findall(r"<tr[^>]*data-search.*?</tr>", raw, re.S) if "Apps" in r)
+    link = re.search(r'<a class="tool-button[^"]*" href="([^"]*)" title="([^"]*)">(.*?)</a>', row, re.S)
+    assert link.group(1).replace("&amp;", "&") == f"/admin/teams/{apps.id}/parents?remove={infra.id}&back={infra.id}"
+    assert link.group(2) == "Remove Apps from under Infra"
+    assert "Remove Apps from under Infra" in link.group(3) and "sr-only" in link.group(3)
+    assert "Removing Apps from under Infra" in text_of(client.get(link.group(1).replace("&amp;", "&")))
+    done = post(
+        client,
+        f"/admin/teams/{apps.id}/parents",
+        {"action": "remove", "parent_id": str(infra.id), "back": str(infra.id)},
+    )
+    assert done.headers["Location"].endswith(f"/admin/teams/{infra.id}?tab=below")
+    assert parents_of(db, apps) == set()
+    assert len(entries(db, "team_parent_removed")) == 1
+
+
+@pytest.mark.parametrize("back", ["999999", "abc", ""])
+def test_back_to_an_unknown_team_is_ignored(client, logged_in_admin, db, estate, back):
+    solo, infra = estate["solo"], estate["infra"]
+    page = raw_of(client.get(f"/admin/teams/{solo.id}/parents?add={infra.id}&back={back}"))
+    assert 'name="back"' not in page and f'href="/admin/teams/{solo.id}/parents"' in page
+    done = post(client, f"/admin/teams/{solo.id}/parents", {"action": "add", "parent_id": str(infra.id), "back": back})
+    assert done.headers["Location"].endswith(f"/admin/teams/{solo.id}/parents")

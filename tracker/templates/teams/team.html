@@ -161,10 +161,22 @@
     <div id="tab-below">
     <section class="list-panel team-panel" id="teams-below" aria-labelledby="section-below">
       <h2 class="sr-only" id="section-below">Teams below</h2>
-      <div class="team-add-panel team-add-note">
-        <span>People in this team also reach the trackers of these teams.</span>
-        <a class="button" href="{{ url_for('teams.index', parent=team.id, _anchor='new-team') }}">{{ icon('plus') }}New team below {{ team.name }}</a>
-      </div>
+      {% if existing_teams %}
+      <form class="team-add-panel team-add-below" method="get" action="{{ url_for('teams.add_below', team_id=team.id) }}">
+        <div>
+          <label for="below_team_id">Existing team</label>
+          <select id="below_team_id" name="team_id" required>
+            {% for id, name in existing_teams %}<option value="{{ id }}">{{ name }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="button" type="submit">{{ icon('plus') }}Add selected team</button>
+        <span class="role-note">or</span>
+        <a class="button" href="{{ url_for('teams.index', parent=team.id, _anchor='new-team') }}">{{ icon('plus') }}New team</a>
+      </form>
+      {% else %}
+      <p class="team-add-panel team-add-note"><span>No other team can be placed below {{ team.name }}.</span>
+        <a class="button" href="{{ url_for('teams.index', parent=team.id, _anchor='new-team') }}">{{ icon('plus') }}New team</a></p>
+      {% endif %}
       {% if below %}
       <div class="list-tools">
         {{ search_box('below-table', 'Search teams below') }}
@@ -189,7 +201,7 @@
             <td>{% if place %}{{ place_text }}{% else %}<span class="muted">{{ place_text }}</span>{% endif %}</td>
             <td class="num">{{ people_count(people_total) }}</td>
             <td class="num">{{ tracker_total }}</td>
-            <td class="cell-actions"></td>
+            <td class="cell-actions"><div class="row-tools"><a class="tool-button is-danger" href="{{ url_for('teams.parents', team_id=row.id, remove=team.id, back=team.id) }}" title="Remove {{ row.name }} from under {{ team.name }}">{{ icon('close') }}<span class="sr-only">Remove {{ row.name }} from under {{ team.name }}</span></a></div></td>
           </tr>
           {% endfor %}
           </tbody>
