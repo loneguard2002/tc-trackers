@@ -289,5 +289,4 @@ def test_diamond_effective_access_lists_both_team_routes(db, user_factory, track
     (row,) = tracker_access_routes(db, person)
     assert row.tracker.id == tracker.id and row.role == "editor"
     texts = [route.text for route in row.routes]
-    assert "Team Windows: Viewer" in texts and "Team Applications: Editor" in texts
     assert texts == ["Team Applications: Editor", "Team Windows: Viewer"]

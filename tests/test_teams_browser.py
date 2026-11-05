@@ -1,4 +1,4 @@
-"""The team move preview and confirmation in a real browser, under the Content Security Policy (database)."""
+"""The Higher teams preview and confirmation in a real browser, under the Content Security Policy (database)."""
 
 from __future__ import annotations
 
@@ -13,9 +13,10 @@ from tracker.models import TeamParent
 pytestmark = pytest.mark.browser
 
 
-def test_move_preview_then_confirm(page, live_server, db, team_factory, user_factory, tracker_factory, add_member):
+def test_higher_team_preview_then_confirm(
+    page, live_server, db, team_factory, user_factory, tracker_factory, add_member
+):
     infra = team_factory(name="Infrastructure")
-    apps = team_factory(name="Applications")
     windows = team_factory(name="Windows", parent=infra)
     tracker_factory(name="Laptop refresh", team_id=windows.id)
     add_member(infra, user_factory(full_name="Head of Infrastructure"), "owner")
@@ -24,18 +25,18 @@ def test_move_preview_then_confirm(page, live_server, db, team_factory, user_fac
     browser_sign_in(page, live_server, admin)
     page.goto(f"{live_server}/admin/teams/{windows.id}")
 
-    page.click("text=Move…")
-    page.select_option("#parent_id", str(apps.id))
-    page.click("text=Show what changes")
+    page.click("text=Higher teams…")
+    page.click("text=Remove…")
     expect(page.locator("main, body").first).to_contain_text("Head of Infrastructure loses Owner on Laptop refresh.")
     expect(page.locator("body")).to_contain_text("No one gains access.")
-    page.get_by_role("button", name="Move Windows").click()
+    page.get_by_role("button", name="Remove from Infrastructure").click()
     page.wait_for_load_state("networkidle")
 
-    expect(page.locator(".flash")).to_contain_text("Moved Windows to Applications.")
-    expect(page.locator(".teams-crumb")).to_contain_text("Teams › Windows")
+    expect(page.locator(".flash")).to_contain_text(
+        "Removed Windows from under Infrastructure. It is now at the top level."
+    )
     db.expire_all()
-    assert set(db.scalars(select(TeamParent.parent_id).where(TeamParent.team_id == windows.id))) == {apps.id}
+    assert set(db.scalars(select(TeamParent.parent_id).where(TeamParent.team_id == windows.id))) == set()
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
 

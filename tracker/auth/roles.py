@@ -122,7 +122,7 @@ def team_access(session: Session, tracker: Tracker) -> list[TeamAccess]:
         .where(TeamMember.team_id.in_(reaching), User.status == "active")
     )
     access = [TeamAccess(user, labels.get(team, ""), role, team) for user, team, role in found]
-    return sorted(access, key=lambda a: (a.user.full_name.lower(), a.user.full_name, a.team_name, a.user.id))
+    return sorted(access, key=lambda a: (a.user.full_name.lower(), a.user.full_name, a.team_name.casefold(), a.user.id))
 
 
 class Route(NamedTuple):
