@@ -15,6 +15,7 @@ from typing import NamedTuple
 from flask import abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import delete, exists, func, insert, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.exc import StaleDataError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import ROLE_ORDER, ROLES, current_user, permission_required
@@ -46,6 +47,15 @@ from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
 from .people import TeamPerson, reach_counts, team_people
+from .tracker_moves import (
+    TRACKER_CHOICE_ERROR,
+    moving_trackers,
+    parse_trackers,
+    picker_trackers,
+    team_region,
+    tracker_move_impact,
+)
+from .tracker_moves import move_trackers as apply_tracker_moves
 from .tree import (
     ALREADY_MEMBER_MESSAGE,
     CHOOSE_ROLE_MESSAGE,
@@ -270,7 +280,18 @@ def _tracker_rows(db, team_id: int) -> list[TrackerRow]:
     return [TrackerRow(tracker, line or "", codes.get(tracker.id, [])) for tracker, line in found]
 
 
-def _render_team(team: Team, errors: list[str], status: int, form=None, editing: bool = False, tab: str = "people"):
+def _render_team(
+    team: Team,
+    errors: list[str],
+    status: int,
+    form=None,
+    editing: bool = False,
+    tab: str = "people",
+    picking: bool = False,
+    picked: frozenset[int] = frozenset(),
+):
+    """The team's page with one tab open; ``picking`` opens the Trackers tab's picker, whose ``picked`` boxes are
+    ticked, and shows ``errors`` there instead of in the header."""
     db = get_session()
     rows = load_team_rows(db)
     labels = team_labels(rows)
@@ -319,6 +340,10 @@ def _render_team(team: Team, errors: list[str], status: int, form=None, editing:
         errors=errors,
         editing=editing,
         tab=tab if tab in TEAM_TABS else "people",
+        picking=picking,
+        pick=picker_trackers(db, team) if picking else [],
+        pick_region=getattr(team_region(db, team), "code", None) if picking else None,
+        picked=picked,
         page_title=team.name,
         current_page="teams",
     )
@@ -339,9 +364,81 @@ def add_below(team_id: int):
 @bp.get("/<int:team_id>")
 @permission_required("manage_teams")
 def view(team_id: int):
+    tab = request.args.get("tab", "")
     return _render_team(
-        _team_or_404(team_id), [], 200, editing=request.args.get("edit") == "1", tab=request.args.get("tab", "")
+        _team_or_404(team_id),
+        [],
+        200,
+        editing=request.args.get("edit") == "1",
+        tab=tab,
+        picking=tab == "trackers" and request.args.get("add") == "1",
     )
+
+
+# --- Trackers moved into the team -----------------------------------------------------------------------------------
+
+
+def _chosen_trackers(team: Team, texts: list[str]):
+    """``(trackers, None)`` for a valid choice, else ``(None, response)``: the picker again, with the error."""
+    trackers, error = parse_trackers(get_session(), team, texts)
+    if error:
+        picked = frozenset(i for i in map(parse_id, texts) if i is not None)
+        return None, _render_team(team, [error], 400, tab="trackers", picking=True, picked=picked)
+    return trackers, None
+
+
+@bp.get("/<int:team_id>/trackers", endpoint="move_trackers")
+@permission_required("manage_teams")
+def preview_tracker_moves(team_id: int):
+    """What moving the chosen trackers into the team would change, with the button that does it."""
+    team = _team_or_404(team_id)
+    trackers, refusal = _chosen_trackers(team, request.args.getlist("tracker_id"))
+    if refusal:
+        return refusal
+    db = get_session()
+    region = team_region(db, team)
+    page = render_template(
+        "teams/move_trackers.html",
+        team=team,
+        moving=moving_trackers(db, team, trackers),
+        region=region.code if region else None,
+        impact=tracker_move_impact(db, team, trackers),
+        page_title=f"Move trackers to {team.name}",
+        current_page="teams",
+    )
+    return page, 200
+
+
+@bp.post("/<int:team_id>/trackers", endpoint="confirm_move_trackers")
+@permission_required("manage_teams")
+def confirm_tracker_moves(team_id: int):
+    team = _team_or_404(team_id)
+    trackers, refusal = _chosen_trackers(team, request.form.getlist("tracker_id"))
+    if refusal:
+        return refusal
+    db = get_session()
+    actor = current_user()
+    back = redirect(url_for("teams.view", team_id=team.id, tab="trackers"))
+    names, team_name = [tracker.name for tracker in trackers], team.name
+    before = snapshot_access(db, actor)
+    try:  # flushed by the guard's query, so a team deleted at the same moment fails there or on commit
+        apply_tracker_moves(db, actor, team, trackers)
+        if raises_own_access(db, actor, before):
+            db.rollback()
+            flash(SELF_PROMOTION_MESSAGE, "danger")
+            return back
+        db.commit()
+    except IntegrityError:  # the team was deleted at the same moment
+        db.rollback()
+        flash(TEAM_CHOICE_ERROR, "danger")
+        return back
+    except StaleDataError:  # a tracker was deleted at the same moment
+        db.rollback()
+        flash(TRACKER_CHOICE_ERROR, "danger")
+        return back
+    moved = names[0] if len(names) == 1 else f"{len(names)} trackers"
+    flash(f"Moved {moved} to {team_name}.", "success")
+    return back
 
 
 @bp.post("/<int:team_id>/rename")

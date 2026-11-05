@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+{% from "teams/_changes.html" import access_changes %}
+{% from "teams/_tracker_regions.html" import regions_after %}
+{% block content %}
+{% set count = moving|length %}
+<h1>Move trackers to {{ team.name }}</h1>
+<p class="page-lede"><a href="{{ url_for('teams.index') }}">Teams</a> › <a href="{{ url_for('teams.view', team_id=team.id, tab='trackers') }}">{{ team.name }}</a> › Move trackers</p>
+<div class="settings settings-narrow">
+  <section class="settings-section" aria-labelledby="section-moving">
+    <header class="settings-section-head">
+      <h2 id="section-moving">Trackers to move</h2>
+      <p>Each tracker moves here from its current team and keeps every region it has.{% if region %} A tracker without {{ region }}, this team's region, gains it, so people who reach it by region keep their access.{% endif %} No region is removed.</p>
+    </header>
+    <ul class="member-list">
+      {% for row in moving %}
+      <li class="member move-tracker">
+        <span class="member-who"><span class="member-name">{{ row.tracker.name }}{% if row.tracker.status == 'archived' %} <span class="badge badge-muted">Archived</span>{% endif %}</span>
+          <span class="member-email">From {{ row.team_name or 'no team' }}</span></span>
+        {{ regions_after(row) }}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="settings-section" aria-labelledby="section-summary">
+    <header class="settings-section-head">
+      <h2 id="section-summary">Who gains or loses access</h2>
+      <p>By team and by region. Unchanged: direct roles and permission sets keep working.</p>
+    </header>
+  </section>
+  {{ access_changes(impact) }}
+
+  <form class="move-confirm" method="post" action="{{ url_for('teams.confirm_move_trackers', team_id=team.id) }}">
+    {{ csrf_field(csrf_token()) }}
+    {% for row in moving %}<input type="hidden" name="tracker_id" value="{{ row.tracker.id }}">{% endfor %}
+    <button class="button primary" type="submit">Move {{ count }} tracker{{ 's' if count != 1 }} here</button>
+    <a class="button" href="{{ url_for('teams.view', team_id=team.id, tab='trackers', add=1) }}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

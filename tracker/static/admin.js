@@ -132,6 +132,20 @@
     grid.addEventListener("change", refresh);
     refresh();
   });
+  // button[data-move-count] names how many of its form's tracker_id boxes are ticked: "Move 2 trackers here". With none
+  // ticked, or without JavaScript, it reads "Move here".
+  each(document.querySelectorAll("button[data-move-count]"), function (button) {
+    var form = button.form;
+    if (!form) return;
+
+    function label() {
+      var ticked = form.querySelectorAll('input[name="tracker_id"]:checked').length;
+      button.textContent = ticked === 0 ? "Move here" : "Move " + ticked + " tracker" + (ticked === 1 ? "" : "s") + " here";
+    }
+
+    form.addEventListener("change", label);
+    label();
+  });
   window.addEventListener("hashchange", openHash);
   openHash();
 })();

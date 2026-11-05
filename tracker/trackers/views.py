@@ -46,6 +46,7 @@ from ..models import (
     Region,
     ReportInput,
     Risk,
+    Team,
     Tracker,
     TrackerRegion,
     TrackerRole,
@@ -487,10 +488,17 @@ def set_team(tracker_id: int):
 
 
 def _after_team_change(actor: User, tracker: Tracker, destination: str):
-    """Back to where the change was made, or to the home page when the actor no longer reaches that screen."""
+    """Back to where the change was made, or to the home page when the actor no longer reaches that screen.
+
+    ``"team"`` is the Trackers tab of the team named by the form's ``team`` field (the row Remove there).
+    """
     db = get_session()
     if destination == "access" and has_permission(actor, "manage_teams"):
         return redirect(url_for("trackers.roles", tracker_id=tracker.id))
+    if destination == "team" and has_permission(actor, "manage_teams"):
+        team_id = parse_id(request.form.get("team"))
+        if team_id is not None and db.get(Team, team_id) is not None:
+            return redirect(url_for("teams.view", team_id=team_id, tab="trackers"))
     if destination == "settings" and user_role(db, actor, tracker.id) == "owner":
         return redirect(url_for("trackers.settings", tracker_id=tracker.id))
     return redirect(url_for("index"))

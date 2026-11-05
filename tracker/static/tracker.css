@@ -704,6 +704,32 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .select-filter { display: block; width: 100%; margin: 0 0 6px; padding: 7px 10px; font-size: .9rem; }
 .move-changes { margin: 0; padding: 12px 20px 14px 38px; }
 .move-changes li { padding: 3px 0; }
+/* The Trackers tab: + Add trackers at the end of the tools row, then the picker, a light-blue panel holding its own
+   search, table, pager and buttons; and "+ EMEA", the region a move adds. */
+.list-tools-action { margin-left: auto; }
+.list-status:not([hidden]) + .list-tools-action { margin-left: 0; }
+.team-pick { display: grid; gap: 12px; margin: 16px 20px; padding: 16px 18px; border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--primary) 7%, var(--surface)); }
+.team-pick-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.team-pick-head h3 { margin: 0; font-size: 1rem; }
+.team-pick-head .list-search { flex: 1 1 220px; max-width: 320px; }
+.team-pick .form-alert { margin: 0; }
+.team-pick-note { margin: 0; color: var(--muted); font-size: .875rem; }
+.team-pick-note strong { color: var(--text); }
+.team-pick form { display: grid; gap: 12px; margin: 0; }
+.team-pick-table { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.team-pick .list-no-match { padding: 8px 0; }
+.team-pick .pager { padding: 0; border-top: 0; }
+.team-pick-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.team-pick-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.section-table .pick-cell { width: 1%; padding-right: 0; }
+.pick-cell input { width: 18px; height: 18px; margin: 0; vertical-align: middle; }
+.team-pick-table label { margin: 0; font-size: inherit; cursor: pointer; }
+.region-added { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px dashed color-mix(in srgb, var(--success) 60%, var(--border)); border-radius: 6px; color: var(--success); font: 700 .8125rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .03em; white-space: nowrap; }
+.move-tracker .team-regions { flex: 0 1 auto; }
+@media (max-width: 720px) {
+  .team-pick { margin: 12px 16px; padding: 14px; }
+  .team-pick-head .list-search { max-width: none; }
+}
 
 @media (max-width: 900px) {
   .teams-layout { grid-template-columns: minmax(0, 1fr); }
