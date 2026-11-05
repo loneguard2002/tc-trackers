@@ -22,6 +22,7 @@
         <h1>Edit details</h1>
         <form method="post" action="{{ url_for('teams.rename', team_id=team.id) }}">
           {{ csrf_field(csrf_token()) }}
+          {% if tab != 'people' %}<input type="hidden" name="tab" value="{{ tab }}">{% endif %}
           <div class="field-stack">
             {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
             <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
@@ -50,11 +51,12 @@
             <span class="team-pill">{% if under %}Under {% for id, name in under %}{{ ' and ' if loop.last and not loop.first else (', ' if not loop.first else '') }}<a href="{{ url_for('teams.view', team_id=id) }}">{{ name }}</a>{% endfor %}{% else %}Top level{% endif %}</span>
           </div>
         </div>
-        <a class="button" href="{{ url_for('teams.view', team_id=team.id, edit=1) }}">{{ icon('edit') }}Edit details</a>
+        <a class="button" href="{{ url_for('teams.view', team_id=team.id, edit=1, tab=tab if tab != 'people' else none) }}">{{ icon('edit') }}Edit details</a>
         <a class="button" href="{{ url_for('teams.parents', team_id=team.id) }}">{{ icon('teams') }}Higher teams</a>
         <span class="team-divider" aria-hidden="true"></span>
         {% if delete_blocker %}
-        <button class="button danger icon-only" type="button" disabled title="{{ delete_blocker }}">{{ icon('trash') }}<span class="sr-only">{{ delete_blocker }}</span></button>
+        <span class="team-delete-blocked"><button class="button danger icon-only" type="button" disabled title="{{ delete_blocker }}">{{ icon('trash') }}<span class="sr-only">{{ delete_blocker }}</span></button>
+          <span class="team-delete-note" aria-hidden="true">{{ delete_blocker }}</span></span>
         {% else %}
         <form class="team-delete-form" method="post" action="{{ url_for('teams.delete', team_id=team.id) }}"
           data-confirm="Delete {{ team.name }}? Its members lose the access it gives." data-inline-confirm>
@@ -150,9 +152,9 @@
           {% endfor %}
           </tbody>
         </table>
-      </div>
       {{ no_match('No people match the search.') }}
-      {{ pager('people-table', 'people', people|length) }}
+      </div>
+      {{ pager('people-table', 'people', people|length, 'person') }}
       {% else %}
       <p class="empty-note">No one reaches this team yet.</p>
       {% endif %}
@@ -207,9 +209,9 @@
           {% endfor %}
           </tbody>
         </table>
-      </div>
       {{ no_match('No teams match the search.') }}
-      {{ pager('below-table', 'teams below', below|length) }}
+      </div>
+      {{ pager('below-table', 'teams below', below|length, 'team below') }}
       {% else %}
       <p class="empty-note">No teams are below this one.</p>
       {% endif %}
@@ -256,9 +258,9 @@
           {% endfor %}
           </tbody>
         </table>
-      </div>
       {{ no_match('No trackers match the search.') }}
-      {{ pager('trackers-table', 'trackers', trackers|length) }}
+      </div>
+      {{ pager('trackers-table', 'trackers', trackers|length, 'tracker') }}
       {% else %}
       <p class="empty-note">No trackers are in this team.</p>
       {% endif %}

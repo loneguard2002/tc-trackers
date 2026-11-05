@@ -1151,3 +1151,6 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
   .access-table td:first-child { grid-column: 1 / -1; }
   .access-table .cell-actions { width: auto; text-align: right; }
 }
+.team-delete-blocked { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; max-width: 100%; }
+.team-delete-note { color: var(--muted); font-size: .8125rem; }
+.team-header:has(.team-delete-blocked) .team-divider { display: none; }

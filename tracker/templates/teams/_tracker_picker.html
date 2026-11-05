@@ -36,9 +36,9 @@
         {% endfor %}
         </tbody>
       </table>
+      {{ no_match('No trackers match the search.') }}
     </div>
-    {{ no_match('No trackers match the search.') }}
-    {{ pager('pick-table', 'trackers', pick|length) }}
+    {{ pager('pick-table', 'trackers', pick|length, 'tracker') }}
     <div class="team-pick-foot">
       <span class="role-note">Next you see who gains or loses access, then confirm.</span>
       <span class="team-pick-actions">

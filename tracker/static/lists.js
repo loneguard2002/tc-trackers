@@ -35,7 +35,9 @@
     var regionFilter = document.querySelector('select[data-region-filter="' + id + '"]');
     var panel = table.closest(".list-panel");
     var foot = panel ? panel.querySelector(".list-foot") : null;
-    var noMatch = panel ? panel.querySelector("[data-no-match]") : null;
+    // The line sits inside the table's own frame, so that two tables in one panel (the team page's picker) never share one.
+    var frame = table.closest(".list-table") || panel;
+    var noMatch = frame ? frame.querySelector("[data-no-match]") : null;
     var pager = document.querySelector('[data-pager-for="' + id + '"]');
     var sizeSelect = pager ? pager.querySelector("[data-pager-size]") : null;
     var status = "all";
@@ -56,6 +58,9 @@
       return !(regionFilter && regionFilter.value !== "" && row.getAttribute("data-region") !== regionFilter.value);
     }
 
+    // A rebuilt page button loses the focus the reader had in the pager, so the current page's button takes it.
+    var focusCurrent = false;
+
     function pageButton(label, number, current) {
       var button = document.createElement("button");
       button.type = "button";
@@ -65,6 +70,7 @@
       if (current) button.setAttribute("aria-current", "page");
       button.addEventListener("click", function () {
         pageNumber = number;
+        focusCurrent = true;
         refresh();
       });
       return button;
@@ -84,6 +90,11 @@
         }
         target.appendChild(pageButton(String(number), number, number === pageNumber));
         last = number;
+      }
+      if (focusCurrent) {
+        var current = target.querySelector('[aria-current="page"]');
+        if (current) current.focus();
+        focusCurrent = false;
       }
     }
 
@@ -122,6 +133,11 @@
         var total = pager.querySelector("[data-pager-total]");
         if (range) range.textContent = shown === 0 ? "0" : (first + 1) + "\u2013" + (first + shown);
         if (total) total.textContent = String(matching.length);
+        var noun = pager.querySelector("[data-pager-noun]");
+        if (noun) {
+          var one = noun.getAttribute("data-noun-one");
+          noun.textContent = matching.length === 1 && one ? one : noun.getAttribute("data-noun-many");
+        }
         var previous = pager.querySelector("[data-pager-prev]");
         var next = pager.querySelector("[data-pager-next]");
         if (previous) previous.disabled = pageNumber <= 1;
@@ -154,8 +170,8 @@
           restart();
         });
       }
-      if (previous) previous.addEventListener("click", function () { pageNumber -= 1; refresh(); });
-      if (next) next.addEventListener("click", function () { pageNumber += 1; refresh(); });
+      if (previous) previous.addEventListener("click", function () { pageNumber -= 1; focusCurrent = true; refresh(); });
+      if (next) next.addEventListener("click", function () { pageNumber += 1; focusCurrent = true; refresh(); });
     }
 
     if (search && input) {

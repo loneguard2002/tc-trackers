@@ -111,8 +111,9 @@ def _higher_teams(labels: dict[int, str], parent_ids: Iterable[int]) -> list[tup
     return sorted(((i, labels[i]) for i in parent_ids if i in labels), key=lambda item: (item[1].casefold(), item[1]))
 
 
-def _to_team(team: Team):
-    return redirect(url_for("teams.view", team_id=team.id))
+def _to_team(team: Team, tab: str = "people"):
+    """Back to the team's page, on ``tab`` unless that is the first tab (the address then stays short)."""
+    return redirect(url_for("teams.view", team_id=team.id, tab=tab if tab in TEAM_TABS and tab != "people" else None))
 
 
 def _place_text(region: Region | None, location: Location | None) -> str | None:
@@ -446,6 +447,7 @@ def confirm_tracker_moves(team_id: int):
 def rename(team_id: int):
     team = _team_or_404(team_id)
     db = get_session()
+    tab = request.form.get("tab", "")
     submitted = {
         "name": request.form.get("name", "").strip(),
         "description": request.form.get("description", "").strip(),
@@ -464,7 +466,7 @@ def rename(team_id: int):
         if e
     ]
     if errors:
-        return _render_team(team, errors, 400, form=form, editing=True)
+        return _render_team(team, errors, 400, form=form, editing=True, tab=tab)
     before = {field: getattr(team, field) for field, value in submitted.items() if getattr(team, field) != value}
     after = {field: submitted[field] for field in before}
     if (region.id, location_id) != (team.region_id, team.location_id):
@@ -475,7 +477,7 @@ def rename(team_id: int):
         after["location"] = _place_text(region, location)
     if not before:
         flash(NO_CHANGES_MESSAGE, "info")
-        return _to_team(team)
+        return _to_team(team, tab)
     path = _team_path(team)  # as it was before the change
     for field, value in submitted.items():
         setattr(team, field, value)
@@ -494,9 +496,9 @@ def rename(team_id: int):
     except IntegrityError:  # the same name was taken, or the region or location deleted, at the same moment
         db.rollback()
         error = parse_place(db, region_text, location_text, team.region_id, team.location_id)[2] or name_taken("team")
-        return _render_team(team, [error], 400, form=form, editing=True)
+        return _render_team(team, [error], 400, form=form, editing=True, tab=tab)
     flash("Saved the team details.", "success")
-    return _to_team(team)
+    return _to_team(team, tab)
 
 
 def _judge_change(rows: list[TeamRow], team: Team, action: str, text: str) -> tuple[int | None, str | None, str | None]:
