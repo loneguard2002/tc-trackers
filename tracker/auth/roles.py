@@ -1,7 +1,8 @@
 """Per-tracker roles (spec section 6.1).
 
 An active user's role on a tracker is the highest of: administrator (owner everywhere), a direct role, a team role
-(membership of the tracker's team or of any team above it, by any path) and the ``view_all_trackers`` permission (viewer
+(membership of the tracker's team or of any team above it, by any path), a region role (a grant on any region the
+tracker covers) and the ``view_all_trackers`` permission (viewer
 everywhere). Users who are not active have no access.
 """
 
@@ -20,9 +21,12 @@ from ..models import (
     PermissionSet,
     PermissionSetHolder,
     PermissionSetPermission,
+    Region,
+    RegionGrant,
     TeamMember,
     TeamParent,
     Tracker,
+    TrackerRegion,
     TrackerRole,
     User,
 )
@@ -38,7 +42,8 @@ def _rank(role_column):
 
 
 def _grants(user_id: int) -> Subquery:
-    """Every (tracker_id, rank) the user holds by a direct role, a team role or ``view_all_trackers``.
+    """Every (tracker_id, rank) the user holds by a direct role, a team role, a region role or
+    ``view_all_trackers``.
 
     The team walk goes down every link to a lower team. It uses ``UNION`` rather than ``UNION ALL`` so it ends even if
     a cycle ever reached the table; several paths to one tracker give several rows, and the highest rank wins.
@@ -66,6 +71,9 @@ def _grants(user_id: int) -> Subquery:
             TrackerRole.user_id == user_id
         ),
         select(Tracker.id, reach.c.rank).join(reach, Tracker.team_id == reach.c.team_id),
+        select(TrackerRegion.tracker_id, _rank(RegionGrant.role))
+        .join(RegionGrant, RegionGrant.region_id == TrackerRegion.region_id)
+        .where(RegionGrant.user_id == user_id),
         select(Tracker.id, literal(1)).where(view_all),
     ).subquery("grants")
 
@@ -140,8 +148,9 @@ def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
     """Every tracker the user reaches, with the highest role and every route that gives one (Effective access).
 
     Routes read ``"Administrator"``, ``"Direct role: Viewer"``, ``"Team Windows: Editor"`` (one per team the user
-    belongs to, by team name) and ``"View all trackers: Viewer"``, in that order. The roles agree with
-    ``tracker_roles``. Sorted by tracker name, then id; empty for a user who is not active.
+    belongs to, by team name), ``"Region EMEA: Viewer"`` (one per region grant, by region code) and
+    ``"View all trackers: Viewer"``, in that order. The roles agree with ``tracker_roles``. Sorted by tracker name,
+    then id; empty for a user who is not active.
     """
     if user.status != "active":
         return []
@@ -171,6 +180,16 @@ def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
     for team_id, role in sorted(memberships, key=lambda m: (labels.get(m.team_id, "").casefold(), m.team_id)):
         reached = [tracker_id for team in descendants(rows, team_id) for tracker_id in by_team.get(team, [])]
         add(reached, role, f"Team {labels.get(team_id, '')}: {role.title()}")
+    grants = session.execute(
+        select(Region.id, Region.code, RegionGrant.role)
+        .join(RegionGrant, RegionGrant.region_id == Region.id)
+        .where(RegionGrant.user_id == user.id)
+    ).all()
+    covered: dict[int, list[int]] = {}
+    for tracker_id, region_id in session.execute(select(TrackerRegion.tracker_id, TrackerRegion.region_id)):
+        covered.setdefault(region_id, []).append(tracker_id)
+    for region_id, code, role in sorted(grants, key=lambda g: (g.code.casefold(), g.code, g.id)):
+        add(covered.get(region_id, []), role, f"Region {code}: {role.title()}")
     if any(permission == "view_all_trackers" for permission, _source in set_permission_sources(session, user)):
         add(trackers, "viewer", "View all trackers: Viewer")
     access = [
@@ -184,11 +203,18 @@ def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
     return sorted(access, key=lambda a: (a.tracker.name, a.tracker.id))
 
 
+class RegionAccess(NamedTuple):
+    region_id: int
+    code: str
+    role: str
+
+
 class AccessRow(NamedTuple):
     user: User
     role: str  # the highest role over every route; agrees with ``user_role``
     direct_role: str | None
     teams: list[TeamAccess]
+    regions: list[RegionAccess]  # grants on the regions the tracker covers, by region code
     view_all_sets: list[str]  # names of sets granting view_all_trackers, held directly or through a team they belong to
     admin: bool
 
@@ -207,6 +233,15 @@ def tracker_access_list(session: Session, tracker: Tracker) -> list[AccessRow]:
     teams: dict[int, list[TeamAccess]] = {}
     for access in team_access(session, tracker):
         teams.setdefault(access.user.id, []).append(access)
+    regions: dict[int, list[RegionAccess]] = {}
+    for region_id, code, user_id, role in session.execute(
+        select(Region.id, Region.code, RegionGrant.user_id, RegionGrant.role)
+        .join(RegionGrant, RegionGrant.region_id == Region.id)
+        .join(TrackerRegion, TrackerRegion.region_id == Region.id)
+        .where(TrackerRegion.tracker_id == tracker.id)
+    ):
+        if user_id in users:
+            regions.setdefault(user_id, []).append(RegionAccess(region_id, code, role))
     view_all: dict[int, set[str]] = {}
     holdings = session.execute(
         select(PermissionSet.name, PermissionSetHolder.user_id, PermissionSetHolder.team_id)
@@ -231,6 +266,7 @@ def tracker_access_list(session: Session, tracker: Tracker) -> list[AccessRow]:
     rows = []
     for user_id, user in users.items():
         ranks = [ROLE_ORDER[a.role] for a in teams.get(user_id, [])]
+        ranks += [ROLE_ORDER[a.role] for a in regions.get(user_id, [])]
         if user_id in direct:
             ranks.append(ROLE_ORDER[direct[user_id]])
         if user_id in view_all:
@@ -240,8 +276,11 @@ def tracker_access_list(session: Session, tracker: Tracker) -> list[AccessRow]:
         if not ranks:
             continue
         sets = sorted(view_all.get(user_id, ()), key=lambda n: (n.casefold(), n))
+        held = sorted(regions.get(user_id, []), key=lambda a: (a.code.casefold(), a.code, a.region_id))
         rows.append(
-            AccessRow(user, ROLE_BY_RANK[max(ranks)], direct.get(user_id), teams.get(user_id, []), sets, user.is_admin)
+            AccessRow(
+                user, ROLE_BY_RANK[max(ranks)], direct.get(user_id), teams.get(user_id, []), held, sets, user.is_admin
+            )
         )
     return sorted(rows, key=lambda r: (r.user.full_name.casefold(), r.user.id))
 
