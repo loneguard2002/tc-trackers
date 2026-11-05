@@ -233,7 +233,7 @@ def test_approval_with_a_team_place(client, logged_in_admin, user_factory, team_
     windows = team_factory(name="Windows", parent=team_factory(name="Infrastructure"))
     pending = user_factory(status="pending", auth_source="sso", password_hash=None, sso_subject="s-1")
     page = text_of(client.get("/admin/users"))
-    assert 'name="team_id"' in page and "Infrastructure › Windows" in page
+    assert 'name="team_id"' in page and f'<option value="{windows.id}">Windows</option>' in page
     response = post(client, f"/admin/users/{pending.id}/approve", {"team_id": str(windows.id), "team_role": "editor"})
     assert response.status_code == 302
     assert reloaded(db, pending).status == "active"
@@ -241,7 +241,7 @@ def test_approval_with_a_team_place(client, logged_in_admin, user_factory, team_
     (approved,) = entries(db, "user_approved")
     (added,) = entries(db, "team_member_added")
     assert approved.target_user_id == pending.id and added.target_user_id == pending.id
-    assert added.detail == {"team": "Infrastructure › Windows", "role": "editor"}
+    assert added.detail == {"team": "Windows", "role": "editor"}
     assert added.entity == "team" and added.entity_id == str(windows.id)
     flashed = text_of(client.get("/admin/users"))
     assert f"{pending.full_name} is now active, as editor in Windows." in flashed
@@ -344,7 +344,7 @@ def test_effective_access_lists_routes_and_permission_sources(
     routes = {a.tracker.name: (a.role, [r.text for r in a.routes]) for a in tracker_access_routes(db, person)}
     assert routes == {
         "Laptops": ("viewer", ["Direct role: Viewer", "View all trackers: Viewer"]),
-        "Servers": ("editor", ["Team Infrastructure › Windows: Editor", "View all trackers: Viewer"]),
+        "Servers": ("editor", ["Team Windows: Editor", "View all trackers: Viewer"]),
     }
     assert {a.tracker.id: a.role for a in tracker_access_routes(db, person)} == tracker_roles(db, person)
     assert permission_sources(db, person) == {
@@ -355,7 +355,7 @@ def test_effective_access_lists_routes_and_permission_sources(
     for text in (
         "Servers",
         "Laptops",
-        "Team Infrastructure › Windows: Editor",
+        "Team Windows: Editor",
         "Direct role: Viewer",
         "View all trackers: Viewer",
         "Set PMO, held by team PMO Office",
@@ -615,10 +615,10 @@ def test_access_page_header_and_sections(client, user_manager, user_factory, tea
     page = _visible(client, person)
     for text in (
         "Teams",
-        "Infrastructure › Windows · Editor",
+        "Windows · Editor",
         "Permission sets",
         "Readers, held directly",
-        "PMO, held by team Infrastructure › Windows",
+        "PMO, held by team Windows",
     ):
         assert text in page
     assert page.index("Teams") < page.index("Permission sets")

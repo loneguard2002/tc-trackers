@@ -70,7 +70,7 @@
             </form></td>
             {% else %}
             <td>{{ row.person.role|title }}</td>
-            <td>{% for i in row.person.inherited %}{% if not loop.first %}, {% endif %}From <a href="{{ url_for('teams.view', team_id=i.team_id) }}">{{ i.path }}</a>{% if row.person.inherited|length > 1 %} ({{ i.role|title }}){% endif %}{% endfor %}</td>
+            <td>{% for i in row.person.inherited %}{% if not loop.first %}, {% endif %}From <a href="{{ url_for('teams.view', team_id=i.team_id) }}">{{ i.team_name }}</a>{% if row.person.inherited|length > 1 %} ({{ i.role|title }}){% endif %}{% endfor %}</td>
             <td class="cell-actions"></td>
             {% endif %}
           </tr>

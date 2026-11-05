@@ -5,12 +5,15 @@ from __future__ import annotations
 import pytest
 from conftest import browser_sign_in
 from playwright.sync_api import expect
+from sqlalchemy import select
 from test_report_page_browser import RECORDER
+
+from tracker.models import TeamParent
 
 pytestmark = pytest.mark.browser
 
 
-def test_move_preview_then_confirm(page, live_server, team_factory, user_factory, tracker_factory, add_member):
+def test_move_preview_then_confirm(page, live_server, db, team_factory, user_factory, tracker_factory, add_member):
     infra = team_factory(name="Infrastructure")
     apps = team_factory(name="Applications")
     windows = team_factory(name="Windows", parent=infra)
@@ -30,7 +33,9 @@ def test_move_preview_then_confirm(page, live_server, team_factory, user_factory
     page.wait_for_load_state("networkidle")
 
     expect(page.locator(".flash")).to_contain_text("Moved Windows to Applications.")
-    expect(page.locator(".teams-crumb")).to_contain_text("Applications › Windows")
+    expect(page.locator(".teams-crumb")).to_contain_text("Teams › Windows")
+    db.expire_all()
+    assert set(db.scalars(select(TeamParent.parent_id).where(TeamParent.team_id == windows.id))) == {apps.id}
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
 

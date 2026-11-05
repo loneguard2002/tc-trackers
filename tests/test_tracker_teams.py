@@ -67,7 +67,7 @@ def test_new_tracker_in_a_team_or_none(client, logged_in_admin, team_factory, db
     first, second = db.scalars(select(Tracker).order_by(Tracker.id)).all()
     assert first.team_id == child.id and second.team_id is None
     created = entries(db, "tracker_created")
-    assert created[0].detail["team"] == "Infrastructure › Windows" and created[1].detail["team"] is None
+    assert created[0].detail["team"] == "Windows" and created[1].detail["team"] is None
     assert 'name="team_id"' in client.get("/trackers/new").get_data(as_text=True)
 
 
@@ -152,7 +152,7 @@ def test_set_team_logs_before_and_after_and_works_when_archived(
     assert response.status_code == 302 and response.headers["Location"].endswith(f"/trackers/{tracker.id}/settings")
     assert team_of(db, tracker) == network.id
     entry = entries(db, "tracker_team_changed")[0]
-    assert entry.detail == {"before": "Infrastructure › Windows", "after": "Network"} and entry.tracker_id == tracker.id
+    assert entry.detail == {"before": "Windows", "after": "Network"} and entry.tracker_id == tracker.id
     post(client, f"/trackers/{tracker.id}/team", {"team_id": "", "next": "access"})
     assert team_of(db, tracker) is None
     assert entries(db, "tracker_team_changed")[1].detail == {"before": "Network", "after": None}

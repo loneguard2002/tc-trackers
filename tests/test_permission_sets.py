@@ -148,7 +148,7 @@ def test_delete_logs_each_holder_then_the_set(client, logged_in_admin, db, user_
     actions = [e.action for e in entries(db)]
     assert actions == ["permission_set_holder_removed", "permission_set_holder_removed", "permission_set_deleted"]
     removed = entries(db, "permission_set_holder_removed")
-    assert {"set": "PMO", "team": "Top › Sub"} in [e.detail for e in removed]
+    assert {"set": "PMO", "team": "Sub"} in [e.detail for e in removed]
     assert [e.target_user_id for e in removed if e.detail == {"set": "PMO"}] == [person.id]
     [deleted] = entries(db, "permission_set_deleted")
     assert deleted.detail == {"name": "PMO", "permissions": ["view_activity"]}
@@ -167,15 +167,15 @@ def test_add_and_remove_team_and_user_holders_are_logged(client, logged_in_admin
     assert post(client, url, {"holder": f"team:{sub.id}"}).status_code == 302
     assert post(client, url, {"holder": f"user:{person.id}"}).status_code == 302
     added = entries(db, "permission_set_holder_added")
-    assert [e.detail for e in added] == [{"set": "PMO", "team": "Top › Sub"}, {"set": "PMO"}]
+    assert [e.detail for e in added] == [{"set": "PMO", "team": "Sub"}, {"set": "PMO"}]
     assert [e.target_user_id for e in added] == [None, person.id]
     assert all(e.entity == "permission_set" and e.entity_id == str(s.id) for e in added)
     page = text_of(client.get(f"/admin/permission-sets/{s.id}"))
-    assert "Top › Sub" in page and person.email in page
+    assert '<span class="cell-title">Sub</span>' in page and person.email in page
     for holder in db.scalars(select(PermissionSetHolder).where(PermissionSetHolder.set_id == s.id)).all():
         assert post(client, f"{url}/{holder.id}/delete").status_code == 302
     removed = entries(db, "permission_set_holder_removed")
-    assert [e.detail for e in removed] == [{"set": "PMO", "team": "Top › Sub"}, {"set": "PMO"}]
+    assert [e.detail for e in removed] == [{"set": "PMO", "team": "Sub"}, {"set": "PMO"}]
     assert [e.target_user_id for e in removed] == [None, person.id]
 
 
