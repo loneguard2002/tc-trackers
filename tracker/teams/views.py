@@ -28,7 +28,7 @@ from ..auth.guards import (
 )
 from ..db import get_session
 from ..ids import in_range, parse_id
-from ..lists.catalogue import location_choices, location_label, parse_location, team_places
+from ..lists.catalogue import location_choices, location_label, parse_place, team_places
 from ..models import Location, PermissionSet, PermissionSetHolder, Region, Team, TeamMember, TeamParent, Tracker, User
 from ..naming import description_error, name_error, name_taken
 from . import bp
@@ -91,20 +91,18 @@ def _to_team(team: Team):
     return redirect(url_for("teams.view", team_id=team.id))
 
 
-def _place_text(location: Location | None) -> str | None:
-    """A location as the Activity names it, "Geneva, Switzerland (EMEA)", or ``None`` when unset."""
-    if location is None:
+def _place_text(region: Region | None, location: Location | None) -> str | None:
+    """A place as the Activity names it, "Geneva, Switzerland (EMEA)" or "EMEA" alone, or ``None`` when unset."""
+    if region is None:
         return None
-    region = get_session().get(Region, location.region_id)
+    if location is None:
+        return region.code
     return f"{location_label(location.city, location.country_code)} ({region.code})"
 
 
 def _place_form(team: Team) -> dict[str, str]:
     """The Region and Location choices to preselect for a team: its own, or none when unset."""
-    location = get_session().get(Location, team.location_id) if team.location_id else None
-    if location is None:
-        return {"region_id": "", "location_id": ""}
-    return {"region_id": str(location.region_id), "location_id": str(location.id)}
+    return {"region_id": str(team.region_id or ""), "location_id": str(team.location_id or "")}
 
 
 def _refuse(team: Team, message: str):
@@ -173,17 +171,17 @@ def create():
     name = request.form.get("name", "").strip()
     description = request.form.get("description", "").strip()
     parent, parent_error = parse_team_id(db, request.form.get("parent_id"))
-    location, location_error = parse_location(db, request.form.get("region_id"), request.form.get("location_id"), None)
+    region, location, place_error = parse_place(
+        db, request.form.get("region_id"), request.form.get("location_id"), None, None
+    )
     errors = [
-        e
-        for e in (name_error(db, Team, name, "team"), description_error(description), parent_error, location_error)
-        if e
+        e for e in (name_error(db, Team, name, "team"), description_error(description), parent_error, place_error) if e
     ]
     if errors:
         return _render_index(request.form, errors, 400)
     parent_path = team_labels(load_team_rows(db)).get(parent.id, parent.name) if parent else None
-    place = _place_text(location)
-    team = Team(name=name, description=description, region_id=location.region_id, location_id=location.id)
+    place = _place_text(region, location)
+    team = Team(name=name, description=description, region_id=region.id, location_id=location.id if location else None)
     db.add(team)
     try:
         db.flush()
@@ -200,11 +198,11 @@ def create():
             detail={"name": name, "parent": parent_path, "location": place},
         )
         db.commit()
-    except IntegrityError:  # the same name was taken, or the parent or location deleted, at the same moment
+    except IntegrityError:  # the same name was taken, or the parent, region or location deleted, at the same moment
         db.rollback()
         error = (
             name_error(db, Team, name, "team")
-            or parse_location(db, request.form.get("region_id"), request.form.get("location_id"), None)[1]
+            or parse_place(db, request.form.get("region_id"), request.form.get("location_id"), None, None)[2]
             or TEAM_CHOICE_ERROR
         )
         return _render_index(request.form, [error], 400)
@@ -266,7 +264,7 @@ def _render_team(team: Team, errors: list[str], status: int, form=None, open_det
         can_add=current_user().is_admin or not team_holds_sets(db, team.id),
         add_refusal=TEAM_WITH_SETS_MESSAGE,
         delete_blocker=_delete_blocker(team.id, rows),
-        place_choices=location_choices(db, team.location_id),
+        place_choices=location_choices(db, team.region_id, team.location_id),
         place=context["places"].get(team.id),
         form=form or {"name": team.name, "description": team.description, **_place_form(team)},
         errors=errors,
@@ -294,13 +292,14 @@ def rename(team_id: int):
     }
     region_text, location_text = request.form.get("region_id", ""), request.form.get("location_id", "")
     form = {**submitted, "region_id": region_text.strip(), "location_id": location_text.strip()}
-    location, location_error = parse_location(db, region_text, location_text, team.location_id)
+    region, location, place_error = parse_place(db, region_text, location_text, team.region_id, team.location_id)
+    location_id = location.id if location else None
     errors = [
         e
         for e in (
             name_error(db, Team, submitted["name"], "team", team.id),
             description_error(submitted["description"]),
-            location_error,
+            place_error,
         )
         if e
     ]
@@ -308,16 +307,19 @@ def rename(team_id: int):
         return _render_team(team, errors, 400, form=form, open_details=True)
     before = {field: getattr(team, field) for field, value in submitted.items() if getattr(team, field) != value}
     after = {field: submitted[field] for field in before}
-    if location.id != team.location_id:
-        before["location"] = _place_text(db.get(Location, team.location_id) if team.location_id else None)
-        after["location"] = _place_text(location)
+    if (region.id, location_id) != (team.region_id, team.location_id):
+        before["location"] = _place_text(
+            db.get(Region, team.region_id) if team.region_id else None,
+            db.get(Location, team.location_id) if team.location_id else None,
+        )
+        after["location"] = _place_text(region, location)
     if not before:
         flash(NO_CHANGES_MESSAGE, "info")
         return _to_team(team)
     path = _team_path(team)  # as it was before the change
     for field, value in submitted.items():
         setattr(team, field, value)
-    team.region_id, team.location_id = location.region_id, location.id
+    team.region_id, team.location_id = region.id, location_id
     record(
         db,
         user_id=current_user().id,
@@ -329,9 +331,9 @@ def rename(team_id: int):
     )
     try:
         db.commit()
-    except IntegrityError:  # the same name was taken, or the location deleted, at the same moment
+    except IntegrityError:  # the same name was taken, or the region or location deleted, at the same moment
         db.rollback()
-        error = parse_location(db, region_text, location_text, team.location_id)[1] or name_taken("team")
+        error = parse_place(db, region_text, location_text, team.region_id, team.location_id)[2] or name_taken("team")
         return _render_team(team, [error], 400, form=form, open_details=True)
     flash("Saved the team details.", "success")
     return _to_team(team)

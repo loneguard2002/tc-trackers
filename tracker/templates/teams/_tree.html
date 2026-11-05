@@ -8,7 +8,7 @@
     <div class="team-node">
       <a class="cell-title" href="{{ url_for('teams.view', team_id=row.id) }}"{% if row.id == current_id %} aria-current="page"{% endif %}>{{ row.name }}</a>
       {% set place = places.get(row.id) %}
-      {% if place %}<span class="team-place">{{ place.region_code }} · {{ place.city }}</span>{% else %}<span class="team-place is-unset">Region not set</span>{% endif %}
+      {% if place %}<span class="team-place">{{ place.region_code }}{% if place.city %} · {{ place.city }}{% endif %}</span>{% else %}<span class="team-place is-unset">Region not set</span>{% endif %}
       <span class="team-counts">{{ people_count(reach.get(row.id, 0)) }}</span>
       {% set others = higher.get(row.id, [])|rejectattr(0, 'equalto', parent_id)|list %}
       {% if others %}<span class="team-also">Also under {{ names_in_words(others) }}</span>{% endif %}

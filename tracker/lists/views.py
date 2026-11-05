@@ -21,7 +21,7 @@ from ..ids import in_range, parse_id
 from ..models import BusinessLine, Location, Region, RegionGrant, Team, Tracker, TrackerRegion
 from ..naming import MAX_NAME_LENGTH, name_error
 from . import bp
-from .catalogue import location_label
+from .catalogue import REGION_CHOICE_ERROR, location_label
 from .countries import COUNTRIES, country_name, flag_path, parse_country
 
 manage_lists_required = admin_required
@@ -30,12 +30,11 @@ MAX_CODE_LENGTH = 20
 REGION_CODE_REQUIRED = "Enter a region code."
 REGION_CODE_TOO_LONG = f"A region code can be at most {MAX_CODE_LENGTH} characters."
 REGION_CODE_TAKEN = "A region with that code already exists."
-REGION_CHOICE_ERROR = "Choose a region from the list."
 LOCATION_CODE_REQUIRED = "Enter a location code."
 LOCATION_CODE_FORMAT = "A location code is 2 to 6 letters, such as LON."
 LOCATION_CODE_TAKEN = "A location with that code already exists."
 LOCATION_TAKEN = "A location with that name and country already exists."
-REGION_IN_USE = "This region has locations, trackers or people with access, so it can only be retired."
+REGION_IN_USE = "This region has locations, teams, trackers or people with access, so it can only be retired."
 LOCATION_IN_USE = "Teams use this location, so it can only be retired."
 TEAM_NOTE_ONE = "Used by 1 team. Changing the region moves the team with it."
 TEAM_NOTE_MANY = "Used by {n} teams. Changing the region moves them to it."  # lists.js fills in {n} too
@@ -180,6 +179,7 @@ def _region_in_use(region_id: int) -> bool:
     db = get_session()
     return bool(
         db.scalar(select(exists().where(Location.region_id == region_id)))
+        or db.scalar(select(exists().where(Team.region_id == region_id)))
         or db.scalar(select(exists().where(TrackerRegion.region_id == region_id)))
         or db.scalar(select(exists().where(RegionGrant.region_id == region_id)))
     )
@@ -204,14 +204,7 @@ def _render_regions(
     db = get_session()
     regions = db.scalars(select(Region).order_by(func.lower(Region.code), Region.id)).all()
     locations = dict(db.execute(select(Location.region_id, func.count()).group_by(Location.region_id)).all())
-    teams = dict(
-        db.execute(
-            select(Location.region_id, func.count(Team.id))
-            .select_from(Team)
-            .join(Location, Team.location_id == Location.id)
-            .group_by(Location.region_id)
-        ).all()
-    )
+    teams = dict(db.execute(select(Team.region_id, func.count()).group_by(Team.region_id)).all())
     trackers = dict(db.execute(select(TrackerRegion.region_id, func.count()).group_by(TrackerRegion.region_id)).all())
     people = dict(db.execute(select(RegionGrant.region_id, func.count()).group_by(RegionGrant.region_id)).all())
     editing = db.get(Region, edit_id) if dialog == "edit" else None
@@ -295,7 +288,7 @@ def update_region(region_id: int):
         db.delete(region)
         try:
             db.commit()
-        except IntegrityError:  # a location, tracker or grant took it up at the same moment
+        except IntegrityError:  # a location, team, tracker or grant took it up at the same moment
             db.rollback()
             return _render_regions(400, page_errors=[REGION_IN_USE])
         flash(f"Deleted the region {code}.", "success")

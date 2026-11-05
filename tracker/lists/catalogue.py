@@ -16,7 +16,8 @@ from ..ids import parse_id
 from ..models import BusinessLine, Location, Region, Team, Tracker, TrackerRegion
 from .countries import country_name
 
-LOCATION_REQUIRED = "Choose a region and a location."
+REGION_REQUIRED = "Choose a region."
+REGION_CHOICE_ERROR = "Choose a region from the list."
 LOCATION_CHOICE_ERROR = "Choose a location from the list."
 LOCATION_REGION_MISMATCH = "The location is not in the chosen region."
 BUSINESS_LINE_REQUIRED = "Choose a business line."
@@ -32,23 +33,23 @@ def location_label(city: str, country_code: str | None) -> str:
 
 
 class Place(NamedTuple):
-    location_id: int
-    location: str
     region_id: int
     region_code: str
-    city: str
+    location_id: int | None
+    location: str | None  # "Geneva, Switzerland", or None for a team in a region without a location
+    city: str | None
 
 
 def team_places(session: Session) -> dict[int, Place]:
-    """Team id to its place, for teams that have a location."""
+    """Team id to its place, for teams that have a region."""
     rows = session.execute(
-        select(Team.id, Location.id, Location.city, Location.country_code, Region.id, Region.code)
-        .join(Location, Team.location_id == Location.id)
-        .join(Region, Location.region_id == Region.id)
+        select(Team.id, Region.id, Region.code, Location.id, Location.city, Location.country_code)
+        .join(Region, Team.region_id == Region.id)
+        .outerjoin(Location, Team.location_id == Location.id)
     )
     return {
-        team_id: Place(location_id, location_label(city, country_code), region_id, code, city)
-        for team_id, location_id, city, country_code, region_id, code in rows
+        team_id: Place(region_id, code, location_id, location_label(city, country_code) if location_id else None, city)
+        for team_id, region_id, code, location_id, city, country_code in rows
     }
 
 
@@ -60,8 +61,11 @@ class RegionOption(NamedTuple):
     locations: list[tuple[int, str, bool]]
 
 
-def location_choices(session: Session, keep_id: int | None = None) -> list[RegionOption]:
-    """Regions with their locations; retired ones appear only where they hold ``keep_id``."""
+def location_choices(
+    session: Session, keep_region_id: int | None = None, keep_location_id: int | None = None
+) -> list[RegionOption]:
+    """Every region with its locations, for a team's place. Retired regions and locations appear only where the team
+    already uses them (``keep_region_id``, ``keep_location_id``)."""
     options: dict[int, RegionOption] = {}
     for region in session.scalars(select(Region).order_by(func.lower(Region.code), Region.id)):
         options[region.id] = RegionOption(region.id, region.code, region.name, region.retired, [])
@@ -70,7 +74,7 @@ def location_choices(session: Session, keep_id: int | None = None) -> list[Regio
     )
     for location in locations:
         region = options[location.region_id]
-        if location.id != keep_id and (location.retired or region.retired):
+        if location.id != keep_location_id and (location.retired or region.retired):
             continue
         region.locations.append(
             (location.id, location_label(location.city, location.country_code), location.retired or region.retired)
@@ -78,7 +82,7 @@ def location_choices(session: Session, keep_id: int | None = None) -> list[Regio
     # Labels sort as "city, country", so order the result by label rather than by city alone.
     for region in options.values():
         region.locations.sort(key=lambda item: item[1].lower())
-    return [region for region in options.values() if not region.retired or region.locations]
+    return [r for r in options.values() if not r.retired or r.id == keep_region_id or r.locations]
 
 
 def region_choices(session: Session, keep_ids: Collection[int] = ()) -> list[RegionOption]:
@@ -92,23 +96,34 @@ def business_line_choices(session: Session, keep_id: int | None = None) -> list[
     return [(b.id, b.name, b.retired) for b in lines if not b.retired or b.id == keep_id]
 
 
-def parse_location(
-    session: Session, region_text: str | None, location_text: str | None, current_id: int | None
-) -> tuple[Location | None, str | None]:
+def parse_place(
+    session: Session,
+    region_text: str | None,
+    location_text: str | None,
+    current_region_id: int | None,
+    current_location_id: int | None,
+) -> tuple[Region | None, Location | None, str | None]:
+    """A team's region (required) and location (optional, in that region): ``(region, location, error)``."""
     region_text, location_text = (region_text or "").strip(), (location_text or "").strip()
-    if not region_text or not location_text:
-        return None, LOCATION_REQUIRED
-    region_id, location_id = parse_id(region_text), parse_id(location_text)
+    if not region_text:
+        return None, None, REGION_REQUIRED
+    region_id = parse_id(region_text)
+    region = session.get(Region, region_id) if region_id is not None else None
+    if region is None or (region.retired and region.id != current_region_id):
+        return None, None, REGION_CHOICE_ERROR
+    if not location_text:
+        return region, None, None
+    location_id = parse_id(location_text)
     location = session.get(Location, location_id) if location_id is not None else None
     if location is None:
-        return None, LOCATION_CHOICE_ERROR
-    if location.id != current_id:
-        region = session.get(Region, location.region_id)
-        if location.retired or region is None or region.retired:
-            return None, LOCATION_CHOICE_ERROR
-    if region_id != location.region_id:
-        return None, LOCATION_REGION_MISMATCH
-    return location, None
+        return None, None, LOCATION_CHOICE_ERROR
+    if location.id != current_location_id:
+        location_region = session.get(Region, location.region_id)
+        if location.retired or location_region is None or location_region.retired:
+            return None, None, LOCATION_CHOICE_ERROR
+    if region.id != location.region_id:
+        return None, None, LOCATION_REGION_MISMATCH
+    return region, location, None
 
 
 def parse_business_line(
