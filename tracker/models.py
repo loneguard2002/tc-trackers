@@ -78,6 +78,21 @@ Index("uq_regions_code_lower", func.lower(Region.code), unique=True)
 Index("uq_regions_name_lower", func.lower(Region.name), unique=True)
 
 
+class RegionGrant(Base):
+    """A role on every tracker covering the region, held by one person."""
+
+    __tablename__ = "region_grants"
+    __table_args__ = (
+        CheckConstraint("role IN ('viewer', 'editor', 'owner')", name="role"),
+        Index("ix_region_grants_user_id", "user_id"),
+    )
+
+    region_id: Mapped[int] = mapped_column(ForeignKey("regions.id", ondelete="RESTRICT"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    role: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now()
+
+
 class Location(Base):
     __tablename__ = "locations"
 

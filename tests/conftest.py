@@ -21,6 +21,7 @@ from tracker.models import (
     PermissionSetHolder,
     PermissionSetPermission,
     Region,
+    RegionGrant,
     Team,
     TeamMember,
     TeamParent,
@@ -267,6 +268,15 @@ def logged_in_admin(client, user_factory):
 def grant(db):
     def give(user: User, tracker: Tracker, role: str) -> None:
         db.add(TrackerRole(user_id=user.id, tracker_id=tracker.id, role=role))
+        db.commit()
+
+    return give
+
+
+@pytest.fixture
+def region_grant(db):
+    def give(region: Region, user: User, role: str) -> None:
+        db.add(RegionGrant(region_id=region.id, user_id=user.id, role=role))
         db.commit()
 
     return give
