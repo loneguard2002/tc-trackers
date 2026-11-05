@@ -1,66 +1,77 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, field, icon %}
-{% from "lists/_entry.html" import state_actions %}
+{% from "macros.html" import icon %}
+{% from "lists/_table.html" import status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_foot, row_actions, list_dialog, dialog_field, list_tabs %}
+{% macro line_fields(prefix, values, errors) -%}
+{% call dialog_field('Name', 'Unique, at most 100 characters.', prefix ~ '-name', errors.get('name', [])) %}
+<input id="{{ prefix }}-name" name="name" value="{{ values.get('name', '') }}" maxlength="100" required autocomplete="off" aria-describedby="{{ prefix }}-name-{{ 'error' if errors.get('name') else 'help' }}"{% if errors.get('name') %} aria-invalid="true"{% endif %}>
+{% endcall %}
+{%- endmacro %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
-<h1>Business lines</h1>
-<p class="page-lede">Every tracker belongs to one business line.</p>
-{% if errors %}
-<div class="form-alert" role="alert">
-  <strong>Please correct the following:</strong>
-  <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
-</div>
-{% endif %}
-
-<section class="settings-section" id="lines" aria-labelledby="section-lines">
-  <header class="settings-section-head">
-    <h2 id="section-lines">Business lines</h2>
-    <p>A retired business line stays on the trackers that use it but cannot be chosen for others.</p>
+<div class="list-page">
+  {{ list_tabs('business_lines', tab_counts) }}
+  <header class="list-head">
+    <div>
+      <h1>Business lines</h1>
+      <p class="page-lede">Every tracker belongs to one business line. A retired business line stays on the trackers that use it but cannot be chosen for others.</p>
+    </div>
+    <a class="button primary" href="{{ url_for('lists.new_business_line') }}" data-dialog-open="add">{{ icon('plus') }}Add business line</a>
   </header>
-  {% if lines %}
-  <ul class="member-list">
-    {% for b in lines %}
-    {% set key = 'line-%d'|format(b.id) %}
-    {% set bf = form if editing == key else {} %}
-    {% set used = tracker_counts.get(b.id, 0) %}
-    <li class="member" id="line-{{ b.id }}">
-      <span class="member-who"><span class="member-name">{{ b.name }}{% if b.retired %} <span class="badge badge-muted">Retired</span>{% endif %}</span></span>
-      <span class="team-counts">{{ used }} tracker{{ 's' if used != 1 }}</span>
-      <details class="list-edit"{% if editing == key %} open{% endif %}>
-        <summary class="button button-small">{{ icon('edit') }}Edit<span class="sr-only"> {{ b.name }}</span></summary>
-        <div class="list-edit-body">
-          <form class="list-edit-form" method="post" action="{{ url_for('lists.update_business_line', line_id=b.id) }}">
-            {{ csrf_field(csrf_token()) }}
-            {% call field('Name', '', 'name-' ~ b.id) %}
-            <input id="name-{{ b.id }}" name="name" value="{{ bf.get('name', b.name) }}" maxlength="100" required>
-            {% endcall %}
-            <button class="button primary" type="submit" name="action" value="save">Save</button>
-          </form>
-          {{ state_actions(url_for('lists.update_business_line', line_id=b.id), b.retired, 'the business line ' ~ b.name, business_line_in_use if used else '') }}
-        </div>
-      </details>
-    </li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="empty-note">No business lines yet. Add the first one below.</p>
+
+  {% if page_errors %}
+  <div class="form-alert" role="alert">
+    <strong>Please correct the following:</strong>
+    <ul class="form-error">{% for e in page_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
   {% endif %}
-</section>
 
-{% set nf = form if editing == 'new-line' else {} %}
-<section class="settings-section" id="new-line" aria-labelledby="section-new-line">
-  <header class="settings-section-head">
-    <h2 id="section-new-line">New business line</h2>
-  </header>
-  <form method="post" action="{{ url_for('lists.create_business_line') }}">
-    {{ csrf_field(csrf_token()) }}
-    <div class="field-stack">
-      {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
-      <input id="name" name="name" value="{{ nf.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
-      {% endcall %}
+  {% set adding = dialog == 'add' %}
+  {% call list_dialog('add', 'Add business line', url_for('lists.create_business_line'), adding, dialog_errors if adding else [], 'Create business line', url_for('lists.business_lines')) %}
+  {{ line_fields('add', form if adding else {}, field_errors if adding else {}) }}
+  {% endcall %}
+
+  {% set edit_open = dialog == 'edit' and editing %}
+  {% call list_dialog('edit', 'Edit business line ' ~ editing.name if edit_open else 'Edit business line', url_for('lists.update_business_line', line_id=editing.id) if edit_open else '', edit_open, dialog_errors if edit_open else [], 'Save', url_for('lists.business_lines'), 'Edit business line') %}
+  {{ line_fields('edit', form if edit_open else {}, field_errors if edit_open else {}) }}
+  {% endcall %}
+
+  <section class="list-panel" aria-labelledby="lines-heading">
+    <h2 class="sr-only" id="lines-heading">All business lines</h2>
+    {% if lines %}
+    <div class="list-tools">
+      {{ search_box('business-lines-table', 'Search business lines') }}
+      {{ status_filters('business-lines-table', 'business lines') }}
     </div>
-    <div class="settings-section-foot">
-      <button class="button primary" type="submit">{{ icon('plus') }}Add business line</button>
+    <div class="section-table list-table">
+      <table id="business-lines-table">
+        <thead><tr>
+          {{ sort_header('Name', 'name', default=True) }}
+          {{ sort_header('Trackers', 'trackers', 'num') }}
+          {{ sort_header('Status', 'status') }}
+          <th scope="col"><span class="sr-only">Actions</span></th>
+        </tr></thead>
+        <tbody>
+        {% for b in lines %}
+        {% set used = tracker_counts.get(b.id, 0) %}
+        {% set status = 'retired' if b.retired else 'active' %}
+        {% set edit_data = {'name': b.name, 'action': url_for('lists.update_business_line', line_id=b.id)} %}
+        <tr id="line-{{ b.id }}"{% if b.retired %} class="is-retired"{% endif %} data-search="{{ b.name|lower }}" data-status="{{ status }}" data-sort-name="{{ b.name }}" data-sort-trackers="{{ used }}" data-sort-status="{{ status }}" data-edit='{{ edit_data|tojson }}'>
+          <td class="list-name">{{ b.name }}</td>
+          <td class="num">{{ count_pill(used, None, 'tracker' ~ ('s' if used != 1)) }}</td>
+          <td>{{ status_badge(b.retired) }}</td>
+          <td class="cell-actions">{{ row_actions(url_for('lists.edit_business_line', line_id=b.id), url_for('lists.update_business_line', line_id=b.id), b.retired, 'the business line ' ~ b.name, b.name, business_line_in_use if used else '') }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {{ no_match('No business lines match.') }}
     </div>
-  </form>
-</section>
+    {{ table_foot('business lines', lines|length, lines|rejectattr('retired')|list|length) }}
+    {% else %}
+    <p class="empty-note">No business lines yet. Add the first one.</p>
+    {% endif %}
+  </section>
+</div>
 {% endblock %}

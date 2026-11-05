@@ -39,6 +39,7 @@ REGION_IN_USE = "This region has locations or trackers, so it can only be retire
 LOCATION_IN_USE = "Teams use this location, so it can only be retired."
 TEAM_NOTE_ONE = "Used by 1 team. Changing the region moves the team with it."
 TEAM_NOTE_MANY = "Used by {n} teams. Changing the region moves them to it."  # lists.js fills in {n} too
+BUSINESS_LINE_TAKEN = "A business line with that name already exists."
 BUSINESS_LINE_IN_USE = "Trackers use this business line, so it can only be retired."
 ACTIONS = ("save", "retire", "restore", "delete")
 
@@ -153,6 +154,15 @@ def _location_errors(
     return errors, country_code
 
 
+def _tab_counts() -> dict[str, int]:
+    """The number of entries, retired ones included, for each tab of the tab bar."""
+    db = get_session()
+    return {
+        key: db.scalar(select(func.count()).select_from(model)) or 0
+        for key, model in (("regions", Region), ("locations", Location), ("business_lines", BusinessLine))
+    }
+
+
 def _region_form() -> dict:
     return {"code": request.form.get("code", "").strip(), "name": request.form.get("name", "").strip()}
 
@@ -217,7 +227,8 @@ def _render_regions(
         dialog_errors=_summary(field_errors or {}),
         field_errors=field_errors or {},
         page_title="Regions",
-        current_page="regions",
+        current_page="lists",
+        tab_counts=_tab_counts(),
     )
     return page, status
 
@@ -376,7 +387,8 @@ def _render_locations(
         dialog_errors=_summary(field_errors or {}),
         field_errors=field_errors or {},
         page_title="Locations",
-        current_page="locations",
+        current_page="lists",
+        tab_counts=_tab_counts(),
     )
     return page, status
 
@@ -509,7 +521,16 @@ def _line_error(name: str, exclude_id: int | None = None) -> str | None:
     return name_error(get_session(), BusinessLine, name, "business line", exclude_id)
 
 
-def _render_business_lines(errors: list[str], status: int, form: dict | None = None, editing: str = ""):
+def _render_business_lines(
+    status: int,
+    *,
+    page_errors: list[str] | None = None,
+    field_errors: FieldErrors | None = None,
+    form: dict | None = None,
+    dialog: str | None = None,
+    edit_id: int | None = None,
+):
+    """The Business lines table. The arguments work as for :func:`_render_regions`."""
     db = get_session()
     lines = db.scalars(select(BusinessLine).order_by(func.lower(BusinessLine.name), BusinessLine.id)).all()
     trackers = dict(
@@ -519,16 +540,21 @@ def _render_business_lines(errors: list[str], status: int, form: dict | None = N
             .group_by(Tracker.business_line_id)
         ).all()
     )
+    editing = db.get(BusinessLine, edit_id) if dialog == "edit" else None
     page = render_template(
         "lists/business_lines.html",
         lines=lines,
         tracker_counts=trackers,
         business_line_in_use=BUSINESS_LINE_IN_USE,
-        form=form or {},
+        dialog=dialog,
         editing=editing,
-        errors=errors,
+        form=form or {},
+        page_errors=page_errors or [],
+        dialog_errors=_summary(field_errors or {}),
+        field_errors=field_errors or {},
         page_title="Business lines",
-        current_page="business_lines",
+        current_page="lists",
+        tab_counts=_tab_counts(),
     )
     return page, status
 
@@ -540,7 +566,20 @@ def _to_business_lines(anchor: str | None = None):
 @bp.get("/business-lines")
 @manage_lists_required
 def business_lines():
-    return _render_business_lines([], 200)
+    return _render_business_lines(200)
+
+
+@bp.get("/business-lines/new")
+@manage_lists_required
+def new_business_line():
+    return _render_business_lines(200, dialog="add")
+
+
+@bp.get("/business-lines/<int:line_id>/edit")
+@manage_lists_required
+def edit_business_line(line_id: int):
+    line = _or_404(BusinessLine, line_id)
+    return _render_business_lines(200, form={"name": line.name}, dialog="edit", edit_id=line.id)
 
 
 @bp.post("/business-lines")
@@ -550,7 +589,7 @@ def create_business_line():
     name = request.form.get("name", "").strip()
     error = _line_error(name)
     if error:
-        return _render_business_lines([error], 400, {"name": name}, "new-line")
+        return _render_business_lines(400, field_errors={"name": [error]}, form={"name": name}, dialog="add")
     line = BusinessLine(name=name)
     db.add(line)
     try:
@@ -559,8 +598,8 @@ def create_business_line():
         db.commit()
     except IntegrityError:  # the same name was taken at the same moment
         db.rollback()
-        error = _line_error(name) or "A business line with that name already exists."
-        return _render_business_lines([error], 400, {"name": name}, "new-line")
+        error = _line_error(name) or BUSINESS_LINE_TAKEN
+        return _render_business_lines(400, field_errors={"name": [error]}, form={"name": name}, dialog="add")
     flash(f"Added the business line {name}.", "success")
     return _to_business_lines(f"line-{line.id}")
 
@@ -573,30 +612,32 @@ def update_business_line(line_id: int):
     action = _action()
     name = line.name
     named = {"business_line": name}
-    editing = f"line-{line.id}"
+    anchor = f"line-{line.id}"
     if action == "delete":
         if db.scalar(select(exists().where(Tracker.business_line_id == line.id))):
-            return _render_business_lines([BUSINESS_LINE_IN_USE], 400)
+            return _render_business_lines(400, page_errors=[BUSINESS_LINE_IN_USE])
         _log(action="business_line_deleted", entity="business_line", entity_id=line.id, detail=named)
         db.delete(line)
         try:
             db.commit()
         except IntegrityError:  # a tracker took it up at the same moment
             db.rollback()
-            return _render_business_lines([BUSINESS_LINE_IN_USE], 400)
+            return _render_business_lines(400, page_errors=[BUSINESS_LINE_IN_USE])
         flash(f"Deleted the business line {name}.", "success")
         return _to_business_lines()
     if action in ("retire", "restore"):
         _set_retired(line, action, "business line", name, "business_line", named)
-        return _to_business_lines(editing)
+        return _to_business_lines(anchor)
     submitted = {"name": request.form.get("name", "").strip()}
     error = _line_error(submitted["name"], line.id)
     if error:
-        return _render_business_lines([error], 400, submitted, editing)
+        return _render_business_lines(
+            400, field_errors={"name": [error]}, form=submitted, dialog="edit", edit_id=line.id
+        )
     before, after = _changed(line, submitted)
     if not before:
         flash(NO_CHANGES_MESSAGE, "info")
-        return _to_business_lines(editing)
+        return _to_business_lines(anchor)
     line.name = submitted["name"]
     _log(
         action="business_line_changed",
@@ -608,7 +649,9 @@ def update_business_line(line_id: int):
         db.commit()
     except IntegrityError:
         db.rollback()
-        error = _line_error(submitted["name"], line.id) or "A business line with that name already exists."
-        return _render_business_lines([error], 400, submitted, editing)
+        error = _line_error(submitted["name"], line.id) or BUSINESS_LINE_TAKEN
+        return _render_business_lines(
+            400, field_errors={"name": [error]}, form=submitted, dialog="edit", edit_id=line.id
+        )
     flash(f"Saved the business line {line.name}.", "success")
-    return _to_business_lines(editing)
+    return _to_business_lines(anchor)

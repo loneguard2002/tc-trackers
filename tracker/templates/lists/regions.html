@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import icon %}
-{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_foot, row_actions, list_dialog, dialog_field, described_by %}
+{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_foot, row_actions, list_dialog, dialog_field, described_by, list_tabs %}
 {% macro region_fields(prefix, values, errors) -%}
 <div class="field-pair">
   {% set code_help = 'A short name such as EMEA, at most 20 characters.' %}
@@ -17,6 +17,7 @@
 {% endblock %}
 {% block content %}
 <div class="list-page">
+  {{ list_tabs('regions', tab_counts) }}
   <header class="list-head">
     <div>
       <h1>Regions</h1>

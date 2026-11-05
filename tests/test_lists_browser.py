@@ -557,13 +557,50 @@ def test_delete_still_asks_first(page, live_server, db, user_factory, places):
     _clean(page)
 
 
+def test_business_line_add_dialog_is_modal_and_creates(page, live_server, db, user_factory, business_line_factory):
+    business_line_factory("Brokerage")
+    _open(page, live_server, user_factory(is_admin=True), "/admin/business-lines")
+
+    page.get_by_role("link", name="Add business line").click()
+    expect(page.locator("#add-dialog")).to_be_visible()
+    assert _is_modal(page, "add-dialog")
+    assert page.url.endswith("/admin/business-lines")
+    expect(page.locator("#add-name")).to_be_focused()
+    page.fill("#add-name", "Data")
+    page.locator("#add-dialog").get_by_role("button", name="Create business line").click()
+    page.wait_for_load_state("networkidle")
+
+    expect(page.locator(".flash")).to_contain_text("Added the business line Data")
+    assert _names(page, "business-lines-table") == ["Brokerage", "Data"]
+    _clean(page)
+
+
+def test_business_lines_search_filter_and_edit(page, live_server, user_factory, business_line_factory):
+    business_line_factory("Brokerage")
+    business_line_factory("Data")
+    business_line_factory("Legacy", retired=True)
+    _open(page, live_server, user_factory(is_admin=True), "/admin/business-lines")
+
+    page.locator("#business-lines-table-search").fill("da")
+    assert _names(page, "business-lines-table") == ["Data"]
+    page.locator("#business-lines-table-search").fill("")
+    page.locator('[data-status-for] button[data-status="retired"]').click()
+    assert _names(page, "business-lines-table") == ["Legacy"]
+    assert _foot(page) == "Showing 1 of 3 business lines 2 active"
+    page.locator('[data-status-for] button[data-status="all"]').click()
+    page.get_by_role("link", name="Edit Data").click()
+    assert _is_modal(page, "edit-dialog")
+    expect(page.locator("#edit-name")).to_have_value("Data")
+    _clean(page)
+
+
 # --- Layout -----------------------------------------------------------------------------------------------------------
 
 
 def test_no_horizontal_scroll_at_390(page, live_server, user_factory, places):
     page.set_viewport_size({"width": 390, "height": 900})
     _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
-    for url in ("/admin/locations", "/admin/regions"):
+    for url in ("/admin/locations", "/admin/regions", "/admin/business-lines"):
         page.goto(f"{live_server}{url}")
         assert page.evaluate("document.scrollingElement.scrollWidth") <= 390, url
         page.locator("a[data-dialog-open=add]").click()
