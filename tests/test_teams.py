@@ -387,8 +387,8 @@ def test_filter_group_counts(client, logged_in_admin, team_factory, user_factory
     add_member(infra, user_factory(), "owner")
     add_member(windows, user_factory(), "viewer")
     add_member(windows, user_factory(), "viewer")
-    text = text_of(client.get(f"/admin/teams/{windows.id}"))
-    assert "All (3)" in text and "Direct (2)" in text and "From teams above (1)" in text
+    text = flat(raw_of(client.get(f"/admin/teams/{windows.id}")))
+    assert "All 3 Direct 2 From teams above 1" in text
 
 
 def test_people_list_direct_members_before_those_from_teams_above(
@@ -456,10 +456,11 @@ def test_filters_render_hidden_for_no_script(client, logged_in_admin, team_facto
     add_member(team, user_factory(), "viewer")
     user_factory(full_name="Olly Other")
     raw = raw_of(client.get(f"/admin/teams/{team.id}"))
-    for marker in ("data-tree-filter", "data-row-filter=", "data-select-filter="):
+    for marker in ("data-tree-filter", "data-status-for=", "data-search-for=", "data-select-filter="):
         [tag] = re.findall(rf"<[a-z]+[^>]*{marker}[^>]*>", raw)
         assert re.search(r"\bhidden\b", tag), marker
     assert 'src="/static/admin.js' in raw
+    assert re.search(r"<nav[^>]*data-pager-for=[^>]*\bhidden\b", raw) and 'src="/static/lists.js' in raw
 
 
 # --- Members --------------------------------------------------------------------------------------------------------

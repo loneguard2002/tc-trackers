@@ -132,3 +132,88 @@ def test_tree_help_sits_beside_the_title(client, logged_in_admin, team_factory):
         in text_of(client.get("/admin/teams")).replace("\n", " ")
     )
     assert "The number beside a team" not in raw
+
+
+def test_people_table_columns_filters_and_add_form_on_top(
+    client, logged_in_admin, team_factory, user_factory, add_member
+):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    mia = user_factory(full_name="Mia Member")
+    add_member(windows, mia, "viewer")
+    add_member(infra, user_factory(full_name="Hana Head"), "owner")
+    user_factory(full_name="Pat Possible")
+    raw = raw_of(client.get(f"/admin/teams/{windows.id}"))
+    assert raw.index(f'action="/admin/teams/{windows.id}/members"') < raw.index('data-search-for="people-table"')
+    assert "team-add-panel" in raw and 'data-select-filter="user_id"' in raw
+    assert 'src="/static/lists.js' in raw
+    headings = re.findall(r'<th scope="col"[^>]*>.*?</th>', raw[raw.index('id="people-table"') :], re.S)
+    assert [flat(h) for h in headings[:3]] == ["Person Person", "Route Route", "Role Role"]
+    group = raw[raw.index('data-status-for="people-table"') :]
+    group = group[group.index(">") + 1 : group.index("</div>")]
+    assert re.findall(r'data-status="(\w+)"', group) == ["all", "direct", "inherited"]
+    assert flat(group) == "All 2 Direct 1 From teams above 1"
+    assert re.search(r'data-pager-for="people-table"[^>]*\bhidden\b', raw)
+    direct = row_of(raw, "Mia Member")
+    assert 'data-status="direct"' in direct and "<select" in direct and "Mia Member" in direct
+    assert re.search(
+        r'<button[^>]*class="tool-button[^"]*"[^>]*title="Remove Mia Member from Windows"[^>]*>\s*<svg.*?</svg>'
+        r'\s*<span class="sr-only">Remove Mia Member from Windows</span>',
+        direct,
+        re.S,
+    )
+    assert ">Remove<" not in direct
+    inherited = row_of(raw, "Hana Head")
+    assert 'data-status="inherited"' in inherited
+    assert "<select" not in inherited and "<form" not in inherited
+
+
+def row_of(raw: str, name: str) -> str:
+    [row] = [r for r in re.findall(r"<tr data-route.*?</tr>", raw, re.S) if name in r]
+    return row
+
+
+def test_teams_below_and_trackers_tables_columns(
+    client, logged_in_admin, team_factory, tracker_factory, region_factory, business_line_factory, db
+):
+    from tracker.models import TrackerRegion
+
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    tracker_factory(name="Patch cycle", team_id=windows.id)
+    emea = region_factory("EMEA")
+    line = business_line_factory("Rates")
+    live = tracker_factory(name="Laptop refresh", team_id=infra.id, business_line_id=line.id)
+    old = tracker_factory(name="Old rollout", team_id=infra.id, status="archived")
+    db.add(TrackerRegion(tracker_id=live.id, region_id=emea.id))
+    db.commit()
+    raw = raw_of(client.get(f"/admin/teams/{infra.id}?tab=below"))
+    table = raw[raw.index('id="below-table"') : raw.index("</table>", raw.index('id="below-table"'))]
+    assert [flat(h) for h in re.findall(r"<th scope=\"col\"[^>]*>.*?</th>", table, re.S)] == [
+        "Team Team",
+        "Place Place",
+        "People People",
+        "Trackers Trackers",
+        "Actions",
+    ]
+    assert re.search(r"<tr[^>]*data-search=\"windows[^\"]*\"", table) and 'data-sort-trackers="1"' in table
+    assert 'data-search-for="below-table"' in raw and 'data-pager-for="below-table"' in raw
+    raw = raw_of(client.get(f"/admin/teams/{infra.id}?tab=trackers"))
+    table = raw[raw.index('id="trackers-table"') : raw.index("</table>", raw.index('id="trackers-table"'))]
+    assert [flat(h) for h in re.findall(r"<th scope=\"col\"[^>]*>.*?</th>", table, re.S)] == [
+        "Tracker Tracker",
+        "Business line Business line",
+        "Regions Regions",
+        "Status Status",
+        "Actions",
+    ]
+    rows = re.findall(r"<tr[^>]*data-search.*?</tr>", table, re.S)
+    assert len(rows) == 2
+    live_row = next(r for r in rows if "Laptop refresh" in r)
+    assert 'data-status="active"' in live_row and "Rates" in live_row and "EMEA" in live_row
+    assert "Active" in flat(live_row) and f'href="/trackers/{live.id}/roles"' in live_row
+    old_row = next(r for r in rows if "Old rollout" in r)
+    assert 'data-status="archived"' in old_row and "Archived" in flat(old_row)
+    assert f'href="/trackers/{old.id}/roles"' in old_row
+    group = raw[raw.index('data-status-for="trackers-table"') :]
+    assert flat(group[group.index(">") + 1 : group.index("</div>")]) == "All 2 Active 1 Archived 1"

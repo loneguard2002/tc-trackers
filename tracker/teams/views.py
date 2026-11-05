@@ -29,7 +29,19 @@ from ..auth.guards import (
 from ..db import get_session
 from ..ids import in_range, parse_id
 from ..lists.catalogue import location_choices, location_label, parse_place, team_places
-from ..models import Location, PermissionSet, PermissionSetHolder, Region, Team, TeamMember, TeamParent, Tracker, User
+from ..models import (
+    BusinessLine,
+    Location,
+    PermissionSet,
+    PermissionSetHolder,
+    Region,
+    Team,
+    TeamMember,
+    TeamParent,
+    Tracker,
+    TrackerRegion,
+    User,
+)
 from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
@@ -232,6 +244,31 @@ def _person_row(person: TeamPerson) -> PersonRow:
     return PersonRow(person, route, note)
 
 
+class TrackerRow(NamedTuple):
+    tracker: Tracker
+    business_line: str
+    regions: list[str]
+
+
+def _tracker_rows(db, team_id: int) -> list[TrackerRow]:
+    """The team's trackers by name, each with its business line and its region codes."""
+    found = db.execute(
+        select(Tracker, BusinessLine.name)
+        .outerjoin(BusinessLine, Tracker.business_line_id == BusinessLine.id)
+        .where(Tracker.team_id == team_id)
+        .order_by(func.lower(Tracker.name), Tracker.id)
+    ).all()
+    codes: dict[int, list[str]] = {}
+    for tracker_id, code in db.execute(
+        select(TrackerRegion.tracker_id, Region.code)
+        .join(Region, Region.id == TrackerRegion.region_id)
+        .where(TrackerRegion.tracker_id.in_([tracker.id for tracker, _ in found]))
+        .order_by(func.lower(Region.code), Region.id)
+    ):
+        codes.setdefault(tracker_id, []).append(code)
+    return [TrackerRow(tracker, line or "", codes.get(tracker.id, [])) for tracker, line in found]
+
+
 def _render_team(team: Team, errors: list[str], status: int, form=None, editing: bool = False, tab: str = "people"):
     db = get_session()
     rows = load_team_rows(db)
@@ -246,10 +283,16 @@ def _render_team(team: Team, errors: list[str], status: int, form=None, editing:
         )
         if user.id not in direct_ids
     ]
-    trackers = db.scalars(
-        select(Tracker).where(Tracker.team_id == team.id).order_by(func.lower(Tracker.name), Tracker.id)
-    ).all()
+    trackers = _tracker_rows(db, team.id)
     context = _tree_context(rows, team.id)
+    below = context["children"].get(team.id, [])
+    tracker_counts = dict(
+        db.execute(
+            select(Tracker.team_id, func.count())
+            .where(Tracker.team_id.in_([r.id for r in below]))
+            .group_by(Tracker.team_id)
+        ).all()
+    )
     page = render_template(
         "teams/team.html",
         **context,
@@ -258,9 +301,11 @@ def _render_team(team: Team, errors: list[str], status: int, form=None, editing:
         people=people,
         direct_count=sum(1 for row in people if row.person.direct_role is not None),
         inherited_count=sum(1 for row in people if row.person.inherited),
-        below=context["children"].get(team.id, []),
+        below=below,
+        tracker_counts=tracker_counts,
         candidates=candidates,
         trackers=trackers,
+        active_trackers=sum(1 for row in trackers if row.tracker.status != "archived"),
         roles=ROLES,
         can_add=current_user().is_admin or not team_holds_sets(db, team.id),
         add_refusal=TEAM_WITH_SETS_MESSAGE,

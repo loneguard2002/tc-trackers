@@ -11,11 +11,16 @@
 
   // --- Tables -------------------------------------------------------------------------------------------------------
 
-  // Each table's rows carry data-search (lower-case text), data-status ("active" or "retired"), data-region (Locations)
-  // and data-sort-<key>. A row shows when it contains the typed text (a plain substring, never a pattern), is in the
-  // chosen region, and has the chosen status. Each status button counts the rows the search and region filter leave
-  // for that status; the footer counts the rows shown, all rows, and all active rows (whatever is shown, as the total
-  // is). A line inside the table's frame says so when no row is shown.
+  // Each table's rows carry data-search (lower-case text), data-status (one token such as "active" or "retired", or
+  // several separated by spaces, as in "direct inherited"), data-region (Locations) and data-sort-<key>. A row shows
+  // when it contains the typed text (a plain substring, never a pattern), is in the chosen region, and holds the
+  // chosen status token ("all" matches every row). Each status button counts the rows the search and region filter
+  // leave for its token; the footer counts the rows shown, all rows, and all active rows (whatever is shown, as the
+  // total is). A line inside the table's frame says so when no row is shown.
+  //
+  // A table with a [data-pager-for="<id>"] block is also paged: 25 rows to start (or 50, 100), taken in the order the
+  // rows are in after sorting. A change of search, filter or sort returns to page 1. "Shown" is then the rows on
+  // the page, and the pager says which of the matching rows they are.
   function setUpTable(table) {
     var id = table.id;
     var body = table.tBodies[0];
@@ -31,11 +36,19 @@
     var panel = table.closest(".list-panel");
     var foot = panel ? panel.querySelector(".list-foot") : null;
     var noMatch = panel ? panel.querySelector("[data-no-match]") : null;
+    var pager = document.querySelector('[data-pager-for="' + id + '"]');
+    var sizeSelect = pager ? pager.querySelector("[data-pager-size]") : null;
     var status = "all";
+    var pageNumber = 1;
+    var pageSize = 25;
 
     each(buttons, function (button) {
       if (button.getAttribute("aria-pressed") === "true") status = button.getAttribute("data-status");
     });
+
+    function tokens(row) {
+      return (row.getAttribute("data-status") || "").split(/\s+/).filter(Boolean);
+    }
 
     function inSearchAndRegion(row) {
       var text = input ? input.value.trim().toLowerCase() : "";
@@ -43,27 +56,79 @@
       return !(regionFilter && regionFilter.value !== "" && row.getAttribute("data-region") !== regionFilter.value);
     }
 
+    function pageButton(label, number, current) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "pager-button";
+      button.textContent = label;
+      button.setAttribute("aria-label", "Page " + label);
+      if (current) button.setAttribute("aria-current", "page");
+      button.addEventListener("click", function () {
+        pageNumber = number;
+        refresh();
+      });
+      return button;
+    }
+
+    // The numbers of the pages, the first and last always and those beside the current one; a gap shows as "...".
+    function showPages(pages, target) {
+      while (target.firstChild) target.removeChild(target.firstChild);
+      var last = 0;
+      for (var number = 1; number <= pages; number += 1) {
+        if (number !== 1 && number !== pages && Math.abs(number - pageNumber) > 1) continue;
+        if (last && number - last > 1) {
+          var gap = document.createElement("span");
+          gap.className = "pager-gap";
+          gap.textContent = "\u2026";
+          target.appendChild(gap);
+        }
+        target.appendChild(pageButton(String(number), number, number === pageNumber));
+        last = number;
+      }
+    }
+
     function refresh() {
-      var counts = { all: 0, active: 0, retired: 0 };
-      var shown = 0;
+      var counts = { all: 0 };
+      var matching = [];
       var active = 0;
-      items.forEach(function (item) {
-        var rowStatus = item.row.getAttribute("data-status");
-        var found = inSearchAndRegion(item.row);
+      Array.prototype.forEach.call(body.rows, function (row) {
+        var rowTokens = tokens(row);
+        var found = inSearchAndRegion(row);
         if (found) {
           counts.all += 1;
-          counts[rowStatus] = (counts[rowStatus] || 0) + 1;
+          rowTokens.forEach(function (token) { counts[token] = (counts[token] || 0) + 1; });
         }
-        var show = found && (status === "all" || rowStatus === status);
-        item.row.hidden = !show;
-        if (show) shown += 1;
-        if (rowStatus === "active") active += 1;
+        if (found && (status === "all" || rowTokens.indexOf(status) !== -1)) matching.push(row);
+        if (rowTokens.indexOf("active") !== -1) active += 1;
       });
-      if (noMatch) noMatch.hidden = shown !== 0;
+      var pages = Math.max(1, Math.ceil(matching.length / pageSize));
+      if (pageNumber > pages) pageNumber = pages;
+      var first = pager ? (pageNumber - 1) * pageSize : 0;
+      var last = pager ? first + pageSize : matching.length;
+      var shown = 0;
+      Array.prototype.forEach.call(body.rows, function (row) {
+        var index = matching.indexOf(row);
+        var show = index !== -1 && index >= first && index < last;
+        row.hidden = !show;
+        if (show) shown += 1;
+      });
+      if (noMatch) noMatch.hidden = matching.length !== 0;
       each(buttons, function (button) {
         var count = button.querySelector("[data-count]");
         if (count) count.textContent = String(counts[button.getAttribute("data-status")] || 0);
       });
+      if (pager) {
+        var range = pager.querySelector("[data-pager-range]");
+        var total = pager.querySelector("[data-pager-total]");
+        if (range) range.textContent = shown === 0 ? "0" : (first + 1) + "\u2013" + (first + shown);
+        if (total) total.textContent = String(matching.length);
+        var previous = pager.querySelector("[data-pager-prev]");
+        var next = pager.querySelector("[data-pager-next]");
+        if (previous) previous.disabled = pageNumber <= 1;
+        if (next) next.disabled = pageNumber >= pages;
+        var numbers = pager.querySelector("[data-pager-pages]");
+        if (numbers) showPages(pages, numbers);
+      }
       if (!foot) return;
       var parts = { "[data-shown]": shown, "[data-total]": items.length, "[data-active]": active };
       Object.keys(parts).forEach(function (selector) {
@@ -72,13 +137,34 @@
       });
     }
 
+    // A change of search, filter or sort starts again at the first page.
+    function restart() {
+      pageNumber = 1;
+      refresh();
+    }
+
+    if (pager) {
+      pager.hidden = false;
+      var previous = pager.querySelector("[data-pager-prev]");
+      var next = pager.querySelector("[data-pager-next]");
+      if (sizeSelect) {
+        pageSize = Number(sizeSelect.value) || 25;
+        sizeSelect.addEventListener("change", function () {
+          pageSize = Number(sizeSelect.value) || 25;
+          restart();
+        });
+      }
+      if (previous) previous.addEventListener("click", function () { pageNumber -= 1; refresh(); });
+      if (next) next.addEventListener("click", function () { pageNumber += 1; refresh(); });
+    }
+
     if (search && input) {
       search.hidden = false;
-      input.addEventListener("input", refresh);
+      input.addEventListener("input", restart);
     }
     if (regionFilter) {
       regionFilter.hidden = false;
-      regionFilter.addEventListener("change", refresh);
+      regionFilter.addEventListener("change", restart);
     }
     if (statusGroup) {
       statusGroup.hidden = false;
@@ -86,7 +172,7 @@
         button.addEventListener("click", function () {
           status = button.getAttribute("data-status");
           each(buttons, function (other) { other.setAttribute("aria-pressed", other === button ? "true" : "false"); });
-          refresh();
+          restart();
         });
       });
     }
@@ -122,6 +208,7 @@
         headers.forEach(function (other) { other.setAttribute("aria-sort", "none"); });
         header.setAttribute("aria-sort", direction);
         sorted.forEach(function (item) { body.appendChild(item.row); });
+        restart();
       });
     });
 

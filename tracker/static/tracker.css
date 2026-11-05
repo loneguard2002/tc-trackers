@@ -662,7 +662,37 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .team-tabs { margin: 0; padding: 0 12px; border-top: 1px solid var(--border); border-bottom: 0; }
 .team-tabs .tab { margin-bottom: 0; }
 .team-tree-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
-.team-tree-head p { margin: 0; font-size: .75rem; }
+.team-tree-head p { flex: 1 1 11rem; min-width: 0; margin: 0; font-size: .75rem; }
+.team-header:has([data-confirm-box]:not([hidden])) .team-divider { display: none; }
+@media (max-width: 720px) {
+  .team-tabs { gap: 0; padding: 0 6px; }
+  .team-tabs .tab { padding: 10px 8px; font-size: 13px; }
+  .team-tabs .tab-count { min-width: 20px; margin-left: 2px; padding: 0 5px; }
+}
+/* The tab's card: the light-blue panel on top (Add member, New team), then search, table and pager. */
+.team-panel { margin-bottom: 20px; }
+.team-add-panel { padding: 14px 20px; border-top: 0; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--primary) 7%, var(--surface)); }
+.team-add-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin: 0; color: var(--muted); font-size: .875rem; }
+.team-panel .list-table table { min-width: 560px; }
+.team-panel .list-table td.num, .team-panel .list-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.team-panel .list-table .cell-actions { width: 1%; white-space: nowrap; }
+.team-regions { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; }
+.pager[hidden] { display: none; }
+.pager-count { margin: 0; }
+.pager-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pager-size { display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 0 0; font-size: inherit; font-weight: 400; }
+.pager-size select { width: auto; padding: 4px 8px; font-size: .8125rem; }
+.pager-pages { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.pager-gap { padding: 0 2px; }
+.pager-button { min-width: 34px; min-height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.pager-button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); }
+.pager-button[aria-current="page"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); color: var(--primary); }
+.pager-button:disabled { opacity: .5; cursor: not-allowed; }
+.pager-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+@media (max-width: 720px) {
+  .team-add-panel, .pager { padding-left: 16px; padding-right: 16px; }
+}
 #tab-people > .settings-section, #tab-below > .settings-section, #tab-trackers > .settings-section { margin-top: 20px; }
 .row-filter { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
 .row-filter .button[aria-pressed="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary); }
