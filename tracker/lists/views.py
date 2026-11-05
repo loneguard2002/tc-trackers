@@ -18,7 +18,7 @@ from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import admin_required, current_user
 from ..db import get_session
 from ..ids import in_range, parse_id
-from ..models import BusinessLine, Location, Region, Team, Tracker, TrackerRegion
+from ..models import BusinessLine, Location, Region, RegionGrant, Team, Tracker, TrackerRegion
 from ..naming import MAX_NAME_LENGTH, name_error
 from . import bp
 from .catalogue import location_label
@@ -35,7 +35,7 @@ LOCATION_CODE_REQUIRED = "Enter a location code."
 LOCATION_CODE_FORMAT = "A location code is 2 to 6 letters, such as LON."
 LOCATION_CODE_TAKEN = "A location with that code already exists."
 LOCATION_TAKEN = "A location with that name and country already exists."
-REGION_IN_USE = "This region has locations or trackers, so it can only be retired."
+REGION_IN_USE = "This region has locations, trackers or people with access, so it can only be retired."
 LOCATION_IN_USE = "Teams use this location, so it can only be retired."
 TEAM_NOTE_ONE = "Used by 1 team. Changing the region moves the team with it."
 TEAM_NOTE_MANY = "Used by {n} teams. Changing the region moves them to it."  # lists.js fills in {n} too
@@ -181,6 +181,7 @@ def _region_in_use(region_id: int) -> bool:
     return bool(
         db.scalar(select(exists().where(Location.region_id == region_id)))
         or db.scalar(select(exists().where(TrackerRegion.region_id == region_id)))
+        or db.scalar(select(exists().where(RegionGrant.region_id == region_id)))
     )
 
 
@@ -212,6 +213,7 @@ def _render_regions(
         ).all()
     )
     trackers = dict(db.execute(select(TrackerRegion.region_id, func.count()).group_by(TrackerRegion.region_id)).all())
+    people = dict(db.execute(select(RegionGrant.region_id, func.count()).group_by(RegionGrant.region_id)).all())
     editing = db.get(Region, edit_id) if dialog == "edit" else None
     page = render_template(
         "lists/regions.html",
@@ -219,6 +221,7 @@ def _render_regions(
         location_counts=locations,
         team_counts=teams,
         tracker_counts=trackers,
+        people_counts=people,
         region_in_use=REGION_IN_USE,
         dialog=dialog,
         editing=editing,

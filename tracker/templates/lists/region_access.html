@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field, icon %}
+{% from "lists/_table.html" import list_tabs %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
+{% endblock %}
+{% block content %}
+<div class="list-page">
+  {{ list_tabs('regions', tab_counts) }}
+  <header class="list-head">
+    <div>
+      <h1>Access to {{ region.code }}</h1>
+      <p class="region-name">{{ region.name }}</p>
+      <p class="page-lede">People given access to a region reach every tracker that covers it, at the role shown. Their access follows the tracker's regions: it ends when a tracker stops covering the region.</p>
+    </div>
+  </header>
+
+  {% if errors %}
+  <div class="form-alert" role="alert">
+    <strong>Please correct the following:</strong>
+    <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  <section class="list-panel" aria-labelledby="access-heading">
+    <h2 class="sr-only" id="access-heading">People with access to {{ region.code }}</h2>
+    {% if holders %}
+    <div class="section-table">
+      <table id="access-table" class="access-table">
+        <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody>
+        {% for u, role in holders %}
+        <tr id="person-{{ u.id }}">
+          <td><div class="member-cell">
+            <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
+            <span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.status != 'active' %} <span class="badge badge-muted">{{ u.status|title }}</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
+          </div></td>
+          <td><form class="member-actions" method="post" action="{{ url_for('lists.change_region_access', region_id=region.id) }}">
+            {{ csrf_field(csrf_token()) }}<input type="hidden" name="user_id" value="{{ u.id }}"><input type="hidden" name="action" value="set">
+            <label class="sr-only" for="role-{{ u.id }}">Role for {{ u.full_name }}</label>
+            <select id="role-{{ u.id }}" name="role" data-autosubmit>
+              {% for r in roles %}<option value="{{ r }}"{{ ' selected' if role == r }}>{{ r|title }}</option>{% endfor %}
+            </select>
+            <button class="button button-small" type="submit" data-autosubmit-fallback>Set role</button>
+          </form></td>
+          <td class="cell-actions"><form method="post" action="{{ url_for('lists.change_region_access', region_id=region.id) }}"
+            data-confirm="Remove {{ u.full_name }}'s access to {{ region.code }}? They lose the access it gives.">
+            {{ csrf_field(csrf_token()) }}<input type="hidden" name="user_id" value="{{ u.id }}"><input type="hidden" name="action" value="set">
+            <button class="button button-small button-quiet" type="submit" name="role" value="remove">Remove access</button>
+          </form></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-note">Nobody has access to this region yet.</p>
+    {% endif %}
+    {% if region.retired %}
+    <p class="section-foot-note">This region is retired. Access given here keeps working until it is removed.</p>
+    {% elif candidates %}
+    <form class="inline-form team-add access-add" method="post" action="{{ url_for('lists.change_region_access', region_id=region.id) }}">
+      {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="give">
+      <div>
+        <label for="user_id">Person</label>
+        <select id="user_id" name="user_id" required>
+          {% for u in candidates %}<option value="{{ u.id }}">{{ u.full_name }} ({{ u.email }})</option>{% endfor %}
+        </select>
+        <input class="select-filter" type="search" placeholder="Filter people" autocomplete="off" aria-label="Filter the list of people" data-select-filter="user_id" hidden>
+      </div>
+      <div>
+        <label for="role">Role</label>
+        <select id="role" name="role">
+          {% for r in roles %}<option value="{{ r }}"{{ ' selected' if r == 'viewer' }}>{{ r|title }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="button" type="submit">{{ icon('plus') }}Give access</button>
+    </form>
+    {% else %}
+    <p class="section-foot-note">Every active person already has access to this region.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

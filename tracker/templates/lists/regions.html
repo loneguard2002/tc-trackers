@@ -57,6 +57,7 @@
           {{ sort_header('Name', 'name') }}
           {{ sort_header('Locations', 'locations', 'num') }}
           {{ sort_header('Teams', 'teams', 'num') }}
+          {{ sort_header('People', 'people', 'num') }}
           {{ sort_header('Status', 'status') }}
           <th scope="col"><span class="sr-only">Actions</span></th>
         </tr></thead>
@@ -64,15 +65,17 @@
         {% for r in regions %}
         {% set places = location_counts.get(r.id, 0) %}
         {% set teams = team_counts.get(r.id, 0) %}
+        {% set people = people_counts.get(r.id, 0) %}
         {% set status = 'retired' if r.retired else 'active' %}
         {% set edit_data = {'code': r.code, 'name': r.name, 'action': url_for('lists.update_region', region_id=r.id)} %}
-        <tr id="region-{{ r.id }}"{% if r.retired %} class="is-retired"{% endif %} data-search="{{ (r.code ~ ' ' ~ r.name)|lower }}" data-status="{{ status }}" data-sort-code="{{ r.code }}" data-sort-name="{{ r.name }}" data-sort-locations="{{ places }}" data-sort-teams="{{ teams }}" data-sort-status="{{ status }}" data-edit='{{ edit_data|tojson }}'>
+        <tr id="region-{{ r.id }}"{% if r.retired %} class="is-retired"{% endif %} data-search="{{ (r.code ~ ' ' ~ r.name)|lower }}" data-status="{{ status }}" data-sort-code="{{ r.code }}" data-sort-name="{{ r.name }}" data-sort-locations="{{ places }}" data-sort-teams="{{ teams }}" data-sort-people="{{ people }}" data-sort-status="{{ status }}" data-edit='{{ edit_data|tojson }}'>
           <td>{{ code_badge(r.code) }}</td>
           <td class="list-name">{{ r.name }}</td>
           <td class="num">{{ count_pill(places, url_for('lists.locations', region=r.id), 'location' ~ ('s' if places != 1) ~ ' in ' ~ r.code) }}</td>
           <td class="num">{{ count_pill(teams, url_for('teams.index'), 'team' ~ ('s' if teams != 1) ~ ' in ' ~ r.code) }}</td>
+          <td class="num">{{ count_pill(people, url_for('lists.region_access', region_id=r.id), ('person' if people == 1 else 'people') ~ ' with access to ' ~ r.code) }}</td>
           <td>{{ status_badge(r.retired) }}</td>
-          <td class="cell-actions">{{ row_actions(url_for('lists.edit_region', region_id=r.id), url_for('lists.update_region', region_id=r.id), r.retired, 'the region ' ~ r.code, r.code, region_in_use if places or tracker_counts.get(r.id, 0) else '') }}</td>
+          <td class="cell-actions">{{ row_actions(url_for('lists.edit_region', region_id=r.id), url_for('lists.update_region', region_id=r.id), r.retired, 'the region ' ~ r.code, r.code, region_in_use if places or tracker_counts.get(r.id, 0) or people else '') }}</td>
         </tr>
         {% endfor %}
         </tbody>
