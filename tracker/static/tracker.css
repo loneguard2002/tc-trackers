@@ -1069,3 +1069,15 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
   .list-dialog-body, .list-dialog-foot { padding-left: 16px; padding-right: 16px; }
   .list-dialog-foot .button { flex: 1; text-align: center; }
 }
+
+/* A region's Access screen: on a phone each person is a card (name, then role and Remove side by side), so the Role
+   select is never pushed out of view by a wide table. */
+.region-name { margin: 0 0 8px; }
+@media (max-width: 640px) {
+  .access-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .access-table, .access-table tbody { display: block; }
+  .access-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .access-table td, .access-table td:first-child { display: block; padding: 0; border: 0; }
+  .access-table td:first-child { grid-column: 1 / -1; }
+  .access-table .cell-actions { width: auto; text-align: right; }
+}

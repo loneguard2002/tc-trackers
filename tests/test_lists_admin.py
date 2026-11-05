@@ -332,10 +332,10 @@ def test_entries_in_use_cannot_be_deleted_only_retired(
 
     response = post(client, f"/admin/regions/{region.id}", {"action": "delete"})
     assert response.status_code == 400
-    assert "This region has locations or trackers, so it can only be retired." in text_of(response)
+    assert REGION_IN_USE in text_of(response)
     response = post(client, f"/admin/regions/{covered.id}", {"action": "delete"})
     assert response.status_code == 400
-    assert "This region has locations or trackers, so it can only be retired." in text_of(response)
+    assert REGION_IN_USE in text_of(response)
     response = post(client, f"/admin/locations/{place.id}", {"action": "delete"})
     assert response.status_code == 400
     assert "Teams use this location, so it can only be retired." in text_of(response)
@@ -466,12 +466,17 @@ def test_regions_table_lists_counts_and_status(client, logged_in_admin, region_f
     team_factory("B")  # placed nowhere: counted in no region
     page = client.get("/admin/regions").get_data(as_text=True)
     row = row_of(page, f"region-{emea.id}")
-    assert cells_of(row)[:5] == ["EMEA", "Europe, Middle East and Africa", "2", "1", "Active"]
-    assert cells_of(row_of(page, f"region-{old.id}"))[:5] == ["OLD", "Old region", "0", "0", "Retired"]
+    assert cells_of(row)[:6] == ["EMEA", "Europe, Middle East and Africa", "2", "1", "0", "Active"]
+    assert cells_of(row_of(page, f"region-{old.id}"))[:6] == ["OLD", "Old region", "0", "0", "0", "Retired"]
     assert page.index(f'id="region-{emea.id}"') < page.index(f'id="region-{old.id}"')
     assert 'data-search="emea europe, middle east and africa"' in row and 'data-status="active"' in row
     assert 'data-status="retired"' in row_of(page, f"region-{old.id}")
-    for attribute in ('data-sort-code="EMEA"', 'data-sort-locations="2"', 'data-sort-teams="1"'):
+    for attribute in (
+        'data-sort-code="EMEA"',
+        'data-sort-locations="2"',
+        'data-sort-teams="1"',
+        'data-sort-people="0"',
+    ):
         assert attribute in row
     assert 'data-sort-name="Europe, Middle East and Africa"' in row and 'data-sort-status="active"' in row
     edit = json.loads(html.unescape(re.search(r"data-edit='([^']*)'", row).group(1)))
@@ -481,7 +486,7 @@ def test_regions_table_lists_counts_and_status(client, logged_in_admin, region_f
     assert f'href="/admin/regions/{emea.id}/edit" data-dialog-open="edit"' in row
     assert '</svg>Edit<span class="sr-only"> EMEA</span></a>' in row
     assert 'href="/admin/regions/new" data-dialog-open="add"' in page
-    for column in ("Code", "Name", "Locations", "Teams", "Status"):
+    for column in ("Code", "Name", "Locations", "Teams", "People", "Status"):
         assert f'data-sort="{column.lower()}" hidden' in page
     # The server's order is by code; lists.js marks that column sorted (no sort control without JavaScript).
     assert "aria-sort" not in page
@@ -591,7 +596,7 @@ def test_other_errors_show_above_the_table(client, logged_in_admin, region_facto
     response = post(client, f"/admin/regions/{region.id}", {"action": "delete"})
     assert response.status_code == 400
     page = text_of(response)
-    assert page.index("This region has locations or trackers, so it can only be retired.") < page.index("<table")
+    assert page.index(REGION_IN_USE) < page.index("<table")
     for name in ("add", "edit"):
         assert not is_open(dialog_of(page, name)[0])
 

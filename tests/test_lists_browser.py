@@ -625,3 +625,22 @@ def test_status_buttons_stay_left_when_wrapped(page, live_server, user_factory, 
     assert abs(status["x"] - search["x"]) < 1
     assert abs(region["x"] - search["x"]) < 1 and abs(region["width"] - search["width"]) < 1
     _clean(page)
+
+
+def test_region_access_role_autosubmits(page, live_server, db, user_factory, region_factory, region_grant):
+    from tracker.models import RegionGrant
+
+    region = region_factory("EMEA", "Europe, Middle East and Africa")
+    holder = user_factory(full_name="Holder One")
+    region_grant(region, holder, "viewer")
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/regions/{region.id}/access")
+
+    expect(page.locator("[data-autosubmit-fallback]")).to_be_hidden()  # the select saves by itself
+    page.select_option(f"#role-{holder.id}", "editor")
+    expect(page.get_by_text("Holder One now has Editor access to EMEA.")).to_be_visible()
+    db.expire_all()
+    assert db.scalar(select(RegionGrant.role).where(RegionGrant.user_id == holder.id)) == "editor"
+    _clean(page)
+
+    page.set_viewport_size({"width": 390, "height": 800})
+    assert page.evaluate("document.scrollingElement.scrollWidth") <= 390
