@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from tests.conftest import post, sign_in
-from tests.test_teams import entries, holder, parents_of, text_of
+from tests.test_teams import entries, flat, holder, parents_of, text_of
 from tracker.auth.guards import SELF_PROMOTION_MESSAGE
 from tracker.ids import MAX_ID
 from tracker.models import Team, TeamParent
@@ -270,3 +270,15 @@ def test_parents_requires_manage_teams(client, user_factory, team_factory):
     sign_in(client, user_factory(full_name="Outsider"))
     assert client.get(screen(team)).status_code == 403
     assert post(client, screen(team), {"action": "add", "parent_id": "1"}).status_code == 403
+
+
+def test_notices_sit_in_the_section_they_belong_to(client, logged_in_admin, tree):
+    _infra, windows, desktops, apps, _laptops = tree
+    removed = client.get(f"{screen(desktops)}?remove={apps.id}").get_data(as_text=True)
+    now, add = removed.split('id="section-add"')
+    assert "Desktops is not under Applications." in flat(now.split('id="section-now"')[1])
+    assert "Desktops is not under" not in flat(add)
+    added = client.get(f"{screen(desktops)}?add={windows.id}").get_data(as_text=True)
+    now, add = added.split('id="section-add"')
+    assert "Desktops is already under Windows." in flat(add)
+    assert "Desktops is already under" not in flat(now)

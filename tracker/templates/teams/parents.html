@@ -43,6 +43,7 @@
     {% else %}
     <p class="empty-note">{{ team.name }} is at the top level.</p>
     {% endif %}
+    {% if notice and not adding %}<p class="section-foot-note">{{ notice }}</p>{% endif %}
   </section>
 
   <section class="settings-section" aria-labelledby="section-add">
@@ -62,7 +63,7 @@
     {% else %}
     <p class="empty-note">No other team can take {{ team.name }}.</p>
     {% endif %}
-    {% if notice %}<p class="section-foot-note">{{ notice }}</p>{% endif %}
+    {% if notice and adding %}<p class="section-foot-note">{{ notice }}</p>{% endif %}
   </section>
 
   {% if impact %}

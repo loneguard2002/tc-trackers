@@ -620,6 +620,7 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .team-node { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 6px 0; }
 .team-counts { color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
 .team-place { color: var(--muted); font-size: .8125rem; }
+.team-also { flex-basis: 100%; color: var(--muted); font-size: .8125rem; overflow-wrap: anywhere; }
 .team-place.is-unset, .team-header-place.is-unset { font-style: italic; }
 .team-move { align-items: flex-end; }
 .team-add { padding: 16px 20px; border-top: 1px solid var(--border); }

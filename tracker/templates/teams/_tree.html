@@ -1,7 +1,7 @@
-{#- The team tree card, shared by the Teams index and a team's page. Expects children, reach, search, current_id and
+{#- The team tree card, shared by the Teams index and a team's page. Expects children, higher, reach, search, current_id and
     places. -#}
-{% from "macros.html" import people_count %}
-{% macro level(parent_id) -%}
+{% from "macros.html" import people_count, names_in_words %}
+{% macro level(parent_id, path) -%}
 <ul class="{{ 'team-tree' if parent_id is none else 'team-tree-children' }}">
   {% for row in children.get(parent_id, []) %}
   <li data-search="{{ search.get(row.id, '') }}">
@@ -10,8 +10,11 @@
       {% set place = places.get(row.id) %}
       {% if place %}<span class="team-place">{{ place.region_code }} · {{ place.city }}</span>{% else %}<span class="team-place is-unset">Region not set</span>{% endif %}
       <span class="team-counts">{{ people_count(reach.get(row.id, 0)) }}</span>
+      {% set others = higher.get(row.id, [])|rejectattr(0, 'equalto', parent_id)|list %}
+      {% if others %}<span class="team-also">Also under {{ names_in_words(others) }}</span>{% endif %}
     </div>
-    {% if children.get(row.id) %}{{ level(row.id) }}{% endif %}
+    {#- A team already on the path is a cycle in corrupted data: show it, but do not descend into it again. -#}
+    {% if children.get(row.id) and row.id not in path %}{{ level(row.id, path + [row.id]) }}{% endif %}
   </li>
   {% endfor %}
 </ul>
@@ -19,12 +22,12 @@
 <aside class="settings-section teams-tree-card" aria-labelledby="teams-tree-title">
   <header class="settings-section-head">
     <h2 id="teams-tree-title">Teams</h2>
-    <p>The number beside a team counts the active people who reach it, from the team itself and from the teams above it.</p>
+    <p>The number beside a team counts the active people who reach it, from the team itself and from the teams above it. A team under several higher teams appears under each.</p>
   </header>
   <label class="sr-only" for="tree-filter">Filter teams by team or person</label>
   <input id="tree-filter" class="tree-filter" type="search" placeholder="Filter by team or person" autocomplete="off" data-tree-filter hidden>
   {% if children.get(none) %}
-  <div class="section-body" data-tree>{{ level(none) }}</div>
+  <div class="section-body" data-tree>{{ level(none, []) }}</div>
   {% else %}
   <p class="empty-note">No teams yet.</p>
   {% endif %}
