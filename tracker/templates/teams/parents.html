@@ -12,6 +12,9 @@
     <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
   </div>
   {% endif %}
+  {% if back and not impact %}
+  <p><a href="{{ url_for('teams.view', team_id=back, tab='below') }}">Back to the teams below {{ back_name }}</a></p>
+  {% endif %}
 
   <section class="settings-section" aria-labelledby="section-now">
     <header class="settings-section-head">

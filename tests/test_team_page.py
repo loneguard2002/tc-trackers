@@ -65,6 +65,18 @@ def test_tabs_link_with_counts_and_mark_the_current_one(
         ]
 
 
+def test_people_tab_count_leaves_out_people_who_are_not_active(
+    client, logged_in_admin, team_factory, user_factory, add_member
+):
+    infra = team_factory(name="Infrastructure")
+    add_member(infra, user_factory(), "viewer")
+    add_member(infra, user_factory(status="disabled"), "editor")
+    raw = raw_of(client.get(f"/admin/teams/{infra.id}"))
+    links = re.findall(r'<a class="tab[^"]*" href="[^"]*"[^>]*>(.*?)</a>', raw, re.S)
+    assert flat(links[0]) == "People 1"
+    assert "Disabled" in raw  # the disabled member is still listed, so it can be removed
+
+
 def test_unknown_tab_shows_people(client, logged_in_admin, team_factory):
     team = team_factory(name="Windows")
     response = client.get(f"/admin/teams/{team.id}?tab=nonsense")
@@ -277,6 +289,30 @@ def test_add_selected_team_previews_then_returns_to_the_tab(client, logged_in_ad
     assert done.status_code == 302 and done.headers["Location"].endswith(f"/admin/teams/{infra.id}?tab=below")
     assert parents_of(db, solo) == {infra.id}
     assert len(entries(db, "team_parent_added")) == 1
+
+
+def test_a_team_placed_below_at_the_same_moment_returns_to_the_tab(client, logged_in_admin, db, estate):
+    """Someone else places Solo under Infra between the choice and the confirm: back to the tab, with a notice."""
+    infra, solo = estate["infra"], estate["solo"]
+    preview = f"/admin/teams/{solo.id}/parents?add={infra.id}&back={infra.id}"
+    assert "Adding Solo under Infra" in text_of(client.get(preview))
+    post(client, f"/admin/teams/{solo.id}/parents", {"action": "add", "parent_id": str(infra.id)})
+    done = post(
+        client, f"/admin/teams/{solo.id}/parents", {"action": "add", "parent_id": str(infra.id), "back": str(infra.id)}
+    )
+    assert done.status_code == 302 and done.headers["Location"].endswith(f"/admin/teams/{infra.id}?tab=below")
+    assert "Solo is already under Infra." in text_of(client.get(done.headers["Location"]))
+    again = client.get(preview)  # the preview link itself, followed late
+    assert again.status_code == 302 and again.headers["Location"].endswith(f"/admin/teams/{infra.id}?tab=below")
+    assert len(entries(db, "team_parent_added")) == 1
+
+
+def test_an_error_on_higher_teams_offers_the_way_back_to_the_tab(client, logged_in_admin, estate):
+    infra, top = estate["infra"], estate["top"]
+    response = client.get(f"/admin/teams/{top.id}/parents?add={infra.id}&back={infra.id}")  # would form a cycle
+    assert response.status_code == 400
+    assert f'href="/admin/teams/{infra.id}?tab=below"' in raw_of(response)
+    assert "Back to the teams below Infra" in text_of(response)
 
 
 @pytest.mark.parametrize("value", ["", "x", "999999"])
