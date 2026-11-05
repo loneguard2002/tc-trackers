@@ -691,3 +691,57 @@ def test_status_tokens_match_a_row_in_two_groups(page, live_server, user_factory
     assert sorted(page.locator(names).all_inner_texts()) == ["Bea Both", "Ian Inherited"]
     expect(page.locator("button[data-status=all]")).to_contain_text("3")
     _clean(page)
+
+
+def test_pager_says_tracker_for_one_row(page, live_server, user_factory, team_factory, tracker_factory):
+    team = team_factory(name="Infrastructure")
+    tracker_factory(name="Only one", team_id=team.id)
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{team.id}?tab=trackers")
+    pager = page.locator('[data-pager-for="trackers-table"]')
+    expect(pager).to_contain_text("Showing 1\u20131 of 1 tracker")
+    assert "trackers" not in pager.locator(".pager-count").inner_text()
+    _clean(page)
+
+
+def test_pager_keeps_keyboard_focus_on_the_current_page(page, live_server, user_factory, team_factory, add_member):
+    team = team_factory(name="Big team")
+    for n in range(60):
+        add_member(team, user_factory(full_name=f"Person {n:02d}"), "viewer")
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{team.id}")
+    pager = page.locator('[data-pager-for="people-table"]')
+    pager.get_by_role("button", name="Page 2", exact=True).focus()
+    page.keyboard.press("Enter")
+    expect(pager).to_contain_text("Showing 26\u201350 of 60 people")
+    assert page.evaluate("document.activeElement.getAttribute('aria-label')") == "Page 2"
+    assert page.evaluate("document.activeElement.getAttribute('aria-current')") == "page"
+    pager.get_by_role("button", name="Page 3", exact=True).focus()
+    page.keyboard.press("Enter")  # the last page: Next becomes disabled
+    assert page.evaluate("document.activeElement.getAttribute('aria-label')") == "Page 3"
+    pager.get_by_role("button", name="Previous").focus()
+    page.keyboard.press("Enter")
+    assert page.evaluate("document.activeElement.getAttribute('aria-label')") == "Page 2"
+    _clean(page)
+
+
+def test_picker_and_trackers_table_keep_separate_no_match_lines(
+    page, live_server, user_factory, team_factory, tracker_factory
+):
+    team = team_factory(name="Infrastructure")
+    other = team_factory(name="Applications")
+    tracker_factory(name="Inside one", team_id=team.id)
+    tracker_factory(name="Outside one", team_id=other.id)
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{team.id}?tab=trackers&add=1")
+    picker = page.locator("#pick-table").locator("xpath=ancestor::form")
+    page.get_by_role("searchbox", name="Search trackers to add").fill("zzz")
+    expect(picker.locator("[data-no-match]")).to_be_visible()
+    expect(
+        page.locator("#trackers-table")
+        .locator("xpath=ancestor::*[contains(@class,'list-table')]")
+        .locator("[data-no-match]")
+    ).to_be_hidden()
+    assert page.locator("[data-no-match]:visible").count() == 1
+    page.get_by_role("searchbox", name="Search trackers", exact=True).fill("zzz")
+    assert page.locator("[data-no-match]:visible").count() == 2
+    page.get_by_role("searchbox", name="Search trackers to add").fill("")
+    assert page.locator("[data-no-match]:visible").count() == 1
+    _clean(page)

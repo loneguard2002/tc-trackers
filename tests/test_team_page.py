@@ -312,3 +312,50 @@ def test_back_to_an_unknown_team_is_ignored(client, logged_in_admin, db, estate,
     assert 'name="back"' not in page and f'href="/admin/teams/{solo.id}/parents"' in page
     done = post(client, f"/admin/teams/{solo.id}/parents", {"action": "add", "parent_id": str(infra.id), "back": back})
     assert done.headers["Location"].endswith(f"/admin/teams/{solo.id}/parents")
+
+
+def test_blocked_delete_shows_its_reason_as_visible_text_beside_the_button(client, logged_in_admin, team_factory):
+    parent = team_factory(name="Infrastructure")
+    team_factory(name="Windows", parent=parent)
+    header = header_of(raw_of(client.get(f"/admin/teams/{parent.id}")))
+    outside = re.sub(r"<button[^>]*\bdisabled\b[^>]*>.*?</button>", "", header, flags=re.S)
+    note = re.search(r'<(\w+)[^>]*class="[^"]*team-delete-note[^"]*"[^>]*>(.*?)</\1>', outside, re.S)
+    assert note and HAS_CHILDREN_MESSAGE in flat(note.group(2))
+    assert re.search(r"<button[^>]*\bdisabled\b[^>]*>.*?</button>", header, re.S)
+
+
+def test_edit_details_keeps_the_current_tab(client, logged_in_admin, desktops):
+    base = f"/admin/teams/{desktops.id}"
+    header = header_of(raw_of(client.get(f"{base}?tab=trackers")))
+    assert f'href="{base}?edit=1&amp;tab=trackers"' in header
+    header = header_of(raw_of(client.get(f"{base}?edit=1&tab=trackers")))
+    assert f'href="{base}?tab=trackers"' in header and 'name="tab" value="trackers"' in header
+    page = post(
+        client, f"{base}/rename", {"name": "", "description": "", "region_id": "", "location_id": "", "tab": "trackers"}
+    )
+    header = header_of(raw_of(page))
+    assert (
+        page.status_code == 400 and 'name="tab" value="trackers"' in header and f'href="{base}?tab=trackers"' in header
+    )
+
+
+def test_saving_details_returns_to_the_tab(client, logged_in_admin, desktops):
+    base = f"/admin/teams/{desktops.id}"
+    form = {
+        "name": "Desktops 2",
+        "description": "",
+        "region_id": str(desktops.region_id),
+        "location_id": str(desktops.location_id),
+    }
+    assert (
+        post(client, f"{base}/rename", {**form, "tab": "trackers"}).headers["Location"].endswith(f"{base}?tab=trackers")
+    )
+    form["name"] = "Desktops 3"
+    assert post(client, f"{base}/rename", {**form, "tab": "bogus"}).headers["Location"].endswith(base)
+
+
+def test_pager_uses_the_singular_noun_for_one_row(client, logged_in_admin, team_factory, tracker_factory):
+    team = team_factory(name="Infrastructure")
+    tracker_factory(team_id=team.id)
+    raw = raw_of(client.get(f"/admin/teams/{team.id}?tab=trackers"))
+    assert 'data-noun-one="tracker"' in raw and 'data-noun-many="trackers"' in raw
