@@ -1,7 +1,7 @@
 # Team page: actions in the header, tabs below
 
 Status: draft for the owner's approval, 5 November 2026. Mockup: https://claude.ai/artifact/5cbGV5ew2jWLLCtHRzzJSy
-(version 5).
+(version 6).
 
 ## Why
 
@@ -40,7 +40,12 @@ possible from here, so teams are easier to rearrange.
    - **Teams below:** Team, Place, People, Trackers, then × Remove; New team beside the search; the Existing team form
      below the table.
    - **Trackers:** Tracker, Business line, Regions, Status, then Access; All / Active / Archived filters.
-   - Pagination is left for later (owner, 5 November 2026).
+   - **Search and pages on every table** (owner, 5 November 2026). Each table has a search box above it and a pager
+     below it: "Showing 1–25 of 40 people", Rows per page (25, 50, 100; 25 to start), Previous, the page numbers and
+     Next. Search, filters and sorting apply before paging, and a change of search or filter returns to page 1.
+   - My call: every row is sent with the page and the script pages them, as the Lists tables already search and sort.
+     Without JavaScript all rows show and the pager is hidden. A team holds tens of rows, not thousands, so the page
+     stays light; server-side paging can follow if a team grows past a few hundred.
 7. **Unchanged:** the team tree on the left, roles and access rules.
 
 ## Constraints
