@@ -1,7 +1,7 @@
 # Team page: actions in the header, tabs below
 
-Status: draft for the owner's approval, 5 November 2026. Mockup: https://claude.ai/artifact/5cbGV5ew2jWLLCtHRzzJSy
-(version 13).
+Status: approved by the owner, 5 November 2026 ("fine. Let's implement this change"). Mockup: https://claude.ai/artifact/5cbGV5ew2jWLLCtHRzzJSy
+(version 13; the row Remove buttons are icon-only in the build).
 
 ## Why
 
@@ -70,6 +70,16 @@ possible from here, so teams are easier to rearrange.
    - Moves and removals go to Activity as `tracker_team_changed`; an added region goes as the tracker's regions change.
    - Who may do it: anyone with `manage_teams`, as for moving a tracker today.
 9. **Unchanged:** the team tree on the left, roles and access rules.
+
+## Buttons (owner, 5 November 2026)
+
+- Main actions carry an icon and a label: Edit details, Higher teams, Add member, Add selected team, New team, Add
+  trackers, Access.
+- Destructive or secondary actions are icon-only, set apart, with their full name as a tooltip and for screen readers,
+  as the Lists tables' Retire and Delete already are: Delete team (bin) in the header and Remove (×) on every row, for
+  example "Remove Sam from Infrastructure".
+- Not built: the optional "In teams below" view on a top team (offered, not chosen). The People tab lists who reaches
+  the team's trackers, as today.
 
 ## Constraints
 
