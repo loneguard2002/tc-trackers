@@ -91,13 +91,13 @@ def test_people_filter_buttons(page, live_server, team_factory, user_factory, ad
     add_member(windows, user_factory(full_name="Mia Member"), "viewer")
     _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{windows.id}")
 
-    rows = page.locator("table[data-row-filter-target] tr[data-route]")
+    rows = page.locator("#people-table tr[data-route]")
     expect(rows).to_have_count(2)
     page.get_by_role("button", name="From teams above").click()
     expect(page.get_by_role("row", name="Mia Member")).to_be_hidden()
     expect(page.get_by_role("row", name="Hana Head")).to_be_visible()
     expect(page.get_by_role("button", name="From teams above")).to_have_attribute("aria-pressed", "true")
-    page.get_by_role("button", name="All (2)").click()
+    page.locator("button[data-status=all]").click()
     expect(page.get_by_role("row", name="Mia Member")).to_be_visible()
     _clean(page)
 

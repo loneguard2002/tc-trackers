@@ -603,7 +603,7 @@ def test_no_horizontal_scroll_at_390(page, live_server, user_factory, places):
     for url in ("/admin/locations", "/admin/regions", "/admin/business-lines"):
         page.goto(f"{live_server}{url}")
         assert page.evaluate("document.scrollingElement.scrollWidth") <= 390, url
-        tabs = page.locator('nav.tabs a.tab')
+        tabs = page.locator("nav.tabs a.tab")
         assert tabs.count() == 3
         for index in range(3):  # every tab is fully on screen, with no scrolling of the bar
             box = tabs.nth(index).bounding_box()
@@ -644,3 +644,50 @@ def test_region_access_role_autosubmits(page, live_server, db, user_factory, reg
 
     page.set_viewport_size({"width": 390, "height": 800})
     assert page.evaluate("document.scrollingElement.scrollWidth") <= 390
+
+
+# --- Paging and status tokens (shown on the team page tables) -------------------------------------------------------
+
+
+def test_pager_pages_rows_and_resets_on_search(page, live_server, user_factory, team_factory, add_member):
+    team = team_factory(name="Big team")
+    for n in range(30):
+        add_member(team, user_factory(full_name=f"Person {n:02d}"), "viewer")
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{team.id}")
+    rows = "#people-table tbody tr:visible"
+    pager = page.locator('[data-pager-for="people-table"]')
+    expect(pager).to_be_visible()
+    expect(page.locator(rows)).to_have_count(25)
+    expect(pager).to_contain_text("Showing 1–25 of 30 people")
+    pager.get_by_role("button", name="Next").click()
+    expect(page.locator(rows)).to_have_count(5)
+    expect(pager).to_contain_text("Showing 26–30 of 30 people")
+    page.get_by_role("searchbox", name="Search people").fill("person 0")
+    expect(pager).to_contain_text("Showing 1–10 of 10 people")
+    page.get_by_role("searchbox", name="Search people").fill("")
+    expect(page.locator(rows)).to_have_count(25)
+    pager.get_by_role("button", name="Next").click()
+    pager.get_by_label("Rows per page").select_option("50")
+    expect(page.locator(rows)).to_have_count(30)
+    expect(pager).to_contain_text("Showing 1–30 of 30 people")
+    page.set_viewport_size({"width": 390, "height": 900})
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+    _clean(page)
+
+
+def test_status_tokens_match_a_row_in_two_groups(page, live_server, user_factory, team_factory, add_member):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    both = user_factory(full_name="Bea Both")
+    add_member(infra, both, "owner")
+    add_member(windows, both, "viewer")
+    add_member(windows, user_factory(full_name="Dan Direct"), "viewer")
+    add_member(infra, user_factory(full_name="Ian Inherited"), "viewer")
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{windows.id}")
+    names = "#people-table tbody tr:visible .member-name"
+    page.locator("button[data-status=direct]").click()
+    assert sorted(n.split(" (")[0] for n in page.locator(names).all_inner_texts()) == ["Bea Both", "Dan Direct"]
+    page.locator("button[data-status=inherited]").click()
+    assert sorted(page.locator(names).all_inner_texts()) == ["Bea Both", "Ian Inherited"]
+    expect(page.locator("button[data-status=all]")).to_contain_text("3")
+    _clean(page)

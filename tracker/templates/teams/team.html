@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, field, icon, people_count %}
+{% from "lists/_table.html" import code_badge, search_box, status_filters, sort_header, no_match, pager %}
 {% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% block content %}
@@ -77,61 +79,12 @@
 
     {% if tab == 'people' %}
     <div id="tab-people">
-    <section class="settings-section" id="people" aria-labelledby="section-people">
-      <header class="settings-section-head">
-        <h2 id="section-people">People</h2>
-        <p>Everyone who reaches this team's trackers, and those of the teams below it, with the role shown. Viewers open reports; editors also record progress; owners also change settings.</p>
-      </header>
-      {% if people %}
-      <div class="row-filter" role="group" aria-label="Show people" data-row-filter="people" hidden>
-        <button class="button button-small" type="button" data-show="all" aria-pressed="true">All ({{ people|length }})</button>
-        <button class="button button-small" type="button" data-show="direct" aria-pressed="false">Direct ({{ direct_count }})</button>
-        <button class="button button-small" type="button" data-show="inherited" aria-pressed="false">From teams above ({{ inherited_count }})</button>
-      </div>
-      <div class="section-table register">
-        <table class="table" data-row-filter-target="people">
-          <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Route</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
-          <tbody>
-          {% for row in people %}
-          {% set u = row.person.user %}
-          <tr data-route="{{ row.route }}">
-            <td><div class="member-cell">
-              <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
-              <span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}{% if u.status != 'active' %} <span class="badge badge-muted">{{ u.status|title }}</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
-            </div></td>
-            {% if row.person.direct_role %}
-            <td><form class="member-actions" method="post" action="{{ url_for('teams.update_member', team_id=team.id, user_id=u.id) }}">
-              {{ csrf_field(csrf_token()) }}
-              <label class="sr-only" for="role-{{ u.id }}">Role for {{ u.full_name }}</label>
-              <select id="role-{{ u.id }}" name="role" data-autosubmit>
-                {% for r in roles %}<option value="{{ r }}" {{ 'selected' if row.person.direct_role == r }}>{{ r|title }}</option>{% endfor %}
-              </select>
-              <button class="button button-small" type="submit" data-autosubmit-fallback>Set role</button>
-              {% if row.note %}<span class="role-note">{{ row.note }}</span>{% endif %}
-            </form></td>
-            <td>Direct</td>
-            <td class="cell-actions"><form method="post" action="{{ url_for('teams.update_member', team_id=team.id, user_id=u.id) }}"
-              data-confirm="Remove {{ u.full_name }} from {{ team.name }}? They lose the access this team gives.">
-              {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="remove">
-              <button class="button button-small button-quiet" type="submit">Remove</button>
-            </form></td>
-            {% else %}
-            <td>{{ row.person.role|title }}</td>
-            <td>{% for i in row.person.inherited %}{% if not loop.first %}, {% endif %}From <a href="{{ url_for('teams.view', team_id=i.team_id) }}">{{ i.team_name }}</a>{% if row.person.inherited|length > 1 %} ({{ i.role|title }}){% endif %}{% endfor %}</td>
-            <td class="cell-actions"></td>
-            {% endif %}
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <p class="empty-note">No one reaches this team yet.</p>
-      {% endif %}
+    <section class="list-panel team-panel" id="people" aria-labelledby="section-people">
+      <h2 class="sr-only" id="section-people">People</h2>
       {% if not can_add %}
-      <p class="section-foot-note">{{ add_refusal }}</p>
+      <p class="team-add-panel team-add-note">{{ add_refusal }}</p>
       {% elif candidates %}
-      <form class="inline-form team-add" method="post" action="{{ url_for('teams.add_member', team_id=team.id) }}">
+      <form class="inline-form team-add team-add-panel" method="post" action="{{ url_for('teams.add_member', team_id=team.id) }}">
         {{ csrf_field(csrf_token()) }}
         <div>
           <label for="user_id">Person</label>
@@ -149,49 +102,141 @@
         <button class="button" type="submit">{{ icon('plus') }}Add member</button>
       </form>
       {% else %}
-      <p class="section-foot-note">Every active person is already a direct member.</p>
+      <p class="team-add-panel team-add-note">Every active person is already a direct member.</p>
+      {% endif %}
+      {% if people %}
+      <div class="list-tools">
+        {{ search_box('people-table', 'Search people') }}
+        {{ status_filters('people-table', 'people', (('all', 'All'), ('direct', 'Direct'), ('inherited', 'From teams above')), {'all': people|length, 'direct': direct_count, 'inherited': inherited_count}) }}
+      </div>
+      <div class="section-table list-table">
+        <table id="people-table">
+          <thead><tr>
+            {{ sort_header('Person', 'person', default=True) }}
+            {{ sort_header('Route', 'route') }}
+            {{ sort_header('Role', 'role') }}
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr></thead>
+          <tbody>
+          {% for row in people %}
+          {% set u = row.person.user %}
+          <tr data-route="{{ row.route }}" data-status="{{ row.route }}" data-search="{{ (u.full_name ~ ' ' ~ u.email ~ ' ' ~ row.route ~ ' ' ~ (row.person.inherited|map(attribute='team_name')|join(' ')) ~ ' ' ~ row.person.role ~ ' ' ~ u.status)|lower }}" data-sort-person="{{ u.full_name }}" data-sort-route="{{ row.route }}" data-sort-role="{{ row.person.role }}">
+            <td><div class="member-cell">
+              <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
+              <span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}{% if u.status != 'active' %} <span class="badge badge-muted">{{ u.status|title }}</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
+            </div></td>
+            <td>{% if row.person.direct_role %}Direct{% if row.person.inherited %}, {% endif %}{% endif %}{% for i in row.person.inherited %}{% if not loop.first %}, {% endif %}From <a href="{{ url_for('teams.view', team_id=i.team_id) }}">{{ i.team_name }}</a>{% if row.person.inherited|length > 1 %} ({{ i.role|title }}){% endif %}{% endfor %}</td>
+            {% if row.person.direct_role %}
+            <td><form class="member-actions" method="post" action="{{ url_for('teams.update_member', team_id=team.id, user_id=u.id) }}">
+              {{ csrf_field(csrf_token()) }}
+              <label class="sr-only" for="role-{{ u.id }}">Role for {{ u.full_name }}</label>
+              <select id="role-{{ u.id }}" name="role" data-autosubmit>
+                {% for r in roles %}<option value="{{ r }}" {{ 'selected' if row.person.direct_role == r }}>{{ r|title }}</option>{% endfor %}
+              </select>
+              <button class="button button-small" type="submit" data-autosubmit-fallback>Set role</button>
+              {% if row.note %}<span class="role-note">{{ row.note }}</span>{% endif %}
+            </form></td>
+            <td class="cell-actions"><div class="row-tools"><form method="post" action="{{ url_for('teams.update_member', team_id=team.id, user_id=u.id) }}"
+              data-confirm="Remove {{ u.full_name }} from {{ team.name }}? They lose the access this team gives.">
+              {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="remove">
+              <button class="tool-button is-danger" type="submit" title="Remove {{ u.full_name }} from {{ team.name }}">{{ icon('close') }}<span class="sr-only">Remove {{ u.full_name }} from {{ team.name }}</span></button>
+            </form></div></td>
+            {% else %}
+            <td>{{ row.person.role|title }}</td>
+            <td class="cell-actions"></td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {{ no_match('No people match the search.') }}
+      {{ pager('people-table', 'people', people|length) }}
+      {% else %}
+      <p class="empty-note">No one reaches this team yet.</p>
       {% endif %}
     </section>
-
     </div>
     {% elif tab == 'below' %}
     <div id="tab-below">
-    <section class="settings-section" id="teams-below" aria-labelledby="section-below">
-      <header class="settings-section-head has-action">
-        <div>
-          <h2 id="section-below">Teams below</h2>
-          <p>People in this team also reach the trackers of these teams.</p>
-        </div>
-        <a class="button button-small" href="{{ url_for('teams.index', parent=team.id, _anchor='new-team') }}">{{ icon('plus') }}New team below {{ team.name }}</a>
-      </header>
+    <section class="list-panel team-panel" id="teams-below" aria-labelledby="section-below">
+      <h2 class="sr-only" id="section-below">Teams below</h2>
+      <div class="team-add-panel team-add-note">
+        <span>People in this team also reach the trackers of these teams.</span>
+        <a class="button" href="{{ url_for('teams.index', parent=team.id, _anchor='new-team') }}">{{ icon('plus') }}New team below {{ team.name }}</a>
+      </div>
       {% if below %}
-      <ul class="member-list">
-        {% for row in below %}
-        <li class="member"><span class="member-who"><a class="member-name" href="{{ url_for('teams.view', team_id=row.id) }}">{{ row.name }}</a></span>
-          <span class="team-counts">{{ people_count(reach.get(row.id, 0)) }}</span></li>
-        {% endfor %}
-      </ul>
+      <div class="list-tools">
+        {{ search_box('below-table', 'Search teams below') }}
+      </div>
+      <div class="section-table list-table">
+        <table id="below-table">
+          <thead><tr>
+            {{ sort_header('Team', 'team', default=True) }}
+            {{ sort_header('Place', 'place') }}
+            {{ sort_header('People', 'people', 'num') }}
+            {{ sort_header('Trackers', 'trackers', 'num') }}
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr></thead>
+          <tbody>
+          {% for row in below %}
+          {% set place = places.get(row.id) %}
+          {% set place_text = (place.region_code ~ (' · ' ~ place.city if place.city else '')) if place else 'Region not set' %}
+          {% set people_total = reach.get(row.id, 0) %}
+          {% set tracker_total = tracker_counts.get(row.id, 0) %}
+          <tr data-search="{{ (row.name ~ ' ' ~ place_text)|lower }}" data-sort-team="{{ row.name }}" data-sort-place="{{ place_text }}" data-sort-people="{{ people_total }}" data-sort-trackers="{{ tracker_total }}">
+            <td class="list-name"><a href="{{ url_for('teams.view', team_id=row.id) }}">{{ row.name }}</a></td>
+            <td>{% if place %}{{ place_text }}{% else %}<span class="muted">{{ place_text }}</span>{% endif %}</td>
+            <td class="num">{{ people_count(people_total) }}</td>
+            <td class="num">{{ tracker_total }}</td>
+            <td class="cell-actions"></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {{ no_match('No teams match the search.') }}
+      {{ pager('below-table', 'teams below', below|length) }}
       {% else %}
       <p class="empty-note">No teams are below this one.</p>
       {% endif %}
     </section>
-
     </div>
     {% else %}
     <div id="tab-trackers">
-    <section class="settings-section" id="trackers" aria-labelledby="section-trackers">
-      <header class="settings-section-head">
-        <h2 id="section-trackers">Trackers</h2>
-        <p>The trackers in this team, archived ones included. Open a tracker's Access tab to see who can open it.</p>
-      </header>
+    <section class="list-panel team-panel" id="trackers" aria-labelledby="section-trackers">
+      <h2 class="sr-only" id="section-trackers">Trackers</h2>
       {% if trackers %}
-      <ul class="member-list">
-        {% for t in trackers %}
-        <li class="member"><span class="member-who"><span class="member-name">{{ t.name }}</span></span>
-          {% if t.status == 'archived' %}<span class="badge badge-muted">Archived</span>{% endif %}
-          <a class="button button-small" href="{{ url_for('trackers.roles', tracker_id=t.id) }}">Access</a></li>
-        {% endfor %}
-      </ul>
+      <div class="list-tools">
+        {{ search_box('trackers-table', 'Search trackers') }}
+        {{ status_filters('trackers-table', 'trackers', (('all', 'All'), ('active', 'Active'), ('archived', 'Archived')), {'all': trackers|length, 'active': active_trackers, 'archived': trackers|length - active_trackers}) }}
+      </div>
+      <div class="section-table list-table">
+        <table id="trackers-table">
+          <thead><tr>
+            {{ sort_header('Tracker', 'tracker', default=True) }}
+            {{ sort_header('Business line', 'line') }}
+            {{ sort_header('Regions', 'regions') }}
+            {{ sort_header('Status', 'status') }}
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr></thead>
+          <tbody>
+          {% for row in trackers %}
+          {% set t = row.tracker %}
+          {% set archived = t.status == 'archived' %}
+          <tr{% if archived %} class="is-retired"{% endif %} data-search="{{ (t.name ~ ' ' ~ row.business_line ~ ' ' ~ row.regions|join(' ') ~ ' ' ~ t.status)|lower }}" data-status="{{ t.status }}" data-sort-tracker="{{ t.name }}" data-sort-line="{{ row.business_line }}" data-sort-regions="{{ row.regions|join(', ') }}" data-sort-status="{{ t.status }}">
+            <td class="list-name">{{ t.name }}</td>
+            <td>{% if row.business_line %}{{ row.business_line }}{% else %}<span class="muted">None</span>{% endif %}</td>
+            <td>{% if row.regions %}<span class="team-regions">{% for code in row.regions %}{{ code_badge(code) }}{% endfor %}</span>{% else %}<span class="muted">None</span>{% endif %}</td>
+            <td>{% if archived %}<span class="badge badge-muted">Archived</span>{% else %}<span class="badge badge-success">Active</span>{% endif %}</td>
+            <td class="cell-actions"><div class="row-tools"><a class="button button-small" href="{{ url_for('trackers.roles', tracker_id=t.id) }}">Access<span class="sr-only"> for {{ t.name }}</span></a></div></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {{ no_match('No trackers match the search.') }}
+      {{ pager('trackers-table', 'trackers', trackers|length) }}
       {% else %}
       <p class="empty-note">No trackers are in this team.</p>
       {% endif %}

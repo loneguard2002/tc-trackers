@@ -29,11 +29,13 @@
 </div>
 {%- endmacro %}
 
-{# All / Active / Retired, each with the number of rows it would show in its [data-count]. #}
-{% macro status_filters(target_id, noun) -%}
+{# All / Active / Retired, each with the number of rows it would show in its [data-count]. ``options`` replaces the
+   buttons ((token, text) pairs, the first being "all") and ``counts`` (token to number) fills each count for a first
+   paint; lists.js recounts. A row holds one or more of the tokens in its data-status. #}
+{% macro status_filters(target_id, noun, options=None, counts=None) -%}
 <div class="chips list-status" role="group" aria-label="Show {{ noun }} by status" data-status-for="{{ target_id }}" hidden>
-  {% for value, text in (('all', 'All'), ('active', 'Active'), ('retired', 'Retired')) %}
-  <button class="chip" type="button" data-status="{{ value }}" aria-pressed="{{ 'true' if value == 'all' else 'false' }}">{{ text }} <span class="chip-count" data-count></span></button>
+  {% for value, text in (options or (('all', 'All'), ('active', 'Active'), ('retired', 'Retired'))) %}
+  <button class="chip" type="button" data-status="{{ value }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ text }} <span class="chip-count" data-count>{% if counts is not none %}{{ counts.get(value, 0) }}{% endif %}</span></button>
   {% endfor %}
 </div>
 {%- endmacro %}
@@ -54,6 +56,21 @@
 
 {% macro table_foot(noun_plural, total=0, active=0) -%}
 <p class="list-foot"><span>Showing <span data-shown>{{ total }}</span> of <span data-total>{{ total }}</span> {{ noun_plural }}</span><span><span data-active>{{ active }}</span> active</span></p>
+{%- endmacro %}
+
+{# The paging line under a table (``table_id``): "Showing 1–25 of 30 people", Rows per page, Previous, the page numbers
+   and Next. ``total`` is the number of rows before any search. Hidden until lists.js reveals it and fills it in, so
+   that without JavaScript every row shows and there is nothing to page. #}
+{% macro pager(table_id, noun_plural, total=0) -%}
+<nav class="pager" aria-label="Pages of {{ noun_plural }}" data-pager-for="{{ table_id }}" hidden>
+  <p class="pager-count" aria-live="polite">Showing <span data-pager-range>{{ total }}</span> of <span data-pager-total>{{ total }}</span> {{ noun_plural }}</p>
+  <div class="pager-controls">
+    <label class="pager-size">Rows per page <select data-pager-size><option value="25" selected>25</option><option value="50">50</option><option value="100">100</option></select></label>
+    <button class="pager-button" type="button" data-pager-prev>Previous</button>
+    <span class="pager-pages" data-pager-pages></span>
+    <button class="pager-button" type="button" data-pager-next>Next</button>
+  </div>
+</nav>
 {%- endmacro %}
 
 {# Edit, Retire or Restore, and Delete when nothing uses the entry. ``what`` names the entry in a sentence ("the
