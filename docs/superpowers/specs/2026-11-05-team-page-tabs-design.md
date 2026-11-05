@@ -1,7 +1,7 @@
 # Team page: actions in the header, tabs below
 
 Status: draft for the owner's approval, 5 November 2026. Mockup: https://claude.ai/artifact/5cbGV5ew2jWLLCtHRzzJSy
-(version 4).
+(version 5).
 
 ## Why
 
@@ -33,7 +33,15 @@ possible from here, so teams are easier to rearrange.
    - Add selected team and Remove first show the same access preview as the Higher teams screen (who gains or loses
      which trackers), then save on confirmation. They go to Activity as `team_parent_added` and
      `team_parent_removed`, with the same checks.
-6. **Unchanged:** the team tree on the left, People and Trackers content, roles and access rules.
+6. **Tables on every tab**, built like the Lists tables (search box, column headings that sort, a footer "Showing n
+   of n …"):
+   - **People:** Person (name and email), Route, Role, then Remove for direct members; All / Direct / From teams above
+     filters; the Add member form below the table.
+   - **Teams below:** Team, Place, People, Trackers, then × Remove; New team beside the search; the Existing team form
+     below the table.
+   - **Trackers:** Tracker, Business line, Regions, Status, then Access; All / Active / Archived filters.
+   - Pagination is left for later (owner, 5 November 2026).
+7. **Unchanged:** the team tree on the left, roles and access rules.
 
 ## Constraints
 
