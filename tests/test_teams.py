@@ -13,7 +13,6 @@ from tracker.models import AuditLog, PermissionSet, PermissionSetHolder, Team, T
 from tracker.naming import description_error, name_error
 from tracker.teams import views as team_views
 from tracker.teams.tree import TEAM_CHOICE_ERROR
-from tracker.teams.views import CYCLE_MESSAGE
 
 
 def text_of(response) -> str:
@@ -34,11 +33,6 @@ def member_role(db, team, user) -> str | None:
 def parents_of(db, team) -> set[int]:
     db.expire_all()
     return set(db.scalars(select(TeamParent.parent_id).where(TeamParent.team_id == team.id)))
-
-
-def move_options(page: str) -> list[str]:
-    select_html = re.search(r'<select id="parent_id".*?</select>', page, re.S).group(0)
-    return re.findall(r'<option value="(\d*)"', select_html)
 
 
 @pytest.fixture
@@ -217,82 +211,6 @@ def test_rename_to_another_teams_name_refused(client, logged_in_admin, db, team_
     assert page.status_code == 400 and "A team with that name already exists." in text_of(page)
     db.expire_all()
     assert db.get(Team, team.id).name == "Linux"
-
-
-def test_move_form_offers_only_valid_parents(client, logged_in_admin, team_factory):
-    infra = team_factory(name="Infrastructure")
-    windows = team_factory(name="Windows", parent=infra)
-    servers = team_factory(name="Servers", parent=windows)
-    apps = team_factory(name="Applications")
-    page = text_of(client.get(f"/admin/teams/{windows.id}/move"))
-    options = move_options(page)
-    assert "" in options and str(infra.id) in options and str(apps.id) in options
-    assert str(windows.id) not in options and str(servers.id) not in options
-
-
-def test_move_under_itself_or_below_refused_on_the_server(client, logged_in_admin, db, team_factory):
-    infra = team_factory(name="Infrastructure")
-    windows = team_factory(name="Windows", parent=infra)
-    servers = team_factory(name="Servers", parent=windows)
-    for target in (windows, servers):
-        page = post(client, f"/admin/teams/{windows.id}/move", {"parent_id": str(target.id)})
-        assert page.status_code == 400 and CYCLE_MESSAGE in text_of(page)
-        assert parents_of(db, windows) == {infra.id}
-    assert CYCLE_MESSAGE == "A team cannot be moved under itself or under a team below it."
-    assert entries(db, "team_moved") == []
-
-
-def test_move_logs_parent_before_and_after(client, logged_in_admin, db, team_factory):
-    infra = team_factory(name="Infrastructure")
-    apps = team_factory(name="Applications")
-    windows = team_factory(name="Windows", parent=infra)
-    assert post(client, f"/admin/teams/{windows.id}/move", {"parent_id": ""}).status_code == 302
-    assert parents_of(db, windows) == set()
-    assert post(client, f"/admin/teams/{windows.id}/move", {"parent_id": str(apps.id)}).status_code == 302
-    assert parents_of(db, windows) == {apps.id}
-    moves = entries(db, "team_moved")
-    assert [m.detail for m in moves] == [
-        {"team": "Windows", "before": "Infrastructure", "after": None},
-        {"team": "Windows", "before": None, "after": "Applications"},
-    ]
-    assert moves[0].entity == "team" and moves[0].entity_id == str(windows.id)
-
-
-def test_move_names_parents_by_their_names(client, logged_in_admin, db, team_factory):
-    infra = team_factory(name="Infrastructure")
-    windows = team_factory(name="Windows", parent=infra)
-    laptops = team_factory(name="Laptops")
-    assert post(client, f"/admin/teams/{laptops.id}/move", {"parent_id": str(windows.id)}).status_code == 302
-    [entry] = entries(db, "team_moved")
-    assert entry.detail == {"team": "Laptops", "before": None, "after": "Windows"}
-
-
-def test_move_makes_the_chosen_team_the_only_higher_team(client, logged_in_admin, db, team_factory):
-    infra, apps = team_factory(name="Infrastructure"), team_factory(name="applications")
-    desktops = team_factory(name="Desktops", parents=(infra, apps))
-    page = text_of(client.get(f"/admin/teams/{desktops.id}/move?parent_id={infra.id}"))
-    assert "Now below <strong>applications and Infrastructure</strong>." in page
-    assert "Moving Desktops below Infrastructure" in page
-    assert post(client, f"/admin/teams/{desktops.id}/move", {"parent_id": str(infra.id)}).status_code == 302
-    assert parents_of(db, desktops) == {infra.id}
-    [entry] = entries(db, "team_moved")
-    assert entry.detail == {"team": "Desktops", "before": "applications and Infrastructure", "after": "Infrastructure"}
-
-
-def test_move_to_the_same_parent_logs_nothing(client, logged_in_admin, db, team_factory):
-    infra = team_factory(name="Infrastructure")
-    windows = team_factory(name="Windows", parent=infra)
-    assert post(client, f"/admin/teams/{windows.id}/move", {"parent_id": str(infra.id)}).status_code == 302
-    assert entries(db) == []
-
-
-def test_move_with_a_malformed_parent_is_400(client, logged_in_admin, db, team_factory):
-    infra = team_factory(name="Infrastructure")
-    windows = team_factory(name="Windows", parent=infra)
-    for parent in ("abc", "1.5", "99999"):
-        assert post(client, f"/admin/teams/{windows.id}/move", {"parent_id": parent}).status_code == 400
-    assert parents_of(db, windows) == {infra.id}
-    assert entries(db) == []
 
 
 # --- Deleting -------------------------------------------------------------------------------------------------------
@@ -503,7 +421,7 @@ def test_team_page_sections_in_order(client, logged_in_admin, team_factory, plac
     assert bad.status_code == 400
     [tag] = re.findall(r"<details\b[^>]*>", raw_of(bad))
     assert re.search(r"\sopen\b", tag)
-    assert "Edit details" in raw and f"/admin/teams/{team.id}/move" in raw and "Move…" in raw
+    assert "Edit details" in raw and f"/admin/teams/{team.id}/parents" in raw and "Higher teams…" in raw
 
 
 def test_teams_below_and_new_team_below(client, logged_in_admin, team_factory, user_factory, add_member):
@@ -642,7 +560,6 @@ def test_change_to_an_unknown_role_is_400(client, logged_in_admin, db, team_fact
 def test_missing_team_or_member_is_404(client, logged_in_admin, team_factory, user_factory):
     assert client.get("/admin/teams/9999").status_code == 404
     assert post(client, "/admin/teams/9999/rename", {"name": "X"}).status_code == 404
-    assert post(client, "/admin/teams/9999/move", {"parent_id": ""}).status_code == 404
     assert post(client, "/admin/teams/9999/delete").status_code == 404
     assert post(client, "/admin/teams/9999/members", {"user_id": "1", "role": "viewer"}).status_code == 404
     team = team_factory()
@@ -697,20 +614,6 @@ def test_holder_cannot_raise_own_team_role_but_can_lower_it(
     assert entry.detail["before"] == "editor" and entry.detail["after"] == "viewer"
 
 
-def test_holder_cannot_move_a_team_under_their_own_team(
-    client, db, user_factory, give_set, team_factory, tracker_factory, add_member
-):
-    actor = holder(user_factory, give_set, client)
-    own = team_factory(name="Own")
-    add_member(own, actor, "owner")
-    other = team_factory(name="Other")
-    tracker_factory(team_id=other.id)
-    response = post(client, f"/admin/teams/{other.id}/move", {"parent_id": str(own.id)}, follow_redirects=True)
-    assert SELF_PROMOTION_MESSAGE in text_of(response)
-    assert parents_of(db, other) == set()
-    assert entries(db) == []
-
-
 def test_non_admin_cannot_add_members_to_a_team_holding_a_set(
     client, db, user_factory, give_set, team_factory, logged_in_admin
 ):
@@ -749,22 +652,10 @@ def vouch(db, actor, target, action="user_created"):
     db.commit()
 
 
-def test_team_moved_names_the_team_by_its_name(client, logged_in_admin, db, team_factory):
-    infra = team_factory(name="Infrastructure")
-    windows = team_factory(name="Windows", parent=infra)
-    laptops = team_factory(name="Laptops", parent=windows)
-    apps = team_factory(name="Applications")
-    assert post(client, f"/admin/teams/{laptops.id}/move", {"parent_id": str(apps.id)}).status_code == 302
-    [entry] = entries(db, "team_moved")
-    assert entry.detail == {"team": "Laptops", "before": "Windows", "after": "Applications"}
-
-
 def test_very_long_ids_are_400_not_500(client, logged_in_admin, db, team_factory, place):
     team = team_factory(name="Windows")
     assert post(client, "/admin/teams", {"name": "New", "parent_id": LONG_ID, **place}).status_code == 400
-    assert post(client, f"/admin/teams/{team.id}/move", {"parent_id": LONG_ID}).status_code == 400
     assert post(client, f"/admin/teams/{team.id}/members", {"user_id": LONG_ID, "role": "viewer"}).status_code == 400
-    assert post(client, f"/admin/teams/{team.id}/move", {"parent_id": str(2**31)}).status_code == 400
     assert entries(db) == [] and db.scalar(select(func.count()).select_from(Team)) == 1
 
 

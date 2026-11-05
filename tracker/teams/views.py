@@ -13,7 +13,7 @@ from collections.abc import Iterable
 from typing import NamedTuple
 
 from flask import abort, flash, redirect, render_template, request, url_for
-from sqlalchemy import delete, exists, func, select
+from sqlalchemy import delete, exists, func, insert, select
 from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
@@ -43,12 +43,14 @@ from .tree import (
     descendants,
     load_team_rows,
     parse_team_id,
-    set_team_parents,
+    sorted_by_name,
     team_choices,
     team_labels,
 )
 
-CYCLE_MESSAGE = "A team cannot be moved under itself or under a team below it."
+CYCLE_MESSAGE = "A team cannot be placed under itself or under a team below it."
+ALREADY_UNDER = "{team} is already under {parent}."
+NOT_UNDER = "{team} is not under {parent}."
 HAS_CHILDREN_MESSAGE = "This team has teams below it. Move or delete them first."
 HAS_TRACKERS_MESSAGE = "This team has trackers, including archived ones. Move them to another team first."
 CHOOSE_PERSON_MESSAGE = "Choose an active person from the list."
@@ -335,113 +337,120 @@ def rename(team_id: int):
     return _to_team(team)
 
 
-def _render_move(team: Team, choice: str | None, errors: list[str], status: int):
-    """The move page: the destination form and, for a valid different destination, what the move would change.
+def _judge_change(rows: list[TeamRow], team: Team, action: str, text: str) -> tuple[int | None, str | None, str | None]:
+    """Check one change to the team's higher teams: ``(parent id, error, notice)``.
 
-    Until the Higher teams screen replaces it, the chosen team becomes the team's only higher team.
+    An error is a refusal (status 400); a notice says the change would do nothing.
     """
+    parent_id = parse_id(text)
+    labels = team_labels(rows)
+    if parent_id is None or parent_id not in labels:
+        return None, TEAM_CHOICE_ERROR, None
+    current = _row(rows, team).parent_ids
+    names = {"team": team.name, "parent": labels[parent_id]}
+    if action == "add":
+        if parent_id in descendants(rows, team.id):
+            return parent_id, CYCLE_MESSAGE, None
+        if parent_id in current:
+            return parent_id, None, ALREADY_UNDER.format(**names)
+    elif parent_id not in current:
+        return parent_id, None, NOT_UNDER.format(**names)
+    return parent_id, None, None
+
+
+def _render_parents(
+    team: Team,
+    errors: list[str],
+    status: int,
+    change_to: tuple[str, int] | None = None,
+    notice: str | None = None,
+):
+    """The Higher teams page: the current higher teams, the teams that could be added and, for a valid ``change_to``
+    (``("add" | "remove", parent id)``), what that one change would alter."""
     db = get_session()
     rows = load_team_rows(db)
     labels = team_labels(rows)
-    below = descendants(rows, team.id)
-    new_parent_id = parse_id(choice) if choice else None
     current = frozenset(_row(rows, team).parent_ids)
-    parent_label = _higher_teams_text(labels, current)
-    impact = notice = target = None
-    if choice is not None and not errors:
-        new_parents = frozenset() if new_parent_id is None else frozenset({new_parent_id})
-        if new_parents == current:
-            notice = (
-                f"{team.name} is already at the top level."
-                if new_parent_id is None
-                else f"{team.name} is already below {parent_label}."
-            )
-        else:
-            target = labels.get(new_parent_id, TOP_LEVEL) if new_parent_id else TOP_LEVEL
-            impact = move_impact(db, team, new_parents)
+    below = descendants(rows, team.id)
+    impact = None
+    if change_to is not None and not errors and notice is None:
+        action, parent_id = change_to
+        impact = move_impact(db, team, current | {parent_id} if action == "add" else current - {parent_id})
     page = render_template(
-        "teams/move.html",
+        "teams/parents.html",
         team=team,
-        path=labels.get(team.id, team.name),
-        parent_label=parent_label,
-        parents=sorted(
-            ((row.id, row.name) for row in rows if row.id not in below), key=lambda c: (c[1].casefold(), c[0])
-        ),
-        choice=choice,
-        new_parent_id=new_parent_id,
-        target=target,
+        higher=[(row.id, row.name) for row in sorted_by_name(row for row in rows if row.id in current)],
+        choices=[(row.id, row.name) for row in sorted_by_name(rows) if row.id not in below | current],
+        change_to=change_to,
+        target=labels.get(change_to[1]) if change_to else None,
         impact=impact,
         notice=notice,
         errors=errors,
-        page_title=f"Move {team.name}",
+        page_title=f"Higher teams for {team.name}",
         current_page="teams",
     )
     return page, status
 
 
-@bp.get("/<int:team_id>/move")
+@bp.get("/<int:team_id>/parents")
 @permission_required("manage_teams")
-def move_preview(team_id: int):
+def parents(team_id: int):
     team = _team_or_404(team_id)
-    if "parent_id" not in request.args:
-        return _render_move(team, None, [], 200)
-    choice = request.args["parent_id"].strip()
-    db = get_session()
-    new_parent_id = parse_id(choice) if choice else None
-    rows = load_team_rows(db)
-    if choice and (new_parent_id is None or new_parent_id not in {row.id for row in rows}):
-        return _render_move(team, choice, [TEAM_CHOICE_ERROR], 400)
-    if new_parent_id is not None and new_parent_id in descendants(rows, team.id):
-        return _render_move(team, choice, [CYCLE_MESSAGE], 400)
-    return _render_move(team, choice, [], 200)
+    action = "add" if "add" in request.args else "remove" if "remove" in request.args else None
+    if action is None:
+        return _render_parents(team, [], 200)
+    parent_id, error, notice = _judge_change(load_team_rows(get_session()), team, action, request.args[action].strip())
+    if error:
+        return _render_parents(team, [error], 400)
+    return _render_parents(team, [], 200, (action, parent_id), notice)
 
 
-@bp.post("/<int:team_id>/move")
+@bp.post("/<int:team_id>/parents")
 @permission_required("manage_teams")
-def move(team_id: int):
+def change_parents(team_id: int):
     team = _team_or_404(team_id)
     db = get_session()
-    text = request.form.get("parent_id", "").strip()
-    new_parent_id = parse_id(text) if text else None
-    if text and new_parent_id is None:
-        return _render_team(team, [TEAM_CHOICE_ERROR], 400)
-    rows = load_team_rows(db, lock=True)  # held until commit or rollback, so a concurrent move cannot form a cycle
-    current = {row.id: row for row in rows}
-    if team.id not in current:
+    action = request.form.get("action", "")
+    if action not in ("add", "remove"):
+        abort(400)
+    rows = load_team_rows(db, lock=True)  # held until commit or rollback, so a concurrent change cannot form a cycle
+    if team.id not in {row.id for row in rows}:
         db.rollback()
         abort(404)
-    if new_parent_id is not None and new_parent_id not in current:
+    parent_id, error, notice = _judge_change(rows, team, action, request.form.get("parent_id", "").strip())
+    if error or notice:
         db.rollback()
-        return _render_team(team, [TEAM_CHOICE_ERROR], 400)
-    if new_parent_id is not None and new_parent_id in descendants(rows, team.id):
-        db.rollback()
-        return _render_team(team, [CYCLE_MESSAGE], 400)
-    old_parents = frozenset(current[team.id].parent_ids)
-    new_parents = frozenset() if new_parent_id is None else frozenset({new_parent_id})
-    if new_parents == old_parents:
-        db.rollback()
-        flash(NO_CHANGES_MESSAGE, "info")
-        return _to_team(team)
+        if error:
+            return _render_parents(team, [error], 400)
+        flash(notice, "info")
+        return redirect(url_for("teams.parents", team_id=team.id))
     actor = current_user()
     before = snapshot_access(db, actor)
-    set_team_parents(db, team.id, new_parents)
+    if action == "add":
+        db.execute(insert(TeamParent).values(team_id=team.id, parent_id=parent_id))
+    else:
+        db.execute(delete(TeamParent).where(TeamParent.team_id == team.id, TeamParent.parent_id == parent_id))
     if raises_own_access(db, actor, before):
         return _refuse(team, SELF_PROMOTION_MESSAGE)
     labels = team_labels(rows)
-    old_path = _higher_teams_text(labels, old_parents)
-    new_path = labels.get(new_parent_id) if new_parent_id else None
     record(
         db,
         user_id=actor.id,
         tracker_id=None,
-        action="team_moved",
+        action="team_parent_added" if action == "add" else "team_parent_removed",
         entity="team",
         entity_id=team.id,
-        detail={"team": labels[team.id], **change(old_path, new_path)},
+        detail={"team": labels[team.id], "parent": labels[parent_id]},
     )
     db.commit()
-    flash(f"Moved {team.name} to {new_path or 'the top level'}.", "success")
-    return _to_team(team)
+    if action == "add":
+        flash(f"Added {team.name} under {labels[parent_id]}.", "success")
+    else:
+        message = f"Removed {team.name} from under {labels[parent_id]}."
+        if set(_row(rows, team).parent_ids) == {parent_id}:
+            message += " It is now at the top level."
+        flash(message, "success")
+    return redirect(url_for("teams.parents", team_id=team.id))
 
 
 @bp.post("/<int:team_id>/delete", endpoint="delete")

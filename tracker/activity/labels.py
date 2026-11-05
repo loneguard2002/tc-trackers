@@ -23,6 +23,8 @@ ACTION_LABELS: dict[str, str] = {
     "team_created": "Team created",
     "team_renamed": "Team details changed",
     "team_moved": "Team moved",
+    "team_parent_added": "Higher team added",
+    "team_parent_removed": "Higher team removed",
     "team_deleted": "Team deleted",
     "team_member_added": "Team member added",
     "team_member_role_changed": "Team member role changed",

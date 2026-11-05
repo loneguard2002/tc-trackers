@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field %}
 {% macro change_list(heading, items, empty) %}
-<section class="settings-section" aria-labelledby="move-{{ heading|lower|replace(' ', '-') }}">
+<section class="settings-section" aria-labelledby="change-{{ heading|lower|replace(' ', '-') }}">
   <header class="settings-section-head">
-    <h2 id="move-{{ heading|lower|replace(' ', '-') }}">{{ heading }}</h2>
+    <h2 id="change-{{ heading|lower|replace(' ', '-') }}">{{ heading }}</h2>
   </header>
   {% if items %}
   <ul class="move-changes">
@@ -17,8 +17,9 @@
 </section>
 {% endmacro %}
 {% block content %}
-<h1>Move {{ team.name }}</h1>
-<p class="page-lede"><a href="{{ url_for('teams.index') }}">Teams</a> › <a href="{{ url_for('teams.view', team_id=team.id) }}">{{ path }}</a> › Move</p>
+{% set adding = change_to and change_to[0] == 'add' %}
+<h1>Higher teams for {{ team.name }}</h1>
+<p class="page-lede"><a href="{{ url_for('teams.index') }}">Teams</a> › <a href="{{ url_for('teams.view', team_id=team.id) }}">{{ team.name }}</a> › Higher teams</p>
 <div class="settings settings-narrow">
   {% if errors %}
   <div class="form-alert" role="alert">
@@ -27,28 +28,47 @@
   </div>
   {% endif %}
 
-  <section class="settings-section" aria-labelledby="section-destination">
+  <section class="settings-section" aria-labelledby="section-now">
     <header class="settings-section-head">
-      <h2 id="section-destination">Where to move it</h2>
-      <p>{% if parent_label %}Now below <strong>{{ parent_label }}</strong>.{% else %}Now at the <strong>top level</strong>.{% endif %} People in the teams above a team reach its trackers, so moving it changes who can see them. Choose a place to see what would change before anything does.</p>
+      <h2 id="section-now">Now under</h2>
+      <p>People in a higher team reach this team's trackers. A team can sit under several higher teams; all count equally.</p>
     </header>
-    <form class="archive-row team-move" method="get" action="{{ url_for('teams.move_preview', team_id=team.id) }}">
+    {% if higher %}
+    <ul class="member-list">
+      {% for id, name in higher %}
+      <li class="member"><span class="member-who"><a class="member-name" href="{{ url_for('teams.view', team_id=id) }}">{{ name }}</a></span>
+        <a href="{{ url_for('teams.parents', team_id=team.id, remove=id) }}">Remove…</a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-note">{{ team.name }} is at the top level.</p>
+    {% endif %}
+  </section>
+
+  <section class="settings-section" aria-labelledby="section-add">
+    <header class="settings-section-head">
+      <h2 id="section-add">Add under another team</h2>
+    </header>
+    {% if choices %}
+    <form class="archive-row team-move" method="get" action="{{ url_for('teams.parents', team_id=team.id) }}">
       <div class="archive-text field">
-        <label for="parent_id">Move below</label>
-        <select id="parent_id" name="parent_id">
-          <option value="" {{ 'selected' if choice == '' }}>Top level</option>
-          {% for id, label in parents %}<option value="{{ id }}" {{ 'selected' if new_parent_id == id }}>{{ label }}</option>{% endfor %}
+        <label for="add">Add under</label>
+        <select id="add" name="add">
+          {% for id, label in choices %}<option value="{{ id }}" {{ 'selected' if adding and change_to[1] == id }}>{{ label }}</option>{% endfor %}
         </select>
       </div>
       <button class="button" type="submit">Show what changes</button>
     </form>
+    {% else %}
+    <p class="empty-note">No other team can take {{ team.name }}.</p>
+    {% endif %}
     {% if notice %}<p class="section-foot-note">{{ notice }}</p>{% endif %}
   </section>
 
   {% if impact %}
   <section class="settings-section" aria-labelledby="section-summary">
     <header class="settings-section-head">
-      <h2 id="section-summary">Moving {{ team.name }} {% if new_parent_id %}below {{ target }}{% else %}to the top level{% endif %}</h2>
+      <h2 id="section-summary">{% if adding %}Adding {{ team.name }} under {{ target }}{% else %}Removing {{ team.name }} from under {{ target }}{% endif %}</h2>
       <p>Unchanged: members of {{ team.name }} and the teams below it keep their roles; direct roles and permission sets keep working.</p>
     </header>
   </section>
@@ -58,7 +78,7 @@
 
   <section class="settings-section" aria-labelledby="section-trackers">
     <header class="settings-section-head">
-      <h2 id="section-trackers">Trackers that move</h2>
+      <h2 id="section-trackers">Trackers affected</h2>
       <p>The trackers in {{ team.name }} and the teams below it, archived ones included.</p>
     </header>
     {% if impact.trackers %}
@@ -73,11 +93,12 @@
     {% endif %}
   </section>
 
-  <form class="move-confirm" method="post" action="{{ url_for('teams.move', team_id=team.id) }}">
+  <form class="move-confirm" method="post" action="{{ url_for('teams.change_parents', team_id=team.id) }}">
     {{ csrf_field(csrf_token()) }}
-    <input type="hidden" name="parent_id" value="{{ new_parent_id if new_parent_id is not none else '' }}">
-    <button class="button primary" type="submit">Move {{ team.name }}</button>
-    <a class="button" href="{{ url_for('teams.view', team_id=team.id) }}">Cancel</a>
+    <input type="hidden" name="action" value="{{ change_to[0] }}">
+    <input type="hidden" name="parent_id" value="{{ change_to[1] }}">
+    <button class="button primary" type="submit">{% if adding %}Add under {{ target }}{% else %}Remove from {{ target }}{% endif %}</button>
+    <a class="button" href="{{ url_for('teams.parents', team_id=team.id) }}">Cancel</a>
   </form>
   {% endif %}
 </div>

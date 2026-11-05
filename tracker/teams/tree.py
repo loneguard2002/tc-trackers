@@ -31,6 +31,11 @@ def _name_key(row: TeamRow) -> tuple[str, int]:
     return row.name.casefold(), row.id
 
 
+def sorted_by_name(rows: Iterable[TeamRow]) -> list[TeamRow]:
+    """The teams sorted by name ignoring case, then id."""
+    return sorted(rows, key=_name_key)
+
+
 def children_map(rows: list[TeamRow]) -> dict[int | None, list[TeamRow]]:
     """Higher team id (``None`` for the top level) to the teams below it, sorted by name ignoring case.
 
@@ -91,7 +96,7 @@ def team_labels(rows: list[TeamRow]) -> dict[int, str]:
 def load_team_rows(session: Session, lock: bool = False) -> list[TeamRow]:
     """Every team by id; with ``lock`` the ``teams`` rows are read ``FOR UPDATE`` before the links.
 
-    Every change to the links takes that lock first, so a concurrent move cannot form a cycle.
+    Every move, adding or removing a higher team, takes that lock first, so concurrent moves cannot form a cycle.
     """
     query = select(Team.id, Team.name).order_by(Team.id)
     if lock:
@@ -106,7 +111,7 @@ def load_team_rows(session: Session, lock: bool = False) -> list[TeamRow]:
 
 def team_choices(session: Session) -> list[tuple[int, str]]:
     """``(id, name)`` for every team, sorted by name ignoring case, then id, for selects."""
-    return [(row.id, row.name) for row in sorted(load_team_rows(session), key=_name_key)]
+    return [(row.id, row.name) for row in sorted_by_name(load_team_rows(session))]
 
 
 def set_team_parents(session: Session, team_id: int, parent_ids: Iterable[int]) -> None:
