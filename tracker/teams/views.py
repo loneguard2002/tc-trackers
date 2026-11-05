@@ -54,6 +54,7 @@ NOT_UNDER = "{team} is not under {parent}."
 HAS_CHILDREN_MESSAGE = "This team has teams below it. Remove them from under it or delete them first."
 HAS_TRACKERS_MESSAGE = "This team has trackers, including archived ones. Move them to another team first."
 CHOOSE_PERSON_MESSAGE = "Choose an active person from the list."
+TEAM_TABS = ("people", "below", "trackers")
 
 
 def _team_or_404(team_id: int) -> Team:
@@ -231,7 +232,7 @@ def _person_row(person: TeamPerson) -> PersonRow:
     return PersonRow(person, route, note)
 
 
-def _render_team(team: Team, errors: list[str], status: int, form=None, open_details: bool = False):
+def _render_team(team: Team, errors: list[str], status: int, form=None, editing: bool = False, tab: str = "people"):
     db = get_session()
     rows = load_team_rows(db)
     labels = team_labels(rows)
@@ -268,7 +269,8 @@ def _render_team(team: Team, errors: list[str], status: int, form=None, open_det
         place=context["places"].get(team.id),
         form=form or {"name": team.name, "description": team.description, **_place_form(team)},
         errors=errors,
-        open_details=open_details,
+        editing=editing,
+        tab=tab if tab in TEAM_TABS else "people",
         page_title=team.name,
         current_page="teams",
     )
@@ -278,7 +280,9 @@ def _render_team(team: Team, errors: list[str], status: int, form=None, open_det
 @bp.get("/<int:team_id>")
 @permission_required("manage_teams")
 def view(team_id: int):
-    return _render_team(_team_or_404(team_id), [], 200)
+    return _render_team(
+        _team_or_404(team_id), [], 200, editing=request.args.get("edit") == "1", tab=request.args.get("tab", "")
+    )
 
 
 @bp.post("/<int:team_id>/rename")
@@ -304,7 +308,7 @@ def rename(team_id: int):
         if e
     ]
     if errors:
-        return _render_team(team, errors, 400, form=form, open_details=True)
+        return _render_team(team, errors, 400, form=form, editing=True)
     before = {field: getattr(team, field) for field, value in submitted.items() if getattr(team, field) != value}
     after = {field: submitted[field] for field in before}
     if (region.id, location_id) != (team.region_id, team.location_id):
@@ -334,7 +338,7 @@ def rename(team_id: int):
     except IntegrityError:  # the same name was taken, or the region or location deleted, at the same moment
         db.rollback()
         error = parse_place(db, region_text, location_text, team.region_id, team.location_id)[2] or name_taken("team")
-        return _render_team(team, [error], 400, form=form, open_details=True)
+        return _render_team(team, [error], 400, form=form, editing=True)
     flash("Saved the team details.", "success")
     return _to_team(team)
 
@@ -468,7 +472,7 @@ def delete_team(team_id: int):
     blocker = _delete_blocker(team.id, rows)
     if blocker:
         db.rollback()
-        return _render_team(team, [blocker], 400, open_details=True)
+        return _render_team(team, [blocker], 400)
     labels = team_labels(rows)
     path = labels[team.id]
     parent_ids = current[team.id].parent_ids  # read under the lock: a move just committed has changed them

@@ -261,7 +261,7 @@ def test_old_move_address_is_gone(client, logged_in_admin, team_factory):
 def test_team_page_links_to_higher_teams(client, logged_in_admin, team_factory):
     team = team_factory(name="Windows")
     raw = client.get(f"/admin/teams/{team.id}").get_data(as_text=True)
-    assert f'href="/admin/teams/{team.id}/parents"' in raw and "Higher teams…" in raw
+    assert f'href="/admin/teams/{team.id}/parents"' in raw and "Higher teams" in raw
     assert "Move…" not in raw
 
 

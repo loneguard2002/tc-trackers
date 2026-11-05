@@ -639,25 +639,35 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .tree-filter { display: block; width: calc(100% - 40px); margin: 12px 20px 0; padding: 7px 10px; font-size: .9rem; }
 .team-tree a[aria-current="page"] { color: var(--text); font-weight: 700; }
 .team-tree a[aria-current="page"]::before { content: ""; display: inline-block; width: 3px; height: 1em; margin-right: 8px; vertical-align: -2px; border-radius: 2px; background: var(--primary); }
-.team-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 16px; padding: 16px 20px; }
-.team-header h1 { margin: 0 0 4px; }
-.team-description { margin: 0 0 6px; max-width: 60ch; }
-.team-header-place { margin: 0 0 6px; color: var(--muted); }
-.team-header-counts { margin: 0; color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
-.team-header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.team-card { overflow: hidden; }
+.team-header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 8px; padding: 14px 20px 12px; }
+.team-header-text { display: grid; flex: 1 1 320px; gap: 8px; min-width: 0; margin-right: 8px; }
+.team-title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.team-header h1 { margin: 0; font-size: 26px; line-height: 1.15; overflow-wrap: anywhere; }
+.team-description { margin: 0; color: var(--muted); font-size: .875rem; }
+.team-pills { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.team-pill { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--text) 7%, transparent); font-size: .8125rem; }
+.team-pill .icon { width: 14px; height: 14px; }
+.team-pill a { font-weight: 600; }
+.team-pill.is-unset { color: var(--muted); font-style: italic; }
+@media (max-width: 640px) { .team-divider { display: none; } }
+.team-delete-form { display: contents; }
+.team-divider { align-self: stretch; width: 1px; margin: 4px 4px; background: var(--border); }
+.button.icon-only { width: 40px; padding-right: 0; padding-left: 0; text-align: center; }
+.button.icon-only .icon { margin: 0; }
+.team-alert { flex: 1 1 100%; margin: 0 0 4px; }
+.team-edit { display: block; }
+.team-edit h1 { margin-bottom: 12px; font-size: 1.25rem; }
+.team-edit-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.team-tabs { margin: 0; padding: 0 12px; border-top: 1px solid var(--border); border-bottom: 0; }
+.team-tabs .tab { margin-bottom: 0; }
+.team-tree-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.team-tree-head p { margin: 0; font-size: .75rem; }
+#tab-people > .settings-section, #tab-below > .settings-section, #tab-trackers > .settings-section { margin-top: 20px; }
 .row-filter { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
 .row-filter .button[aria-pressed="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary); }
 .role-note { color: var(--muted); font-size: .8125rem; }
 .select-filter { display: block; width: 100%; margin: 0 0 6px; padding: 7px 10px; font-size: .9rem; }
-.team-details > summary { cursor: pointer; list-style: none; }
-.team-details > summary::-webkit-details-marker { display: none; }
-.team-details > summary h2::before { content: "\25B8"; display: inline-block; margin-right: 8px; color: var(--muted); }
-.team-details[open] > summary { border-bottom: 1px solid var(--border); }
-.team-details[open] > summary h2::before { content: "\25BE"; }
-.team-delete { padding: 14px 20px 16px; border-top: 1px solid var(--border); }
-.team-delete h3 { margin: 0 0 2px; color: var(--danger); font-size: .9375rem; }
-.team-delete-note { margin: 0 0 10px; color: var(--muted); font-size: .8125rem; }
-.team-delete .empty-note { padding: 0; }
 .move-changes { margin: 0; padding: 12px 20px 14px 38px; }
 .move-changes li { padding: 3px 0; }
 
