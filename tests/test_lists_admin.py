@@ -1197,7 +1197,7 @@ def test_business_line_name_is_required_and_limited(client, logged_in_admin, db,
 def test_nav_shows_one_lists_entry_to_administrators_only(client, logged_in_user, give_set, db, user_factory):
     give_set(["manage_teams", "manage_users"], user=logged_in_user)
     page = client.get("/").get_data(as_text=True)
-    assert 'data-label="Lists"' not in page and 'href="/admin/regions"' not in page
+    assert 'data-label="Regions &amp; business lines"' not in page and 'href="/admin/regions"' not in page
     assert 'href="/admin/locations"' not in page and 'href="/admin/business-lines"' not in page
 
     from tests.conftest import sign_in
@@ -1205,7 +1205,8 @@ def test_nav_shows_one_lists_entry_to_administrators_only(client, logged_in_user
     sign_in(client, user_factory(is_admin=True))
     page = client.get("/admin/regions").get_data(as_text=True)
     sidebar = page[page.index('<nav class="sidebar-nav">') : page.index("</nav>", page.index("sidebar-nav"))]
-    assert 'data-label="Lists"' in sidebar and "<span>Lists</span>" in sidebar
+    assert 'data-label="Regions &amp; business lines"' in sidebar
+    assert "<span>Regions &amp; business lines</span>" in sidebar
     for old in ("Regions", "Locations", "Business lines"):
         assert f'data-label="{old}"' not in sidebar and f"<span>{old}</span>" not in sidebar
     assert 'href="/admin/locations"' not in sidebar and 'href="/admin/business-lines"' not in sidebar
@@ -1227,7 +1228,7 @@ TABS = (("Regions", "/admin/regions"), ("Locations", "/admin/locations"), ("Busi
 
 
 def tab_bar(page: str) -> str:
-    start = page.index('<nav class="tabs" aria-label="Lists">')
+    start = page.index('<nav class="tabs" aria-label="Regions &amp; business lines">')
     return page[start : page.index("</nav>", start)]
 
 
@@ -1262,7 +1263,7 @@ def test_tab_bar_counts_are_zero_on_empty_lists(client, logged_in_admin):
 def test_tab_bar_shows_on_new_and_edit_pages(client, logged_in_admin, region_factory, business_line_factory):
     line = business_line_factory()
     for url in ("/admin/regions/new", "/admin/business-lines/new", f"/admin/business-lines/{line.id}/edit"):
-        assert '<nav class="tabs" aria-label="Lists">' in client.get(url).get_data(as_text=True), url
+        assert '<nav class="tabs" aria-label="Regions &amp; business lines">' in client.get(url).get_data(as_text=True), url
 
 
 # --- Business lines table -------------------------------------------------------------------------------------------

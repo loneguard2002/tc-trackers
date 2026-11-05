@@ -98,7 +98,12 @@ def test_sidebar_shows_only_the_links_held(app, held):
     html = render_sidebar(app, is_admin=False, held=held)
     for permission, link in LINKS.items():
         assert (link in html) == (permission in held)
-    assert ("Administration" in html) == bool(held & set(LINKS))
+    assert ("Administration" in html) == bool(held & (set(LINKS) - {"import_workbooks"}))
+
+
+def test_import_link_sits_under_trackers_not_administration(app):
+    html = render_sidebar(app, is_admin=True, held=set())
+    assert html.index('href="/"') < html.index('href="/import"') < html.index("Administration")
 
 
 def test_sidebar_shows_every_link_to_administrators(app):
