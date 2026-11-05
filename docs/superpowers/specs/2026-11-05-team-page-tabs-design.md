@@ -1,7 +1,7 @@
 # Team page: actions in the header, tabs below
 
 Status: draft for the owner's approval, 5 November 2026. Mockup: https://claude.ai/artifact/5cbGV5ew2jWLLCtHRzzJSy
-(version 7).
+(version 8).
 
 ## Why
 
@@ -36,9 +36,10 @@ possible from here, so teams are easier to rearrange.
 6. **Tables on every tab**, built like the Lists tables (search box, column headings that sort, a footer "Showing n
    of n …"):
    - **People:** Person (name and email), Route, Role, then Remove for direct members; All / Direct / From teams above
-     filters; the Add member form below the table.
+     filters. The Add member form (Person, Role, Add member) sits at the top of the tab, above the search, so no
+     scrolling is needed to administer (owner, 5 November 2026).
    - **Teams below:** Team, Place, People, Trackers, then × Remove; New team beside the search; the Existing team form
-     below the table.
+     at the top of the tab, above the search, as on People.
    - **Trackers:** Tracker, Business line, Regions, Status, then Access and × Remove; All / Active / Archived filters;
      **+ Add trackers** beside the filters.
    - **Search and pages on every table** (owner, 5 November 2026). Each table has a search box above it and a pager
