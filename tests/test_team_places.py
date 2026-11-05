@@ -69,8 +69,8 @@ def test_a_team_can_have_a_region_without_a_location(client, logged_in_admin, db
     assert entry.detail["location"] == "GLOBAL"
     index = client.get("/admin/teams").get_data(as_text=True)
     assert '<span class="team-place">GLOBAL</span>' in tree_item(index, "Group risk")
-    page = client.get(f"/admin/teams/{team.id}").get_data(as_text=True)
-    assert '<p class="team-header-place">GLOBAL</p>' in page
+    page = client.get(f"/admin/teams/{team.id}?edit=1").get_data(as_text=True)
+    assert "<strong>GLOBAL</strong></span>" in client.get(f"/admin/teams/{team.id}").get_data(as_text=True)
     assert selected_value(page, "region_id") == str(world.id) and selected_value(page, "location_id") == ""
 
 
@@ -111,7 +111,7 @@ def test_edit_can_clear_the_location_and_a_retired_region_is_kept(
     emea.retired = True
     db.commit()
     assert f'value="{emea.id}"' in select_html(
-        client.get(f"/admin/teams/{team.id}").get_data(as_text=True), "region_id"
+        client.get(f"/admin/teams/{team.id}?edit=1").get_data(as_text=True), "region_id"
     )
     assert post(client, f"/admin/teams/{team.id}/rename", {**form, "description": "Kept"}).status_code == 302
 
@@ -176,13 +176,12 @@ def test_an_existing_team_shows_region_not_set_and_its_next_save_needs_a_place(
     team = team_factory("Desktop")
     index = client.get("/admin/teams").get_data(as_text=True)
     assert '<span class="team-place is-unset">Region not set</span>' in tree_item(index, "Desktop")
-    page = client.get(f"/admin/teams/{team.id}").get_data(as_text=True)
-    assert "Region not set" in page
+    assert "Region not set" in client.get(f"/admin/teams/{team.id}").get_data(as_text=True)
+    page = client.get(f"/admin/teams/{team.id}?edit=1").get_data(as_text=True)
     assert selected_value(page, "region_id") == "" and selected_value(page, "location_id") == ""
     page = post(client, f"/admin/teams/{team.id}/rename", {"name": "Desktop", "description": ""})
     assert page.status_code == 400 and REGION_REQUIRED in text_of(page)
-    [tag] = re.findall(r"<details\b[^>]*>", page.get_data(as_text=True))
-    assert re.search(r"\sopen\b", tag)
+    assert 'class="team-header team-edit"' in page.get_data(as_text=True)
     response = post(
         client, f"/admin/teams/{team.id}/rename", {"name": "Desktop", "description": "", **place_of(emea, geneva)}
     )
@@ -197,7 +196,7 @@ def test_saving_a_team_at_a_retired_location_keeps_it(
     emea = region_factory("EMEA")
     old = location_factory(emea, retired=True)
     team = team_factory("Desktop", location_id=old.id)
-    page = text_of(client.get(f"/admin/teams/{team.id}"))
+    page = text_of(client.get(f"/admin/teams/{team.id}?edit=1"))
     assert "Geneva, Switzerland (retired)" in page
     assert selected_value(page, "location_id") == str(old.id)
     assert selected_value(page, "region_id") == str(emea.id)
@@ -216,7 +215,7 @@ def test_saving_a_team_in_a_retired_region_keeps_it(
     old = region_factory("OLD", name="Old region", retired=True)
     bern = location_factory(old, city="Bern")
     team = team_factory("Desktop", location_id=bern.id)
-    page = text_of(client.get(f"/admin/teams/{team.id}"))
+    page = text_of(client.get(f"/admin/teams/{team.id}?edit=1"))
     assert re.search(r">OLD – Old region \(retired\)</option>", select_html(page, "region_id"))
     assert '<optgroup label="OLD – Old region (retired)"' in select_html(page, "location_id")
     assert "Bern, Switzerland (retired)" in page
@@ -267,7 +266,8 @@ def test_tree_and_team_page_show_the_place(client, logged_in_admin, team_factory
         assert '<span class="team-place is-unset">Region not set</span>' in tree_item(page, "Windows")
     page = text_of(client.get(f"/admin/teams/{infra.id}"))
     header = re.search(r'<header class="team-header.*?</header>', page, re.S).group(0)
-    assert "EMEA · Geneva, Switzerland" in header
+    assert re.search(r"<strong>EMEA</strong>.*?</svg>Geneva, Switzerland", header, re.S)
+    page = text_of(client.get(f"/admin/teams/{infra.id}?edit=1"))
     assert selected_value(page, "region_id") == str(emea.id)
     assert selected_value(page, "location_id") == str(geneva.id)
 

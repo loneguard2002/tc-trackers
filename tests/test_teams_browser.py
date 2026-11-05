@@ -25,7 +25,7 @@ def test_higher_team_preview_then_confirm(
     browser_sign_in(page, live_server, admin)
     page.goto(f"{live_server}/admin/teams/{windows.id}")
 
-    page.click("text=Higher teams…")
+    page.click("text=Higher teams")
     page.click("text=Remove…")
     expect(page.locator("main, body").first).to_contain_text("Head of Infrastructure loses Owner on Laptop refresh.")
     expect(page.locator("body")).to_contain_text("No one gains access.")
@@ -199,10 +199,11 @@ def test_new_team_location_narrows_to_the_chosen_region(
     page.get_by_role("button", name="Create team").click()
     page.wait_for_load_state("networkidle")
     expect(page.locator(".flash")).to_contain_text("Created the team Desktop.")
-    expect(page.locator(".team-header")).to_contain_text("APAC · Singapore, Singapore")
+    expect(page.locator(".team-header .team-header-place")).to_contain_text("APAC")
+    expect(page.locator(".team-header .team-header-place")).to_contain_text("Singapore, Singapore")
     expect(page.locator("[data-tree] .team-place").first).to_have_text("APAC · Singapore")
     page.set_viewport_size({"width": 390, "height": 900})
-    page.goto(page.url.split("#")[0] + "#details")
+    page.goto(page.url.split("#")[0] + "?edit=1")
     expect(page.locator("#location_id")).to_be_visible()
     assert page.eval_on_selector("#location_id", "s => s.value") == str(singapore.id)
     for url in (page.url, f"{live_server}/admin/teams"):

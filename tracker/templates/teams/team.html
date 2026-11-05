@@ -8,29 +8,75 @@
 <div class="teams-layout">
   {% include "teams/_tree.html" %}
   <div class="teams-main">
-    <header class="team-header settings-section">
-      <div class="team-header-text">
-        <h1>{{ team.name }}</h1>
-        {% if place %}<p class="team-header-place">{{ place.region_code }}{% if place.location %} · {{ place.location }}{% endif %}</p>{% else %}<p class="team-header-place is-unset">Region not set</p>{% endif %}
-        <p class="team-header-place">{% if under %}Under {% for id, name in under %}{{ ' and ' if loop.last and not loop.first else (', ' if not loop.first else '') }}<a href="{{ url_for('teams.view', team_id=id) }}">{{ name }}</a>{% endfor %}{% else %}Top level{% endif %}</p>
-        {% if team.description %}<p class="team-description">{{ team.description }}</p>{% endif %}
-        <p class="team-header-counts">
-          {{ people_count(reach.get(team.id, 0)) }} · {{ trackers|length }} {{ 'tracker' if trackers|length == 1 else 'trackers' }} · {{ below|length }} {{ 'team' if below|length == 1 else 'teams' }} below
-        </p>
-      </div>
-      <div class="team-header-actions">
-        <a class="button" href="#details" data-open-details>Edit details</a>
-        <a class="button" href="{{ url_for('teams.parents', team_id=team.id) }}">Higher teams…</a>
-      </div>
-    </header>
-
-    {% if errors %}
-    <div class="form-alert" role="alert">
-      <strong>Please correct the following:</strong>
-      <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    <div class="settings-section team-card">
+      {% set alert %}{% if errors %}<div class="form-alert team-alert" role="alert">
+        <strong>Please correct the following:</strong>
+        <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      </div>{% endif %}{% endset %}
+      {% if editing %}
+      <header class="team-header team-edit">
+        {{ alert }}
+        <h1>Edit details</h1>
+        <form method="post" action="{{ url_for('teams.rename', team_id=team.id) }}">
+          {{ csrf_field(csrf_token()) }}
+          <div class="field-stack">
+            {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
+            <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
+            {% endcall %}
+            {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
+            <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
+            {% endcall %}
+            {% include "teams/_place_fields.html" %}
+          </div>
+          <div class="team-edit-foot">
+            <a class="button" href="{{ url_for('teams.view', team_id=team.id, tab=tab if tab != 'people' else none) }}">Cancel</a>
+            <button class="button primary" type="submit">Save details</button>
+          </div>
+        </form>
+      </header>
+      {% else %}
+      <header class="team-header">
+        {{ alert }}
+        <div class="team-header-text">
+          <div class="team-title-row">
+            <h1>{{ team.name }}</h1>
+            {% if team.description %}<p class="team-description">{{ team.description }}</p>{% endif %}
+          </div>
+          <div class="team-pills">
+            {% if place %}<span class="team-pill team-header-place"><strong>{{ place.region_code }}</strong>{% if place.location %}{{ icon('pin') }}{{ place.location }}{% endif %}</span>{% else %}<span class="team-pill team-header-place is-unset">Region not set</span>{% endif %}
+            <span class="team-pill">{% if under %}Under {% for id, name in under %}{{ ' and ' if loop.last and not loop.first else (', ' if not loop.first else '') }}<a href="{{ url_for('teams.view', team_id=id) }}">{{ name }}</a>{% endfor %}{% else %}Top level{% endif %}</span>
+          </div>
+        </div>
+        <a class="button" href="{{ url_for('teams.view', team_id=team.id, edit=1) }}">{{ icon('edit') }}Edit details</a>
+        <a class="button" href="{{ url_for('teams.parents', team_id=team.id) }}">{{ icon('teams') }}Higher teams</a>
+        <span class="team-divider" aria-hidden="true"></span>
+        {% if delete_blocker %}
+        <button class="button danger icon-only" type="button" disabled title="{{ delete_blocker }}">{{ icon('trash') }}<span class="sr-only">{{ delete_blocker }}</span></button>
+        {% else %}
+        <form class="team-delete-form" method="post" action="{{ url_for('teams.delete', team_id=team.id) }}"
+          data-confirm="Delete {{ team.name }}? Its members lose the access it gives." data-inline-confirm>
+          {{ csrf_field(csrf_token()) }}
+          <button class="button danger icon-only" type="submit" data-ask title="Delete team">{{ icon('trash') }}<span class="sr-only">Delete team</span></button>
+          <div class="confirm-box" data-confirm-box hidden>
+            <p>Delete <strong>{{ team.name }}</strong>? Its members lose the access it gives. This cannot be undone.</p>
+            <div class="confirm-box-actions">
+              <button class="button" type="button" data-confirm-no>Cancel</button>
+              <button class="button danger" type="button" data-confirm-yes>Delete</button>
+            </div>
+          </div>
+        </form>
+        {% endif %}
+      </header>
+      {% endif %}
+      <nav class="tabs team-tabs" aria-label="Team sections">
+        {% for key, label, count in (('people', 'People', people|length), ('below', 'Teams below', below|length), ('trackers', 'Trackers', trackers|length)) %}
+        <a class="tab{{ ' active' if key == tab }}" href="{{ url_for('teams.view', team_id=team.id, tab=key) }}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }} <span class="tab-count">{{ count }}</span></a>
+        {% endfor %}
+      </nav>
     </div>
-    {% endif %}
 
+    {% if tab == 'people' %}
+    <div id="tab-people">
     <section class="settings-section" id="people" aria-labelledby="section-people">
       <header class="settings-section-head">
         <h2 id="section-people">People</h2>
@@ -107,6 +153,9 @@
       {% endif %}
     </section>
 
+    </div>
+    {% elif tab == 'below' %}
+    <div id="tab-below">
     <section class="settings-section" id="teams-below" aria-labelledby="section-below">
       <header class="settings-section-head has-action">
         <div>
@@ -127,6 +176,9 @@
       {% endif %}
     </section>
 
+    </div>
+    {% else %}
+    <div id="tab-trackers">
     <section class="settings-section" id="trackers" aria-labelledby="section-trackers">
       <header class="settings-section-head">
         <h2 id="section-trackers">Trackers</h2>
@@ -144,52 +196,8 @@
       <p class="empty-note">No trackers are in this team.</p>
       {% endif %}
     </section>
-
-    <details class="settings-section team-details" id="details"{% if open_details %} open{% endif %}>
-      <summary class="settings-section-head">
-        <h2 id="section-details">Details</h2>
-        <p>The team's name, description, region and location, and deleting the team.</p>
-      </summary>
-      <form method="post" action="{{ url_for('teams.rename', team_id=team.id) }}">
-        {{ csrf_field(csrf_token()) }}
-        <div class="field-stack">
-          {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
-          <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
-          {% endcall %}
-          {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
-          <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
-          {% endcall %}
-          {% include "teams/_place_fields.html" %}
-        </div>
-        <div class="settings-section-foot">
-          <button class="button primary" type="submit">Save details</button>
-        </div>
-      </form>
-      <div class="team-delete" id="delete">
-        <h3>Delete</h3>
-        <p class="team-delete-note">Deleting a team removes its members and the permission sets it holds. It cannot be undone.</p>
-        {% if delete_blocker %}
-        <p class="empty-note">{{ delete_blocker }}</p>
-        {% else %}
-        <form class="archive-row" method="post" action="{{ url_for('teams.delete', team_id=team.id) }}"
-          data-confirm="Delete {{ team.name }}? Its members lose the access it gives." data-inline-confirm>
-          {{ csrf_field(csrf_token()) }}
-          <div class="archive-text">
-            <strong>Delete this team</strong>
-            <p>Its members lose the access it gives. The activity log records each removal.</p>
-          </div>
-          <button class="button danger" type="submit" data-ask>{{ icon('trash') }}Delete team…</button>
-          <div class="confirm-box" data-confirm-box hidden>
-            <p>Delete <strong>{{ team.name }}</strong>? Its members and the permission sets it holds will be removed.</p>
-            <div class="confirm-box-actions">
-              <button class="button danger" type="button" data-confirm-yes>Delete</button>
-              <button class="button" type="button" data-confirm-no>Cancel</button>
-            </div>
-          </div>
-        </form>
-        {% endif %}
-      </div>
-    </details>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

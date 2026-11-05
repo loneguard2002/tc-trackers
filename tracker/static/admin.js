@@ -90,7 +90,7 @@
     narrow();
   });
 
-  // A <details> holding the target of the address (or of an a[data-open-details] link) opens, so the section is seen.
+  // A <details> holding the target of the address opens, so the section is seen.
   function openFor(target) {
     var details = target && target.closest ? target.closest("details") : null;
     if (details) details.open = true;
@@ -99,12 +99,6 @@
   function openHash() {
     if (window.location.hash.length > 1) openFor(document.getElementById(window.location.hash.slice(1)));
   }
-
-  each(document.querySelectorAll("a[data-open-details]"), function (link) {
-    link.addEventListener("click", function () {
-      openFor(document.getElementById((link.getAttribute("href") || "").slice(1)));
-    });
-  });
 
   // [data-permission-cards] holds article[data-set-card] cards whose tick boxes belong to one save form. Each change
   // updates the card's [data-count] ("2/7"), marks a card whose boxes differ from the saved state (defaultChecked, so

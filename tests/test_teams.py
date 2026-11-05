@@ -378,10 +378,7 @@ def test_inactive_direct_members_keep_their_row_with_a_status_badge(
     add_member(team, gone, "viewer")
     row = row_for(raw_of(client.get(f"/admin/teams/{team.id}")), "Dora Disabled")
     assert "Disabled" in row and "<select" in row and "Remove" in row
-    header = re.search(
-        r'<p class="team-header-counts">(.*?)</p>', raw_of(client.get(f"/admin/teams/{team.id}")), re.S
-    ).group(1)
-    assert "0 people" in header  # a disabled member does not reach the team
+    assert re.search(r"People\s*<span class=\"tab-count\">1</span>", raw_of(client.get(f"/admin/teams/{team.id}")))
 
 
 def test_filter_group_counts(client, logged_in_admin, team_factory, user_factory, add_member):
@@ -408,23 +405,13 @@ def test_people_list_direct_members_before_those_from_teams_above(
     assert order == ["Carl", "Zoe", "Aaron", "Bea"]
 
 
-def test_team_page_sections_in_order(client, logged_in_admin, team_factory, place):
+def test_team_page_has_no_details_section_and_edits_in_the_header(client, logged_in_admin, team_factory, place):
     team = team_factory(name="Windows")
     raw = raw_of(client.get(f"/admin/teams/{team.id}"))
-    headings = re.findall(r"<h2[^>]*>(.*?)</h2>", raw, re.S)
-    assert [h.strip() for h in headings if h.strip() in ("People", "Teams below", "Trackers", "Details")] == [
-        "People",
-        "Teams below",
-        "Trackers",
-        "Details",
-    ]
-    [tag] = re.findall(r"<details\b[^>]*>", raw)
-    assert not re.search(r"\sopen\b", tag)
+    assert "<details" not in raw and 'id="details"' not in raw
     bad = post(client, f"/admin/teams/{team.id}/rename", {"name": "", **place})
-    assert bad.status_code == 400
-    [tag] = re.findall(r"<details\b[^>]*>", raw_of(bad))
-    assert re.search(r"\sopen\b", tag)
-    assert "Edit details" in raw and f"/admin/teams/{team.id}/parents" in raw and "Higher teams…" in raw
+    assert bad.status_code == 400 and 'class="team-header team-edit"' in raw_of(bad)
+    assert "Edit details" in raw and f"/admin/teams/{team.id}/parents" in raw and "Higher teams" in raw
 
 
 def test_teams_below_and_new_team_below(client, logged_in_admin, team_factory, user_factory, add_member):
@@ -433,8 +420,8 @@ def test_teams_below_and_new_team_below(client, logged_in_admin, team_factory, u
     patching = team_factory(name="Patching", parent=windows)
     add_member(windows, user_factory(), "viewer")
     add_member(patching, user_factory(), "viewer")
-    raw = raw_of(client.get(f"/admin/teams/{windows.id}"))
-    below = raw[raw.index('id="teams-below"') : raw.index('id="trackers"')]
+    raw = raw_of(client.get(f"/admin/teams/{windows.id}?tab=below"))
+    below = raw[raw.index('id="teams-below"') :]
     assert "Patching" in below and "2 people" in below
     assert f'href="/admin/teams?parent={windows.id}#new-team"' in raw
     page = raw_of(client.get(f"/admin/teams?parent={windows.id}"))
@@ -450,7 +437,7 @@ def test_teams_below_and_new_team_below(client, logged_in_admin, team_factory, u
 def test_trackers_link_to_their_access_tab(client, logged_in_admin, team_factory, tracker_factory):
     team = team_factory(name="Windows")
     tracker = tracker_factory(name="Laptop refresh", team_id=team.id)
-    raw = raw_of(client.get(f"/admin/teams/{team.id}"))
+    raw = raw_of(client.get(f"/admin/teams/{team.id}?tab=trackers"))
     assert f'href="/trackers/{tracker.id}/roles"' in raw
 
 
@@ -638,7 +625,7 @@ def test_team_page_names_trackers_the_holder_cannot_open(client, user_factory, g
     team = team_factory()
     tracker = tracker_factory(name="Secret rollout", team_id=team.id)
     tracker_factory(name="Old rollout", team_id=team.id, status="archived")
-    page = text_of(client.get(f"/admin/teams/{team.id}"))
+    page = text_of(client.get(f"/admin/teams/{team.id}?tab=trackers"))
     assert "Secret rollout" in page
     assert re.search(r"Old rollout.*Archived", page, re.S)
     assert client.get(f"/trackers/{tracker.id}").status_code == 404
@@ -828,7 +815,7 @@ def test_also_under_names_two_others_with_and(client, logged_in_admin, team_fact
 
 
 def test_tree_note_says_a_team_appears_under_each(client, logged_in_admin):
-    assert "A team under several higher teams appears under each." in text_of(client.get("/admin/teams"))
+    assert "A team in several groups shows under each, marked “Also under”." in text_of(client.get("/admin/teams"))
 
 
 def test_team_page_header_names_every_higher_team(client, logged_in_admin, team_factory):
