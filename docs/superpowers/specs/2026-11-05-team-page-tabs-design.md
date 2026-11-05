@@ -1,7 +1,7 @@
 # Team page: actions in the header, tabs below
 
 Status: draft for the owner's approval, 5 November 2026. Mockup: https://claude.ai/artifact/5cbGV5ew2jWLLCtHRzzJSy
-(version 11).
+(version 12).
 
 ## Why
 
@@ -39,7 +39,7 @@ possible from here, so teams are easier to rearrange.
    - Add selected team and Remove first show the same access preview as the Higher teams screen (who gains or loses
      which trackers), then save on confirmation. They go to Activity as `team_parent_added` and
      `team_parent_removed`, with the same checks.
-6. **Tree help** on the left reads: "A team in several groups shows under each, marked “Also under”. Numbers count
+6. **Tree help** sits to the right of the tree card's "Teams" title, in small grey text, and reads: "A team in several groups shows under each, marked “Also under”. Numbers count
    the people who reach a team." (owner: shorter and more informative).
 7. **Tables on every tab**, built like the Lists tables (search box, column headings that sort, a footer "Showing n
    of n …"):
