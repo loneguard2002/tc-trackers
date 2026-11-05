@@ -1,7 +1,7 @@
 # Team page: actions in the header, tabs below
 
 Status: draft for the owner's approval, 5 November 2026. Mockup: https://claude.ai/artifact/5cbGV5ew2jWLLCtHRzzJSy
-(version 6).
+(version 7).
 
 ## Why
 
@@ -39,14 +39,27 @@ possible from here, so teams are easier to rearrange.
      filters; the Add member form below the table.
    - **Teams below:** Team, Place, People, Trackers, then × Remove; New team beside the search; the Existing team form
      below the table.
-   - **Trackers:** Tracker, Business line, Regions, Status, then Access; All / Active / Archived filters.
+   - **Trackers:** Tracker, Business line, Regions, Status, then Access and × Remove; All / Active / Archived filters;
+     **+ Add trackers** beside the filters.
    - **Search and pages on every table** (owner, 5 November 2026). Each table has a search box above it and a pager
      below it: "Showing 1–25 of 40 people", Rows per page (25, 50, 100; 25 to start), Previous, the page numbers and
      Next. Search, filters and sorting apply before paging, and a change of search or filter returns to page 1.
    - My call: every row is sent with the page and the script pages them, as the Lists tables already search and sort.
      Without JavaScript all rows show and the pager is hidden. A team holds tens of rows, not thousands, so the page
      stays light; server-side paging can follow if a team grows past a few hundred.
-7. **Unchanged:** the team tree on the left, roles and access rules.
+7. **Moving trackers into the team** (owner, 5 November 2026).
+   - **+ Add trackers** opens a picker of the trackers not in this team: search, then a table with a tick box,
+     Tracker, Current team and "Regions after the move". The button reads "Move 2 trackers here".
+   - A tracker belongs to one team, so it moves here from its current team (or from no team).
+   - **Regions:** a moved tracker keeps every region it has and gains this team's region when it lacks it, so people
+     who reach it by region keep their access and the team's region is covered. Nothing is ever removed. A team with
+     no region adds nothing. A new tracker already starts with its team's region ticked; that stays.
+   - Before saving, the screen shows who gains or loses access (by team and by region), then the owner confirms. The
+     existing rule stays: a person may not move a tracker so that they gain access themselves.
+   - **× Remove** takes a tracker out of this team into no team; its regions stay.
+   - Moves and removals go to Activity as `tracker_team_changed`; an added region goes as the tracker's regions change.
+   - Who may do it: anyone with `manage_teams`, as for moving a tracker today.
+8. **Unchanged:** the team tree on the left, roles and access rules.
 
 ## Constraints
 
