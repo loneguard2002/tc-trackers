@@ -848,6 +848,13 @@ def test_team_page_header_joins_three_higher_teams(client, logged_in_admin, team
     assert "Under A, B and C" in flat(header_of(raw_of(client.get(f"/admin/teams/{shared.id}"))))
 
 
+def test_under_line_follows_the_place_line(client, logged_in_admin, team_factory):
+    apps = team_factory(name="Applications")
+    desktops = team_factory(name="Desktops", parent=apps)
+    header = flat(header_of(raw_of(client.get(f"/admin/teams/{desktops.id}"))))
+    assert header.index("Region not set") < header.index("Under Applications")
+
+
 def test_top_level_team_page_says_top_level(client, logged_in_admin, team_factory):
     team = team_factory(name="Applications")
     raw = raw_of(client.get(f"/admin/teams/{team.id}"))
