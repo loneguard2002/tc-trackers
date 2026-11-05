@@ -222,7 +222,10 @@ def test_delete_refused_with_a_child_team_a_tracker_or_an_archived_tracker(
     parent = team_factory(name="Infrastructure")
     team_factory(name="Windows", parent=parent)
     page = post(client, f"/admin/teams/{parent.id}/delete")
-    assert page.status_code == 400 and "This team has teams below it. Move or delete them first." in text_of(page)
+    assert (
+        page.status_code == 400
+        and "This team has teams below it. Remove them from under it or delete them first." in text_of(page)
+    )
     trackers_message = "This team has trackers, including archived ones. Move them to another team first."
     with_tracker = team_factory(name="Linux")
     tracker_factory(team_id=with_tracker.id)
@@ -774,3 +777,106 @@ def test_delete_message_names_the_team_read_under_the_lock(client, logged_in_adm
     monkeypatch.setattr(team_views, "load_team_rows", rename_first)
     response = post(client, f"/admin/teams/{team.id}/delete", follow_redirects=True)
     assert "Deleted the team Windows Server." in text_of(response)
+
+
+# --- The tree and the team page with several higher teams -----------------------------------------------------------
+
+
+def flat(markup: str) -> str:
+    """The text of a piece of markup, tags dropped and white space collapsed."""
+    text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", markup)).split())
+    return re.sub(r"\s+([,.])", r"\1", text)
+
+
+def tree_of(client, url: str = "/admin/teams") -> str:
+    raw = raw_of(client.get(url))
+    start = raw.index("data-tree>")
+    return raw[start : raw.index("</aside>", start)]
+
+
+def header_of(raw: str) -> str:
+    start = raw.index('class="team-header')
+    return raw[start : raw.index("</header>", start)]
+
+
+def test_tree_shows_a_team_under_each_higher_team_with_also_under(client, logged_in_admin, team_factory):
+    windows, apps = team_factory(name="Windows"), team_factory(name="Applications")
+    desktops = team_factory(name="Desktops", parents=(windows, apps))
+    team_factory(name="Laptops", parent=desktops)
+    tree = tree_of(client)
+    assert tree.count(f'href="/admin/teams/{desktops.id}"') == 2
+    assert re.findall(r">(Applications|Windows|Desktops|Laptops)</a>", tree) == [
+        "Applications",
+        "Desktops",
+        "Laptops",
+        "Windows",
+        "Desktops",
+        "Laptops",
+    ]
+    applications_part, windows_part = tree.split(f'href="/admin/teams/{windows.id}"')
+    assert 'class="team-also"' in applications_part and "Also under Windows" in flat(applications_part)
+    assert "Also under Applications" in flat(windows_part)
+    assert flat(tree).count("Also under") == 2  # Laptops has one higher team and says nothing
+
+
+def test_also_under_names_two_others_with_and(client, logged_in_admin, team_factory):
+    a, b, c = team_factory(name="A"), team_factory(name="B"), team_factory(name="C")
+    team_factory(name="Shared", parents=(a, b, c))
+    tree = tree_of(client)
+    under_a = tree[tree.index(f'href="/admin/teams/{a.id}"') : tree.index(f'href="/admin/teams/{b.id}"')]
+    assert "Also under B and C" in flat(under_a)
+
+
+def test_tree_note_says_a_team_appears_under_each(client, logged_in_admin):
+    assert "A team under several higher teams appears under each." in text_of(client.get("/admin/teams"))
+
+
+def test_team_page_header_names_every_higher_team(client, logged_in_admin, team_factory):
+    windows, apps = team_factory(name="Windows"), team_factory(name="Applications")
+    desktops = team_factory(name="Desktops", parents=(windows, apps))
+    raw = raw_of(client.get(f"/admin/teams/{desktops.id}"))
+    header = header_of(raw)
+    assert "Under Applications and Windows" in flat(header)
+    assert f'href="/admin/teams/{apps.id}"' in header and f'href="/admin/teams/{windows.id}"' in header
+    assert "Teams › Desktops" in flat(raw)
+    assert tree_of(client, f"/admin/teams/{desktops.id}").count('aria-current="page"') == 2  # every appearance
+
+
+def test_team_page_header_joins_three_higher_teams(client, logged_in_admin, team_factory):
+    a, b, c = team_factory(name="A"), team_factory(name="B"), team_factory(name="C")
+    shared = team_factory(name="Shared", parents=(a, b, c))
+    assert "Under A, B and C" in flat(header_of(raw_of(client.get(f"/admin/teams/{shared.id}"))))
+
+
+def test_top_level_team_page_says_top_level(client, logged_in_admin, team_factory):
+    team = team_factory(name="Applications")
+    raw = raw_of(client.get(f"/admin/teams/{team.id}"))
+    assert "Top level" in flat(header_of(raw))
+
+
+def test_tree_people_count_counts_each_person_once(client, logged_in_admin, team_factory, user_factory, add_member):
+    top = team_factory(name="Top")
+    left, right = team_factory(name="Left", parent=top), team_factory(name="Right", parent=top)
+    desktops = team_factory(name="Desktops", parents=(left, right))
+    add_member(top, user_factory(), "viewer")
+    tree = tree_of(client)
+    first = flat(tree.split(f'href="/admin/teams/{desktops.id}"')[1])
+    assert first.startswith(">Desktops") and "1 person" in first[:60] and "2 people" not in first[:60]
+
+
+def test_new_team_form_offers_a_higher_team(client, logged_in_admin, team_factory):
+    team_factory(name="Windows")
+    text = text_of(client.get("/admin/teams"))
+    assert "Higher team" in text
+    assert "Optional. You can add more higher teams from the team's page." in text
+
+
+def test_a_cycle_in_the_data_does_not_crash_the_tree(client, logged_in_admin, db, team_factory):
+    a, b, c = team_factory(name="A"), team_factory(name="B"), team_factory(name="C")
+    db.add_all(
+        TeamParent(team_id=team_id, parent_id=parent_id)
+        for team_id, parent_id in ((b.id, a.id), (b.id, c.id), (c.id, b.id))
+    )
+    db.commit()
+    for url in ("/admin/teams", f"/admin/teams/{c.id}"):
+        assert client.get(url).status_code == 200, url

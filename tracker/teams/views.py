@@ -51,10 +51,9 @@ from .tree import (
 CYCLE_MESSAGE = "A team cannot be placed under itself or under a team below it."
 ALREADY_UNDER = "{team} is already under {parent}."
 NOT_UNDER = "{team} is not under {parent}."
-HAS_CHILDREN_MESSAGE = "This team has teams below it. Move or delete them first."
+HAS_CHILDREN_MESSAGE = "This team has teams below it. Remove them from under it or delete them first."
 HAS_TRACKERS_MESSAGE = "This team has trackers, including archived ones. Move them to another team first."
 CHOOSE_PERSON_MESSAGE = "Choose an active person from the list."
-TOP_LEVEL = "Top level"
 
 
 def _team_or_404(team_id: int) -> Team:
@@ -83,9 +82,9 @@ def _higher_team_names(labels: dict[int, str], parent_ids: Iterable[int]) -> lis
     return sorted((labels[parent_id] for parent_id in parent_ids), key=lambda name: (name.casefold(), name))
 
 
-def _higher_teams_text(labels: dict[int, str], parent_ids: Iterable[int]) -> str | None:
-    """The higher teams named in a sentence, "Applications and Infrastructure", or ``None`` for the top level."""
-    return " and ".join(_higher_team_names(labels, parent_ids)) or None
+def _higher_teams(labels: dict[int, str], parent_ids: Iterable[int]) -> list[tuple[int, str]]:
+    """The higher teams as ``(id, name)``, sorted by name ignoring case."""
+    return sorted(((i, labels[i]) for i in parent_ids if i in labels), key=lambda item: (item[1].casefold(), item[1]))
 
 
 def _to_team(team: Team):
@@ -128,8 +127,10 @@ def _tree_context(rows: list[TeamRow], current_id: int | None) -> dict:
         .order_by(func.lower(User.full_name), User.id)
     ):
         names.setdefault(team_id, []).append(full_name)
+    labels = team_labels(rows)
     return {
         "children": children_map(rows),
+        "higher": {row.id: _higher_teams(labels, row.parent_ids) for row in rows if len(row.parent_ids) > 1},
         "reach": reach_counts(db),
         "search": {row.id: " ".join([row.name, *names.get(row.id, [])]).lower() for row in rows},
         "current_id": current_id,
@@ -254,8 +255,7 @@ def _render_team(team: Team, errors: list[str], status: int, form=None, open_det
         "teams/team.html",
         **context,
         team=team,
-        path=labels.get(team.id, team.name),
-        parent_label=_higher_teams_text(labels, _row(rows, team).parent_ids) or TOP_LEVEL,
+        under=_higher_teams(labels, _row(rows, team).parent_ids),
         people=people,
         direct_count=sum(1 for row in people if row.person.direct_role is not None),
         inherited_count=sum(1 for row in people if row.person.inherited),

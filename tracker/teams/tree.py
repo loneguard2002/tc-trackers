@@ -1,8 +1,9 @@
 """The team tree (spec sections 6.4 and 5): higher teams, descendants, ancestors and labels over plain rows.
 
 A team sits under zero or more higher teams (``team_parents``); none means top level. The tree functions take every
-team as ``TeamRow`` tuples and touch no database. Cycles are prevented when teams are moved; a team caught in one is
-never reached from the top level, and every walk ends on a team already seen.
+team as ``TeamRow`` tuples and touch no database. Cycles are prevented when teams are changed. Corrupted data could
+still hold one that is reachable from the top level (A at the top, B under A and C, C under B), so every walk ends
+on a team already seen and the tree screen does not descend into a team on its own path.
 """
 
 from __future__ import annotations

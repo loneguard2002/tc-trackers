@@ -209,3 +209,18 @@ def test_new_team_location_narrows_to_the_chosen_region(
         page.goto(url)
         assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"), url
     _clean(page)
+
+
+def test_tree_filter_shows_every_appearance(page, live_server, team_factory, user_factory):
+    windows, apps = team_factory(name="Windows"), team_factory(name="Applications")
+    desktops = team_factory(name="Desktops", parents=(windows, apps))
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{desktops.id}")
+    tree = page.locator("[data-tree]")
+    page.locator("input[data-tree-filter]").fill("Desktops")
+    links = tree.get_by_role("link", name="Desktops")
+    expect(links).to_have_count(2)
+    expect(links.nth(0)).to_be_visible()
+    expect(links.nth(1)).to_be_visible()
+    page.set_viewport_size({"width": 390, "height": 900})
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+    _clean(page)

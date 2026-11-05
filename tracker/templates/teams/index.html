@@ -35,7 +35,7 @@
             {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
             <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
             {% endcall %}
-            {% call field('Place in the tree', 'The team it sits below.', 'parent_id') %}
+            {% call field('Higher team', 'Optional. You can add more higher teams from the team\'s page.', 'parent_id') %}
             <select id="parent_id" name="parent_id" aria-describedby="parent_id-help">
               <option value="" {{ 'selected' if not selected_parent }}>Top level</option>
               {% for id, label in choices %}<option value="{{ id }}" {{ 'selected' if selected_parent == id|string }}>{{ label }}</option>{% endfor %}
