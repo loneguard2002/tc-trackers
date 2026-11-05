@@ -19,7 +19,7 @@ def upgrade() -> None:
         sa.Column("region_id", sa.Integer(), nullable=False),
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("role", sa.Text(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.CheckConstraint("role IN ('viewer', 'editor', 'owner')", name=op.f("ck_region_grants_role")),
         sa.ForeignKeyConstraint(
             ["region_id"], ["regions.id"], name=op.f("fk_region_grants_region_id_regions"), ondelete="RESTRICT"
