@@ -10,7 +10,7 @@
   {% for id, name, retired in business_line_choices %}<option value="{{ id }}" {{ 'selected' if form.get('business_line_id')|string == id|string }}>{{ name }}{% if retired %} (retired){% endif %}</option>{% endfor %}
 </select>
 {% endcall %}
-{% set help = 'Choose every region the tracker covers. In a later release, people given a region will see its trackers, so changing the regions changes who can see this tracker.' %}
+{% set help = 'Choose every region the tracker covers. People given a region see its trackers, so changing the regions changes who can see this tracker.' %}
 {% macro boxes() %}
   {% if region_choices %}
   <div class="check-row">

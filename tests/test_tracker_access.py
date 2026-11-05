@@ -9,7 +9,7 @@ from tests.conftest import post, sign_in
 from tracker.auth.accounts import VOUCHED_MESSAGE
 from tracker.auth.guards import SELF_PROMOTION_MESSAGE
 from tracker.auth.roles import team_access, tracker_access_list, user_role
-from tracker.models import AuditLog, PermissionSetHolder, Tracker, TrackerRole, User
+from tracker.models import AuditLog, PermissionSetHolder, Tracker, TrackerRegion, TrackerRole, User
 from tracker.trackers.views import INACTIVE_PERSON_MESSAGE
 
 
@@ -377,3 +377,55 @@ def test_give_a_direct_role_form(
     assert re.search(r"<input[^>]*data-select-filter=\"user_id\"[^>]*hidden", form)
     response = post(client, f"/trackers/{t.id}/roles", {"user_id": free.id, "role": "viewer"})
     assert response.status_code == 302 and db.get(TrackerRole, (free.id, t.id)).role == "viewer"
+
+
+def _emea_tracker(db, tracker_factory, region_factory, user_factory, region_grant):
+    region = region_factory("EMEA")
+    tracker = tracker_factory(name="Regional")
+    db.add(TrackerRegion(tracker_id=tracker.id, region_id=region.id))
+    db.commit()
+    region_grant(region, user_factory(full_name="Reg Viewer"), "viewer")
+    return tracker, region
+
+
+def test_access_list_shows_region_route_and_filter(
+    client, logged_in_admin, db, tracker_factory, region_factory, user_factory, region_grant
+):
+    tracker, _region = _emea_tracker(db, tracker_factory, region_factory, user_factory, region_grant)
+    page = client.get(f"/trackers/{tracker.id}/roles")
+    body = text_of(page)
+    assert "Region EMEA" in body and "Regions (1)" in body
+    row = next(r for r in re.findall(r"<tr data-route=.*?</tr>", body, re.S) if "Reg Viewer" in r)
+    assert re.match(r'<tr data-route="[^"]*\bregion\b', row)
+    assert body.index("Teams (") < body.index("Regions (") < body.index("Permission sets (")
+
+
+def test_region_route_links_only_for_administrators(
+    client, user_factory, db, tracker_factory, region_factory, region_grant, grant, give_set
+):
+    tracker, region = _emea_tracker(db, tracker_factory, region_factory, user_factory, region_grant)
+    admin = user_factory(is_admin=True)
+    sign_in(client, admin)
+    assert f'href="/admin/regions/{region.id}/access"' in client.get(f"/trackers/{tracker.id}/roles").get_data(
+        as_text=True
+    )
+    owner = user_factory(full_name="Tracker Owner")
+    grant(owner, tracker, "owner")
+    give_set(["manage_teams"], user=owner)
+    sign_in(client, owner)
+    page = client.get(f"/trackers/{tracker.id}/roles")
+    body = page.get_data(as_text=True)
+    assert page.status_code == 200 and "Region EMEA" in body and "/access" not in body.split("<table", 1)[1]
+
+
+def test_regions_help_says_people_given_a_region_see_its_trackers(
+    client, logged_in_admin, db, tracker_factory, region_factory
+):
+    region_factory("EMEA")
+    tracker = tracker_factory()
+    help_text = (
+        "Choose every region the tracker covers. People given a region see its trackers, so changing the "
+        "regions changes who can see this tracker."
+    )
+    assert help_text in text_of(client.get("/trackers/new"))
+    assert help_text in text_of(client.get(f"/trackers/{tracker.id}/settings"))

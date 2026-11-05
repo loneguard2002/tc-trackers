@@ -23,7 +23,7 @@ from tracker.lists.catalogue import (
 from tracker.models import AuditLog, Tracker
 
 REGIONS_HELP = (
-    "Choose every region the tracker covers. In a later release, people given a region will see its trackers, so "
+    "Choose every region the tracker covers. People given a region see its trackers, so "
     "changing the regions changes who can see this tracker."
 )
 
