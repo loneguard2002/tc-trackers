@@ -29,7 +29,7 @@
       <p>Every tracker this person can open, with their role and each route that gives it, then every permission they hold, the teams they belong to and their permission sets.</p>
     </header>
     {% if person.status != 'active' %}
-    <p class="empty-note">This account is not active, so it gives no access to trackers and no permissions. Any teams and permission sets it keeps apply again once it is active.</p>
+    <p class="empty-note">This account is not active, so it gives no access to trackers and no permissions. Any teams, region access and permission sets it keeps apply again once it is active.</p>
     {% else %}
     {% if trackers %}
     <div class="section-table register">
@@ -78,6 +78,14 @@
       </ul>
       {% else %}
       <p class="empty-note">Not a member of any team.</p>
+      {% endif %}
+      <h3>Regions</h3>
+      {% if regions %}
+      <ul class="access-list">
+        {% for region_id, code, role in regions %}<li class="status-pill">{% if can_view_regions %}<a href="{{ url_for('lists.region_access', region_id=region_id) }}">{{ code }}</a>{% else %}{{ code }}{% endif %} · {{ role|title }}</li>{% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty-note">Has no region access.</p>
       {% endif %}
       <h3>Permission sets</h3>
       {% if held_sets %}

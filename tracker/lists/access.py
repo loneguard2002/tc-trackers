@@ -20,11 +20,13 @@ from ..models import Region, RegionGrant, User
 from . import bp
 from .views import _or_404, _tab_counts
 
+# If this becomes a permission, giving access must add add_member's self-escalation checks (vouched_refusal,
+# raises_own_access).
 manage_region_access_required = admin_required
 
 CHOOSE_PERSON = "Choose an active person from the list."
 CHOOSE_ROLE = "Choose a role from the list."
-CHOOSE_ACTION = "Choose give or set."
+CHOOSE_ACTION = "Choose an action."
 ALREADY_HAS_ACCESS = "That person already has access to this region."
 RETIRED_NO_NEW_ACCESS = "This region is retired. Restore it before giving anyone new access."
 REMOVE = "remove"  # the role value that removes a grant

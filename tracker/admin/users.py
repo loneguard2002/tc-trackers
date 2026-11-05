@@ -21,7 +21,7 @@ from ..auth.permissions import PERMISSIONS, permission_sources
 from ..auth.roles import tracker_access_routes
 from ..db import get_session
 from ..ids import in_range, parse_id
-from ..models import PermissionSet, PermissionSetHolder, Team, TeamMember, User
+from ..models import PermissionSet, PermissionSetHolder, Region, RegionGrant, Team, TeamMember, User
 from ..teams.tree import (
     ALREADY_MEMBER_MESSAGE,
     CHOOSE_ROLE_MESSAGE,
@@ -464,6 +464,12 @@ def access(user_id: int):
     if limited:
         own = tracker_roles(db, viewer)
         shown = [entry for entry in reached if entry.tracker.id in own]
+    regions = db.execute(
+        select(Region.id, Region.code, RegionGrant.role)
+        .join(RegionGrant, RegionGrant.region_id == Region.id)
+        .where(RegionGrant.user_id == user.id)
+        .order_by(func.lower(Region.code), Region.code)
+    ).all()
     labels = team_labels(load_team_rows(db))
     memberships = db.execute(select(TeamMember.team_id, TeamMember.role).where(TeamMember.user_id == user.id))
     teams = sorted(((labels.get(team_id, ""), team_id, role) for team_id, role in memberships))
@@ -474,6 +480,8 @@ def access(user_id: int):
         teams=teams,
         team_labels=labels,
         can_view_teams=has_permission(viewer, "manage_teams"),
+        regions=regions,
+        can_view_regions=viewer.is_admin,
         held_sets=_held_sets(db, user, labels),
         trackers=shown,
         limited=limited,

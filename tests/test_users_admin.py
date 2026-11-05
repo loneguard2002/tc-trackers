@@ -20,7 +20,7 @@ from tracker.auth.guards import TEAM_WITH_SETS_MESSAGE
 from tracker.auth.passwords import verify_password
 from tracker.auth.permissions import permission_sources
 from tracker.auth.roles import tracker_access_routes, tracker_roles
-from tracker.models import AuditLog, TeamMember, User
+from tracker.models import AuditLog, TeamMember, TrackerRegion, User
 
 SSO_MESSAGE = "This person signs in with Microsoft and has no password here."
 NEW_PASSWORD = "new-password-456"
@@ -627,3 +627,27 @@ def test_access_page_header_and_sections(client, user_manager, user_factory, tea
     assert f'href="/admin/teams/{windows.id}"' in _access_html(client, person)
     pending = user_factory(status="pending")
     assert "Approve" in _visible(client, pending)
+
+
+def test_access_page_lists_region_grants_of_active_and_disabled_people(
+    client, logged_in_admin, user_factory, region_factory, region_grant, tracker_factory, db
+):
+    emea = region_factory("EMEA")
+    region_factory("APAC")
+    tracker = tracker_factory(name="Covered")
+    db.add(TrackerRegion(tracker_id=tracker.id, region_id=emea.id))
+    db.commit()
+    holder = user_factory(full_name="Active Holder")
+    region_grant(emea, holder, "viewer")
+    raw = _access_html(client, holder)
+    page = _visible(client, holder)
+    assert "Region EMEA: Viewer" in page
+    assert page.index("Regions") > page.index("Teams") and "EMEA · Viewer" in page[page.index("Regions") :]
+    assert f'href="/admin/regions/{emea.id}/access">EMEA</a>' in raw
+    gone = user_factory(full_name="Gone Holder", status="disabled")
+    uncovered = region_factory("AMER")
+    region_grant(uncovered, gone, "owner")
+    page = _visible(client, gone)
+    assert "AMER · Owner" in page[page.index("Regions") :]
+    assert "Any teams, region access and permission sets it keeps apply again once it is active." in page
+    assert "Has no region access." in _visible(client, user_factory(full_name="No Region"))
