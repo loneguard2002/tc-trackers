@@ -11,7 +11,7 @@ from tracker.audit import NO_CHANGES_MESSAGE
 from tracker.auth.permissions import PERMISSIONS
 from tracker.auth.roles import user_role
 from tracker.ids import MAX_ID
-from tracker.lists.access import ALREADY_HAS_ACCESS, CHOOSE_PERSON, RETIRED_NO_NEW_ACCESS
+from tracker.lists.access import ALREADY_HAS_ACCESS, CHOOSE_ACTION, CHOOSE_PERSON, CHOOSE_ROLE, RETIRED_NO_NEW_ACCESS
 from tracker.lists.views import REGION_IN_USE
 from tracker.models import AuditLog, Region, RegionGrant, TrackerRegion
 
@@ -231,3 +231,20 @@ def test_anonymous_visitors_are_sent_to_sign_in(client, region_factory):
     region = region_factory("EMEA")
     for response in (client.get(url(region)), post(client, url(region), {"action": "give"})):
         assert response.status_code == 302 and "/login" in response.headers["Location"]
+
+
+def test_set_with_an_invalid_role_changes_nothing(
+    client, logged_in_admin, db, user_factory, region_factory, region_grant
+):
+    region = region_factory("EMEA")
+    person = user_factory()
+    region_grant(region, person, "editor")
+    response = post(client, url(region), {"user_id": str(person.id), "role": "admin", "action": "set"})
+    assert response.status_code == 400 and CHOOSE_ROLE in text_of(response)
+    assert grants(db, region) == {person.id: "editor"}
+    assert entries(db, "region_access_changed") == []
+
+
+def test_an_unknown_action_asks_for_an_action(client, logged_in_admin, region_factory):
+    response = post(client, url(region_factory("EMEA")), {"action": "bogus"})
+    assert response.status_code == 400 and CHOOSE_ACTION == "Choose an action." and CHOOSE_ACTION in text_of(response)

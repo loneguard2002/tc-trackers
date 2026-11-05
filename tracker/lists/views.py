@@ -295,7 +295,7 @@ def update_region(region_id: int):
         db.delete(region)
         try:
             db.commit()
-        except IntegrityError:  # a location or tracker took it up at the same moment
+        except IntegrityError:  # a location, tracker or grant took it up at the same moment
             db.rollback()
             return _render_regions(400, page_errors=[REGION_IN_USE])
         flash(f"Deleted the region {code}.", "success")

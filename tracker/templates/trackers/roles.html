@@ -60,7 +60,7 @@
               </li>
               {% endif %}
               {% for t in row.teams %}<li><a href="{{ url_for('teams.view', team_id=t.team_id) }}">Team {{ t.team_name }}</a> <span class="muted">{{ t.role|title }}</span></li>{% endfor %}
-              {% for g in row.regions %}<li>{% if current_user and current_user.is_admin %}<a href="{{ url_for('lists.region_access', region_id=g.region_id) }}">Region {{ g.code }}</a>{% else %}Region {{ g.code }}{% endif %} <span class="muted">{{ g.role|title }}</span></li>{% endfor %}
+              {% for reg in row.regions %}<li>{% if current_user and current_user.is_admin %}<a href="{{ url_for('lists.region_access', region_id=reg.region_id) }}">Region {{ reg.code }}</a>{% else %}Region {{ reg.code }}{% endif %} <span class="muted">{{ reg.role|title }}</span></li>{% endfor %}
               {% for name in row.view_all_sets %}<li>Permission set {{ name }}: View all trackers</li>{% endfor %}
             </ul>
           </td>
