@@ -3,14 +3,16 @@ from tracker.lists.catalogue import (
     BUSINESS_LINE_REQUIRED,
     LOCATION_CHOICE_ERROR,
     LOCATION_REGION_MISMATCH,
-    LOCATION_REQUIRED,
+    REGION_CHOICE_ERROR,
+    REGION_REQUIRED,
     REGIONS_CHOICE_ERROR,
     REGIONS_REQUIRED,
+    Place,
     TrackerLabels,
     location_choices,
     location_label,
     parse_business_line,
-    parse_location,
+    parse_place,
     parse_regions,
     set_tracker_regions,
     team_places,
@@ -18,33 +20,39 @@ from tracker.lists.catalogue import (
 )
 
 
-def test_parse_location_refuses_a_location_from_another_region(db, region_factory, location_factory):
+def test_parse_place_needs_a_region_and_refuses_a_location_from_another_region(db, region_factory, location_factory):
     emea, apac = region_factory("EMEA"), region_factory("APAC")
     geneva = location_factory(emea)
-    assert parse_location(db, str(apac.id), str(geneva.id), None) == (None, LOCATION_REGION_MISMATCH)
-    assert parse_location(db, str(emea.id), str(geneva.id), None) == (geneva, None)
-    assert parse_location(db, "", str(geneva.id), None) == (None, LOCATION_REQUIRED)
-    assert parse_location(db, str(emea.id), "99999999999", None) == (None, LOCATION_CHOICE_ERROR)
+    assert parse_place(db, str(apac.id), str(geneva.id), None, None) == (None, None, LOCATION_REGION_MISMATCH)
+    assert parse_place(db, str(emea.id), str(geneva.id), None, None) == (emea, geneva, None)
+    assert parse_place(db, str(apac.id), "", None, None) == (apac, None, None)
+    assert parse_place(db, "", str(geneva.id), None, None) == (None, None, REGION_REQUIRED)
+    assert parse_place(db, "abc", "", None, None) == (None, None, REGION_CHOICE_ERROR)
+    assert parse_place(db, str(emea.id), "99999999999", None, None) == (None, None, LOCATION_CHOICE_ERROR)
 
 
 def test_a_retired_location_is_accepted_only_where_it_is_already_used(db, region_factory, location_factory):
     emea = region_factory("EMEA")
     old = location_factory(emea, city="Zurich", retired=True)
-    assert parse_location(db, str(emea.id), str(old.id), None) == (None, LOCATION_CHOICE_ERROR)
-    assert parse_location(db, str(emea.id), str(old.id), old.id) == (old, None)
+    assert parse_place(db, str(emea.id), str(old.id), None, None) == (None, None, LOCATION_CHOICE_ERROR)
+    assert parse_place(db, str(emea.id), str(old.id), emea.id, old.id) == (emea, old, None)
     assert [o.code for o in location_choices(db)] == ["EMEA"] and location_choices(db)[0].locations == []
-    assert location_choices(db, keep_id=old.id)[0].locations == [(old.id, "Zurich, Switzerland", True)]
+    kept = location_choices(db, keep_location_id=old.id)
+    assert kept[0].locations == [(old.id, "Zurich, Switzerland", True)]
 
 
-def test_a_kept_location_in_a_retired_region_reads_as_retired(db, region_factory, location_factory):
+def test_a_kept_region_or_location_in_a_retired_region_reads_as_retired(db, region_factory, location_factory):
     gone = region_factory("LATAM", retired=True)
     kept = location_factory(gone, city="Lima", country_code="PE")
     assert location_choices(db) == []
-    options = location_choices(db, keep_id=kept.id)
+    options = location_choices(db, keep_region_id=gone.id, keep_location_id=kept.id)
     assert [(o.code, o.retired) for o in options] == [("LATAM", True)]
     assert options[0].locations == [(kept.id, "Lima, Peru", True)]
-    assert parse_location(db, str(gone.id), str(kept.id), None) == (None, LOCATION_CHOICE_ERROR)
-    assert parse_location(db, str(gone.id), str(kept.id), kept.id) == (kept, None)
+    assert [o.code for o in location_choices(db, keep_region_id=gone.id)] == ["LATAM"]
+    assert parse_place(db, str(gone.id), "", None, None) == (None, None, REGION_CHOICE_ERROR)
+    assert parse_place(db, str(gone.id), "", gone.id, None) == (gone, None, None)
+    assert parse_place(db, str(gone.id), str(kept.id), gone.id, None) == (None, None, LOCATION_CHOICE_ERROR)
+    assert parse_place(db, str(gone.id), str(kept.id), gone.id, kept.id) == (gone, kept, None)
 
 
 def test_parse_regions_requires_one_and_refuses_unknown_and_retired(db, region_factory):
@@ -78,6 +86,8 @@ def test_tracker_labels_and_team_places(
     }
     assert team_places(db)[team.id].location == "Geneva, Switzerland"
     assert team_places(db)[team.id].region_code == "EMEA"
+    unplaced = team_factory("Group risk", region_id=apac.id)
+    assert team_places(db)[unplaced.id] == Place(apac.id, "APAC", None, None, None)
 
 
 def test_location_label_names_the_country_or_leaves_it_out():

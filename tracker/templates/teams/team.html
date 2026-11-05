@@ -11,7 +11,7 @@
     <header class="team-header settings-section">
       <div class="team-header-text">
         <h1>{{ team.name }}</h1>
-        {% if place %}<p class="team-header-place">{{ place.region_code }} · {{ place.location }}</p>{% else %}<p class="team-header-place is-unset">Region not set</p>{% endif %}
+        {% if place %}<p class="team-header-place">{{ place.region_code }}{% if place.location %} · {{ place.location }}{% endif %}</p>{% else %}<p class="team-header-place is-unset">Region not set</p>{% endif %}
         <p class="team-header-place">{% if under %}Under {% for id, name in under %}{{ ' and ' if loop.last and not loop.first else (', ' if not loop.first else '') }}<a href="{{ url_for('teams.view', team_id=id) }}">{{ name }}</a>{% endfor %}{% else %}Top level{% endif %}</p>
         {% if team.description %}<p class="team-description">{{ team.description }}</p>{% endif %}
         <p class="team-header-counts">

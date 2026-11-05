@@ -9,7 +9,12 @@ from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import post
 from tracker.activity.labels import action_label
-from tracker.lists.catalogue import LOCATION_CHOICE_ERROR, LOCATION_REGION_MISMATCH, LOCATION_REQUIRED
+from tracker.lists.catalogue import (
+    LOCATION_CHOICE_ERROR,
+    LOCATION_REGION_MISMATCH,
+    REGION_CHOICE_ERROR,
+    REGION_REQUIRED,
+)
 from tracker.models import AuditLog, Team
 
 
@@ -40,20 +45,75 @@ def tree_item(page: str, name: str) -> str:
     return tree[start : tree.index("</li>", start)]
 
 
-def test_a_new_team_needs_a_region_and_a_location(client, logged_in_admin, db, region_factory, location_factory):
+def test_a_new_team_needs_a_region(client, logged_in_admin, db, region_factory, location_factory):
     emea = region_factory("EMEA")
     geneva = location_factory(emea)
-    page = post(client, "/admin/teams", {"name": "Desktop"})
-    assert page.status_code == 400 and LOCATION_REQUIRED in text_of(page)
-    for partial in ({"region_id": str(emea.id)}, {"location_id": str(geneva.id)}):
+    for partial in ({}, {"location_id": str(geneva.id)}):
         page = post(client, "/admin/teams", {"name": "Desktop", **partial})
-        assert page.status_code == 400 and LOCATION_REQUIRED in text_of(page)
+        assert page.status_code == 400 and REGION_REQUIRED in text_of(page)
     assert db.scalar(select(func.count()).select_from(Team)) == 0
     assert post(client, "/admin/teams", {"name": "Desktop", **place_of(emea, geneva)}).status_code == 302
     team = db.scalars(select(Team)).one()
-    assert team.location_id == geneva.id
+    assert (team.region_id, team.location_id) == (emea.id, geneva.id)
     [entry] = entries(db, "team_created")
     assert entry.detail == {"name": "Desktop", "parent": None, "location": "Geneva, Switzerland (EMEA)"}
+
+
+def test_a_team_can_have_a_region_without_a_location(client, logged_in_admin, db, region_factory):
+    world = region_factory("GLOBAL")
+    created = post(client, "/admin/teams", {"name": "Group risk", "region_id": str(world.id), "location_id": ""})
+    assert created.status_code == 302
+    team = db.scalars(select(Team)).one()
+    assert (team.region_id, team.location_id) == (world.id, None)
+    [entry] = entries(db, "team_created")
+    assert entry.detail["location"] == "GLOBAL"
+    index = client.get("/admin/teams").get_data(as_text=True)
+    assert '<span class="team-place">GLOBAL</span>' in tree_item(index, "Group risk")
+    page = client.get(f"/admin/teams/{team.id}").get_data(as_text=True)
+    assert '<p class="team-header-place">GLOBAL</p>' in page
+    assert selected_value(page, "region_id") == str(world.id) and selected_value(page, "location_id") == ""
+
+
+def test_region_without_locations_is_offered(client, logged_in_admin, db, region_factory, location_factory):
+    world, emea = region_factory("GLOBAL"), region_factory("EMEA")
+    location_factory(emea)
+    region_factory("OLD", retired=True)
+    page = client.get("/admin/teams").get_data(as_text=True)
+    regions = select_html(page, "region_id")
+    assert f'value="{world.id}"' in regions and f'value="{emea.id}"' in regions and "OLD" not in regions
+    locations = select_html(page, "location_id")
+    assert re.search(r'<option value=""[^>]*>No specific location</option>', locations)
+    assert "required" not in locations.split(">", 1)[0]
+    assert "if it works from one" in page
+
+
+def test_an_unknown_or_retired_region_is_refused(client, logged_in_admin, db, region_factory):
+    old = region_factory("OLD", retired=True)
+    for region_id in ("99999", "abc", str(old.id)):
+        page = post(client, "/admin/teams", {"name": "Desktop", "region_id": region_id, "location_id": ""})
+        assert page.status_code == 400 and REGION_CHOICE_ERROR in text_of(page), region_id
+    assert db.scalar(select(func.count()).select_from(Team)) == 0
+
+
+def test_edit_can_clear_the_location_and_a_retired_region_is_kept(
+    client, logged_in_admin, db, team_factory, region_factory, location_factory
+):
+    emea = region_factory("EMEA")
+    geneva = location_factory(emea)
+    team = team_factory("Desktop", location_id=geneva.id)
+    form = {"name": "Desktop", "description": "", "region_id": str(emea.id), "location_id": ""}
+    assert post(client, f"/admin/teams/{team.id}/rename", form).status_code == 302
+    db.expire_all()
+    assert (db.get(Team, team.id).region_id, db.get(Team, team.id).location_id) == (emea.id, None)
+    [entry] = entries(db, "team_renamed")
+    assert entry.detail["before"] == {"location": "Geneva, Switzerland (EMEA)"}
+    assert entry.detail["after"] == {"location": "EMEA"}
+    emea.retired = True
+    db.commit()
+    assert f'value="{emea.id}"' in select_html(
+        client.get(f"/admin/teams/{team.id}").get_data(as_text=True), "region_id"
+    )
+    assert post(client, f"/admin/teams/{team.id}/rename", {**form, "description": "Kept"}).status_code == 302
 
 
 def test_a_place_error_joins_the_other_errors_and_the_choice_is_kept(
@@ -63,10 +123,10 @@ def test_a_place_error_joins_the_other_errors_and_the_choice_is_kept(
     geneva = location_factory(emea)
     page = post(client, "/admin/teams", {"name": "   "})
     body = text_of(page)
-    assert page.status_code == 400 and "Enter a team name." in body and LOCATION_REQUIRED in body
+    assert page.status_code == 400 and "Enter a team name." in body and REGION_REQUIRED in body
     page = post(client, "/admin/teams", {"name": "   ", **place_of(emea, geneva)})
     raw = page.get_data(as_text=True)
-    assert page.status_code == 400 and LOCATION_REQUIRED not in text_of(page)
+    assert page.status_code == 400 and REGION_REQUIRED not in text_of(page)
     assert selected_value(raw, "region_id") == str(emea.id)
     assert selected_value(raw, "location_id") == str(geneva.id)
 
@@ -95,16 +155,16 @@ def test_an_unknown_or_retired_location_is_refused_for_a_new_choice(
     emea, old_region = region_factory("EMEA"), region_factory("OLD", retired=True)
     retired = location_factory(emea, city="Basel", retired=True)
     in_retired_region = location_factory(old_region, city="Bern")
-    for region, location_id in (
-        (emea, "99999"),
-        (emea, "abc"),
-        (emea, str(retired.id)),
-        (old_region, str(in_retired_region.id)),
+    for region, location_id, error in (
+        (emea, "99999", LOCATION_CHOICE_ERROR),
+        (emea, "abc", LOCATION_CHOICE_ERROR),
+        (emea, str(retired.id), LOCATION_CHOICE_ERROR),
+        (old_region, str(in_retired_region.id), REGION_CHOICE_ERROR),
     ):
         page = post(
             client, "/admin/teams", {"name": "Desktop", "region_id": str(region.id), "location_id": location_id}
         )
-        assert page.status_code == 400 and LOCATION_CHOICE_ERROR in text_of(page), location_id
+        assert page.status_code == 400 and error in text_of(page), location_id
     assert db.scalar(select(func.count()).select_from(Team)) == 0
 
 
@@ -120,7 +180,7 @@ def test_an_existing_team_shows_region_not_set_and_its_next_save_needs_a_place(
     assert "Region not set" in page
     assert selected_value(page, "region_id") == "" and selected_value(page, "location_id") == ""
     page = post(client, f"/admin/teams/{team.id}/rename", {"name": "Desktop", "description": ""})
-    assert page.status_code == 400 and LOCATION_REQUIRED in text_of(page)
+    assert page.status_code == 400 and REGION_REQUIRED in text_of(page)
     [tag] = re.findall(r"<details\b[^>]*>", page.get_data(as_text=True))
     assert re.search(r"\sopen\b", tag)
     response = post(
@@ -172,7 +232,7 @@ def test_saving_a_team_in_a_retired_region_keeps_it(
 def test_the_place_fields_group_locations_by_region(client, logged_in_admin, region_factory, location_factory):
     emea = region_factory("EMEA", name="Europe, Middle East and Africa")
     apac = region_factory("APAC", name="Asia Pacific")
-    region_factory("LATAM")  # no locations: not offered
+    region_factory("LATAM", name="Latin America")  # no locations: offered, with no location group
     location_factory(emea, city="Zurich")
     location_factory(emea, city="Geneva")
     location_factory(apac, city="Singapore", country_code="SG")
@@ -183,11 +243,11 @@ def test_the_place_fields_group_locations_by_region(client, logged_in_admin, reg
         "Choose a region",
         "APAC – Asia Pacific",
         "EMEA – Europe, Middle East and Africa",
+        "LATAM – Latin America",
     ]
-    assert "LATAM" not in regions
     locations = select_html(page, "location_id")
-    assert re.search(r"<select [^>]*\brequired\b", locations) and "data-location-select" in locations
-    assert re.search(r'<option value=""[^>]*>Choose a location</option>', locations)
+    assert not re.search(r"<select [^>]*\brequired\b", locations) and "data-location-select" in locations
+    assert re.search(r'<option value=""[^>]*>No specific location</option>', locations)
     groups = re.findall(r'<optgroup label="([^"]*)" data-region="(\d+)">(.*?)</optgroup>', locations, re.S)
     assert [(label, int(region)) for label, region, _ in groups] == [
         ("APAC – Asia Pacific", apac.id),

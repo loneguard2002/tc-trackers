@@ -1149,9 +1149,9 @@ def test_locations_page_has_no_inline_script_or_style(
         assert re.search(r"\son[a-z]+\s*=", page) is None
 
 
-def test_team_form_points_to_the_locations_screen(client, logged_in_admin):
+def test_team_form_points_to_the_lists_screen(client, logged_in_admin):
     page = text_of(client.get("/admin/teams"))
-    assert "No locations are available yet. An administrator adds them on the Locations screen." in page
+    assert "No regions are available yet. An administrator adds them under Lists." in page
     assert "Regions and locations" not in page
 
 
@@ -1423,3 +1423,15 @@ def test_location_code_inputs_show_capitals_as_typed(client, logged_in_admin, re
             assert ('autocapitalize="characters"' in tag) is styled and "style=" not in tag
     css = (Path(__file__).parent.parent / "tracker" / "static" / "tracker.css").read_text()
     assert re.search(r"\.code-input \{[^}]*text-transform: uppercase", css)
+
+
+def test_region_used_by_a_team_cannot_be_deleted(client, logged_in_admin, db, region_factory, team_factory):
+    world = region_factory("GLOBAL")
+    team_factory("Group risk", region_id=world.id)
+    row = row_of(text_of(client.get("/admin/regions")), f"region-{world.id}")
+    assert 'value="delete"' not in row and f'title="{REGION_IN_USE}"' in row
+    assert cells_of(row)[3] == "1"  # Teams counts a team with no location
+    response = post(client, f"/admin/regions/{world.id}", {"action": "delete"})
+    assert response.status_code == 400 and REGION_IN_USE in text_of(response)
+    assert db.get(Region, world.id) is not None
+    assert "teams" in REGION_IN_USE

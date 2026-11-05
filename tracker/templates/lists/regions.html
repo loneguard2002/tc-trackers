@@ -75,7 +75,7 @@
           <td class="num">{{ count_pill(teams, url_for('teams.index'), 'team' ~ ('s' if teams != 1) ~ ' in ' ~ r.code) }}</td>
           <td class="num">{{ count_pill(people, url_for('lists.region_access', region_id=r.id), ('person' if people == 1 else 'people') ~ ' with access to ' ~ r.code) }}</td>
           <td>{{ status_badge(r.retired) }}</td>
-          <td class="cell-actions">{{ row_actions(url_for('lists.edit_region', region_id=r.id), url_for('lists.update_region', region_id=r.id), r.retired, 'the region ' ~ r.code, r.code, region_in_use if places or tracker_counts.get(r.id, 0) or people else '') }}</td>
+          <td class="cell-actions">{{ row_actions(url_for('lists.edit_region', region_id=r.id), url_for('lists.update_region', region_id=r.id), r.retired, 'the region ' ~ r.code, r.code, region_in_use if places or teams or tracker_counts.get(r.id, 0) or people else '') }}</td>
         </tr>
         {% endfor %}
         </tbody>
