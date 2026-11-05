@@ -1,7 +1,7 @@
 # Team page: actions in the header, tabs below
 
 Status: draft for the owner's approval, 5 November 2026. Mockup: https://claude.ai/artifact/5cbGV5ew2jWLLCtHRzzJSy
-(version 9).
+(version 11).
 
 ## Why
 
@@ -12,9 +12,15 @@ possible from here, so teams are easier to rearrange.
 
 ## What changes
 
-1. **Header card.** The name, the place line, the "Under …" line and the description, then one action row: **Edit
-   details**, **Higher teams…**, **Delete team…** (red outline). A summary line follows: "5 people · 3 trackers · 2
-   teams below".
+1. **Header card, compact** (owner, 5 November 2026: the first version wasted space).
+   - Left: the name (26 px), then one line of small pills and text: the region code with the location ("EMEA ·
+     London, United Kingdom", or "GLOBAL" alone), "Under Group technology" (links), and the description in grey.
+   - Right, on the same row: **Edit details** (pencil) and **Higher teams** (tree icon), a thin divider, then
+     **Delete team** as a red-outlined trash icon button with the label "Delete team" for screen readers and as a
+     tooltip. On a phone the row wraps under the name.
+   - No separate summary line: the counts sit on the tabs.
+   - The tab bar is the bottom edge of the header card, so the header and tabs read as one block; the tab content
+     is its own card below.
 2. **Edit details in place.** The header card becomes the form: Name, Region, Location ("No specific location"
    first), Description, then **Cancel** and **Save details**. Errors show in the card, with the typed values kept. The
    Details section at the foot of the page is removed.
@@ -33,7 +39,9 @@ possible from here, so teams are easier to rearrange.
    - Add selected team and Remove first show the same access preview as the Higher teams screen (who gains or loses
      which trackers), then save on confirmation. They go to Activity as `team_parent_added` and
      `team_parent_removed`, with the same checks.
-6. **Tables on every tab**, built like the Lists tables (search box, column headings that sort, a footer "Showing n
+6. **Tree help** on the left reads: "A team in several groups shows under each, marked “Also under”. Numbers count
+   the people who reach a team." (owner: shorter and more informative).
+7. **Tables on every tab**, built like the Lists tables (search box, column headings that sort, a footer "Showing n
    of n …"):
    - **People:** Person (name and email), Route, Role, then Remove for direct members; All / Direct / From teams above
      filters. The Add member form (Person, Role, Add member) sits at the top of the tab, above the search, so no
@@ -48,7 +56,7 @@ possible from here, so teams are easier to rearrange.
    - My call: every row is sent with the page and the script pages them, as the Lists tables already search and sort.
      Without JavaScript all rows show and the pager is hidden. A team holds tens of rows, not thousands, so the page
      stays light; server-side paging can follow if a team grows past a few hundred.
-7. **Moving trackers into the team** (owner, 5 November 2026).
+8. **Moving trackers into the team** (owner, 5 November 2026).
    - **+ Add trackers** opens a picker of the trackers not in this team: search, then a table with a tick box,
      Tracker, Current team and "Regions after the move". The button reads "Move 2 trackers here".
    - A tracker belongs to one team, so it moves here from its current team (or from no team).
@@ -60,7 +68,7 @@ possible from here, so teams are easier to rearrange.
    - **× Remove** takes a tracker out of this team into no team; its regions stay.
    - Moves and removals go to Activity as `tracker_team_changed`; an added region goes as the tracker's regions change.
    - Who may do it: anyone with `manage_teams`, as for moving a tracker today.
-8. **Unchanged:** the team tree on the left, roles and access rules.
+9. **Unchanged:** the team tree on the left, roles and access rules.
 
 ## Constraints
 
