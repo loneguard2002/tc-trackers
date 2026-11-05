@@ -1,0 +1,25 @@
+{# One list of a move preview (Lose access, Gain access, Role changes); the call body words each change ``c``. Shared
+   by the Higher teams preview and the Move trackers preview. #}
+{% macro change_list(heading, items, empty) %}
+<section class="settings-section" aria-labelledby="change-{{ heading|lower|replace(' ', '-') }}">
+  <header class="settings-section-head">
+    <h2 id="change-{{ heading|lower|replace(' ', '-') }}">{{ heading }}</h2>
+  </header>
+  {% if items %}
+  <ul class="move-changes">
+    {% for c in items %}
+    <li>{{ caller(c) }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-note">{{ empty }}</p>
+  {% endif %}
+</section>
+{% endmacro %}
+
+{# The three lists of a preview, from a MoveImpact. #}
+{% macro access_changes(impact) %}
+{% call(c) change_list('Lose access', impact.losses, 'No one loses access.') %}{{ c.user.full_name }} loses {{ c.before|title }} on {{ c.tracker.name }}.{% endcall %}
+{% call(c) change_list('Gain access', impact.gains, 'No one gains access.') %}{{ c.user.full_name }} gains {{ c.after|title }} on {{ c.tracker.name }}.{% endcall %}
+{% call(c) change_list('Role changes', impact.changes, 'No roles change.') %}{{ c.user.full_name }} goes from {{ c.before|title }} to {{ c.after|title }} on {{ c.tracker.name }}.{% endcall %}
+{% endmacro %}

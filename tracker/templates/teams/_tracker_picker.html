@@ -1,0 +1,54 @@
+{# The Trackers tab's picker (?tab=trackers&add=1): the trackers outside the team, ticked ones sent to the access
+   preview (a GET form, so nothing changes yet). ``pick`` holds MovingTracker rows, ``pick_region`` the code of the
+   region a moved tracker gains (or none) and ``picked`` the ids to tick again after a refusal, shown in ``errors``. #}
+<div class="team-pick" role="group" aria-labelledby="pick-heading">
+  <div class="team-pick-head">
+    <h3 id="pick-heading">Add trackers to {{ team.name }}</h3>
+    {% if pick %}{{ search_box('pick-table', 'Search trackers to add') }}{% endif %}
+  </div>
+  {% if errors %}
+  <div class="form-alert" role="alert">
+    <strong>Please correct the following:</strong>
+    <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% if pick %}
+  <p class="team-pick-note">A tracker moves here from its current team. It keeps its regions{% if pick_region %} and gains <strong>{{ pick_region }}</strong>, this team's region, when it does not have it, so people who reach it by region keep their access{% endif %}.</p>
+  <form id="pick-form" method="get" action="{{ url_for('teams.move_trackers', team_id=team.id) }}">
+    <div class="section-table list-table team-pick-table">
+      <table id="pick-table">
+        <thead><tr>
+          <th scope="col" class="pick-cell"><span class="sr-only">Choose</span></th>
+          {{ sort_header('Tracker', 'tracker', default=True) }}
+          {{ sort_header('Current team', 'team') }}
+          <th scope="col">Regions after the move</th>
+        </tr></thead>
+        <tbody>
+        {% for row in pick %}
+        {% set t = row.tracker %}
+        {% set archived = t.status == 'archived' %}
+        <tr data-search="{{ (t.name ~ ' ' ~ (row.team_name or 'no team') ~ ' ' ~ row.regions|join(' ') ~ ' ' ~ t.status)|lower }}" data-sort-tracker="{{ t.name }}" data-sort-team="{{ row.team_name or '' }}"{% if archived %} class="is-retired"{% endif %}>
+          <td class="pick-cell"><input type="checkbox" id="pick-{{ t.id }}" name="tracker_id" value="{{ t.id }}"{% if t.id in picked %} checked{% endif %}></td>
+          <td class="list-name"><label for="pick-{{ t.id }}">{{ t.name }}</label>{% if archived %} <span class="badge badge-muted">Archived</span>{% endif %}</td>
+          <td>{% if row.team_name %}{{ row.team_name }}{% else %}<span class="muted">No team</span>{% endif %}</td>
+          <td>{{ regions_after(row) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ no_match('No trackers match the search.') }}
+    {{ pager('pick-table', 'trackers', pick|length) }}
+    <div class="team-pick-foot">
+      <span class="role-note">Next you see who gains or loses access, then confirm.</span>
+      <span class="team-pick-actions">
+        <a class="button" href="{{ url_for('teams.view', team_id=team.id, tab='trackers') }}">Cancel</a>
+        <button class="button primary" type="submit" data-move-count>Move here</button>
+      </span>
+    </div>
+  </form>
+  {% else %}
+  <p class="team-pick-note">Every tracker is already in {{ team.name }}.</p>
+  <div class="team-pick-foot"><a class="button" href="{{ url_for('teams.view', team_id=team.id, tab='trackers') }}">Cancel</a></div>
+  {% endif %}
+</div>

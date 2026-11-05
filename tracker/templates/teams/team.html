@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, field, icon, people_count %}
 {% from "lists/_table.html" import code_badge, search_box, status_filters, sort_header, no_match, pager %}
+{% from "teams/_tracker_regions.html" import regions_after %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
@@ -11,7 +12,7 @@
   {% include "teams/_tree.html" %}
   <div class="teams-main">
     <div class="settings-section team-card">
-      {% set alert %}{% if errors %}<div class="form-alert team-alert" role="alert">
+      {% set alert %}{% if errors and not picking %}<div class="form-alert team-alert" role="alert">
         <strong>Please correct the following:</strong>
         <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
       </div>{% endif %}{% endset %}
@@ -218,11 +219,15 @@
     <div id="tab-trackers">
     <section class="list-panel team-panel" id="trackers" aria-labelledby="section-trackers">
       <h2 class="sr-only" id="section-trackers">Trackers</h2>
-      {% if trackers %}
       <div class="list-tools">
+        {% if trackers %}
         {{ search_box('trackers-table', 'Search trackers') }}
         {{ status_filters('trackers-table', 'trackers', (('all', 'All'), ('active', 'Active'), ('archived', 'Archived')), {'all': trackers|length, 'active': active_trackers, 'archived': trackers|length - active_trackers}) }}
+        {% endif %}
+        <a class="button list-tools-action" href="{{ url_for('teams.view', team_id=team.id, tab='trackers', add=1) }}"{% if picking %} aria-current="true"{% endif %}>{{ icon('plus') }}Add trackers</a>
       </div>
+      {% if picking %}{% include "teams/_tracker_picker.html" %}{% endif %}
+      {% if trackers %}
       <div class="section-table list-table">
         <table id="trackers-table">
           <thead><tr>
@@ -241,7 +246,12 @@
             <td>{% if row.business_line %}{{ row.business_line }}{% else %}<span class="muted">None</span>{% endif %}</td>
             <td>{% if row.regions %}<span class="team-regions">{% for code in row.regions %}{{ code_badge(code) }}{% endfor %}</span>{% else %}<span class="muted">None</span>{% endif %}</td>
             <td>{% if archived %}<span class="badge badge-muted">Archived</span>{% else %}<span class="badge badge-success">Active</span>{% endif %}</td>
-            <td class="cell-actions"><div class="row-tools"><a class="button button-small" href="{{ url_for('trackers.roles', tracker_id=t.id) }}">Access<span class="sr-only"> for {{ t.name }}</span></a></div></td>
+            <td class="cell-actions"><div class="row-tools"><a class="button button-small row-edit" href="{{ url_for('trackers.roles', tracker_id=t.id) }}">{{ icon('key') }}Access<span class="sr-only"> for {{ t.name }}</span></a>
+              <form method="post" action="{{ url_for('trackers.set_team', tracker_id=t.id) }}"
+                data-confirm="Remove {{ t.name }} from {{ team.name }}? It moves to no team and keeps its regions. People's access to this tracker will change.">
+                {{ csrf_field(csrf_token()) }}<input type="hidden" name="team_id" value=""><input type="hidden" name="next" value="team"><input type="hidden" name="team" value="{{ team.id }}">
+                <button class="tool-button is-danger" type="submit" title="Remove {{ t.name }} from {{ team.name }}">{{ icon('close') }}<span class="sr-only">Remove {{ t.name }} from {{ team.name }}</span></button>
+              </form></div></td>
           </tr>
           {% endfor %}
           </tbody>

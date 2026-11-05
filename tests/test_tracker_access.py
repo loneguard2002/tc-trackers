@@ -158,6 +158,19 @@ def test_team_change_with_next_access_returns_a_team_manager_to_access(
     assert response.headers["Location"].endswith(f"/trackers/{t.id}/roles")
 
 
+def test_team_change_with_next_team_returns_a_team_manager_to_the_trackers_tab(
+    client, logged_in_user, give_set, tracker_factory, team_factory
+):
+    give_set(["manage_teams"], user=logged_in_user)
+    team = team_factory(name="Network")
+    t = tracker_factory(team_id=team.id)
+    response = post(client, f"/trackers/{t.id}/team", {"team_id": "", "next": "team", "team": str(team.id)})
+    assert response.headers["Location"].endswith(f"/admin/teams/{team.id}?tab=trackers")
+    for team_text in ("", "abc", "99999"):
+        response = post(client, f"/trackers/{t.id}/team", {"team_id": "", "next": "team", "team": team_text})
+        assert response.status_code == 302 and response.headers["Location"].endswith("/")
+
+
 def test_team_change_with_an_unknown_next_goes_home(client, logged_in_admin, tracker_factory, team_factory):
     team, t = team_factory(name="Network"), tracker_factory()
     response = post(client, f"/trackers/{t.id}/team", {"team_id": str(team.id), "next": "elsewhere"})

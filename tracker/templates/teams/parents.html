@@ -1,21 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field %}
-{% macro change_list(heading, items, empty) %}
-<section class="settings-section" aria-labelledby="change-{{ heading|lower|replace(' ', '-') }}">
-  <header class="settings-section-head">
-    <h2 id="change-{{ heading|lower|replace(' ', '-') }}">{{ heading }}</h2>
-  </header>
-  {% if items %}
-  <ul class="move-changes">
-    {% for c in items %}
-    <li>{{ caller(c) }}</li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="empty-note">{{ empty }}</p>
-  {% endif %}
-</section>
-{% endmacro %}
+{% from "teams/_changes.html" import access_changes %}
 {% block content %}
 {% set adding = change_to and change_to[0] == 'add' %}
 <h1>Higher teams for {{ team.name }}</h1>
@@ -74,9 +59,7 @@
       <p>Unchanged: members of {{ team.name }} and the teams below it keep their roles; direct roles and permission sets keep working.</p>
     </header>
   </section>
-  {% call(c) change_list('Lose access', impact.losses, 'No one loses access.') %}{{ c.user.full_name }} loses {{ c.before|title }} on {{ c.tracker.name }}.{% endcall %}
-  {% call(c) change_list('Gain access', impact.gains, 'No one gains access.') %}{{ c.user.full_name }} gains {{ c.after|title }} on {{ c.tracker.name }}.{% endcall %}
-  {% call(c) change_list('Role changes', impact.changes, 'No roles change.') %}{{ c.user.full_name }} goes from {{ c.before|title }} to {{ c.after|title }} on {{ c.tracker.name }}.{% endcall %}
+  {{ access_changes(impact) }}
 
   <section class="settings-section" aria-labelledby="section-trackers">
     <header class="settings-section-head">

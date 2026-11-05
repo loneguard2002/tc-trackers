@@ -1,0 +1,7 @@
+{% from "lists/_table.html" import code_badge %}
+{# A tracker's regions after a move into the team (a MovingTracker ``row``): its codes, then "+ EMEA" when it gains
+   the team's region. #}
+{% macro regions_after(row) -%}
+{% if row.regions or row.added %}<span class="team-regions">{% for code in row.regions %}{{ code_badge(code) }}{% endfor %}{% if row.added %}<span class="region-added" title="Added: this team's region">+ {{ row.added }}</span>{% endif %}</span>
+{%- else %}<span class="muted">None</span>{% endif %}
+{%- endmacro %}
