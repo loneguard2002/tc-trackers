@@ -183,7 +183,7 @@ def create():
         return _render_index(request.form, errors, 400)
     parent_path = team_labels(load_team_rows(db)).get(parent.id, parent.name) if parent else None
     place = _place_text(location)
-    team = Team(name=name, description=description, location_id=location.id)
+    team = Team(name=name, description=description, region_id=location.region_id, location_id=location.id)
     db.add(team)
     try:
         db.flush()
@@ -317,7 +317,7 @@ def rename(team_id: int):
     path = _team_path(team)  # as it was before the change
     for field, value in submitted.items():
         setattr(team, field, value)
-    team.location_id = location.id
+    team.region_id, team.location_id = location.region_id, location.id
     record(
         db,
         user_id=current_user().id,

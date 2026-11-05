@@ -10,6 +10,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Identity,
     Index,
     Integer,
@@ -104,6 +105,9 @@ class Location(Base):
     retired: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = _now()
 
+    # The target of a team's (location, region) key, so a team's region always equals its location's region.
+    __table_args__ = (UniqueConstraint("id", "region_id", name="uq_locations_id_region_id"),)
+
 
 Index("uq_locations_code_lower", func.lower(Location.code), unique=True)
 Index("uq_locations_city_country_code", func.lower(Location.city), Location.country_code, unique=True)
@@ -128,11 +132,26 @@ class Team(Base):
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
     name: Mapped[str] = mapped_column(Text)
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    region_id: Mapped[int | None] = mapped_column(ForeignKey("regions.id", ondelete="RESTRICT"))
     location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = _now()
 
+    # A team has a region and, optionally, a location in that region. Moving a location to another region moves its
+    # teams with it (ON UPDATE CASCADE).
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["location_id", "region_id"],
+            ["locations.id", "locations.region_id"],
+            name="fk_teams_location_id_region_id_locations",
+            onupdate="CASCADE",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("location_id IS NULL OR region_id IS NOT NULL", name="location_has_region"),
+    )
+
 
 Index("uq_teams_name_lower", func.lower(Team.name), unique=True)
+Index("ix_teams_region_id", Team.region_id)
 Index("ix_teams_location_id", Team.location_id)
 
 

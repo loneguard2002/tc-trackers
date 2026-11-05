@@ -96,7 +96,7 @@ def test_retired_region_grant_keeps_working(db, user_factory, tracker_factory, r
 
 def test_team_region_grants_nothing(db, user_factory, tracker_factory, region_factory, region_grant, location_factory):
     emea, apac = region_factory("EMEA"), region_factory("APAC")
-    team = Team(name="Located", location_id=location_factory(emea).id)
+    team = Team(name="Located", location_id=location_factory(emea).id, region_id=emea.id)
     db.add(team)
     db.commit()
     tracker = tracker_factory(team_id=team.id)

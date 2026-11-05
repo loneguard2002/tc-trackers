@@ -3,7 +3,9 @@
 import html
 import re
 
+import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import post
 from tracker.activity.labels import action_label
@@ -241,3 +243,23 @@ def test_location_change_is_logged_as_a_details_change(
     )
     assert len(entries(db, "team_renamed")) == 2
     assert action_label("team_renamed") == "Team details changed"
+
+
+def test_moving_a_location_moves_its_teams_region(db, region_factory, location_factory, team_factory):
+    emea, apac = region_factory("EMEA"), region_factory("APAC")
+    geneva = location_factory(emea)
+    team = team_factory("Desktop", location_id=geneva.id, region_id=emea.id)
+    geneva.region_id = apac.id
+    db.commit()
+    db.refresh(team)
+    assert team.region_id == apac.id
+
+
+def test_a_team_location_must_be_in_its_region(db, region_factory, location_factory):
+    emea, apac = region_factory("EMEA"), region_factory("APAC")
+    geneva = location_factory(emea)
+    for region_id in (apac.id, None):
+        db.add(Team(name="Desktop", location_id=geneva.id, region_id=region_id))
+        with pytest.raises(IntegrityError):
+            db.commit()
+        db.rollback()

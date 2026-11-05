@@ -199,6 +199,8 @@ def team_factory(db):
         if name is None:
             counter["n"] += 1
             name = f"Team {counter['n']}"
+        if kw.get("location_id") and "region_id" not in kw:  # a team's region is its location's region
+            kw["region_id"] = db.get(Location, kw["location_id"]).region_id
         team = Team(name=name, **kw)
         db.add(team)
         db.flush()
