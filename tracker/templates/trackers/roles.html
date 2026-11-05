@@ -23,12 +23,14 @@
     </header>
     {% set direct_count = access|selectattr('direct_role')|rejectattr('admin')|list|length %}
     {% set teams_count = access|selectattr('teams')|list|length %}
+    {% set regions_count = access|selectattr('regions')|list|length %}
     {% set sets_count = access|selectattr('view_all_sets')|list|length %}
     {% set admin_count = access|selectattr('admin')|list|length %}
     <div class="row-filter" role="group" aria-label="Show people" data-row-filter="access" hidden>
       <button class="button button-small" type="button" data-show="all" aria-pressed="true">All ({{ access|length }})</button>
       <button class="button button-small" type="button" data-show="direct" aria-pressed="false">Direct ({{ direct_count }})</button>
       <button class="button button-small" type="button" data-show="team" aria-pressed="false">Teams ({{ teams_count }})</button>
+      <button class="button button-small" type="button" data-show="region" aria-pressed="false">Regions ({{ regions_count }})</button>
       <button class="button button-small" type="button" data-show="set" aria-pressed="false">Permission sets ({{ sets_count }})</button>
       <button class="button button-small" type="button" data-show="admin" aria-pressed="false">Administrators ({{ admin_count }})</button>
     </div>
@@ -38,7 +40,7 @@
         <tbody>
         {% for row in access %}
         {% set u = row.user %}
-        <tr data-route="{{ (('direct ' if row.direct_role and not row.admin) ~ ('team ' if row.teams) ~ ('set ' if row.view_all_sets) ~ ('admin' if row.admin))|trim }}">
+        <tr data-route="{{ (('direct ' if row.direct_role and not row.admin) ~ ('team ' if row.teams) ~ ('region ' if row.regions) ~ ('set ' if row.view_all_sets) ~ ('admin' if row.admin))|trim }}">
           <td><div class="member-cell">{{ person(u) }}</div></td>
           <td>{{ row.role|title }}</td>
           <td>
@@ -58,6 +60,7 @@
               </li>
               {% endif %}
               {% for t in row.teams %}<li><a href="{{ url_for('teams.view', team_id=t.team_id) }}">Team {{ t.team_name }}</a> <span class="muted">{{ t.role|title }}</span></li>{% endfor %}
+              {% for g in row.regions %}<li>{% if current_user and current_user.is_admin %}<a href="{{ url_for('lists.region_access', region_id=g.region_id) }}">Region {{ g.code }}</a>{% else %}Region {{ g.code }}{% endif %} <span class="muted">{{ g.role|title }}</span></li>{% endfor %}
               {% for name in row.view_all_sets %}<li>Permission set {{ name }}: View all trackers</li>{% endfor %}
             </ul>
           </td>
