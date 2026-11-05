@@ -370,13 +370,13 @@ def test_unused_locations_and_business_lines_delete(
 ):
     region = region_factory()
     place_id = location_factory(region).id
-    line_id = business_line_factory("TraditionData").id
+    line_id = business_line_factory("Wealth advisory").id
     assert post(client, f"/admin/locations/{place_id}", {"action": "delete"}).status_code == 302
     assert post(client, f"/admin/business-lines/{line_id}", {"action": "delete"}).status_code == 302
     assert fresh(db, Location, place_id) is None and fresh(db, BusinessLine, line_id) is None
     assert [(e.action, e.detail) for e in entries(db)] == [
         ("location_deleted", {"location": "Geneva, Switzerland", "region": "EMEA"}),
-        ("business_line_deleted", {"business_line": "TraditionData"}),
+        ("business_line_deleted", {"business_line": "Wealth advisory"}),
     ]
 
 

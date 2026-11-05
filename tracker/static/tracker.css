@@ -990,6 +990,11 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .list-head > .button { flex: none; white-space: nowrap; }
 .list-page > .form-alert { margin-bottom: 20px; }
 .list-page > .tabs { margin-top: 0; margin-bottom: 20px; }
+@media (max-width: 480px) {  /* all three tabs fit a 390 px phone, so the bar never needs to scroll */
+  .list-page > .tabs { gap: 0; }
+  .list-page > .tabs .tab { padding: 10px 7px; font-size: 13px; }
+  .list-page > .tabs .tab-count { min-width: 20px; margin-left: 2px; padding: 0 5px; }
+}
 .list-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .list-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
 .list-tools:not(:has(> :not([hidden]))) { display: none; }
