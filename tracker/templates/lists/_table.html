@@ -132,3 +132,13 @@
 {% macro described_by(for_id, help, errors) -%}
 {{ ([for_id ~ '-error'] if errors else ([for_id ~ '-help'] if help else []))|join(' ') }}
 {%- endmacro %}
+
+{# The tab bar over the three list pages: ordinary links, each with its number of entries (every status). ``current``
+   is "regions", "locations" or "business_lines"; ``counts`` is the server's tab_counts. #}
+{% macro list_tabs(current, counts) -%}
+<nav class="tabs" aria-label="Lists">
+  {% for key, label, endpoint in (('regions', 'Regions', 'lists.regions'), ('locations', 'Locations', 'lists.locations'), ('business_lines', 'Business lines', 'lists.business_lines')) %}
+  <a class="tab{{ ' active' if key == current }}" href="{{ url_for(endpoint) }}"{% if key == current %} aria-current="page"{% endif %}>{{ label }} <span class="tab-count">{{ counts.get(key, 0) }}</span></a>
+  {% endfor %}
+</nav>
+{%- endmacro %}

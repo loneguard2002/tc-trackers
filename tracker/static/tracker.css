@@ -403,6 +403,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tab { flex: none; margin-bottom: -1px; padding: 10px 12px; border-bottom: 2px solid transparent; color: var(--muted); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: color .15s, border-color .15s; }
 .tab:hover { color: var(--text); border-bottom-color: var(--border); }
 .tab.active { color: var(--text); border-bottom-color: var(--primary); }
+.tab-count { display: inline-block; min-width: 22px; margin-left: 4px; padding: 0 7px; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, transparent); font-size: .75rem; line-height: 1.6; text-align: center; }
+.tab.active .tab-count { background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); }
 
 /* Links to the sections of a long page, under the tabs. The row stays pinned below the fixed top bar while the page
    scrolls; tracker.js underlines the link of the section in view and outlines that section (.is-current). A linked
@@ -981,23 +983,13 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .activity-retention .field { margin: 0; flex: 1 1 320px; }
 .route-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 
-/* Business lines: each entry folds out its edit form under it. An opened entry takes the full width of its row. */
-.list-edit > summary { list-style: none; }
-.list-edit > summary::-webkit-details-marker { display: none; }
-.list-edit[open] { flex: 1 1 100%; }
-.list-edit-body { display: grid; gap: 12px; margin-top: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
-.list-edit-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); align-items: end; gap: 12px; }
-.list-edit-form > .button { justify-self: start; }
-.list-edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.list-edit-actions form { margin: 0; }
-.list-edit-note { margin: 0; color: var(--muted); font-size: .8125rem; }
-
-/* Regions and Locations tables (lists/_table.html): title and Add button, then a panel holding the search, the
+/* The Regions, Locations and Business lines tables (lists/_table.html): title and Add button, then a panel holding the search, the
    status buttons, the table and its footer line. The search, status and sort buttons stay hidden without JavaScript. */
 .list-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
 .list-head .page-lede { margin: 0; }
 .list-head > .button { flex: none; white-space: nowrap; }
 .list-page > .form-alert { margin-bottom: 20px; }
+.list-page > .tabs { margin-top: 0; margin-bottom: 20px; }
 .list-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .list-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
 .list-tools:not(:has(> :not([hidden]))) { display: none; }

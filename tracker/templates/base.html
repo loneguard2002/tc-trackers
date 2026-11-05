@@ -51,9 +51,7 @@
       {% if show_users %}{{ nav_link('users', 'admin.users', 'Users', 'users') }}{% endif %}
       {% if show_permsets %}{{ nav_link('permsets', 'permsets.index', 'Permission sets', 'key') }}{% endif %}
       {% if show_teams %}{{ nav_link('teams', 'teams.index', 'Teams', 'teams') }}{% endif %}
-      {% if show_lists %}{{ nav_link('regions', 'lists.regions', 'Regions', 'globe') }}{% endif %}
-      {% if show_lists %}{{ nav_link('locations', 'lists.locations', 'Locations', 'pin') }}{% endif %}
-      {% if show_lists %}{{ nav_link('business_lines', 'lists.business_lines', 'Business lines', 'briefcase') }}{% endif %}
+      {% if show_lists %}{{ nav_link('lists', 'lists.regions', 'Lists', 'globe') }}{% endif %}
       {% if show_import %}{{ nav_link('import', 'importer.upload', 'Import workbook', 'upload') }}{% endif %}
       {% if show_smtp %}{{ nav_link('smtp', 'admin.smtp', 'Email settings', 'mail') }}{% endif %}
       {% if show_activity %}{{ nav_link('activity', 'activity.index', 'Activity', 'activity') }}{% endif %}

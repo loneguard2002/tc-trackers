@@ -13,6 +13,7 @@ from tracker.audit import NO_CHANGES_MESSAGE
 from tracker.lists.catalogue import team_places
 from tracker.lists.countries import COUNTRIES, COUNTRY_CHOICE_ERROR, COUNTRY_REQUIRED
 from tracker.lists.views import (
+    BUSINESS_LINE_IN_USE,
     LOCATION_CODE_FORMAT,
     LOCATION_CODE_REQUIRED,
     LOCATION_CODE_TAKEN,
@@ -69,11 +70,21 @@ def is_open(tag: str) -> bool:
 # --- Access ---------------------------------------------------------------------------------------------------------
 
 
-def test_lists_are_for_administrators_only(client, logged_in_user, give_set, db, region_factory, location_factory):
+def test_lists_are_for_administrators_only(
+    client, logged_in_user, give_set, db, region_factory, location_factory, business_line_factory
+):
     give_set(["manage_teams", "manage_users"], user=logged_in_user)
     region = region_factory("APAC")
     location = location_factory(region)
-    for url in ("/admin/regions", "/admin/regions/new", f"/admin/regions/{region.id}/edit", "/admin/business-lines"):
+    line = business_line_factory()
+    for url in (
+        "/admin/regions",
+        "/admin/regions/new",
+        f"/admin/regions/{region.id}/edit",
+        "/admin/business-lines",
+        "/admin/business-lines/new",
+        f"/admin/business-lines/{line.id}/edit",
+    ):
         assert client.get(url).status_code == 403
     assert post(client, "/admin/regions", {"code": "EMEA", "name": "Europe"}).status_code == 403
     for url, data in (
@@ -88,7 +99,7 @@ def test_lists_are_for_administrators_only(client, logged_in_user, give_set, db,
 
 
 def test_lists_send_signed_out_visitors_to_sign_in(client):
-    for url in ("/admin/regions", "/admin/regions/new", "/admin/regions/1/edit"):
+    for url in ("/admin/regions", "/admin/regions/new", "/admin/regions/1/edit", "/admin/business-lines/new"):
         response = client.get(url)
         assert response.status_code == 302 and "/login" in response.headers["Location"]
 
@@ -405,7 +416,8 @@ def test_retired_entries_show_a_badge_and_restore(
     assert 'name="action" value="restore"' in row and "Restore the region EMEA</span></button>" in row
     assert 'value="retire"' not in row
     page = text_of(client.get("/admin/business-lines"))
-    assert ">Retired</span>" in page and ">Restore</button>" in page
+    row = row_of(page, f"line-{line.id}")
+    assert ">Retired</span>" in row and "Restore the business line Tradition brokerage</span></button>" in row
     for url in (f"/admin/regions/{region.id}", f"/admin/locations/{place.id}", f"/admin/business-lines/{line.id}"):
         assert post(client, url, {"action": "restore"}).status_code == 302
     assert fresh(db, Region, region.id).retired is False
@@ -1164,7 +1176,7 @@ def test_business_lines_add_rename_and_log(client, logged_in_admin, db, business
     page = text_of(client.get("/admin/business-lines"))
     assert "<h1>Business lines</h1>" in page and "Every tracker belongs to one business line." in page
     assert "<title>Business lines · Progress Tracker</title>" in page
-    assert "1 tracker" in page
+    assert "> tracker</span>" in page and cells_of(row_of(page, f"line-{line.id}"))[:2] == ["Tradition Data", "1"]
 
 
 def test_business_line_name_is_required_and_limited(client, logged_in_admin, db, business_line_factory):
@@ -1182,28 +1194,189 @@ def test_business_line_name_is_required_and_limited(client, logged_in_admin, db,
 # --- Navigation and labels ------------------------------------------------------------------------------------------
 
 
-def test_nav_shows_the_lists_to_administrators_only(client, logged_in_user, give_set, db, user_factory):
+def test_nav_shows_one_lists_entry_to_administrators_only(client, logged_in_user, give_set, db, user_factory):
     give_set(["manage_teams", "manage_users"], user=logged_in_user)
     page = client.get("/").get_data(as_text=True)
-    assert 'href="/admin/regions"' not in page and 'href="/admin/business-lines"' not in page
-    assert 'data-label="Regions"' not in page and 'href="/admin/locations"' not in page
+    assert 'data-label="Lists"' not in page and 'href="/admin/regions"' not in page
+    assert 'href="/admin/locations"' not in page and 'href="/admin/business-lines"' not in page
 
     from tests.conftest import sign_in
 
     sign_in(client, user_factory(is_admin=True))
     page = client.get("/admin/regions").get_data(as_text=True)
-    assert 'href="/admin/regions"' in page and 'href="/admin/business-lines"' in page
-    assert 'data-label="Regions"' in page and "<span>Regions</span>" in page and "Business lines" in page
-    assert "Regions and locations" not in page
-    assert page.index('href="/admin/teams"') < page.index('href="/admin/regions"')
-    assert page.index('href="/admin/regions"') < page.index('href="/admin/locations"')
-    assert page.index('href="/admin/locations"') < page.index('href="/admin/business-lines"')
-    assert 'data-label="Locations"' in page and "<span>Locations</span>" in page
+    sidebar = page[page.index('<nav class="sidebar-nav">') : page.index("</nav>", page.index("sidebar-nav"))]
+    assert 'data-label="Lists"' in sidebar and "<span>Lists</span>" in sidebar
+    for old in ("Regions", "Locations", "Business lines"):
+        assert f'data-label="{old}"' not in sidebar and f"<span>{old}</span>" not in sidebar
+    assert 'href="/admin/locations"' not in sidebar and 'href="/admin/business-lines"' not in sidebar
+    assert sidebar.index('href="/admin/teams"') < sidebar.index('href="/admin/regions"')
+
+
+@pytest.mark.parametrize("url", ["/admin/regions", "/admin/locations", "/admin/business-lines"])
+def test_lists_entry_is_current_on_every_tab(client, logged_in_admin, url):
+    page = client.get(url).get_data(as_text=True)
     assert 'class="nav-link active" href="/admin/regions"' in page
-    page = client.get("/admin/locations").get_data(as_text=True)
-    assert 'class="nav-link active" href="/admin/locations"' in page
-    page = client.get("/admin/business-lines").get_data(as_text=True)
-    assert 'class="nav-link active" href="/admin/business-lines"' in page
+    assert page.count('class="nav-link active"') == 1
+
+
+def test_lists_entry_is_not_current_elsewhere(client, logged_in_admin):
+    assert 'class="nav-link active" href="/admin/regions"' not in client.get("/admin/teams").get_data(as_text=True)
+
+
+TABS = (("Regions", "/admin/regions"), ("Locations", "/admin/locations"), ("Business lines", "/admin/business-lines"))
+
+
+def tab_bar(page: str) -> str:
+    start = page.index('<nav class="tabs" aria-label="Lists">')
+    return page[start : page.index("</nav>", start)]
+
+
+@pytest.mark.parametrize("current", range(3))
+def test_tab_bar_links_the_three_lists_and_marks_the_current_one(
+    client, logged_in_admin, region_factory, location_factory, business_line_factory, current
+):
+    emea = region_factory("EMEA")
+    region_factory("OLD", retired=True)
+    location_factory(emea, "London", "GB", code="LON")
+    location_factory(emea, "Geneva", "CH", code="GVA", retired=True)
+    location_factory(emea, "Zurich", "CH", code="ZRH")
+    business_line_factory("Brokerage")
+    business_line_factory("Old line", retired=True)
+    bar = tab_bar(client.get(TABS[current][1]).get_data(as_text=True))
+    links = re.findall(r"<a [^>]*>.*?</a>", bar, re.S)
+    assert len(links) == 3
+    counts = ("2", "3", "2")  # retired entries are counted too
+    for index, (label, url) in enumerate(TABS):
+        link = links[index]
+        assert f'href="{url}"' in link and label in link
+        assert re.search(rf'tab-count">{counts[index]}<', link), link
+        assert ('aria-current="page"' in link) is (index == current)
+        assert ("tab active" in link) is (index == current)
+
+
+def test_tab_bar_counts_are_zero_on_empty_lists(client, logged_in_admin):
+    bar = tab_bar(client.get("/admin/regions").get_data(as_text=True))
+    assert bar.count('tab-count">0<') == 3
+
+
+def test_tab_bar_shows_on_new_and_edit_pages(client, logged_in_admin, region_factory, business_line_factory):
+    line = business_line_factory()
+    for url in ("/admin/regions/new", "/admin/business-lines/new", f"/admin/business-lines/{line.id}/edit"):
+        assert '<nav class="tabs" aria-label="Lists">' in client.get(url).get_data(as_text=True), url
+
+
+# --- Business lines table -------------------------------------------------------------------------------------------
+
+
+def test_business_lines_page_has_the_table_layout(client, logged_in_admin, business_line_factory, tracker_factory):
+    used = business_line_factory("Brokerage")
+    free = business_line_factory("Data")
+    old = business_line_factory("Legacy", retired=True)
+    tracker_factory(business_line_id=used.id)
+    page = text_of(client.get("/admin/business-lines"))
+    assert "<h1>Business lines</h1>" in page and 'href="/admin/business-lines/new" data-dialog-open="add"' in page
+    assert ">Add business line</a>" in page
+    assert 'data-search-for="business-lines-table"' in page and 'data-status-for="business-lines-table"' in page
+    assert 'id="business-lines-table"' in page and 'aria-label="Show business lines by status"' in page
+    assert "No business lines match." in page and "Showing <span data-shown>3</span> of" in page
+    for key in ("name", "trackers", "status"):
+        assert f'data-sort="{key}"' in page
+    assert "<details" not in page
+    row = row_of(page, f"line-{used.id}")
+    assert cells_of(row)[:3] == ["Brokerage", "1", "Active"]
+    assert 'data-search="brokerage"' in row and 'data-sort-trackers="1"' in row and 'data-status="active"' in row
+    assert 'value="delete"' not in row and BUSINESS_LINE_IN_USE in row and 'value="retire"' in row
+    assert 'value="delete"' in row_of(page, f"line-{free.id}")
+    retired = row_of(page, f"line-{old.id}")
+    assert 'value="restore"' in retired and 'value="delete"' in retired and "is-retired" in retired
+    assert f'href="/admin/business-lines/{used.id}/edit" data-dialog-open="edit"' in row
+    assert "data-edit=" in row and f"/admin/business-lines/{used.id}" in row
+
+
+def test_business_lines_empty_state(client, logged_in_admin):
+    page = text_of(client.get("/admin/business-lines"))
+    assert "No business lines yet. Add the first one." in page and "<table" not in page
+
+
+def test_new_business_line_page_opens_add_dialog(client, logged_in_admin, business_line_factory):
+    business_line_factory()
+    page = text_of(client.get("/admin/business-lines/new"))
+    tag, dialog = dialog_of(page, "add")
+    assert is_open(tag) and "data-reopen" in tag and not is_open(dialog_of(page, "edit")[0])
+    assert ">Add business line</h2>" in dialog and 'action="/admin/business-lines"' in dialog
+    assert 'name="name" value=""' in dialog and ">Create business line</button>" in dialog
+    assert "<table" in page
+
+
+def test_edit_business_line_page_opens_filled_edit_dialog(client, logged_in_admin, business_line_factory):
+    line = business_line_factory("Brokerage")
+    other = business_line_factory("Data")
+    page = text_of(client.get(f"/admin/business-lines/{line.id}/edit"))
+    tag, dialog = dialog_of(page, "edit")
+    assert is_open(tag) and "data-reopen" in tag and not is_open(dialog_of(page, "add")[0])
+    assert "Edit business line Brokerage</h2>" in dialog and f'action="/admin/business-lines/{line.id}"' in dialog
+    assert 'name="name" value="Brokerage"' in dialog and 'name="action" value="save"' in dialog
+    assert f'action="/admin/business-lines/{other.id}"' not in dialog
+    assert client.get("/admin/business-lines/999999/edit").status_code == 404
+
+
+def test_business_line_dialogs_are_closed_on_the_list(client, logged_in_admin, business_line_factory):
+    business_line_factory()
+    page = text_of(client.get("/admin/business-lines"))
+    for name in ("add", "edit"):
+        assert not is_open(dialog_of(page, name)[0])
+    assert 'name="name" value=""' in dialog_of(page, "edit")[1]
+
+
+def test_business_line_add_error_shows_beside_name_and_keeps_value(client, logged_in_admin, db, business_line_factory):
+    business_line_factory("Brokerage")
+    response = post(client, "/admin/business-lines", {"name": "brokerage"})
+    assert response.status_code == 400
+    page = text_of(response)
+    tag, dialog = dialog_of(page, "add")
+    assert is_open(tag) and "data-reopen" in tag and not is_open(dialog_of(page, "edit")[0])
+    assert 'value="brokerage"' in dialog and "A business line with that name already exists." in dialog
+    assert 'class="field-error" id="add-name-error"' in dialog
+    assert 'aria-invalid="true"' in dialog and 'aria-describedby="add-name-error"' in dialog
+    assert db.scalars(select(BusinessLine)).all() and entries(db) == []
+
+
+def test_business_line_edit_error_reopens_edit_dialog_for_that_line(client, logged_in_admin, db, business_line_factory):
+    business_line_factory("Brokerage")
+    data = business_line_factory("Data")
+    response = post(client, f"/admin/business-lines/{data.id}", {"action": "save", "name": "  "})
+    assert response.status_code == 400
+    page = text_of(response)
+    tag, dialog = dialog_of(page, "edit")
+    assert is_open(tag) and "data-reopen" in tag and not is_open(dialog_of(page, "add")[0])
+    assert f'action="/admin/business-lines/{data.id}"' in dialog and "Edit business line Data</h2>" in dialog
+    assert "Enter a business line name." in dialog and 'aria-invalid="true"' in dialog
+    response = post(client, f"/admin/business-lines/{data.id}", {"action": "save", "name": "Brokerage "})
+    page = text_of(response)
+    assert 'value="Brokerage"' in dialog_of(page, "edit")[1] and entries(db) == []
+
+
+def test_business_line_refused_delete_shows_page_error(
+    client, logged_in_admin, db, business_line_factory, tracker_factory
+):
+    line = business_line_factory()
+    tracker_factory(business_line_id=line.id)
+    response = post(client, f"/admin/business-lines/{line.id}", {"action": "delete"})
+    assert response.status_code == 400
+    page = text_of(response)
+    assert BUSINESS_LINE_IN_USE in page and "<table" in page
+    assert not is_open(dialog_of(page, "add")[0]) and not is_open(dialog_of(page, "edit")[0])
+    assert entries(db) == []
+
+
+def test_business_line_actions_log_as_before(client, logged_in_admin, db, business_line_factory):
+    line = business_line_factory("Brokerage")
+    post(client, f"/admin/business-lines/{line.id}", {"action": "retire"})
+    post(client, f"/admin/business-lines/{line.id}", {"action": "restore"})
+    post(client, f"/admin/business-lines/{line.id}", {"action": "delete"})
+    logged = entries(db)
+    assert [e.action for e in logged] == ["business_line_retired", "business_line_restored", "business_line_deleted"]
+    assert all(e.detail == {"business_line": "Brokerage"} for e in logged)
 
 
 def test_activity_labels_for_the_lists():

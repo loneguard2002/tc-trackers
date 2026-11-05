@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import icon %}
-{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_foot, row_actions, list_dialog, dialog_field, described_by %}
+{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_foot, row_actions, list_dialog, dialog_field, described_by, list_tabs %}
 {% macro region_label(r) -%}
 {{ r.code }} — {{ r.name }}{% if r.retired %} (retired){% endif %}
 {%- endmacro %}
@@ -49,6 +49,7 @@
 {% endblock %}
 {% block content %}
 <div class="list-page">
+  {{ list_tabs('locations', tab_counts) }}
   <header class="list-head">
     <div>
       <h1>Locations</h1>
