@@ -51,6 +51,7 @@ from .tree import (
     CHOOSE_ROLE_MESSAGE,
     TEAM_CHOICE_ERROR,
     TeamRow,
+    ancestors,
     children_map,
     descendants,
     load_team_rows,
@@ -293,9 +294,11 @@ def _render_team(team: Team, errors: list[str], status: int, form=None, editing:
             .group_by(Tracker.team_id)
         ).all()
     )
+    excluded = {team.id, *(row.id for row in below), *ancestors(rows, team.id)}  # itself, direct lower, all higher
     page = render_template(
         "teams/team.html",
         **context,
+        existing_teams=[(row.id, row.name) for row in sorted_by_name(rows) if row.id not in excluded],
         team=team,
         under=_higher_teams(labels, _row(rows, team).parent_ids),
         people=people,
@@ -320,6 +323,17 @@ def _render_team(team: Team, errors: list[str], status: int, form=None, editing:
         current_page="teams",
     )
     return page, status
+
+
+@bp.get("/<int:team_id>/below")
+@permission_required("manage_teams")
+def add_below(team_id: int):
+    """Place an existing team under this one: on to that team's Higher teams preview, which returns to this tab."""
+    team = _team_or_404(team_id)
+    child, error = parse_team_id(get_session(), request.args.get("team_id"))
+    if child is None:
+        return _render_team(team, [error or TEAM_CHOICE_ERROR], 400, tab="below")
+    return redirect(url_for("teams.parents", team_id=child.id, add=team.id, back=team.id))
 
 
 @bp.get("/<int:team_id>")
@@ -409,12 +423,19 @@ def _judge_change(rows: list[TeamRow], team: Team, action: str, text: str) -> tu
     return parent_id, None, None
 
 
+def _back_team(text: str | None) -> int | None:
+    """The team a Higher teams change returns to: ``text`` when it names an existing team, else None."""
+    team_id = parse_id(text)
+    return team_id if team_id is not None and get_session().get(Team, team_id) is not None else None
+
+
 def _render_parents(
     team: Team,
     errors: list[str],
     status: int,
     change_to: tuple[str, int] | None = None,
     notice: str | None = None,
+    back: int | None = None,
 ):
     """The Higher teams page: the current higher teams, the teams that could be added and, for a valid ``change_to``
     (``("add" | "remove", parent id)``), what that one change would alter."""
@@ -436,6 +457,7 @@ def _render_parents(
         target=labels.get(change_to[1]) if change_to else None,
         impact=impact,
         notice=notice,
+        back=back,
         errors=errors,
         page_title=f"Higher teams for {team.name}",
         current_page="teams",
@@ -448,12 +470,13 @@ def _render_parents(
 def parents(team_id: int):
     team = _team_or_404(team_id)
     action = "add" if "add" in request.args else "remove" if "remove" in request.args else None
+    back = _back_team(request.args.get("back"))
     if action is None:
-        return _render_parents(team, [], 200)
+        return _render_parents(team, [], 200, back=back)
     parent_id, error, notice = _judge_change(load_team_rows(get_session()), team, action, request.args[action].strip())
     if error:
-        return _render_parents(team, [error], 400)
-    return _render_parents(team, [], 200, (action, parent_id), notice)
+        return _render_parents(team, [error], 400, back=back)
+    return _render_parents(team, [], 200, (action, parent_id), notice, back)
 
 
 @bp.post("/<int:team_id>/parents")
@@ -469,12 +492,13 @@ def change_parents(team_id: int):
         db.rollback()
         abort(404)
     parent_id, error, notice = _judge_change(rows, team, action, request.form.get("parent_id", "").strip())
+    back = _back_team(request.form.get("back"))
     if error or notice:
         db.rollback()
         if error:
-            return _render_parents(team, [error], 400)
+            return _render_parents(team, [error], 400, back=back)
         flash(notice, "info")
-        return redirect(url_for("teams.parents", team_id=team.id))
+        return redirect(url_for("teams.parents", team_id=team.id, back=back))
     actor = current_user()
     before = snapshot_access(db, actor)
     if action == "add":
@@ -501,6 +525,8 @@ def change_parents(team_id: int):
         if set(_row(rows, team).parent_ids) == {parent_id}:
             message += " It is now at the top level."
         flash(message, "success")
+    if back is not None:
+        return redirect(url_for("teams.view", team_id=back, tab="below"))
     return redirect(url_for("teams.parents", team_id=team.id))
 
 

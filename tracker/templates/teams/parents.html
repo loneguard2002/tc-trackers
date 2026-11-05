@@ -37,7 +37,7 @@
     <ul class="member-list">
       {% for id, name in higher %}
       <li class="member"><span class="member-who"><a class="member-name" href="{{ url_for('teams.view', team_id=id) }}">{{ name }}</a></span>
-        <a href="{{ url_for('teams.parents', team_id=team.id, remove=id) }}">Remove…</a></li>
+        <a href="{{ url_for('teams.parents', team_id=team.id, remove=id, back=back) }}">Remove…</a></li>
       {% endfor %}
     </ul>
     {% else %}
@@ -52,6 +52,7 @@
     </header>
     {% if choices %}
     <form class="archive-row team-move" method="get" action="{{ url_for('teams.parents', team_id=team.id) }}">
+      {% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
       <div class="archive-text field">
         <label for="add">Add under</label>
         <select id="add" name="add">
@@ -98,8 +99,9 @@
     {{ csrf_field(csrf_token()) }}
     <input type="hidden" name="action" value="{{ change_to[0] }}">
     <input type="hidden" name="parent_id" value="{{ change_to[1] }}">
+    {% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
     <button class="button primary" type="submit">{% if adding %}Add under {{ target }}{% else %}Remove from {{ target }}{% endif %}</button>
-    <a class="button" href="{{ url_for('teams.parents', team_id=team.id) }}">Cancel</a>
+    <a class="button" href="{% if back %}{{ url_for('teams.view', team_id=back, tab='below') }}{% else %}{{ url_for('teams.parents', team_id=team.id) }}{% endif %}">Cancel</a>
   </form>
   {% endif %}
 </div>
