@@ -6,8 +6,8 @@ import pytest
 from sqlalchemy import select
 
 from tests.conftest import post, sign_in
-from tests.test_teams import entries, parent_of, text_of
-from tracker.models import Team
+from tests.test_teams import entries, parents_of, text_of
+from tracker.models import TeamParent
 from tracker.teams.impact import move_impact
 from tracker.teams.tree import TEAM_CHOICE_ERROR
 from tracker.teams.views import CYCLE_MESSAGE
@@ -77,21 +77,20 @@ def test_preview_changes_nothing(client, logged_in_admin, db, user_factory, add_
     infra, windows, apps, _laptops = tree
     add_member(infra, user_factory(full_name="Head"), "owner")
     assert preview(client, windows, apps).status_code == 200
-    assert parent_of(db, windows) == infra.id
+    assert parents_of(db, windows) == {infra.id}
     assert entries(db) == []
     assert post(client, f"/admin/teams/{windows.id}/move", {"parent_id": str(apps.id)}).status_code == 302
-    assert parent_of(db, windows) == apps.id
+    assert parents_of(db, windows) == {apps.id}
 
 
 def test_move_impact_leaves_the_session_clean(db, user_factory, add_member, tree):
     infra, windows, apps, _laptops = tree
     add_member(infra, user_factory(full_name="Head"), "owner")
-    impact = move_impact(db, windows, apps.id)
+    impact = move_impact(db, windows, frozenset({apps.id}))
     assert [c.user.full_name for c in impact.losses] == ["Head"]
     assert [t.name for t in impact.trackers] == ["Laptop refresh"]
     assert not db.dirty and not db.in_nested_transaction()
-    assert db.scalar(select(Team.parent_id).where(Team.id == windows.id)) == infra.id
-    assert windows.parent_id == infra.id
+    assert set(db.scalars(select(TeamParent.parent_id).where(TeamParent.team_id == windows.id))) == {infra.id}
 
 
 def test_bad_destinations(client, logged_in_admin, db, team_factory, user_factory, give_set, tree):

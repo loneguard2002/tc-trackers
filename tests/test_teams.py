@@ -9,7 +9,7 @@ from sqlalchemy import delete, func, select, update
 from tests.conftest import post, sign_in
 from tracker.auth.accounts import VOUCHED_MESSAGE
 from tracker.auth.guards import SELF_PROMOTION_MESSAGE, TEAM_WITH_SETS_MESSAGE, team_holds_sets
-from tracker.models import AuditLog, PermissionSet, PermissionSetHolder, Team, TeamMember
+from tracker.models import AuditLog, PermissionSet, PermissionSetHolder, Team, TeamMember, TeamParent
 from tracker.naming import description_error, name_error
 from tracker.teams import views as team_views
 from tracker.teams.tree import TEAM_CHOICE_ERROR
@@ -31,9 +31,9 @@ def member_role(db, team, user) -> str | None:
     return db.scalar(select(TeamMember.role).where(TeamMember.team_id == team.id, TeamMember.user_id == user.id))
 
 
-def parent_of(db, team) -> int | None:
+def parents_of(db, team) -> set[int]:
     db.expire_all()
-    return db.scalar(select(Team.parent_id).where(Team.id == team.id))
+    return set(db.scalars(select(TeamParent.parent_id).where(TeamParent.team_id == team.id)))
 
 
 def move_options(page: str) -> list[str]:
@@ -135,7 +135,7 @@ def test_create_team_logs_team_created(client, logged_in_admin, db, team_factory
     )
     assert response.status_code == 302
     team = db.scalar(select(Team).where(Team.name == "Windows"))
-    assert team.parent_id == infra.id and team.description == "Desktops"
+    assert parents_of(db, team) == {infra.id} and team.description == "Desktops"
     [entry] = entries(db, "team_created")
     assert entry.user_id == logged_in_admin.id and entry.entity == "team" and entry.entity_id == str(team.id)
     assert entry.detail == {"name": "Windows", "parent": "Infrastructure", "location": PLACE_TEXT}
@@ -237,7 +237,7 @@ def test_move_under_itself_or_below_refused_on_the_server(client, logged_in_admi
     for target in (windows, servers):
         page = post(client, f"/admin/teams/{windows.id}/move", {"parent_id": str(target.id)})
         assert page.status_code == 400 and CYCLE_MESSAGE in text_of(page)
-        assert parent_of(db, windows) == infra.id
+        assert parents_of(db, windows) == {infra.id}
     assert CYCLE_MESSAGE == "A team cannot be moved under itself or under a team below it."
     assert entries(db, "team_moved") == []
 
@@ -247,24 +247,36 @@ def test_move_logs_parent_before_and_after(client, logged_in_admin, db, team_fac
     apps = team_factory(name="Applications")
     windows = team_factory(name="Windows", parent=infra)
     assert post(client, f"/admin/teams/{windows.id}/move", {"parent_id": ""}).status_code == 302
-    assert parent_of(db, windows) is None
+    assert parents_of(db, windows) == set()
     assert post(client, f"/admin/teams/{windows.id}/move", {"parent_id": str(apps.id)}).status_code == 302
-    assert parent_of(db, windows) == apps.id
+    assert parents_of(db, windows) == {apps.id}
     moves = entries(db, "team_moved")
     assert [m.detail for m in moves] == [
-        {"team": "Infrastructure › Windows", "before": "Infrastructure", "after": None},
+        {"team": "Windows", "before": "Infrastructure", "after": None},
         {"team": "Windows", "before": None, "after": "Applications"},
     ]
     assert moves[0].entity == "team" and moves[0].entity_id == str(windows.id)
 
 
-def test_move_names_parents_by_their_paths(client, logged_in_admin, db, team_factory):
+def test_move_names_parents_by_their_names(client, logged_in_admin, db, team_factory):
     infra = team_factory(name="Infrastructure")
     windows = team_factory(name="Windows", parent=infra)
     laptops = team_factory(name="Laptops")
     assert post(client, f"/admin/teams/{laptops.id}/move", {"parent_id": str(windows.id)}).status_code == 302
     [entry] = entries(db, "team_moved")
-    assert entry.detail == {"team": "Laptops", "before": None, "after": "Infrastructure › Windows"}
+    assert entry.detail == {"team": "Laptops", "before": None, "after": "Windows"}
+
+
+def test_move_makes_the_chosen_team_the_only_higher_team(client, logged_in_admin, db, team_factory):
+    infra, apps = team_factory(name="Infrastructure"), team_factory(name="applications")
+    desktops = team_factory(name="Desktops", parents=(infra, apps))
+    page = text_of(client.get(f"/admin/teams/{desktops.id}/move?parent_id={infra.id}"))
+    assert "Now below <strong>applications and Infrastructure</strong>." in page
+    assert "Moving Desktops below Infrastructure" in page
+    assert post(client, f"/admin/teams/{desktops.id}/move", {"parent_id": str(infra.id)}).status_code == 302
+    assert parents_of(db, desktops) == {infra.id}
+    [entry] = entries(db, "team_moved")
+    assert entry.detail == {"team": "Desktops", "before": "applications and Infrastructure", "after": "Infrastructure"}
 
 
 def test_move_to_the_same_parent_logs_nothing(client, logged_in_admin, db, team_factory):
@@ -279,7 +291,7 @@ def test_move_with_a_malformed_parent_is_400(client, logged_in_admin, db, team_f
     windows = team_factory(name="Windows", parent=infra)
     for parent in ("abc", "1.5", "99999"):
         assert post(client, f"/admin/teams/{windows.id}/move", {"parent_id": parent}).status_code == 400
-    assert parent_of(db, windows) == infra.id
+    assert parents_of(db, windows) == {infra.id}
     assert entries(db) == []
 
 
@@ -339,10 +351,22 @@ def test_delete_removes_and_logs_memberships_and_holdings(
     ]
     assert {e.target_user_id for e in logged[:2]} == {first.id, second.id}
     assert {e.detail["role"] for e in logged[:2]} == {"viewer", "owner"}
-    assert all(e.detail["team"] == "Infrastructure › Windows" for e in logged[:2])
-    assert logged[2].detail == {"set": "Auditors", "team": "Infrastructure › Windows"}
-    assert logged[3].detail == {"name": "Windows", "parent": "Infrastructure"}
+    assert all(e.detail["team"] == "Windows" for e in logged[:2])
+    assert logged[2].detail == {"set": "Auditors", "team": "Windows"}
+    assert logged[3].detail == {"name": "Windows", "parents": ["Infrastructure"]}
     assert all(e.user_id == logged_in_admin.id for e in logged)
+
+
+def test_delete_removes_the_links_and_names_every_higher_team(client, logged_in_admin, db, team_factory):
+    infra, apps = team_factory(name="Infrastructure"), team_factory(name="applications")
+    desktops = team_factory(name="Desktops", parents=(infra, apps))
+    assert post(client, f"/admin/teams/{desktops.id}/delete").status_code == 302
+    assert post(client, f"/admin/teams/{apps.id}/delete").status_code == 302
+    assert db.scalar(select(func.count()).select_from(TeamParent)) == 0
+    assert [e.detail for e in entries(db, "team_deleted")] == [
+        {"name": "Desktops", "parents": ["applications", "Infrastructure"]},
+        {"name": "applications", "parents": []},
+    ]
 
 
 # --- The layout: tree beside a people-first team page -----------------------------------------------------------------
@@ -558,7 +582,7 @@ def test_add_member_logs_with_the_affected_user(client, logged_in_admin, db, tea
     assert member_role(db, team, user) == "editor"
     [entry] = entries(db, "team_member_added")
     assert entry.target_user_id == user.id and entry.user_id == logged_in_admin.id
-    assert entry.detail == {"team": "Infrastructure › Windows", "role": "editor"}
+    assert entry.detail == {"team": "Windows", "role": "editor"}
     assert entry.entity == "team" and entry.entity_id == str(team.id)
 
 
@@ -602,9 +626,9 @@ def test_change_role_and_remove_member_log_before_and_after(
     assert member_role(db, team, user) is None
     changed, removed = entries(db)
     assert changed.action == "team_member_role_changed" and changed.target_user_id == user.id
-    assert changed.detail == {"team": "Infrastructure › Windows", "before": "viewer", "after": "owner"}
+    assert changed.detail == {"team": "Windows", "before": "viewer", "after": "owner"}
     assert removed.action == "team_member_removed" and removed.target_user_id == user.id
-    assert removed.detail == {"team": "Infrastructure › Windows", "role": "owner"}
+    assert removed.detail == {"team": "Windows", "role": "owner"}
 
 
 def test_change_to_an_unknown_role_is_400(client, logged_in_admin, db, team_factory, user_factory, add_member):
@@ -683,7 +707,7 @@ def test_holder_cannot_move_a_team_under_their_own_team(
     tracker_factory(team_id=other.id)
     response = post(client, f"/admin/teams/{other.id}/move", {"parent_id": str(own.id)}, follow_redirects=True)
     assert SELF_PROMOTION_MESSAGE in text_of(response)
-    assert parent_of(db, other) is None
+    assert parents_of(db, other) == set()
     assert entries(db) == []
 
 
@@ -725,18 +749,14 @@ def vouch(db, actor, target, action="user_created"):
     db.commit()
 
 
-def test_team_moved_names_the_team_by_its_path(client, logged_in_admin, db, team_factory):
+def test_team_moved_names_the_team_by_its_name(client, logged_in_admin, db, team_factory):
     infra = team_factory(name="Infrastructure")
     windows = team_factory(name="Windows", parent=infra)
     laptops = team_factory(name="Laptops", parent=windows)
     apps = team_factory(name="Applications")
     assert post(client, f"/admin/teams/{laptops.id}/move", {"parent_id": str(apps.id)}).status_code == 302
     [entry] = entries(db, "team_moved")
-    assert entry.detail == {
-        "team": "Infrastructure › Windows › Laptops",
-        "before": "Infrastructure › Windows",
-        "after": "Applications",
-    }
+    assert entry.detail == {"team": "Laptops", "before": "Windows", "after": "Applications"}
 
 
 def test_very_long_ids_are_400_not_500(client, logged_in_admin, db, team_factory, place):
@@ -774,14 +794,14 @@ def test_delete_names_the_parent_read_under_the_lock(client, logged_in_admin, db
 
     def move_first(session, lock=False):
         if lock:  # another manager moves the team after this request read it, just before the lock
-            db.execute(update(Team).where(Team.id == team.id).values(parent_id=apps.id))
+            db.execute(update(TeamParent).where(TeamParent.team_id == team.id).values(parent_id=apps.id))
             db.commit()
         return original(session, lock)
 
     monkeypatch.setattr(team_views, "load_team_rows", move_first)
     assert post(client, f"/admin/teams/{team.id}/delete").status_code == 302
     [deleted] = entries(db, "team_deleted")
-    assert deleted.detail == {"name": "Windows", "parent": "Applications"}
+    assert deleted.detail == {"name": "Windows", "parents": ["Applications"]}
 
 
 def test_removing_a_member_removed_at_the_same_moment(

@@ -1,7 +1,7 @@
 """Per-tracker roles (spec section 6.1).
 
 An active user's role on a tracker is the highest of: administrator (owner everywhere), a direct role, a team role
-(membership of the tracker's team or of any team above it) and the ``view_all_trackers`` permission (viewer
+(membership of the tracker's team or of any team above it, by any path) and the ``view_all_trackers`` permission (viewer
 everywhere). Users who are not active have no access.
 """
 
@@ -20,8 +20,8 @@ from ..models import (
     PermissionSet,
     PermissionSetHolder,
     PermissionSetPermission,
-    Team,
     TeamMember,
+    TeamParent,
     Tracker,
     TrackerRole,
     User,
@@ -40,14 +40,15 @@ def _rank(role_column):
 def _grants(user_id: int) -> Subquery:
     """Every (tracker_id, rank) the user holds by a direct role, a team role or ``view_all_trackers``.
 
-    The team walk uses ``UNION`` rather than ``UNION ALL`` so it ends even if a cycle ever reached the table.
+    The team walk goes down every link to a lower team. It uses ``UNION`` rather than ``UNION ALL`` so it ends even if
+    a cycle ever reached the table; several paths to one tracker give several rows, and the highest rank wins.
     """
     reach = (
         select(TeamMember.team_id.label("team_id"), _rank(TeamMember.role).label("rank"))
         .where(TeamMember.user_id == user_id)
         .cte("reach", recursive=True)
     )
-    reach = reach.union(select(Team.id, reach.c.rank).join(reach, Team.parent_id == reach.c.team_id))
+    reach = reach.union(select(TeamParent.team_id, reach.c.rank).join(reach, TeamParent.parent_id == reach.c.team_id))
     member_teams = select(TeamMember.team_id).where(TeamMember.user_id == user_id)
     view_all = (
         select(literal(1))
@@ -96,7 +97,7 @@ def user_role(session: Session, user: User, tracker_id: int) -> str | None:
 
 class TeamAccess(NamedTuple):
     user: User
-    path: str
+    team_name: str  # the team the person belongs to
     role: str
     team_id: int | None = None  # the team the person belongs to, for a link
 
@@ -104,27 +105,24 @@ class TeamAccess(NamedTuple):
 def team_access(session: Session, tracker: Tracker) -> list[TeamAccess]:
     """Who reaches the tracker through a team: one row per membership of an active user in its team or a team above.
 
-    ``path`` is the path of the team the person belongs to. Sorted by user name, then path. Empty without a team.
+    A team above counts once however many paths lead from it. Sorted by user name, then team name. Empty without a
+    team.
     """
     if tracker.team_id is None:
         return []
-    from ..teams.tree import load_team_rows, team_labels  # here: importing tracker.teams at load time is circular
+    # here: importing tracker.teams at load time is circular
+    from ..teams.tree import ancestors, load_team_rows, team_labels
 
     rows = load_team_rows(session)
-    parents = {row.id: row.parent_id for row in rows}
     labels = team_labels(rows)
-    reaching: set[int] = set()
-    team_id = tracker.team_id
-    while team_id is not None and team_id not in reaching:  # the guard ends a walk through a cycle
-        reaching.add(team_id)
-        team_id = parents.get(team_id)
+    reaching = {tracker.team_id, *ancestors(rows, tracker.team_id)}
     found = session.execute(
         select(User, TeamMember.team_id, TeamMember.role)
         .join(TeamMember, TeamMember.user_id == User.id)
         .where(TeamMember.team_id.in_(reaching), User.status == "active")
     )
     access = [TeamAccess(user, labels.get(team, ""), role, team) for user, team, role in found]
-    return sorted(access, key=lambda a: (a.user.full_name.lower(), a.user.full_name, a.path, a.user.id))
+    return sorted(access, key=lambda a: (a.user.full_name.lower(), a.user.full_name, a.team_name, a.user.id))
 
 
 class Route(NamedTuple):
@@ -141,8 +139,8 @@ class TrackerAccess(NamedTuple):
 def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
     """Every tracker the user reaches, with the highest role and every route that gives one (Effective access).
 
-    Routes read ``"Administrator"``, ``"Direct role: Viewer"``, ``"Team Infrastructure › Windows: Editor"`` (the path
-    of the team the user belongs to) and ``"View all trackers: Viewer"``, in that order. The roles agree with
+    Routes read ``"Administrator"``, ``"Direct role: Viewer"``, ``"Team Windows: Editor"`` (one per team the user
+    belongs to, by team name) and ``"View all trackers: Viewer"``, in that order. The roles agree with
     ``tracker_roles``. Sorted by tracker name, then id; empty for a user who is not active.
     """
     if user.status != "active":
@@ -170,7 +168,7 @@ def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
         if tracker.team_id is not None:
             by_team.setdefault(tracker.team_id, []).append(tracker.id)
     memberships = session.execute(select(TeamMember.team_id, TeamMember.role).where(TeamMember.user_id == user.id))
-    for team_id, role in sorted(memberships, key=lambda m: (labels.get(m.team_id, ""), m.team_id)):
+    for team_id, role in sorted(memberships, key=lambda m: (labels.get(m.team_id, "").casefold(), m.team_id)):
         reached = [tracker_id for team in descendants(rows, team_id) for tracker_id in by_team.get(team, [])]
         add(reached, role, f"Team {labels.get(team_id, '')}: {role.title()}")
     if any(permission == "view_all_trackers" for permission, _source in set_permission_sources(session, user)):

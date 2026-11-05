@@ -57,7 +57,7 @@
                 </form>
               </li>
               {% endif %}
-              {% for t in row.teams %}<li><a href="{{ url_for('teams.view', team_id=t.team_id) }}">Team {{ t.path }}</a> <span class="muted">{{ t.role|title }}</span></li>{% endfor %}
+              {% for t in row.teams %}<li><a href="{{ url_for('teams.view', team_id=t.team_id) }}">Team {{ t.team_name }}</a> <span class="muted">{{ t.role|title }}</span></li>{% endfor %}
               {% for name in row.view_all_sets %}<li>Permission set {{ name }}: View all trackers</li>{% endfor %}
             </ul>
           </td>

@@ -102,10 +102,10 @@ def test_team_access_is_sorted_and_empty_without_a_team(db, tracker_factory, tea
     add_member(other, user_factory(full_name="Nobody"), "owner")
     t = tracker_factory(team_id=sub.id)
     rows = team_access(db, t)
-    assert [(r.user.full_name, r.path, r.role) for r in rows] == [
+    assert [(r.user.full_name, r.team_name, r.role) for r in rows] == [
+        ("Amy", "Sub", "editor"),
         ("Amy", "Top", "owner"),
-        ("Amy", "Top › Sub", "editor"),
-        ("Zed", "Top › Sub", "viewer"),
+        ("Zed", "Sub", "viewer"),
     ]
     assert team_access(db, tracker_factory()) == []
 
@@ -325,7 +325,7 @@ def test_access_list_agrees_with_user_role(db, tracker_factory, team_factory, ad
     by_name = {r.user.full_name: r for r in rows}
     assert unrelated.full_name not in by_name and "Gone Member" not in by_name
     assert by_name["Bob Both"].role == "owner" and by_name["Bob Both"].direct_role == "viewer"
-    assert [a.path for a in by_name["Bob Both"].teams] == ["Infrastructure › Windows"]
+    assert [a.team_name for a in by_name["Bob Both"].teams] == ["Windows"]
     assert by_name["Pat Pmo"].view_all_sets == ["PMO"] and by_name["Vera Viaset"].view_all_sets == ["PMO"]
     assert by_name["Ada Admin"].admin and by_name["Ada Admin"].role == "owner"
 
@@ -346,7 +346,7 @@ def test_access_page_is_one_list(
     direct_row = next(r for r in table_rows if "Dina Direct" in r)
     assert "Direct role" in direct_row
     team_row = next(r for r in table_rows if "Bob Both" in r)
-    assert "Team Infrastructure › Windows" in html.unescape(team_row) and 'href="/admin/teams/' in team_row
+    assert "Team Windows" in html.unescape(team_row) and 'href="/admin/teams/' in team_row
     assert "Permission set PMO: View all trackers" in text_of(page)
     assert "Administrator" in text_of(page)
     assert "data-autosubmit>" in direct_row and "data-autosubmit-fallback>Set role" in direct_row

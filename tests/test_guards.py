@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from tracker.auth.guards import SELF_PROMOTION_MESSAGE, raises_own_access, snapshot_access
 from tracker.models import TeamMember, TrackerRole
+from tracker.teams.tree import set_team_parents
 
 
 def test_message():
@@ -60,7 +61,7 @@ def test_moving_another_team_under_own_team_raises_own_access(
     tracker_factory(team_id=other.id)
     add_member(own, actor, "editor")
     before = snapshot_access(db, actor)
-    other.parent_id = own.id
+    set_team_parents(db, other.id, [own.id])
     assert raises_own_access(db, actor, before) is True
 
 
@@ -72,7 +73,7 @@ def test_moving_own_team_without_new_trackers_does_not(db, user_factory, team_fa
     add_member(own, actor, "editor")
     before = snapshot_access(db, actor)
     assert before == {tracker.id: "editor"}
-    own.parent_id = None
+    set_team_parents(db, own.id, [])
     assert raises_own_access(db, actor, before) is False
 
 
@@ -105,7 +106,7 @@ def test_moving_own_team_under_a_team_where_the_actor_is_owner_raises_own_access
     add_member(parent, actor, "owner")
     before = snapshot_access(db, actor)
     assert before == {tracker.id: "viewer"}
-    own.parent_id = parent.id
+    set_team_parents(db, own.id, [parent.id])
     assert raises_own_access(db, actor, before) is True
 
 

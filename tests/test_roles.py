@@ -273,6 +273,21 @@ def test_routes_carry_their_role(db, user_factory, tracker_factory, team_factory
     (row,) = tracker_access_routes(db, person)
     assert row.role == "editor"
     assert row.routes == [
-        Route("Team Infrastructure › Windows: Editor", "editor"),
+        Route("Team Windows: Editor", "editor"),
         Route("View all trackers: Viewer", "viewer"),
     ]
+
+
+def test_diamond_effective_access_lists_both_team_routes(db, user_factory, tracker_factory, team_factory, add_member):
+    infra, applications = team_factory(name="Infrastructure"), team_factory(name="Applications")
+    windows = team_factory(name="Windows", parent=infra)
+    desktops = team_factory(name="Desktops", parents=(windows, applications))
+    tracker = tracker_factory(name="Laptops", team_id=desktops.id)
+    person = user_factory()
+    add_member(windows, person, "viewer")
+    add_member(applications, person, "editor")
+    (row,) = tracker_access_routes(db, person)
+    assert row.tracker.id == tracker.id and row.role == "editor"
+    texts = [route.text for route in row.routes]
+    assert "Team Windows: Viewer" in texts and "Team Applications: Editor" in texts
+    assert texts == ["Team Applications: Editor", "Team Windows: Viewer"]

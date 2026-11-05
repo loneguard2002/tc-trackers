@@ -1,7 +1,8 @@
 """What moving a team would change: who loses, gains or changes a role on the trackers that move with it.
 
 Only people who belong to some team can be affected by a move; administrators and people who are not active are left
-out. The preview moves the team inside a savepoint, reads everyone's roles again and rolls the savepoint back.
+out. The preview replaces the team's higher teams inside a savepoint, reads everyone's roles again and rolls the
+savepoint back.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..auth.roles import tracker_roles
 from ..models import Team, TeamMember, Tracker, User
-from .tree import descendants, load_team_rows
+from .tree import descendants, load_team_rows, set_team_parents
 
 
 class AccessChange(NamedTuple):
@@ -30,10 +31,11 @@ class MoveImpact(NamedTuple):
     trackers: list[Tracker]  # every tracker in the team and below, archived included, by name
 
 
-def move_impact(session: Session, team: Team, new_parent_id: int | None) -> MoveImpact:
-    """Compare each person's role on each tracker in the team and below before and after moving ``team``.
+def move_impact(session: Session, team: Team, parent_ids: frozenset[int]) -> MoveImpact:
+    """Compare each person's role on each tracker in the team and below, before and after replacing its higher teams.
 
-    Leaves the session as it found it: the move is made in a savepoint that is always rolled back.
+    ``parent_ids`` is the new set of higher teams (empty for the top level). Leaves the session as it found it: the
+    links are replaced in a savepoint that is always rolled back.
     """
     subtree = descendants(load_team_rows(session), team.id)
     trackers = list(
@@ -55,14 +57,11 @@ def move_impact(session: Session, team: Team, new_parent_id: int | None) -> Move
         }
 
     before = read()
-    try:
-        with session.begin_nested() as savepoint:
-            team.parent_id = new_parent_id
-            session.flush()
-            after = read()
-            savepoint.rollback()
-    finally:
-        session.expire(team)
+    with session.begin_nested() as savepoint:
+        set_team_parents(session, team.id, parent_ids)
+        session.flush()
+        after = read()
+        savepoint.rollback()
     losses, gains, changes = [], [], []
     for user in users:
         for tracker_id in tracker_ids:

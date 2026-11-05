@@ -1,14 +1,15 @@
 """Teams screens (spec sections 6.3, 6.4, 7 and 8.1): the tree, a team's page and its members.
 
-Every change is committed with its activity entries in one transaction, and the entries name teams by their path from
-the top of the tree. A change that could raise the actor's own tracker access (moving a team, adding a member,
-changing a role) goes through the self-promotion guard of ``tracker/auth/guards.py``: input is validated first, the
-access snapshot is taken before any object is touched, and a refused change is rolled back. A non-administrator cannot
-give a team place or a member role to an account they created or whose password they reset (``vouched_refusal``).
+Every change is committed with its activity entries in one transaction, and the entries name teams by their names. A
+change that could raise the actor's own tracker access (moving a team, adding a member, changing a role) goes through
+the self-promotion guard of ``tracker/auth/guards.py``: input is validated first, the access snapshot is taken before
+any object is touched, and a refused change is rolled back. A non-administrator cannot give a team place or a member
+role to an account they created or whose password they reset (``vouched_refusal``).
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import NamedTuple
 
 from flask import abort, flash, redirect, render_template, request, url_for
@@ -28,7 +29,7 @@ from ..auth.guards import (
 from ..db import get_session
 from ..ids import in_range, parse_id
 from ..lists.catalogue import location_choices, location_label, parse_location, team_places
-from ..models import Location, PermissionSet, PermissionSetHolder, Region, Team, TeamMember, Tracker, User
+from ..models import Location, PermissionSet, PermissionSetHolder, Region, Team, TeamMember, TeamParent, Tracker, User
 from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
@@ -41,8 +42,8 @@ from .tree import (
     children_map,
     descendants,
     load_team_rows,
-    order_tree,
     parse_team_id,
+    set_team_parents,
     team_choices,
     team_labels,
 )
@@ -63,11 +64,26 @@ def _team_or_404(team_id: int) -> Team:
 
 def _delete_blocker(team_id: int, rows: list[TeamRow]) -> str | None:
     """Why the team cannot be deleted (spec section 6.4), or ``None``."""
-    if any(row.parent_id == team_id for row in rows):
+    if any(team_id in row.parent_ids for row in rows):
         return HAS_CHILDREN_MESSAGE
     if get_session().scalar(select(exists().where(Tracker.team_id == team_id))):
         return HAS_TRACKERS_MESSAGE
     return None
+
+
+def _row(rows: list[TeamRow], team: Team) -> TeamRow:
+    """The team's row, or an empty top-level row for a team deleted at the same moment."""
+    return next((row for row in rows if row.id == team.id), TeamRow(team.id, team.name, ()))
+
+
+def _higher_team_names(labels: dict[int, str], parent_ids: Iterable[int]) -> list[str]:
+    """The names of the higher teams, sorted by name ignoring case."""
+    return sorted((labels[parent_id] for parent_id in parent_ids), key=lambda name: (name.casefold(), name))
+
+
+def _higher_teams_text(labels: dict[int, str], parent_ids: Iterable[int]) -> str | None:
+    """The higher teams named in a sentence, "Applications and Infrastructure", or ``None`` for the top level."""
+    return " and ".join(_higher_team_names(labels, parent_ids)) or None
 
 
 def _to_team(team: Team):
@@ -164,10 +180,13 @@ def create():
         return _render_index(request.form, errors, 400)
     parent_path = team_labels(load_team_rows(db)).get(parent.id, parent.name) if parent else None
     place = _place_text(location)
-    team = Team(name=name, description=description, parent_id=parent.id if parent else None, location_id=location.id)
+    team = Team(name=name, description=description, location_id=location.id)
     db.add(team)
     try:
         db.flush()
+        if parent:
+            db.add(TeamParent(team_id=team.id, parent_id=parent.id))
+            db.flush()
         record(
             db,
             user_id=current_user().id,
@@ -207,7 +226,7 @@ def _person_row(person: TeamPerson) -> PersonRow:
     if person.direct_role is not None and person.inherited:
         top = max(person.inherited, key=lambda inherit: ROLE_ORDER[inherit.role])  # the nearest team on a tie
         if ROLE_ORDER[top.role] > ROLE_ORDER[person.direct_role]:
-            note = f"{top.role.title()} from {top.path}"
+            note = f"{top.role.title()} from {top.team_name}"
     return PersonRow(person, route, note)
 
 
@@ -234,7 +253,7 @@ def _render_team(team: Team, errors: list[str], status: int, form=None, open_det
         **context,
         team=team,
         path=labels.get(team.id, team.name),
-        parent_label=labels.get(team.parent_id, TOP_LEVEL) if team.parent_id else TOP_LEVEL,
+        parent_label=_higher_teams_text(labels, _row(rows, team).parent_ids) or TOP_LEVEL,
         people=people,
         direct_count=sum(1 for row in people if row.person.direct_role is not None),
         inherited_count=sum(1 for row in people if row.person.inherited),
@@ -317,16 +336,21 @@ def rename(team_id: int):
 
 
 def _render_move(team: Team, choice: str | None, errors: list[str], status: int):
-    """The move page: the destination form and, for a valid different destination, what the move would change."""
+    """The move page: the destination form and, for a valid different destination, what the move would change.
+
+    Until the Higher teams screen replaces it, the chosen team becomes the team's only higher team.
+    """
     db = get_session()
     rows = load_team_rows(db)
     labels = team_labels(rows)
     below = descendants(rows, team.id)
     new_parent_id = parse_id(choice) if choice else None
-    parent_label = labels.get(team.parent_id, TOP_LEVEL) if team.parent_id else TOP_LEVEL
+    current = frozenset(_row(rows, team).parent_ids)
+    parent_label = _higher_teams_text(labels, current)
     impact = notice = target = None
     if choice is not None and not errors:
-        if new_parent_id == team.parent_id:
+        new_parents = frozenset() if new_parent_id is None else frozenset({new_parent_id})
+        if new_parents == current:
             notice = (
                 f"{team.name} is already at the top level."
                 if new_parent_id is None
@@ -334,13 +358,15 @@ def _render_move(team: Team, choice: str | None, errors: list[str], status: int)
             )
         else:
             target = labels.get(new_parent_id, TOP_LEVEL) if new_parent_id else TOP_LEVEL
-            impact = move_impact(db, team, new_parent_id)
+            impact = move_impact(db, team, new_parents)
     page = render_template(
         "teams/move.html",
         team=team,
         path=labels.get(team.id, team.name),
         parent_label=parent_label,
-        parents=[(row.id, labels[row.id]) for row, _depth in order_tree(rows) if row.id not in below],
+        parents=sorted(
+            ((row.id, row.name) for row in rows if row.id not in below), key=lambda c: (c[1].casefold(), c[0])
+        ),
         choice=choice,
         new_parent_id=new_parent_id,
         target=target,
@@ -390,18 +416,19 @@ def move(team_id: int):
     if new_parent_id is not None and new_parent_id in descendants(rows, team.id):
         db.rollback()
         return _render_team(team, [CYCLE_MESSAGE], 400)
-    old_parent_id = current[team.id].parent_id
-    if new_parent_id == old_parent_id:
+    old_parents = frozenset(current[team.id].parent_ids)
+    new_parents = frozenset() if new_parent_id is None else frozenset({new_parent_id})
+    if new_parents == old_parents:
         db.rollback()
         flash(NO_CHANGES_MESSAGE, "info")
         return _to_team(team)
     actor = current_user()
     before = snapshot_access(db, actor)
-    team.parent_id = new_parent_id
+    set_team_parents(db, team.id, new_parents)
     if raises_own_access(db, actor, before):
         return _refuse(team, SELF_PROMOTION_MESSAGE)
-    labels = team_labels(rows)  # read before the move: the team's path is the one it had
-    old_path = labels.get(old_parent_id) if old_parent_id else None
+    labels = team_labels(rows)
+    old_path = _higher_teams_text(labels, old_parents)
     new_path = labels.get(new_parent_id) if new_parent_id else None
     record(
         db,
@@ -433,7 +460,7 @@ def delete_team(team_id: int):
         return _render_team(team, [blocker], 400, open_details=True)
     labels = team_labels(rows)
     path = labels[team.id]
-    parent_id = current[team.id].parent_id  # from the locked row: a move just committed has changed it
+    parent_ids = current[team.id].parent_ids  # read under the lock: a move just committed has changed them
     actor_id = current_user().id
     memberships = db.execute(
         select(TeamMember.user_id, TeamMember.role).where(TeamMember.team_id == team.id).order_by(TeamMember.user_id)
@@ -472,7 +499,7 @@ def delete_team(team_id: int):
         action="team_deleted",
         entity="team",
         entity_id=team.id,
-        detail={"name": current[team.id].name, "parent": labels.get(parent_id) if parent_id else None},
+        detail={"name": current[team.id].name, "parents": _higher_team_names(labels, parent_ids)},
     )
     db.execute(delete(TeamMember).where(TeamMember.team_id == team.id))
     db.execute(delete(PermissionSetHolder).where(PermissionSetHolder.team_id == team.id))

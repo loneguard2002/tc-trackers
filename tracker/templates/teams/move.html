@@ -30,7 +30,7 @@
   <section class="settings-section" aria-labelledby="section-destination">
     <header class="settings-section-head">
       <h2 id="section-destination">Where to move it</h2>
-      <p>{% if team.parent_id %}Now below <strong>{{ parent_label }}</strong>.{% else %}Now at the <strong>top level</strong>.{% endif %} People in the teams above a team reach its trackers, so moving it changes who can see them. Choose a place to see what would change before anything does.</p>
+      <p>{% if parent_label %}Now below <strong>{{ parent_label }}</strong>.{% else %}Now at the <strong>top level</strong>.{% endif %} People in the teams above a team reach its trackers, so moving it changes who can see them. Choose a place to see what would change before anything does.</p>
     </header>
     <form class="archive-row team-move" method="get" action="{{ url_for('teams.move_preview', team_id=team.id) }}">
       <div class="archive-text field">

@@ -1,3 +1,4 @@
+from tracker.auth.roles import user_role
 from tracker.teams.people import InheritedRole, reach_counts, team_people
 
 
@@ -20,7 +21,7 @@ def test_people_include_members_of_teams_above(db, team_factory, user_factory, a
     assert people[head.id].direct_role is None
     assert people[head.id].inherited == [InheritedRole(infra.id, "Infrastructure", "owner")]
     assert people[head.id].role == "owner"
-    assert people[lead.id].inherited == [InheritedRole(windows.id, "Infrastructure › Windows", "editor")]
+    assert people[lead.id].inherited == [InheritedRole(windows.id, "Windows", "editor")]
 
 
 def test_a_person_in_two_teams_of_the_chain_shows_once_with_the_highest_role(
@@ -69,3 +70,22 @@ def test_reach_counts(db, team_factory, user_factory, add_member):
     add_member(windows, off, "viewer")
 
     assert reach_counts(db) == {infra.id: 1, windows.id: 3, patching.id: 3, lone.id: 0}
+
+
+def test_diamond_highest_role_wins_and_person_counted_once(db, team_factory, user_factory, tracker_factory, add_member):
+    infra, applications = team_factory("Infrastructure"), team_factory("Applications")
+    windows = team_factory("Windows", infra)
+    desktops = team_factory("Desktops", parents=(windows, applications))
+    tracker = tracker_factory(team_id=desktops.id)
+    person = user_factory(full_name="Pat")
+    add_member(windows, person, "viewer")
+    add_member(applications, person, "editor")
+
+    assert user_role(db, person, tracker.id) == "editor"
+    assert reach_counts(db)[desktops.id] == 1
+    [row] = team_people(db, desktops.id)
+    assert row.user.id == person.id and row.direct_role is None and row.role == "editor"
+    assert row.inherited == [
+        InheritedRole(applications.id, "Applications", "editor"),
+        InheritedRole(windows.id, "Windows", "viewer"),
+    ]

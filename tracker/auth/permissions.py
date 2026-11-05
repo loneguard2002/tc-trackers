@@ -63,12 +63,12 @@ def user_permissions(session: Session, user: User) -> frozenset[str]:
 def set_permission_sources(session: Session, user: User) -> list[tuple[str, str]]:
     """``(permission, source)`` for every permission the user's sets grant, whatever the account's status.
 
-    Sources read ``"Set PMO, held directly"`` or ``"Set PMO, held by team PMO Office"`` (the team's path), ordered by
-    set name, then direct holdings first, then team path. The administrator flag is not a source here.
+    Sources read ``"Set PMO, held directly"`` or ``"Set PMO, held by team PMO Office"`` (the team's name), ordered by
+    set name, then direct holdings first, then team name. The administrator flag is not a source here.
     """
-    from ..teams.tree import load_team_rows, paths  # here: importing tracker.teams at load time would be circular
+    from ..teams.tree import load_team_rows, team_labels  # here: importing tracker.teams at load time would be circular
 
-    labels = paths(load_team_rows(session))
+    labels = team_labels(load_team_rows(session))
     holdings = session.execute(
         select(PermissionSet.name, PermissionSetPermission.permission, PermissionSetHolder.team_id, Team.name)
         .join(PermissionSetHolder, PermissionSetHolder.set_id == PermissionSet.id)

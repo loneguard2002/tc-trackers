@@ -23,6 +23,7 @@ from tracker.models import (
     Region,
     Team,
     TeamMember,
+    TeamParent,
     Tracker,
     TrackerRole,
     User,
@@ -192,12 +193,16 @@ def labels_form(region_factory, business_line_factory) -> dict:
 def team_factory(db):
     counter = {"n": 0}
 
-    def make(name: str | None = None, parent: Team | None = None, **kw) -> Team:
+    def make(name: str | None = None, parent: Team | None = None, parents: tuple[Team, ...] = (), **kw) -> Team:
+        """A team below ``parent`` and below each team in ``parents`` (top level without either)."""
         if name is None:
             counter["n"] += 1
             name = f"Team {counter['n']}"
-        team = Team(name=name, parent_id=parent.id if parent else None, **kw)
+        team = Team(name=name, **kw)
         db.add(team)
+        db.flush()
+        higher = ([parent] if parent else []) + list(parents)
+        db.add_all(TeamParent(team_id=team.id, parent_id=other.id) for other in higher)
         db.commit()
         return team
 

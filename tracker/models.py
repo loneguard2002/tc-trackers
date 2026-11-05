@@ -113,14 +113,25 @@ class Team(Base):
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
     name: Mapped[str] = mapped_column(Text)
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
-    parent_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id", ondelete="RESTRICT"))
     location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = _now()
 
 
 Index("uq_teams_name_lower", func.lower(Team.name), unique=True)
-Index("ix_teams_parent_id", Team.parent_id)
 Index("ix_teams_location_id", Team.location_id)
+
+
+class TeamParent(Base):
+    """A link from a team to one of its higher teams; a team without links is top level."""
+
+    __tablename__ = "team_parents"
+    __table_args__ = (
+        CheckConstraint("team_id <> parent_id", name="not_self"),
+        Index("ix_team_parents_parent_id", "parent_id"),
+    )
+
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True)
+    parent_id: Mapped[int] = mapped_column(ForeignKey("teams.id", ondelete="RESTRICT"), primary_key=True)
 
 
 class TeamMember(Base):
