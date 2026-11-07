@@ -693,6 +693,25 @@ def test_status_tokens_match_a_row_in_two_groups(page, live_server, user_factory
     _clean(page)
 
 
+def test_people_filter_counts_leave_out_people_who_are_not_active(
+    page, live_server, user_factory, team_factory, add_member
+):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    add_member(windows, user_factory(full_name="Dan Direct"), "viewer")
+    add_member(windows, user_factory(full_name="Dora Disabled", status="disabled"), "viewer")
+    add_member(infra, user_factory(full_name="Ian Inherited"), "viewer")
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{windows.id}")
+    for status, count in (("all", "2"), ("direct", "1"), ("inherited", "1")):
+        expect(_chip(page, status)).to_have_text(count)
+    page.locator("button[data-status=direct]").click()
+    names = page.locator("#people-table tbody tr:visible .member-name").all_inner_texts()
+    assert sorted(n.split()[0] for n in names) == ["Dan", "Dora"]  # Dora is still listed
+    page.locator("#people-table-search").fill("d")
+    expect(_chip(page, "direct")).to_have_text("1")
+    _clean(page)
+
+
 def test_pager_says_tracker_for_one_row(page, live_server, user_factory, team_factory, tracker_factory):
     team = team_factory(name="Infrastructure")
     tracker_factory(name="Only one", team_id=team.id)
@@ -744,4 +763,31 @@ def test_picker_and_trackers_table_keep_separate_no_match_lines(
     assert page.locator("[data-no-match]:visible").count() == 2
     page.get_by_role("searchbox", name="Search trackers to add").fill("")
     assert page.locator("[data-no-match]:visible").count() == 1
+    _clean(page)
+
+
+# --- Moving trackers into a team whose region is retired -------------------------------------------------------------
+
+
+def test_moving_into_a_retired_region_asks_in_a_modal_whether_to_archive(
+    page, live_server, db, user_factory, team_factory, region_factory, tracker_factory
+):
+    closed = team_factory(name="Closed desk", region_id=region_factory("OLD", retired=True).id)
+    payroll = tracker_factory(name="Payroll audit")
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{closed.id}/trackers?tracker_id={payroll.id}")
+    page.get_by_role("link", name="Move 1 tracker here").click()
+    expect(page.locator("#ask-dialog")).to_be_visible()
+    assert _is_modal(page, "ask-dialog")
+    assert "ask=1" not in page.url  # opened in place, not by following the link
+    expect(page.get_by_role("button", name="No, move only")).to_be_focused()
+    page.locator("#ask-dialog").get_by_role("link", name="Cancel").click()
+    expect(page.locator("#ask-dialog")).to_be_hidden()
+    page.get_by_role("link", name="Move 1 tracker here").click()
+    page.get_by_role("button", name="Yes, move and archive").click()
+    expect(page.locator(".flash, [role=status], .alert").first).to_contain_text(
+        "Moved Payroll audit to Closed desk and archived it."
+    )
+    db.expire_all()
+    tracker = db.get(type(payroll), payroll.id)
+    assert (tracker.team_id, tracker.status) == (closed.id, "archived")
     _clean(page)

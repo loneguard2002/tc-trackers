@@ -31,7 +31,8 @@
 
 {# All / Active / Retired, each with the number of rows it would show in its [data-count]. ``options`` replaces the
    buttons ((token, text) pairs, the first being "all") and ``counts`` (token to number) fills each count for a first
-   paint; lists.js recounts. A row holds one or more of the tokens in its data-status. #}
+   paint; lists.js recounts. A row holds one or more of the tokens in its data-status; a row marked data-uncounted is
+   listed but left out of every count. #}
 {% macro status_filters(target_id, noun, options=None, counts=None) -%}
 <div class="chips list-status" role="group" aria-label="Show {{ noun }} by status" data-status-for="{{ target_id }}" hidden>
   {% for value, text in (options or (('all', 'All'), ('active', 'Active'), ('retired', 'Retired'))) %}

@@ -105,7 +105,7 @@
       Array.prototype.forEach.call(body.rows, function (row) {
         var rowTokens = tokens(row);
         var found = inSearchAndRegion(row);
-        if (found) {
+        if (found && !row.hasAttribute("data-uncounted")) {  // listed but not counted: a person who is not active
           counts.all += 1;
           rowTokens.forEach(function (token) { counts[token] = (counts[token] || 0) + 1; });
         }
@@ -361,10 +361,19 @@
 
   // Add and Edit follow their link to the no-JavaScript page when the dialog cannot open as a modal, when a modifier
   // key asks for a new tab or window, or (Edit) when the row does not say where to save.
+  // Any other data-dialog-open names a dialog the server wrote in full, such as a question, opened as it is.
   each(document.querySelectorAll("a[data-dialog-open]"), function (link) {
     link.addEventListener("click", function (event) {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      if (link.getAttribute("data-dialog-open") === "add") {
+      var kind = link.getAttribute("data-dialog-open");
+      if (kind !== "add" && kind !== "edit") {
+        var question = document.getElementById(kind + "-dialog");
+        if (!canBeModal(question)) return;
+        event.preventDefault();
+        showModal(question);
+        return;
+      }
+      if (kind === "add") {
         if (!canBeModal(addDialog)) return;
         event.preventDefault();
         openAdd(addDialog);

@@ -3,7 +3,7 @@
 A tracker belongs to one team, so it moves here from its current team (or from none). It keeps every region it has and
 gains the team's region when it lacks it, so people who reach it by region keep their access and the team's region is
 covered; nothing is removed. A team without a region, or whose region is retired (a retired region cannot be given to
-a tracker), adds none.
+a tracker), adds none; when it is retired, someone who may retire regions is asked whether to archive the trackers as well.
 
 The preview applies the move inside a savepoint, reads the roles of everyone who could be affected again and rolls
 the savepoint back. Only people who belong to a team or hold a region grant can be affected: a direct role and the
@@ -48,6 +48,12 @@ def team_region(session: Session, team: Team) -> Region | None:
     """The region a tracker moved into the team gains when it lacks it, or ``None``."""
     region = session.get(Region, team.region_id) if team.region_id is not None else None
     return region if region is not None and not region.retired else None
+
+
+def retired_team_region(session: Session, team: Team) -> Region | None:
+    """The team's region when it is retired, so a tracker moved in gains no region, else ``None``."""
+    region = session.get(Region, team.region_id) if team.region_id is not None else None
+    return region if region is not None and region.retired else None
 
 
 def _by_name(trackers: Iterable[Tracker]) -> list[Tracker]:
@@ -192,3 +198,19 @@ def move_trackers(session: Session, actor: User, team: Team, trackers: Sequence[
                 entity_id=tracker.id,
                 detail={"regions": [before, after]},
             )
+
+
+def archive_trackers(session: Session, actor: User, trackers: Sequence[Tracker]) -> None:
+    """Archive the trackers not archived yet, each with a ``tracker_archived`` entry as its own Archive records."""
+    for tracker in trackers:
+        if tracker.status == "archived":
+            continue
+        tracker.status = "archived"
+        record(
+            session,
+            user_id=actor.id,
+            tracker_id=tracker.id,
+            action="tracker_archived",
+            entity="tracker",
+            entity_id=tracker.id,
+        )
