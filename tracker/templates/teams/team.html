@@ -110,7 +110,7 @@
       {% if people %}
       <div class="list-tools">
         {{ search_box('people-table', 'Search people') }}
-        {{ status_filters('people-table', 'people', (('all', 'All'), ('direct', 'Direct'), ('inherited', 'From teams above')), {'all': people|length, 'direct': direct_count, 'inherited': inherited_count}) }}
+        {{ status_filters('people-table', 'people', (('all', 'All'), ('direct', 'Direct'), ('inherited', 'From teams above')), {'all': active_people, 'direct': direct_count, 'inherited': inherited_count}) }}
       </div>
       <div class="section-table list-table">
         <table id="people-table">
@@ -123,7 +123,7 @@
           <tbody>
           {% for row in people %}
           {% set u = row.person.user %}
-          <tr data-route="{{ row.route }}" data-status="{{ row.route }}" data-search="{{ (u.full_name ~ ' ' ~ u.email ~ ' ' ~ row.route ~ ' ' ~ (row.person.inherited|map(attribute='team_name')|join(' ')) ~ ' ' ~ row.person.role ~ ' ' ~ u.status)|lower }}" data-sort-person="{{ u.full_name }}" data-sort-route="{{ row.route }}" data-sort-role="{{ row.person.role }}">
+          <tr data-route="{{ row.route }}" data-status="{{ row.route }}"{% if u.status != 'active' %} data-uncounted{% endif %} data-search="{{ (u.full_name ~ ' ' ~ u.email ~ ' ' ~ row.route ~ ' ' ~ (row.person.inherited|map(attribute='team_name')|join(' ')) ~ ' ' ~ row.person.role ~ ' ' ~ u.status)|lower }}" data-sort-person="{{ u.full_name }}" data-sort-route="{{ row.route }}" data-sort-role="{{ row.person.role }}">
             <td><div class="member-cell">
               <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
               <span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}{% if u.status != 'active' %} <span class="badge badge-muted">{{ u.status|title }}</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
