@@ -1138,6 +1138,8 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
   .list-dialog-head { padding-left: 16px; }
   .list-dialog-body, .list-dialog-foot { padding-left: 16px; padding-right: 16px; }
   .list-dialog-foot .button { flex: 1; text-align: center; }
+  /* Three answers do not fit side by side: one per line, the main answer first. */
+  .list-dialog-foot.foot-stack { flex-direction: column-reverse; }
 }
 
 /* A region's Access screen: on a phone each person is a card (name, then role and Remove side by side), so the Role

@@ -764,3 +764,30 @@ def test_picker_and_trackers_table_keep_separate_no_match_lines(
     page.get_by_role("searchbox", name="Search trackers to add").fill("")
     assert page.locator("[data-no-match]:visible").count() == 1
     _clean(page)
+
+
+# --- Moving trackers into a team whose region is retired -------------------------------------------------------------
+
+
+def test_moving_into_a_retired_region_asks_in_a_modal_whether_to_archive(
+    page, live_server, db, user_factory, team_factory, region_factory, tracker_factory
+):
+    closed = team_factory(name="Closed desk", region_id=region_factory("OLD", retired=True).id)
+    payroll = tracker_factory(name="Payroll audit")
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{closed.id}/trackers?tracker_id={payroll.id}")
+    page.get_by_role("link", name="Move 1 tracker here").click()
+    expect(page.locator("#ask-dialog")).to_be_visible()
+    assert _is_modal(page, "ask-dialog")
+    assert "ask=1" not in page.url  # opened in place, not by following the link
+    expect(page.get_by_role("button", name="No, move only")).to_be_focused()
+    page.locator("#ask-dialog").get_by_role("link", name="Cancel").click()
+    expect(page.locator("#ask-dialog")).to_be_hidden()
+    page.get_by_role("link", name="Move 1 tracker here").click()
+    page.get_by_role("button", name="Yes, move and archive").click()
+    expect(page.locator(".flash, [role=status], .alert").first).to_contain_text(
+        "Moved Payroll audit to Closed desk and archived it."
+    )
+    db.expire_all()
+    tracker = db.get(type(payroll), payroll.id)
+    assert (tracker.team_id, tracker.status) == (closed.id, "archived")
+    _clean(page)
