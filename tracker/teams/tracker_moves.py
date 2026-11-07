@@ -3,7 +3,7 @@
 A tracker belongs to one team, so it moves here from its current team (or from none). It keeps every region it has and
 gains the team's region when it lacks it, so people who reach it by region keep their access and the team's region is
 covered; nothing is removed. A team without a region, or whose region is retired (a retired region cannot be given to
-a tracker), adds none; when it is retired, an administrator is asked whether to archive the trackers as well.
+a tracker), adds none; when it is retired, someone who may retire regions is asked whether to archive the trackers as well.
 
 The preview applies the move inside a savepoint, reads the roles of everyone who could be affected again and rolls
 the savepoint back. Only people who belong to a team or hold a region grant can be affected: a direct role and the

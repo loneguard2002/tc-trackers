@@ -26,6 +26,11 @@ from .countries import COUNTRIES, country_name, flag_path, parse_country
 
 manage_lists_required = admin_required
 
+
+def can_manage_lists(user) -> bool:
+    """Whether ``user`` may change these lists, retiring a region included: the rule ``manage_lists_required`` keeps."""
+    return user is not None and user.is_admin
+
 MAX_CODE_LENGTH = 20
 REGION_CODE_REQUIRED = "Enter a region code."
 REGION_CODE_TOO_LONG = f"A region code can be at most {MAX_CODE_LENGTH} characters."

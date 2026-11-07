@@ -30,6 +30,7 @@ from ..auth.guards import (
 from ..db import get_session
 from ..ids import in_range, parse_id
 from ..lists.catalogue import location_choices, location_label, parse_place, team_places
+from ..lists.views import can_manage_lists
 from ..models import (
     BusinessLine,
     Location,
@@ -407,9 +408,9 @@ def _move_race(team_id: int):
 
 def _asks_to_archive(team: Team, trackers: list[Tracker]) -> bool:
     """Whether moving the trackers asks to archive them: the team's region is retired, so they gain no region, and
-    the actor is an administrator (only administrators archive trackers) moving at least one active tracker."""
+    the actor may retire regions (the owner's rule) and is moving at least one active tracker."""
     return (
-        current_user().is_admin
+        can_manage_lists(current_user())
         and retired_team_region(get_session(), team) is not None
         and any(tracker.status != "archived" for tracker in trackers)
     )
