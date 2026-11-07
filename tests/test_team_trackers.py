@@ -338,3 +338,88 @@ def test_a_region_added_at_the_same_moment_gives_the_tracker_message(client, log
     response = post(client, moves(team), {"tracker_id": str(payroll.id)})
     assert response.headers["Location"].endswith(f"/admin/teams/{team.id}?tab=trackers&add=1")
     assert TRACKERS_CHANGED_MESSAGE in text_of(client.get(response.headers["Location"]))
+
+
+# --- A team whose region is retired: archive the trackers as well? -------------------------------------------------
+
+
+@pytest.fixture
+def closed(region_factory, team_factory):
+    """Closed desk, whose region OLD is retired."""
+    return team_factory(name="Closed desk", region_id=region_factory("OLD", retired=True).id)
+
+
+def ask_dialog(raw: str) -> str | None:
+    found = re.search(r'<dialog id="ask-dialog".*?</dialog>', raw, re.S)
+    return found.group(0) if found else None
+
+
+def test_an_administrator_is_asked_whether_to_archive_when_the_region_is_retired(
+    client, logged_in_admin, closed, setup
+):
+    url = f"{moves(closed)}?{query(setup['old'], setup['payroll'])}"  # by name, as the page writes it
+    raw = raw_of(client.get(url))
+    assert "Closed desk's region, OLD, is retired, so no region is added." in flat(raw)
+    move = re.search(r'<a class="button primary" href="([^"]*)" data-dialog-open="ask">(.*?)</a>', raw, re.S)
+    assert move and flat(move.group(2)) == "Move 2 trackers here"
+    assert move.group(1).replace("&amp;", "&") == f"{url}&ask=1"
+    dialog = ask_dialog(raw)
+    assert dialog and " open" not in dialog.split(">")[0]
+    text = flat(dialog)
+    assert "Archive the trackers as well?" in text
+    assert "Do you want to archive the 1 active tracker you are moving?" in text  # Old rollout is archived already
+    assert re.search(r'<button class="button primary" type="submit" name="archive" value="yes">', dialog)
+    assert re.search(r'<button class="button" type="submit" name="archive" value="no" autofocus>', dialog)
+    assert dialog.count('name="tracker_id"') == 2
+    assert f'href="{url.replace("&", "&amp;")}"' in dialog  # Cancel and close stay on the preview
+    opened = ask_dialog(raw_of(client.get(f"{url}&ask=1")))  # without JavaScript, the link shows the dialog open
+    assert opened and " open data-reopen" in opened.split(">")[0]
+
+
+@pytest.mark.parametrize("case", ["live region", "no region", "all archived", "not an administrator"])
+def test_no_archive_question_otherwise(client, logged_in_admin, db, user_factory, give_set, closed, setup, case):
+    team, chosen = closed, [setup["payroll"]]
+    if case == "live region":
+        team = setup["infra"]
+    elif case == "no region":
+        team.region_id = None
+        db.commit()
+    elif case == "all archived":
+        chosen = [setup["old"]]
+    else:
+        holder(user_factory, give_set, client)
+    raw = raw_of(client.get(f"{moves(team)}?{query(*chosen)}"))
+    assert ask_dialog(raw) is None and 'data-dialog-open="ask"' not in raw
+    assert re.search(r'<button class="button primary" type="submit">Move 1 tracker here</button>', raw)
+
+
+@pytest.mark.parametrize("answer", ["yes", "no"])
+def test_the_answer_archives_the_moved_trackers_or_not(client, logged_in_admin, db, closed, setup, answer):
+    payroll, old = setup["payroll"], setup["old"]
+    response = post(
+        client, moves(closed), {"tracker_id": [str(payroll.id), str(old.id)], "archive": answer}, follow_redirects=True
+    )
+    db.expire_all()
+    assert team_of(db, payroll) == closed.id and team_of(db, old) == closed.id
+    assert region_codes(db, payroll) == {"EMEA"}  # the retired region is not added
+    assert db.get(Tracker, payroll.id).status == ("archived" if answer == "yes" else "active")
+    archived = entries(db, "tracker_archived")
+    if answer == "yes":
+        assert "Moved 2 trackers to Closed desk and archived them." in text_of(response)
+        assert [(e.tracker_id, e.entity, e.entity_id) for e in archived] == [(payroll.id, "tracker", str(payroll.id))]
+    else:
+        assert "Moved 2 trackers to Closed desk." in text_of(response) and archived == []
+
+
+@pytest.mark.parametrize("case", ["live region", "not an administrator"])
+def test_archive_is_ignored_unless_the_question_was_asked(
+    client, logged_in_admin, db, user_factory, give_set, closed, setup, case
+):
+    team = setup["infra"] if case == "live region" else closed
+    if case == "not an administrator":
+        holder(user_factory, give_set, client)
+    payroll = setup["payroll"]
+    post(client, moves(team), {"tracker_id": str(payroll.id), "archive": "yes"})
+    db.expire_all()
+    assert team_of(db, payroll) == team.id and db.get(Tracker, payroll.id).status == "active"
+    assert entries(db, "tracker_archived") == []

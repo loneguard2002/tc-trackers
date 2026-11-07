@@ -50,9 +50,11 @@ from .people import TeamPerson, reach_counts, team_people
 from .tracker_moves import (
     TEAM_DELETED_MESSAGE,
     TRACKERS_CHANGED_MESSAGE,
+    archive_trackers,
     moving_trackers,
     parse_trackers,
     picker_trackers,
+    retired_team_region,
     team_region,
     tracker_move_impact,
 )
@@ -403,6 +405,16 @@ def _move_race(team_id: int):
     return redirect(url_for("teams.view", team_id=team_id, tab="trackers", add=1))
 
 
+def _asks_to_archive(team: Team, trackers: list[Tracker]) -> bool:
+    """Whether moving the trackers asks to archive them: the team's region is retired, so they gain no region, and
+    the actor is an administrator (only administrators archive trackers) moving at least one active tracker."""
+    return (
+        current_user().is_admin
+        and retired_team_region(get_session(), team) is not None
+        and any(tracker.status != "archived" for tracker in trackers)
+    )
+
+
 @bp.get("/<int:team_id>/trackers", endpoint="move_trackers")
 @permission_required("manage_teams")
 def preview_tracker_moves(team_id: int):
@@ -417,11 +429,20 @@ def preview_tracker_moves(team_id: int):
         impact = tracker_move_impact(db, team, trackers)
     except (IntegrityError, StaleDataError):
         return _move_race(team_id)  # not team.id: the failed flush leaves the session to be rolled back first
+    retired = retired_team_region(db, team)
+    ids = [tracker.id for tracker in trackers]
+    asks = _asks_to_archive(team, trackers)
     page = render_template(
         "teams/move_trackers.html",
         team=team,
         moving=moving_trackers(db, team, trackers),
         region=region.code if region else None,
+        retired=retired.code if retired else None,
+        asks=asks,
+        asking=asks and request.args.get("ask") == "1",
+        to_archive=sum(1 for tracker in trackers if tracker.status != "archived"),
+        preview_url=url_for("teams.move_trackers", team_id=team.id, tracker_id=ids),
+        ask_url=url_for("teams.move_trackers", team_id=team.id, tracker_id=ids, ask=1),
         impact=impact,
         page_title=f"Move trackers to {team.name}",
         current_page="teams",
@@ -440,9 +461,12 @@ def confirm_tracker_moves(team_id: int):
     actor = current_user()
     back = redirect(url_for("teams.view", team_id=team.id, tab="trackers"))
     names, team_name = [tracker.name for tracker in trackers], team.name
+    archive = request.form.get("archive") == "yes" and _asks_to_archive(team, trackers)
     before = snapshot_access(db, actor)
     try:  # flushed by the guard's query, so a change made at the same moment fails there or on commit
         apply_tracker_moves(db, actor, team, trackers)
+        if archive:
+            archive_trackers(db, actor, trackers)
         if raises_own_access(db, actor, before):
             db.rollback()
             flash(SELF_PROMOTION_MESSAGE, "danger")
@@ -451,7 +475,8 @@ def confirm_tracker_moves(team_id: int):
     except (IntegrityError, StaleDataError):  # the team or a tracker was deleted, or a region added, at that moment
         return _move_race(team_id)  # not team.id: the failed flush leaves the session to be rolled back first
     moved = names[0] if len(names) == 1 else f"{len(names)} trackers"
-    flash(f"Moved {moved} to {team_name}.", "success")
+    archived = f" and archived {'it' if len(names) == 1 else 'them'}" if archive else ""
+    flash(f"Moved {moved} to {team_name}{archived}.", "success")
     return back
 
 
