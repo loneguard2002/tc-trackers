@@ -300,6 +300,7 @@ def _render_team(
     people = [_person_row(person) for person in team_people(db, team.id)]
     people.sort(key=lambda row: row.person.direct_role is None)  # direct members first; the order by name is kept
     direct_ids = {row.person.user.id for row in people if row.person.direct_role is not None}
+    counted = [row for row in people if row.person.user.status == "active"]  # the counts leave out inactive people
     candidates = [
         user
         for user in db.scalars(
@@ -325,9 +326,9 @@ def _render_team(
         team=team,
         under=_higher_teams(labels, _row(rows, team).parent_ids),
         people=people,
-        active_people=sum(1 for row in people if row.person.user.status == "active"),
-        direct_count=sum(1 for row in people if row.person.direct_role is not None),
-        inherited_count=sum(1 for row in people if row.person.inherited),
+        active_people=len(counted),
+        direct_count=sum(1 for row in counted if row.person.direct_role is not None),
+        inherited_count=sum(1 for row in counted if row.person.inherited),
         below=below,
         tracker_counts=tracker_counts,
         candidates=candidates,

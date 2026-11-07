@@ -693,6 +693,25 @@ def test_status_tokens_match_a_row_in_two_groups(page, live_server, user_factory
     _clean(page)
 
 
+def test_people_filter_counts_leave_out_people_who_are_not_active(
+    page, live_server, user_factory, team_factory, add_member
+):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    add_member(windows, user_factory(full_name="Dan Direct"), "viewer")
+    add_member(windows, user_factory(full_name="Dora Disabled", status="disabled"), "viewer")
+    add_member(infra, user_factory(full_name="Ian Inherited"), "viewer")
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{windows.id}")
+    for status, count in (("all", "2"), ("direct", "1"), ("inherited", "1")):
+        expect(_chip(page, status)).to_have_text(count)
+    page.locator("button[data-status=direct]").click()
+    names = page.locator("#people-table tbody tr:visible .member-name").all_inner_texts()
+    assert sorted(n.split()[0] for n in names) == ["Dan", "Dora"]  # Dora is still listed
+    page.locator("#people-table-search").fill("d")
+    expect(_chip(page, "direct")).to_have_text("1")
+    _clean(page)
+
+
 def test_pager_says_tracker_for_one_row(page, live_server, user_factory, team_factory, tracker_factory):
     team = team_factory(name="Infrastructure")
     tracker_factory(name="Only one", team_id=team.id)

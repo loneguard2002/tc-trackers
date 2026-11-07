@@ -391,6 +391,20 @@ def test_filter_group_counts(client, logged_in_admin, team_factory, user_factory
     assert "All 3 Direct 2 From teams above 1" in text
 
 
+def test_filter_group_counts_leave_out_people_who_are_not_active(
+    client, logged_in_admin, team_factory, user_factory, add_member
+):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    add_member(infra, user_factory(), "owner")
+    add_member(windows, user_factory(), "viewer")
+    add_member(windows, user_factory(full_name="Dora Disabled", status="disabled"), "viewer")
+    raw = raw_of(client.get(f"/admin/teams/{windows.id}"))
+    assert "All 2 Direct 1 From teams above 1" in flat(raw)
+    row = row_for(raw, "Dora Disabled")
+    assert "data-uncounted" in row
+
+
 def test_people_list_direct_members_before_those_from_teams_above(
     client, logged_in_admin, team_factory, user_factory, add_member
 ):

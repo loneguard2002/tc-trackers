@@ -105,7 +105,7 @@
       Array.prototype.forEach.call(body.rows, function (row) {
         var rowTokens = tokens(row);
         var found = inSearchAndRegion(row);
-        if (found) {
+        if (found && !row.hasAttribute("data-uncounted")) {  // listed but not counted: a person who is not active
           counts.all += 1;
           rowTokens.forEach(function (token) { counts[token] = (counts[token] || 0) + 1; });
         }
