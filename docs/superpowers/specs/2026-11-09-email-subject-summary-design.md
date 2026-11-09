@@ -1,7 +1,7 @@
 # Email subject as the week's summary — design (small change)
 
 Chosen approach: C, one `{{summary}}` placeholder that produces the whole subject line, so the line keeps one fixed
-shape on every tracker. (B, a few phrase placeholders an owner could reorder, was the first choice and was replaced
+shape on every tracker, in a subject that only an administrator can change, once for the whole tool. (B, a few phrase placeholders an owner could reorder, was the first choice and was replaced
 by C at the owner's request; A, one placeholder per value, could not handle the special cases.) The email body is a
 separate, later change.
 
@@ -15,7 +15,16 @@ neither progress nor risks, and its date is long.
 
     Network refresh | 06/11/26 : Green | 25 (+5 v +3) of 180 devices done (14%) | 155 left | 3 risks (1 new - red)
 
-New default subject: `{{summary}}`.
+## One subject for the whole tool, set by an administrator
+
+The subject is no longer set per tracker. It is one setting for the whole tool, on the administration Email settings
+page (the SMTP page), editable by whoever holds the "Manage email settings" permission. Its default is `{{summary}}`,
+and an administrator may wrap it or replace it with other placeholders, for example `[PMO] {{summary}}`. It is stored
+in the existing `app_settings` table under the key `report_email_subject`; with no saved value, `{{summary}}` is used.
+Changing it is recorded in the Activity log like the other email settings.
+
+On a tracker's Email page, the owner keeps the body and the recipients. The Subject field is replaced by a read-only
+line showing the tool's subject, with a note that an administrator sets it for every tracker.
 
 | Part | Example | Rules |
 |---|---|---|
@@ -29,10 +38,11 @@ New default subject: `{{summary}}`.
 The existing placeholders all stay, so saved templates and bodies keep working. `{{summary}}` appears in the settings
 page's list of placeholders with a one-line description.
 
-## Saved subjects
+## Saved per-tracker subjects
 
-A data migration switches every saved subject that is exactly the old default to `{{summary}}`. A subject an owner
-has reworded is left alone. (Today one of three trackers has a saved subject, and it is the old default.)
+They stop being used: every tracker's email takes the tool's subject. Nothing is deleted; the column stays and saving
+a tracker's template no longer changes it. (Today one of three trackers has a saved subject, and it is the old
+default, so no wording is lost.)
 
 ## Calls I made
 
@@ -47,9 +57,9 @@ has reworded is left alone. (Today one of three trackers has a saved subject, an
 
 - The email body (the next conversation).
 - A change in the week-on-week percentage; only this week's quantity against its target.
-- Letting owners reorder or reword parts of the summary.
+- Letting owners reorder or reword parts of the summary, or set a subject per tracker.
 
 ## Left to the builder
 
 Where the summary function lives (beside `placeholder_context` in `tracker/mail/compose.py` is the obvious place), and
-the migration number (0009).
+how the read-only subject line looks on the tracker's Email page. No database migration is needed.
