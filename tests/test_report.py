@@ -305,6 +305,23 @@ def test_report_chart_images_are_served_to_viewers_only(client, small_tracker, v
     assert client.get(f"{url}/remaining.svg").status_code == 404
 
 
+def test_report_chart_image_is_drawn_for_the_week_in_its_link(client, db, small_tracker, viewer, monkeypatch):
+    """The picture must show the week on the page. Comparing two pictures cannot prove it (each SVG carries the time
+    it was drawn), so the test records the week the figures are worked out for."""
+    from tracker.report import views
+
+    seed(db, small_tracker)
+    asked = []
+    real = views.compute_position
+    monkeypatch.setattr(views, "compute_position", lambda *a: asked.append(a[2]) or real(*a))
+    url = f"/trackers/{small_tracker.id}/report/chart/remaining.svg"
+    for week in (WEEKS[1], WEEKS[3]):
+        response = client.get(f"{url}?week={week.isoformat()}")
+        assert response.status_code == 200
+        assert response.headers["Cache-Control"] == "no-store, max-age=0"  # never a stale picture
+    assert asked == [WEEKS[1], WEEKS[3]]
+
+
 def test_the_live_page_builds_no_server_charts(db, small_tracker):
     assert build_report(db, small_tracker, WEEKS[1], WEEKS[1], with_charts=False).charts == {}
     assert set(build_report(db, small_tracker, WEEKS[1], WEEKS[1]).charts) == {"remaining", "weekly", "cumulative"}

@@ -16,6 +16,13 @@ def test_security_headers(client):
     assert r.headers["X-Frame-Options"] == "DENY"
 
 
+def test_pages_are_never_stored_but_static_files_may_be(client):
+    """Every page and file the app builds is sent "never store", so no browser shows stale figures; the
+    stylesheets and scripts under /static are left to the normal static-file caching."""
+    assert client.get("/healthz").headers["Cache-Control"] == "no-store, max-age=0"
+    assert "no-store" not in client.get("/static/tracker.css").headers.get("Cache-Control", "")
+
+
 def test_missing_database_url_fails_fast():
     with pytest.raises(ConfigurationError):
         validate_config({"SECRET_KEY": "x", "DATABASE_URL": ""})
