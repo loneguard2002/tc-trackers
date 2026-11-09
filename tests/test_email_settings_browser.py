@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 
 import pytest
@@ -97,18 +98,19 @@ def test_archive_asks_in_the_page(page, live_server, admin):
 
 def test_email_preview_follows_the_template(page, live_server, admin):
     page.goto(f"{live_server}/trackers/{admin.id}/mail")
-    expect(page.locator("#subject")).to_have_attribute("readonly", "")
+    expect(page.locator(".subject-line")).to_contain_text("Live tracker | ")
     expect(page.locator("[data-preview-subject]")).to_contain_text("Subject: Live tracker | ")
-    page.locator("#subject").focus()  # read-only: a chip clicked now still goes into the body
-    page.get_by_role("button", name="tracker_name", exact=True).click()
-    expect(page.locator("#subject")).to_have_value("{{summary}}")
+    page.get_by_role("button", name="tracker_name", exact=True).click()  # chips only ever go into the body
+    expect(page.locator("#body_html")).to_have_value(re.compile(r"\{\{tracker_name\}\}"))
+    frame = page.frame_locator("[data-preview-frame]")
+    expect(frame.locator(".mail-figures")).to_be_visible()  # the default message's parts render, not escaped
+    expect(frame.locator("body")).not_to_contain_text("&lt;table")
     page.fill("#body_html", "<p>Hello {{nope}}</p>")
     expect(page.locator("[data-unknown]")).to_have_text("Unknown placeholders will be sent as written: nope.")
     page.locator("#body_html").focus()
     page.locator("#body_html").press("End")
     page.get_by_role("button", name="status", exact=True).click()
     expect(page.locator("#body_html")).to_have_value("<p>Hello {{nope}}</p>{{status}}")
-    frame = page.frame_locator("[data-preview-frame]")
     expect(frame.locator("body")).to_contain_text("Hello {{nope}}")
     expect(page.locator("[data-dirty-note]")).to_have_text("Unsaved changes; the preview shows them")
     assert_clean(page)

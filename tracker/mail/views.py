@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ..audit import record
 from ..auth import current_user, require_tracker_role
+from ..auth.roles import lead_in_charge
 from ..db import get_session
 from ..engine.weeks import week_endings
 from ..ids import parse_id
@@ -21,6 +22,7 @@ from ..report.build import build_report, default_report_week
 from ..trackers.views import _refuse_if_archived
 from . import bp, sending, smtp
 from .compose import (
+    BLOCK_PLACEHOLDERS,
     DEFAULT_BODY,
     DEFAULT_SUBJECT,
     PLACEHOLDERS,
@@ -101,6 +103,8 @@ def _page(tracker, week, form=None, status: int = 200):
             ).all(),
             values=values,
             placeholders=PLACEHOLDERS,
+            blocks=BLOCK_PLACEHOLDERS,
+            lead_missing=lead_in_charge(db, tracker) is None,
             unknown=unknown_placeholders(values["subject"], values["body_html"]),
             custom=template is not None,
             weeks=week_endings(tracker.first_week_ending, tracker.last_week_ending),

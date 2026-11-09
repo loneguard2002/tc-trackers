@@ -6,6 +6,7 @@
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
+{% if lead_missing %}<p class="warn-box">This tracker has nobody in charge of the weekly update. <a href="{{ url_for('trackers.settings', tracker_id=tracker.id) }}#schedule">Choose one in Settings</a>.</p>{% endif %}
 {% set count = recipients|length %}
 {% set people = count ~ ' recipient' ~ ('' if count == 1 else 's') %}
 <nav class="subnav" aria-label="Email sections">
@@ -50,14 +51,18 @@
     <section class="settings-section" id="template" aria-labelledby="section-template">
       <header class="settings-section-head">
         <h2 id="section-template">Email template</h2>
-        <p>The subject and message sent with the report. The PDF is attached and the chart is shown under the message.</p>
+        <p>The message sent with the report. The PDF is attached and the chart is shown under the message.</p>
       </header>
       <form id="template-form" class="field-stack" method="post" action="{{ url_for('mail.settings', tracker_id=tracker.id) }}" data-template-form>
         {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="save_template">
-        {% call field('Subject', 'Set by an administrator for every tracker.', 'subject') %}
-        {# Read-only and not sent: the subject is the tool's, on the Email settings page; email.js previews it. #}
-        <input id="subject" value="{{ values.subject }}" readonly aria-describedby="subject-help">
-        {% endcall %}
+        <div class="field">
+          <span class="field-label" id="subject-label">Subject</span>
+          {# The tool's subject, set by an administrator; the hidden copy of the template drives the live preview. #}
+          <p class="subject-line" aria-labelledby="subject-label">{{ preview.subject if preview else values.subject }}</p>
+          <p class="field-help">Set by an administrator for every tracker.
+            {%- if can('manage_email_settings') %} <a href="{{ url_for('admin.smtp') }}">Change in Email settings</a>{% endif %}</p>
+          <input type="hidden" id="subject" value="{{ values.subject }}">
+        </div>
         {% call field('Body (HTML)', 'Keep the report link placeholder so readers can open the live report.', 'body_html') %}
         <textarea class="code-input" id="body_html" name="body_html" rows="11" required aria-describedby="body_html-help">{{ values.body_html }}</textarea>
         {% endcall %}
@@ -158,7 +163,7 @@
         </form>
       </header>
       {% if preview %}
-      <div class="mail-frame" data-preview data-mark="{{ preview.mark }}" data-shell="{{ preview.shell }}" data-context="{{ preview.context|tojson|forceescape }}">
+      <div class="mail-frame" data-preview data-mark="{{ preview.mark }}" data-shell="{{ preview.shell }}" data-context="{{ preview.context|tojson|forceescape }}" data-blocks="{{ blocks|join(' ') }}">
         <div class="mail-head">
           <p class="mail-subject" data-preview-subject>Subject: {{ preview.subject }}</p>
           <p class="mail-meta">Bcc: {{ people }} · from Progress Tracker</p>
