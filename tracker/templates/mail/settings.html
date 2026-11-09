@@ -54,8 +54,9 @@
       </header>
       <form id="template-form" class="field-stack" method="post" action="{{ url_for('mail.settings', tracker_id=tracker.id) }}" data-template-form>
         {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="save_template">
-        {% call field('Subject', '', 'subject') %}
-        <input id="subject" name="subject" value="{{ values.subject }}" maxlength="300" required>
+        {% call field('Subject', 'Set by an administrator for every tracker.', 'subject') %}
+        {# Read-only and not sent: the subject is the tool's, on the Email settings page; email.js previews it. #}
+        <input id="subject" value="{{ values.subject }}" readonly aria-describedby="subject-help">
         {% endcall %}
         {% call field('Body (HTML)', 'Keep the report link placeholder so readers can open the live report.', 'body_html') %}
         <textarea class="code-input" id="body_html" name="body_html" rows="11" required aria-describedby="body_html-help">{{ values.body_html }}</textarea>

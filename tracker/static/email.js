@@ -58,9 +58,8 @@
     frame.srcdoc = preview.dataset.shell.replace(preview.dataset.mark, shown);
   }
 
-  [subject, body].forEach(function (input) {
-    input.addEventListener("focus", function () { last = input; });
-  });
+  // The subject is read-only (an administrator sets it for every tracker), so chips always go into the body.
+  body.addEventListener("focus", function () { last = body; });
 
   var chips = form.querySelector("[data-placeholder-chips]");
   var help = form.querySelector("[data-placeholder-help]");
