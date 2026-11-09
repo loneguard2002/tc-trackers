@@ -3,6 +3,11 @@
 {% from "macros.html" import bar, labels_text, rag_dot, rag_tone %}
 {% set r = report %}{% set t = r.tracker %}{% set h = r.headline %}
 {% set mime = chart_mime|default('image/svg+xml') %}
+{#- A chart picture: drawn into the page when the report carries it (print, PDF, email), else a separate image. -#}
+{% macro chart_src(name) -%}
+{%- if report.charts -%}{{ report.charts[name]|data_uri(chart_mime|default('image/svg+xml')) }}
+{%- else -%}{{ url_for('report.chart_image', tracker_id=report.tracker.id, name=name, week=report.week_ending.isoformat()) }}{%- endif -%}
+{%- endmacro %}
 {% set status = r.inputs.status if r.inputs and r.inputs.status else None %}
 {% set tone = rag_tone(status) %}
 {% set group_name = t.group_label or 'Group' %}
@@ -51,7 +56,7 @@
   </section>
 
   <section class="report-panel report-panel-chart">
-    <img class="report-chart" data-chart="remaining" alt="Remaining {{ t.unit_label }}: plan, actual and forecast" src="{{ r.charts.remaining|data_uri(mime) }}">
+    <img class="report-chart" data-chart="remaining" alt="Remaining {{ t.unit_label }}: plan, actual and forecast" src="{{ chart_src('remaining') }}">
   </section>
 
   <div class="report-columns">
@@ -107,7 +112,7 @@
   </div>
 
   <section class="report-panel report-charts">
-    <img class="report-chart" data-chart="weekly" alt="Weekly actual against target" src="{{ r.charts.weekly|data_uri(mime) }}">
-    <img class="report-chart" data-chart="cumulative" alt="Cumulative completed" src="{{ r.charts.cumulative|data_uri(mime) }}">
+    <img class="report-chart" data-chart="weekly" alt="Weekly actual against target" src="{{ chart_src('weekly') }}" loading="lazy">
+    <img class="report-chart" data-chart="cumulative" alt="Cumulative completed" src="{{ chart_src('cumulative') }}" loading="lazy">
   </section>
 </article>

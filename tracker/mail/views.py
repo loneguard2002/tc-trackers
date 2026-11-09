@@ -66,7 +66,7 @@ def _preview(tracker, week, values: dict) -> dict:
     """The preview for ``week`` with the template as shown on the page, plus what the page needs to redraw it as the
     template changes: the placeholder values and the email around the body."""
     db = get_session()
-    report = build_report(db, tracker, week, report_views.today())
+    report = build_report(db, tracker, week, report_views.today(), with_charts=False)  # the email has its own chart
     link = make_link(current_app.config["APP_URL"], tracker.id, week)
     chart = preview_chart_src(report)
     shown = SimpleNamespace(subject=values["subject"], body_html=values["body_html"])

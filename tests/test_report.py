@@ -284,8 +284,30 @@ def test_report_page_renders_sections(client, db, small_tracker, viewer):
     html = page.get_data(as_text=True)
     assert "Needed from you" in html and "Approve extra staff" in html and "Amber" in html
     assert "Site A" in html and "Rate (3 wk)" in html
-    assert html.count("data:image/svg+xml;base64,") == 3
+    # The page does not wait for the server's pictures: they are separate images, drawn when the browser asks.
+    assert "data:image/svg+xml;base64," not in html
+    week = WEEKS[1].isoformat()
+    for name in ("remaining", "weekly", "cumulative"):
+        assert f'src="/trackers/{small_tracker.id}/report/chart/{name}.svg?week={week}"' in html
     assert BADGE_IN_PROGRESS not in html
+
+
+def test_report_chart_images_are_served_to_viewers_only(client, small_tracker, viewer, user_factory):
+    from conftest import sign_in
+
+    url = f"/trackers/{small_tracker.id}/report/chart"
+    for name in ("remaining", "weekly", "cumulative"):
+        response = client.get(f"{url}/{name}.svg?week={WEEKS[1].isoformat()}")
+        assert response.status_code == 200 and response.mimetype == "image/svg+xml"
+        assert response.data.lstrip().startswith(b"<?xml") and b"<svg" in response.data
+    assert client.get(f"{url}/other.svg").status_code == 404
+    sign_in(client, user_factory())  # no role on the tracker
+    assert client.get(f"{url}/remaining.svg").status_code == 404
+
+
+def test_the_live_page_builds_no_server_charts(db, small_tracker):
+    assert build_report(db, small_tracker, WEEKS[1], WEEKS[1], with_charts=False).charts == {}
+    assert set(build_report(db, small_tracker, WEEKS[1], WEEKS[1]).charts) == {"remaining", "weekly", "cumulative"}
 
 
 def test_report_page_in_progress_badge_and_bad_week(client, db, small_tracker, viewer, monkeypatch):
@@ -348,11 +370,15 @@ def test_report_requires_a_role(client, logged_in_user, small_tracker):
     assert client.get(f"/trackers/{small_tracker.id}/report").status_code == 404
 
 
-def test_charts_embed_decodes_to_svg(client, db, small_tracker, viewer):
+def test_charts_embed_decodes_to_svg(app, db, small_tracker):
+    """The printable page (PDF and PNG) carries its three charts inside it; the live page links them instead."""
+    from tracker.report.render import render_print_html
+
     seed(db, small_tracker)
-    html = client.get(f"/trackers/{small_tracker.id}/report").get_data(as_text=True)
-    payload = re.search(r"data:image/svg\+xml;base64,([A-Za-z0-9+/=]+)", html).group(1)
-    assert b"<svg" in base64.b64decode(payload)
+    with app.test_request_context("/"):
+        html = render_print_html(build_report(db, small_tracker, WEEKS[1], WEEKS[1]))
+    payloads = re.findall(r"data:image/svg\+xml;base64,([A-Za-z0-9+/=]+)", html)
+    assert len(payloads) == 3 and all(b"<svg" in base64.b64decode(p) for p in payloads)
 
 
 def test_home_shows_weekly_status_from_latest_input(client, db, small_tracker, viewer):
