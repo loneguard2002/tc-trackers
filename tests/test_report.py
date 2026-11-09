@@ -381,16 +381,6 @@ def test_charts_embed_decodes_to_svg(app, db, small_tracker):
     assert len(payloads) == 3 and all(b"<svg" in base64.b64decode(p) for p in payloads)
 
 
-def test_home_shows_weekly_status_from_latest_input(client, db, small_tracker, viewer):
-    assert "Not set" in client.get("/").get_data(as_text=True)
-    db.add(ReportInput(tracker_id=small_tracker.id, week_ending=WEEKS[0], status="Red"))
-    db.add(ReportInput(tracker_id=small_tracker.id, week_ending=WEEKS[1], status="Green"))
-    db.commit()
-    html = client.get("/").get_data(as_text=True)
-    assert "tracker-card tracker-card-green" in html
-    assert "tracker-card-red" not in html
-
-
 # The report header shows the tracker's business line and regions.
 
 

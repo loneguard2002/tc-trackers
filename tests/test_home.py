@@ -1,7 +1,7 @@
 """The home page: which trackers show, what each card says and the filter choices (database required).
 
 The tests are grouped by area: A access and visibility, B card labels, C filter options, E progress and dates,
-F alerts, G risks, H role, actions and person in charge. Area D, filtering in a real browser, is in
+F status and alerts, G risks, H role, actions and person in charge. Area D, filtering in a real browser, is in
 test_home_browser.py.
 """
 
@@ -50,6 +50,19 @@ def test_archived_tracker_hidden_from_home_but_reachable(client, logged_in_admin
     assert b"Old tracker" in client.get("/?archived=1").data
     assert client.get(f"/trackers/{tracker.id}/groups").status_code == 200
     assert client.get(f"/trackers/{tracker.id}/settings").status_code == 200
+
+
+def test_home_lists_team_trackers_with_their_role(client, logged_in_user, tracker_factory, team_factory, add_member):
+    parent = team_factory(name="Infrastructure")
+    windows, network = team_factory(name="Windows", parent=parent), team_factory(name="Network", parent=parent)
+    add_member(parent, logged_in_user, "editor")
+    tracker_factory(name="Patching tracker", team_id=windows.id)
+    tracker_factory(name="Firewall tracker", team_id=network.id)
+    tracker_factory(name="Unrelated tracker")
+    page = client.get("/")
+    assert b"Patching tracker" in page.data and b"Firewall tracker" in page.data
+    assert b"Unrelated tracker" not in page.data
+    assert page.data.count(b'<span class="role-tag">Editor</span>') == 2
 
 
 # --- B. Card labels -------------------------------------------------------------------------------------------------
@@ -184,7 +197,19 @@ def test_home_shows_one_chart_key_for_the_page(client, logged_in_user, db, track
     assert html.count('class="spark-key') == 1  # one chart key for the page, not one per card
 
 
-# --- F. Alerts ------------------------------------------------------------------------------------------------------
+# --- F. Status and alerts -------------------------------------------------------------------------------------------
+
+
+def test_home_shows_weekly_status_from_latest_input(client, logged_in_user, db, tracker_factory, grant):
+    tracker = tracker_factory(name="Rated")
+    grant(logged_in_user, tracker, "viewer")
+    assert "Not set" in client.get("/").get_data(as_text=True)
+    db.add(ReportInput(tracker_id=tracker.id, week_ending=date(2026, 9, 4), status="Red"))
+    db.add(ReportInput(tracker_id=tracker.id, week_ending=date(2026, 9, 11), status="Green"))
+    db.commit()
+    html = client.get("/").get_data(as_text=True)
+    assert "tracker-card tracker-card-green" in html
+    assert "tracker-card-red" not in html
 
 
 def test_home_card_warns_when_the_weekly_update_is_not_written(client, logged_in_user, tracker_factory, grant):
@@ -282,3 +307,9 @@ def test_home_card_names_the_person_in_charge(client, logged_in_user, db, tracke
     assert "In charge: <strong>You</strong>" in by_name["Mine"]
     assert "In charge: <strong>Bea Lead</strong>" in by_name["Theirs"]
     assert "In charge: <strong" not in by_name["Unled"] and "Nobody yet" in by_name["Unled"]
+
+
+def test_new_tracker_button_follows_create_trackers(client, logged_in_user, give_set):
+    assert 'href="/trackers/new"' not in client.get("/").get_data(as_text=True)
+    give_set(["create_trackers"], user=logged_in_user)
+    assert 'href="/trackers/new"' in client.get("/").get_data(as_text=True)

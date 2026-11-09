@@ -243,19 +243,6 @@ def test_archived_tracker_reached_through_team_is_read_only(
     assert db.scalars(select(CompletionEntry)).all() == []
 
 
-def test_home_lists_team_trackers_with_their_role(client, logged_in_user, tracker_factory, team_factory, add_member):
-    parent = team_factory(name="Infrastructure")
-    windows, network = team_factory(name="Windows", parent=parent), team_factory(name="Network", parent=parent)
-    add_member(parent, logged_in_user, "editor")
-    tracker_factory(name="Patching tracker", team_id=windows.id)
-    tracker_factory(name="Firewall tracker", team_id=network.id)
-    tracker_factory(name="Unrelated tracker")
-    page = client.get("/")
-    assert b"Patching tracker" in page.data and b"Firewall tracker" in page.data
-    assert b"Unrelated tracker" not in page.data
-    assert page.data.count(b'<span class="role-tag">Editor</span>') == 2
-
-
 def test_an_inactive_administrator_has_no_role(db, user_factory, tracker_factory):
     t = tracker_factory()
     for status in ("pending", "disabled"):
