@@ -250,6 +250,19 @@ def test_smtp_page_refuses_a_blank_or_long_subject(client, logged_in_admin, db, 
     assert db.scalars(select(AppSetting)).first() is None
 
 
+def test_smtp_page_warns_about_an_unknown_placeholder_in_the_subject(client, logged_in_admin, db):
+    response = post(
+        client,
+        "/admin/smtp",
+        {"smtp_host": "h", "smtp_port": "25", "smtp_auth": "none", "report_email_subject": "{{sumary}} weekly"},
+        follow_redirects=True,
+    )
+    page = response.get_data(as_text=True)
+    assert "Unknown placeholders will be sent as written: sumary." in page
+    assert db.get(AppSetting, "report_email_subject").value == "{{sumary}} weekly"  # saved, with the warning
+    assert "Unknown placeholders" in client.get("/admin/smtp").get_data(as_text=True)  # and still shown
+
+
 def failures(db):
     return db.scalars(select(AuditLog).where(AuditLog.action == "login_failed").order_by(AuditLog.id)).all()
 
