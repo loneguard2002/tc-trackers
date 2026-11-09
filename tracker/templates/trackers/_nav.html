@@ -11,9 +11,9 @@
   {% if g.role in ('editor', 'owner') %}
   {{ tab('entries.list_entries', 'Entries', 'layers', ('entries.new_entry',)) }}
   {{ tab('entries.inputs', 'Weekly update', 'edit') }}
+  {{ tab('entries.risks', 'Risks', 'warning', ('entries.new_risk', 'entries.edit_risk')) }}
   {{ tab('entries.targets', 'Targets', 'target') }}
   {{ tab('trackers.groups', tracker.group_label|plural if tracker.group_label else 'Groups', 'groups', ('trackers.new_group', 'trackers.edit_group')) }}
-  {{ tab('entries.risks', 'Risks', 'warning', ('entries.new_risk', 'entries.edit_risk')) }}
   {% endif %}
   {% if g.role == 'owner' %}
   {{ tab('mail.settings', 'Email', 'mail', ('mail.preview',)) }}
