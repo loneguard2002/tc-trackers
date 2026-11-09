@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from tracker.engine.calc import GroupInput, build_headline, build_week_rows, group_positions
+from tracker.engine.calc import GroupInput, build_headline, build_week_rows, group_positions, status_mismatch
 from tracker.engine.weeks import week_endings
 
 FRI = 4
@@ -213,3 +213,34 @@ def test_totals_check_ok_during_in_progress_week():
     assert h.forecast_based_on == date(2026, 9, 25)
     h = build_headline(rows, make_positions(deployed_total=138), 0, None, date(2026, 10, 2))
     assert h.totals_check_ok is False
+
+
+# --- The weekly RAG status against the forecast (forecast 20 Nov) ----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "status, target, expected",
+    [
+        ("Green", date(2026, 10, 30), ("warning", "Green, but the forecast is 3 weeks behind target")),
+        ("Green", date(2026, 11, 12), ("warning", "Green, but the forecast is 2 weeks behind target")),  # 8 days
+        ("Green", date(2026, 11, 13), None),  # 7 days behind: within a week, not flagged
+        ("Green", date(2026, 11, 20), None),
+        ("Amber", date(2026, 11, 20), ("note", "Amber, but the forecast is on track for target")),
+        ("Red", date(2026, 11, 27), ("note", "Red, but the forecast is 1 week ahead of target")),
+        ("Red", date(2026, 12, 4), ("note", "Red, but the forecast is 2 weeks ahead of target")),
+        ("Red", date(2026, 11, 19), None),  # a day behind: Red and behind agree
+        ("Amber", date(2026, 10, 30), None),
+        ("Green", None, None),  # no target
+        (None, date(2026, 10, 30), None),  # no status
+    ],
+)
+def test_status_mismatch(rows, status, target, expected):
+    h = build_headline(rows, make_positions(), 0, target, REPORT_WEEK)
+    assert status_mismatch(status, h) == expected
+
+
+def test_status_mismatch_skips_complete_work():
+    actuals = {w: 100 for w in WEEKS[:4]}
+    done = build_week_rows(WEEKS, TARGETS, actuals, 369, 0, 3, as_of=date(2026, 9, 25), weekday=FRI)
+    positions = group_positions([GroupInput(1, "Group A", 369, 0, 0, None, None, None, False)], {1: 369})
+    assert status_mismatch("Red", build_headline(done, positions, 0, date(2026, 10, 30), REPORT_WEEK)) is None

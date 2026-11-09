@@ -26,7 +26,16 @@ from ..auth.accounts import vouched_refusal
 from ..auth.guards import SELF_PROMOTION_MESSAGE, raises_own_access, snapshot_access
 from ..auth.roles import give_creator_ownership, tracker_access_list
 from ..db import get_session
-from ..engine.calc import COMPLETE, GroupInput, Headline, WeekRow, build_headline, build_week_rows, group_positions
+from ..engine.calc import (
+    COMPLETE,
+    GroupInput,
+    Headline,
+    WeekRow,
+    build_headline,
+    build_week_rows,
+    group_positions,
+    status_mismatch,
+)
 from ..engine.weeks import week_endings
 from ..ids import parse_id
 from ..lists.catalogue import (
@@ -321,6 +330,7 @@ def home():
             "inputs_missing": live and (t.id, headline.report_week) not in written,
             "entry_stale": live and (last_entry is None or (today - last_entry).days > 7),
             "behind": dvt is not None and dvt > 0,
+            "mismatch": status_mismatch(status, headline),
             "spark": spark_chart(position.rows),
             "labels": labels[t.id],
             "line_data": str(t.business_line_id) if t.business_line_id is not None else "none",
@@ -330,6 +340,7 @@ def home():
             (10 if t.status != "active" else 0)
             + STATUS_ATTENTION.get(status, 4)
             - (1 if card["behind"] else 0)
+            - (1.5 if card["mismatch"] and card["mismatch"][0] == "warning" else 0)  # Green yet behind: before Amber
             - (0.5 if card["inputs_missing"] else 0)
         )
         cards.append(card)

@@ -196,6 +196,24 @@ def _verdict(remaining: int, total_scope: int, forecast: date | None, target: da
     return "On track for target"
 
 
+def status_mismatch(status: str | None, headline: Headline) -> tuple[str, str] | None:
+    """When the weekly Red/Amber/Green status and the forecast disagree: ``(tone, text)`` for a flag, else ``None``.
+
+    Green while the forecast is more than a week behind target is a ``"warning"``; Red or Amber while it is on track
+    or ahead is a milder ``"note"``. With no status, no forecast, no target or the work complete there is nothing to
+    compare.
+    """
+    days = headline.forecast_vs_target_days
+    if status is None or days is None or (headline.total_scope > 0 and headline.remaining <= 0):
+        return None
+    if status == "Green" and days > 7:
+        return "warning", f"Green, but the forecast is {_plural(ceil(days / 7))} behind target"
+    if status in ("Red", "Amber") and days <= 0:
+        where = f"{_plural(floor(-days / 7))} ahead of target" if days <= -7 else "on track for target"
+        return "note", f"{status}, but the forecast is {where}"
+    return None
+
+
 def build_headline(
     rows: list[WeekRow],
     positions: list[GroupPosition],

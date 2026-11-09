@@ -276,6 +276,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .fact-sub.tone-danger { color: var(--danger); } .fact-sub.tone-success { color: var(--success); }
 .tracker-card-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: auto; padding: 10px 18px 10px 23px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); color: var(--muted); font-size: .8125rem; }
 .flag, .cell-sub.flag { color: var(--warning); font-weight: 600; }
+.flag.flag-mild { color: var(--muted); }  /* a status more cautious than its forecast: worth a look, not a warning */
 .tracker-card-links { display: flex; gap: 12px; margin-left: auto; }
 .tracker-card-links a { font-weight: 600; text-decoration: none; }
 .tracker-card-links a:hover { text-decoration: underline; }
