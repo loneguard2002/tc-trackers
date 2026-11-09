@@ -569,9 +569,51 @@ def test_headline_figures_carry_their_comparisons(app):
     text = flat_text(body_html(app, report))
     assert f"{fmt_rate(h.required_rate)} a week needed" in text
     assert f"Next week: {h.next_week_target}" in text
-    assert h.weeks_left is not None and f"{h.weeks_left} weeks to {fmt_date(h.target_completion)}" in text
-    dvt = h.forecast_vs_target_days
-    assert f"{abs(dvt)} days {'after' if dvt > 0 else 'before'} target" in text
+
+
+TARGET = date(2026, 12, 25)
+
+
+@pytest.mark.parametrize(
+    ("forecast", "target", "days", "weeks_left", "wording", "tone", "weeks_line"),
+    [
+        (date(2027, 1, 31), TARGET, 37, 15, "37 days after target", "tone-danger", "15 weeks to 25 Dec 2026"),
+        (date(2026, 12, 26), TARGET, 1, 15, "1 day after target", "tone-danger", "15 weeks to 25 Dec 2026"),
+        (date(2026, 11, 6), TARGET, -49, 15, "49 days before target", "tone-success", "15 weeks to 25 Dec 2026"),
+        (date(2026, 12, 24), TARGET, -1, 1, "1 day before target", "tone-success", "1 week to 25 Dec 2026"),
+        (TARGET, TARGET, 0, 1, "On the target date", "tone-success", "1 week to 25 Dec 2026"),
+        (None, TARGET, None, 15, "No forecast yet", None, "15 weeks to 25 Dec 2026"),
+        (date(2026, 11, 6), None, None, None, "No target date", None, None),
+        (None, None, None, None, "No target date", None, None),
+    ],
+    ids=["after", "1-day-after", "before", "1-day-before", "on-the-date", "no-forecast", "no-target", "neither"],
+)
+def test_forecast_box_says_how_the_forecast_compares_with_the_target(
+    app, forecast, target, days, weeks_left, wording, tone, weeks_line
+):
+    """Every wording of the Forecast box, read from the box alone: the status line above can say "No forecast yet"
+    too. Late is red, on time or early is green, and nothing is coloured when there is nothing to compare."""
+    import dataclasses
+
+    report, _ = synthetic_report()
+    headline = dataclasses.replace(
+        report.headline,
+        forecast_completion=forecast,
+        target_completion=target,
+        forecast_vs_target_days=days,
+        weeks_left=weeks_left,
+    )
+    html = body_html(app, dataclasses.replace(report, headline=headline))
+    box = re.search(r'<span class="stat-label">Forecast</span>(.*?)</div>', html, re.S).group(1)
+    comparison = re.search(r'<span class="stat-sub([^"]*)">(.*?)</span>', box, re.S)
+    assert comparison.group(2).strip() == wording
+    assert comparison.group(1).strip() == (tone or "")
+    shown = re.search(r'<span class="stat-value">(.*?)</span>', box, re.S).group(1).strip()
+    assert shown == (fmt_date(forecast) if forecast else "–")
+    if weeks_line:
+        assert f'<span class="stat-sub">{weeks_line}</span>' in box
+    else:
+        assert "to 25 Dec" not in box and "weeks to" not in box
 
 
 def test_data_check_warning_when_totals_differ(app):
