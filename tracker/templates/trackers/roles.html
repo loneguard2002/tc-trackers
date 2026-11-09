@@ -17,7 +17,7 @@
       <p>Everyone with access, the role they get and where it comes from. When several routes apply, the highest role wins.</p>
       <dl class="role-legend">
         <div><dt>Viewer</dt><dd>Opens the report and downloads it.</dd></div>
-        <div><dt>Editor</dt><dd>Also records entries, weekly inputs, targets, {{ (tracker.group_label|plural if tracker.group_label and g.role else 'groups')|lower }} and risks.</dd></div>
+        <div><dt>Editor</dt><dd>Also records entries, weekly updates, targets, {{ (tracker.group_label|plural if tracker.group_label and g.role else 'groups')|lower }} and risks.</dd></div>
         <div><dt>Owner</dt><dd>Also changes settings and manages the weekly email.</dd></div>
       </dl>
     </header>

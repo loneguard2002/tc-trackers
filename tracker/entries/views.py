@@ -451,7 +451,7 @@ def inputs(tracker_id: int):
         changed = {k: [old[k], v] for k, v in values.items() if old[k] != v}
         _audit(db, tracker, "inputs_saved", "report_input", week.isoformat(), changed)
         db.commit()
-        flash("Weekly inputs saved.", "success")
+        flash("Weekly update saved.", "success")
         return redirect(url_for("entries.inputs", tracker_id=tracker.id, week=week.isoformat()))
     form = {"status": row.status or "", "headline": row.headline, "decisions": row.decisions} if row else {}
     return _render_inputs(tracker, weeks, week, row, form, [], 200)
@@ -486,7 +486,7 @@ def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[
             red_risks=sum(1 for r in risks if r.rag == "Red"),
             overdue_risks=sum(1 for r in risks if r.target_date and r.target_date < min(week, today)),
             format_date=format_date,
-            **_page(tracker, "Weekly inputs"),
+            **_page(tracker, "Weekly update"),
         ),
         status,
     )

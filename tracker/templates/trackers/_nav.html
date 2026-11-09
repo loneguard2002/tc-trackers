@@ -1,5 +1,5 @@
 {% from "macros.html" import icon %}
-{#- The icons match the actions on the home cards: Report, Entries (Record completions), Weekly inputs (Write the update). -#}
+{#- The icons match the actions on the home cards: Report, Entries (Record completions), Weekly update (Write the update). -#}
 {% macro tab(endpoint, label, icon_name, also=()) -%}
 {% set active = request.endpoint == endpoint or request.endpoint in also %}
 <a class="tab{{ ' active' if active }}" href="{{ url_for(endpoint, tracker_id=tracker.id) }}"{% if active %} aria-current="page"{% endif %}>{{ icon(icon_name) }}{{ label }}</a>
@@ -10,7 +10,7 @@
   {% endif %}
   {% if g.role in ('editor', 'owner') %}
   {{ tab('entries.list_entries', 'Entries', 'layers', ('entries.new_entry',)) }}
-  {{ tab('entries.inputs', 'Weekly inputs', 'edit') }}
+  {{ tab('entries.inputs', 'Weekly update', 'edit') }}
   {{ tab('entries.targets', 'Targets', 'target') }}
   {{ tab('trackers.groups', tracker.group_label|plural if tracker.group_label else 'Groups', 'groups', ('trackers.new_group', 'trackers.edit_group')) }}
   {{ tab('entries.risks', 'Risks', 'warning', ('entries.new_risk', 'entries.edit_risk')) }}

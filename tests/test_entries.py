@@ -1,5 +1,6 @@
 """Data entry routes: completions, targets, weekly inputs, risks (database required)."""
 
+import re
 from datetime import date, timedelta
 
 from sqlalchemy import select
@@ -374,7 +375,9 @@ def test_risk_register_links_to_add_edit_and_delete(client, db, tracker_factory,
     assert 'name="description"' not in html  # the form has its own page
     new_page = client.get(f"{url}/new")
     assert new_page.status_code == 200 and b'name="description"' in new_page.data
-    assert b'aria-current="page">Risks<' in new_page.data
+    assert re.search(
+        rb'aria-current="page"><svg[^>]*>.*?</svg>Risks<', new_page.data, re.S
+    )  # the Risks tab, after its icon
 
 
 def test_risk_form_errors_render_on_the_form_page(client, db, tracker_factory, user_factory, grant):
@@ -430,7 +433,7 @@ def test_viewer_cannot_post_entry(client, db, tracker_factory, user_factory, gra
 
 def test_nav_links_shown_to_editor_only(client, db, tracker_factory, user_factory, grant):
     tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
-    assert b"Weekly inputs" in client.get(f"/trackers/{tracker.id}/groups").data
+    assert b"Weekly update" in client.get(f"/trackers/{tracker.id}/groups").data
 
 
 def test_archived_tracker_refuses_every_post(client, db, tracker_factory, user_factory, grant):
