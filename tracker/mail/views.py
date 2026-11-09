@@ -29,11 +29,11 @@ from .compose import (
     placeholder_context,
     preview_chart_src,
     render_email_html,
+    report_subject,
     unknown_placeholders,
 )
 from .compose import report_link as make_link
 
-MAX_SUBJECT = 300
 MAX_BODY = 50_000
 
 
@@ -85,9 +85,9 @@ def _page(tracker, week, form=None, status: int = 200):
 
     db = get_session()
     template = db.get(EmailTemplate, tracker.id)
-    values = form or {
-        "subject": template.subject if template else DEFAULT_SUBJECT,
-        "body_html": template.body_html if template else DEFAULT_BODY,
+    values = {  # the subject is the tool's, set by an administrator; only the body is the tracker's own
+        "subject": report_subject(db),
+        "body_html": form["body_html"] if form else template.body_html if template else DEFAULT_BODY,
     }
     recent = db.scalars(
         select(ReportSend).where(ReportSend.tracker_id == tracker.id).order_by(ReportSend.id.desc()).limit(10)
@@ -158,21 +158,16 @@ def settings(tracker_id: int):
         db.commit()
         flash("The email template has been reset to the default.", "success")
     elif action == "save_template":
-        subject = " ".join(request.form.get("subject", "").split())
         body = request.form.get("body_html", "").strip()
-        errors = []
-        if not subject or len(subject) > MAX_SUBJECT:
-            errors.append(f"The subject is required and must be at most {MAX_SUBJECT} characters.")
         if not body or len(body) > MAX_BODY:
-            errors.append(f"The body is required and must be at most {MAX_BODY} characters.")
-        if errors:
-            for message in errors:
-                flash(message, "danger")
-            return _page(tracker, _week(tracker), form={"subject": subject, "body_html": body}, status=400)
-        db.merge(EmailTemplate(tracker_id=tracker.id, subject=subject, body_html=body))
-        _audit(
-            tracker, "email_template_saved", tracker.id, {"unknown_placeholders": unknown_placeholders(subject, body)}
-        )
+            flash(f"The body is required and must be at most {MAX_BODY} characters.", "danger")
+            return _page(tracker, _week(tracker), form={"body_html": body}, status=400)
+        template = db.get(EmailTemplate, tracker.id)
+        if template is None:  # the subject column is no longer used: a new row holds the default
+            db.add(EmailTemplate(tracker_id=tracker.id, subject=DEFAULT_SUBJECT, body_html=body))
+        else:
+            template.body_html = body
+        _audit(tracker, "email_template_saved", tracker.id, {"unknown_placeholders": unknown_placeholders(body)})
         db.commit()
         flash("Email template saved.", "success")
     else:

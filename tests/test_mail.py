@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import dataclasses
+import html
+import re
 import smtplib
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -19,11 +21,11 @@ from tracker.mail.compose import (
     PLACEHOLDERS,
     build_report_email,
     email_summary,
-    report_subject,
     normalise_recipient,
     placeholder_context,
     render_placeholders,
     render_subject,
+    report_subject,
     sanitise_subject,
     unknown_placeholders,
 )
@@ -570,17 +572,41 @@ def test_owner_saves_template_and_preview_flags_unknown(client, db, tracker_fact
     grant(owner, tracker, "owner")
     sign_in(client, owner)
     url = f"/trackers/{tracker.id}/mail"
-    post(
-        client,
-        url,
-        {"action": "save_template", "subject": "Hi {{status}}", "body_html": "<p>{{nope}} {{tracker_name}}</p>"},
-    )
+    post(client, url, {"action": "save_template", "body_html": "<p>{{nope}} {{tracker_name}}</p>"})
     template = db.get(EmailTemplate, tracker.id)
-    assert template.subject == "Hi {{status}}"
+    assert template.body_html == "<p>{{nope}} {{tracker_name}}</p>" and template.subject == "{{summary}}"
     page = client.get(url).get_data(as_text=True)
     assert "nope" in page and "Unknown placeholders" in page
     preview = client.get(f"{url}/preview?week=2026-09-11").get_data(as_text=True)
-    assert "Subject: Hi" in preview and "srcdoc" in preview
+    assert "Subject: Test tracker | 11/09/26" in preview and "srcdoc" in preview
+
+
+def test_email_page_shows_the_tools_subject_read_only(client, db, tracker_factory, user_factory, grant):
+    tracker, owner = tracker_factory(), user_factory()
+    grant(owner, tracker, "owner")
+    sign_in(client, owner)
+    db.add(AppSetting(key="report_email_subject", value="[PMO] {{summary}}"))
+    db.commit()
+    page = client.get(f"/trackers/{tracker.id}/mail?week=2026-09-11").get_data(as_text=True)
+    field = re.search(r'<input id="subject"[^>]*>', page).group(0)
+    assert "readonly" in field and "name=" not in field and 'value="[PMO] {{summary}}"' in field
+    assert "Set by an administrator for every tracker." in page
+    assert "Subject: [PMO] Test tracker | 11/09/26 : No status | " in html.unescape(page)
+
+
+def test_saving_the_template_never_changes_a_saved_subject(client, db, tracker_factory, user_factory, grant):
+    tracker, owner = tracker_factory(), user_factory()
+    grant(owner, tracker, "owner")
+    sign_in(client, owner)
+    db.add(EmailTemplate(tracker_id=tracker.id, subject="Old {{status}}", body_html="<p>old</p>"))
+    db.commit()
+    response = post(
+        client, f"/trackers/{tracker.id}/mail", {"action": "save_template", "subject": "New", "body_html": "<p>new</p>"}
+    )
+    assert response.status_code == 302
+    db.expire_all()
+    template = db.get(EmailTemplate, tracker.id)
+    assert (template.subject, template.body_html) == ("Old {{status}}", "<p>new</p>")
 
 
 def test_email_page_shows_the_preview_and_asks_before_sending(client, db, tracker_factory, user_factory, grant):

@@ -97,8 +97,11 @@ def test_archive_asks_in_the_page(page, live_server, admin):
 
 def test_email_preview_follows_the_template(page, live_server, admin):
     page.goto(f"{live_server}/trackers/{admin.id}/mail")
-    page.fill("#subject", "Weekly: {{tracker_name}}")
-    expect(page.locator("[data-preview-subject]")).to_have_text("Subject: Weekly: Live tracker")
+    expect(page.locator("#subject")).to_have_attribute("readonly", "")
+    expect(page.locator("[data-preview-subject]")).to_contain_text("Subject: Live tracker | ")
+    page.locator("#subject").focus()  # read-only: a chip clicked now still goes into the body
+    page.get_by_role("button", name="tracker_name", exact=True).click()
+    expect(page.locator("#subject")).to_have_value("{{summary}}")
     page.fill("#body_html", "<p>Hello {{nope}}</p>")
     expect(page.locator("[data-unknown]")).to_have_text("Unknown placeholders will be sent as written: nope.")
     page.locator("#body_html").focus()
