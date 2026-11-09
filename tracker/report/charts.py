@@ -176,6 +176,8 @@ def email_chart(rows: list[WeekRow], unit_label: str, report_week: date, fmt: st
         bars.bar([x - timedelta(days=1.5) for x in tx], ty, width=3, color=TARGET_BAR, label="Weekly target")
     if dx:
         bars.bar([x + timedelta(days=1.5) for x in dx], dy, width=3, color=DONE_BAR, label="Done that week")
+    if max(ty + dy, default=0) > 0:
+        bars.set_ylim(0, max(ty + dy) * 3)  # the bars keep to the lower third, under the lines
     if px:
         ax.plot(px, py, color=PLAN, linestyle="--", linewidth=1.6, label="Plan")
     if ax_:
