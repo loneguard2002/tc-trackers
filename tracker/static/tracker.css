@@ -147,7 +147,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .muted { color: var(--muted); }
 .report { container-type: inline-size; display: grid; gap: 16px; max-width: 72rem; }
 .report-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.report-title h1 { margin: 0; }
+.report-title h1, .report-title h2 { margin: 0; }
 .report-meta { flex-basis: 100%; margin: -8px 0 0; color: var(--muted); font-size: .875rem; font-weight: 600; }
 /* The status band: a slim strip, a light tint and the status word in the status colour. */
 .report-band { --tone: color-mix(in srgb, var(--muted) 55%, var(--surface)); --tone-text: var(--muted); position: relative; overflow: hidden; padding: 12px 16px 12px 22px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
