@@ -7,9 +7,11 @@
 {% macro forecast_fact(h) -%}
 {% set dvt = h.forecast_vs_target_days %}
 {% if h.verdict == 'Complete' %}<span class="fact-value">Complete</span>
-{% elif not h.forecast_completion %}<span class="fact-value">–</span><span class="fact-sub">{{ 'Target ' ~ (h.target_completion|fdate) if h.target_completion else 'No target date' }}</span>
+{% elif not h.forecast_completion %}<span class="fact-value">Not yet</span><span class="fact-sub fact-line">{{ 'Target ' ~ (h.target_completion|fdate) if h.target_completion else 'No target date' }}</span>
 {% else %}<span class="fact-value {{ '' if dvt is none else ('tone-danger' if dvt > 0 else 'tone-success') }}">{{ h.forecast_completion|fdate }}</span>
-<span class="fact-sub">{% if dvt is none %}No target date{% elif dvt > 0 %}{{ (dvt / 7)|round(0, 'ceil')|int }} wk after target {{ h.target_completion|fdate }}{% elif dvt <= -7 %}{{ (-dvt / 7)|round(0, 'floor')|int }} wk before target {{ h.target_completion|fdate }}{% else %}On target {{ h.target_completion|fdate }}{% endif %}</span>
+{% if dvt is none %}<span class="fact-sub fact-line">No target date</span>
+{% else %}<span class="fact-sub fact-line">{% if dvt > 0 %}{{ (dvt / 7)|round(0, 'ceil')|int }} wk after target{% elif dvt <= -7 %}{{ (-dvt / 7)|round(0, 'floor')|int }} wk before target{% else %}On target{% endif %}</span>
+<span class="fact-sub fact-line">Target {{ h.target_completion|fdate }}</span>{% endif %}
 {% endif %}
 {%- endmacro %}
 
@@ -21,6 +23,14 @@
 <span class="fact-value">{{ h.this_week_actual|num }} <span class="muted">/ {{ h.this_week_target|num }}</span></span>
 <span class="fact-sub {{ 'tone-danger' if gap < 0 else 'tone-success' }}">{% if gap == 0 %}On target{% else %}{{ '+' if gap > 0 else '−' }}{{ gap|abs }} against target{% endif %}</span>
 {% endif %}
+{%- endmacro %}
+
+{% macro risks_text(open) -%}
+{{ 'No open risks' if not open else ('1 open risk' if open == 1 else open ~ ' open risks') }}
+{%- endmacro %}
+
+{% macro card_labels(c) -%}
+{% if not c.labels.business_line and not c.labels.regions %}{{ (c.team ~ ' · ') if c.team }}Business line and regions not set{% else %}{{ labels_text(c.labels, c.team) }}{% endif %}
 {%- endmacro %}
 
 {% macro last_entry_text(c) -%}
@@ -57,7 +67,8 @@
   ('green', 'Green', 'Green', cards|selectattr('status', 'equalto', 'Green')|list|length),
   ('none', 'Not set', '', cards|rejectattr('status')|list|length),
   ('behind', 'Behind target', None, cards|selectattr('behind')|list|length),
-  ('inputs', 'Commentary missing', None, cards|selectattr('inputs_missing')|list|length),
+  ('inputs', 'Weekly update not written', None, cards|selectattr('inputs_missing')|list|length),
+  ('disagree', 'Status disagrees with forecast', None, cards|selectattr('disagree')|list|length),
 ] %}
 <div class="home-tools" data-home-tools hidden>
   <div class="chips" role="group" aria-label="Show trackers">
@@ -99,21 +110,25 @@
   </div>
 </div>
 
+<p class="spark-key home-key" aria-label="Chart key"><span><i class="key key-on"></i>Done, on or above target<i class="key key-low"></i>Done, below target<i class="key key-target"></i>Weekly target</span><span class="muted">Bars show the latest weeks.</span></p>
+
 <div class="tracker-cards" data-home-cards>
   {% for c in cards %}
   {% set t = c.tracker %}{% set h = c.headline %}{% set tone = rag_tone(c.status) %}
   {% set dvt = h.forecast_vs_target_days %}
   {% set can_edit = c.role in ('editor', 'owner') and t.status == 'active' %}
-  <article class="tracker-card tracker-card-{{ tone }}{{ ' is-archived' if t.status == 'archived' }}" data-card
-    data-status="{{ tone }}" data-behind="{{ 'true' if c.behind else 'false' }}" data-inputs="{{ 'true' if c.inputs_missing else 'false' }}"
+  <article class="tracker-card tracker-card-{{ tone }}{{ ' tracker-card-disagree' if c.disagree }}{{ ' is-archived' if t.status == 'archived' }}" data-card
+    data-status="{{ tone }}" data-behind="{{ 'true' if c.behind else 'false' }}" data-inputs="{{ 'true' if c.inputs_missing else 'false' }}" data-disagree="{{ 'true' if c.disagree else 'false' }}"
     data-line="{{ c.line_data }}" data-regions="{{ c.regions_data }}"
     data-name="{{ t.name|lower }}" data-target="{{ h.target_completion.isoformat() if h.target_completion else '9999-12-31' }}" data-attention="{{ c.attention }}">
     <header class="tracker-card-head">
       <h2 class="tracker-card-title"><a href="{{ url_for('report.view', tracker_id=t.id) }}">{{ t.name }}</a>
         {% if c.role %}<span class="role-tag">{{ c.role|capitalize }}</span>{% endif %}
         {% if t.status == 'archived' %}<span class="role-tag">Archived</span>{% endif %}</h2>
-      <p class="tracker-card-team">{{ labels_text(c.labels, c.team) }}</p>
-      <p class="tracker-card-status">{{ rag_dot(c.status) }}<span><span class="status-word">{{ c.status or 'Not set' }}</span>: <span class="{{ '' if dvt is none else ('tone-danger' if dvt > 0 else 'tone-success') }}">{{ h.verdict }}</span></span></p>
+      <p class="tracker-card-team">{{ card_labels(c) }}</p>
+      <p class="tracker-card-lead">In charge: {% if c.lead %}<strong>{{ 'You' if current_user and c.lead.id == current_user.id else c.lead.full_name }}</strong>{% else %}<span class="tone-warning">Nobody yet</span>{% endif %}</p>
+      <p class="tracker-card-status"><span class="card-status-pill">{{ rag_dot(c.status) }}{{ c.status or 'Not set' }}</span>
+        <span class="verdict-pill{{ ' is-warning' if c.disagree }}">{% if c.disagree %}{{ icon('warning') }}{% endif %}{{ h.verdict }}</span></p>
     </header>
     <div class="tracker-card-progress">
       <div class="tracker-card-total">
@@ -128,23 +143,24 @@
           {% for b in s.bars %}<rect class="spark-bar{{ ' is-low' if b.low }}" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.width }}" height="{{ b.height }}"/>{% endfor %}
           {% if s.target %}<path class="spark-target" d="{{ s.target }}" vector-effect="non-scaling-stroke"/>{% endif %}
         </svg>
-        <p class="spark-key"><span><i class="key key-on"></i>On target<i class="key key-low"></i>Below<i class="key key-target"></i>Target</span>
-          <span>Latest week <strong>{{ s.actual|dash }}</strong> / {{ s.goal|dash }}</span></p>
         {% else %}<p class="spark-empty">{{ 'Starts ' ~ (c.starts|fdate) ~ '.' if c.starts else 'No completed weeks yet, so there is no weekly chart.' }}</p>{% endif %}
       </div>
     </div>
     <dl class="tracker-card-facts">
       <div><dt>Forecast</dt><dd>{{ forecast_fact(h) }}</dd></div>
       <div><dt>This week</dt><dd>{{ week_fact(c) }}</dd></div>
-      <div><dt>Red risks</dt><dd><span class="fact-value{{ ' tone-danger' if c.red_risks }}">{{ c.red_risks }}</span><span class="fact-sub">{{ c.open_risks }} open in all</span></dd></div>
+      <div><dt>Red risks</dt><dd><span class="fact-value{{ ' tone-danger' if c.red_risks }}">{{ c.red_risks }}</span><span class="fact-sub">{{ risks_text(c.open_risks) }}</span></dd></div>
     </dl>
+    <ul class="tracker-card-alerts">
+      {% if c.mismatch %}<li class="alert {{ 'alert-warn' if c.mismatch[0] == 'warning' else 'alert-info' }}">{{ icon('warning' if c.mismatch[0] == 'warning' else 'info') }}<span>{{ c.mismatch[1] }}</span></li>{% endif %}
+      {% if c.inputs_missing %}<li class="alert alert-warn">{{ icon('warning') }}<span>Weekly update for {{ h.report_week|fdate }} not written</span></li>{% endif %}
+      {% if c.entry_stale and c.last_entry %}<li class="alert alert-warn">{{ icon('warning') }}<span>No completions for {{ (today - c.last_entry).days }} days (last {{ c.last_entry|fdate }})</span></li>
+      {% else %}<li class="alert alert-info">{{ icon('info') }}<span>{{ last_entry_text(c) }}</span></li>{% endif %}
+    </ul>
     <footer class="tracker-card-foot">
-      <span>{{ last_entry_text(c) }}</span>
-      {% if c.inputs_missing %}<span class="flag">Commentary for {{ h.report_week|fdate }} missing</span>{% endif %}
-      {% if c.entry_stale and c.last_entry %}<span class="flag">No entry for over a week</span>{% endif %}
-      {% if c.mismatch %}<span class="flag{{ ' flag-mild' if c.mismatch[0] == 'note' }}">{{ c.mismatch[1] }}</span>{% endif %}
-      <span class="tracker-card-links"><a href="{{ url_for('report.view', tracker_id=t.id) }}">Report</a>
-        {% if can_edit %}<a href="{{ url_for('entries.new_entry', tracker_id=t.id) }}">Record completions</a>{% endif %}</span>
+      <span class="tracker-card-links"><a href="{{ url_for('report.view', tracker_id=t.id) }}">{{ icon('report') }}Report</a>
+        {% if can_edit %}<a href="{{ url_for('entries.new_entry', tracker_id=t.id) }}">{{ icon('layers') }}Record completions</a>
+        <a class="tracker-card-update" href="{{ url_for('entries.inputs', tracker_id=t.id, week=h.report_week.isoformat()) }}">{{ icon('edit') }}Write the update</a>{% endif %}</span>
     </footer>
   </article>
   {% endfor %}
@@ -156,15 +172,15 @@
     <tbody>
       {% for c in cards %}
       {% set t = c.tracker %}{% set h = c.headline %}{% set tone = rag_tone(c.status) %}
-      <tr class="tracker-row tracker-row-{{ tone }}" data-card data-status="{{ tone }}" data-behind="{{ 'true' if c.behind else 'false' }}" data-inputs="{{ 'true' if c.inputs_missing else 'false' }}"
+      <tr class="tracker-row tracker-row-{{ tone }}" data-card data-status="{{ tone }}" data-behind="{{ 'true' if c.behind else 'false' }}" data-inputs="{{ 'true' if c.inputs_missing else 'false' }}" data-disagree="{{ 'true' if c.disagree else 'false' }}"
         data-line="{{ c.line_data }}" data-regions="{{ c.regions_data }}" data-name="{{ t.name|lower }}" data-target="{{ h.target_completion.isoformat() if h.target_completion else '9999-12-31' }}" data-attention="{{ c.attention }}">
         <td class="tracker-row-status"><span class="rag-label">{{ rag_dot(c.status) }}{{ c.status or 'Not set' }}</span>{% if c.mismatch %}<span class="cell-sub flag{{ ' flag-mild' if c.mismatch[0] == 'note' }}">{{ c.mismatch[1] }}</span>{% endif %}</td>
-        <td><a class="cell-title" href="{{ url_for('report.view', tracker_id=t.id) }}">{{ t.name }}</a><span class="cell-sub">{{ h.verdict }}{{ ' · Archived' if t.status == 'archived' }}</span><span class="cell-sub">{{ labels_text(c.labels, c.team) }}</span></td>
+        <td><a class="cell-title" href="{{ url_for('report.view', tracker_id=t.id) }}">{{ t.name }}</a><span class="cell-sub">{{ h.verdict }}{{ ' · Archived' if t.status == 'archived' }}</span><span class="cell-sub">{{ card_labels(c) }}</span></td>
         <td class="tracker-row-progress">{{ bar(h.completed, h.total_scope, label=(h.pct_complete|pct) ~ ' complete') }}<span class="cell-sub">{{ h.pct_complete|pct }} · {{ h.completed|num }} of {{ h.total_scope|num }}</span></td>
         <td>{{ h.this_week_actual|dash }} / {{ h.this_week_target|dash }}</td>
         <td class="tracker-row-forecast">{{ forecast_fact(h) }}</td>
         <td class="{{ 'tone-danger' if c.red_risks }}"><strong>{{ c.red_risks }}</strong></td>
-        <td>{{ last_entry_text(c) }}{% if c.inputs_missing %}<span class="cell-sub flag">Commentary missing</span>{% endif %}</td>
+        <td>{{ last_entry_text(c) }}{% if c.inputs_missing %}<span class="cell-sub flag">Weekly update not written</span>{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>

@@ -29,7 +29,8 @@
     green: function (el) { return el.dataset.status === "green"; },
     none: function (el) { return el.dataset.status === "none"; },
     behind: function (el) { return el.dataset.behind === "true"; },
-    inputs: function (el) { return el.dataset.inputs === "true"; }
+    inputs: function (el) { return el.dataset.inputs === "true"; },
+    disagree: function (el) { return el.dataset.disagree === "true"; }
   };
 
   // The chip, the business line and the region must all match; a region matches any tracker that covers it.

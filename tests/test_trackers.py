@@ -369,18 +369,23 @@ def test_home_card_flags_missing_commentary_and_counts_red_risks(client, logged_
     )
     db.commit()
     html = client.get("/").get_data(as_text=True)
-    assert "Commentary for" in html and "missing" in html
+    assert re.search(r"Weekly update for \d\d \w{3} \d{4} not written", html)
     assert '<span class="role-tag">Editor</span>' in html
-    assert '<span class="fact-value tone-danger">1</span><span class="fact-sub">2 open in all</span>' in html
+    assert '<span class="fact-value tone-danger">1</span><span class="fact-sub">2 open risks</span>' in html
     assert f'href="/trackers/{tracker.id}/entries/new"' in html
-    assert 'class="spark"' in html
+    assert (
+        re.search(rf'href="/trackers/{tracker.id}/inputs\?week=\d{{4}}-\d\d-\d\d"', html) and "Write the update" in html
+    )
+    assert 'class="spark"' in html and "Latest week" not in html
+    assert html.count('class="spark-key') == 1  # one chart key for the page, not one per card
+    assert "In charge: <strong" not in html and "Nobody yet" in html
 
 
 def test_home_card_for_a_viewer_has_no_record_link(client, logged_in_user, tracker_factory, grant):
     tracker = tracker_factory(name="Read only")
     grant(logged_in_user, tracker, "viewer")
     html = client.get("/").get_data(as_text=True)
-    assert f'href="/trackers/{tracker.id}/entries/new"' not in html
+    assert f'href="/trackers/{tracker.id}/entries/new"' not in html and "Write the update" not in html
     assert '<span class="role-tag">Viewer</span>' in html
 
 
@@ -388,7 +393,7 @@ def test_home_card_for_a_tracker_not_started_yet(client, logged_in_user, tracker
     tracker = tracker_factory(name="Later", first_week_ending=date(2099, 1, 2), last_week_ending=date(2099, 3, 27))
     grant(logged_in_user, tracker, "viewer")
     html = client.get("/").get_data(as_text=True)
-    assert "Starts 02 Jan 2099" in html and "Commentary for" not in html and 'class="spark"' not in html
+    assert "Starts 02 Jan 2099" in html and "not written" not in html and 'class="spark"' not in html
 
 
 def test_spark_chart_takes_the_last_completed_weeks_and_marks_short_weeks():
@@ -630,3 +635,23 @@ def test_group_action_with_an_id_that_cannot_exist_is_404(client, logged_in_admi
     for big in ("9" * 20, "9" * 5000):
         response = post(client, f"/trackers/{tracker.id}/groups", {"action": "retire", "group_id": big})
         assert response.status_code == 404
+
+
+def test_home_card_names_the_person_in_charge_and_the_forecast_lines(
+    client, logged_in_user, db, tracker_factory, grant, user_factory
+):
+    mine, theirs = tracker_factory(name="Mine", target_completion=date(2026, 12, 18)), tracker_factory(name="Theirs")
+    other = user_factory(full_name="Bea Lead")
+    grant(logged_in_user, mine, "owner")
+    grant(logged_in_user, theirs, "viewer")
+    grant(other, theirs, "editor")
+    mine.lead_user_id, theirs.lead_user_id = logged_in_user.id, other.id
+    db.commit()
+    html = client.get("/").get_data(as_text=True)
+    cards = re.findall(r'<article class="tracker-card.*?</article>', html, re.S)
+    by_name = {re.search(r'<a href="[^"]*">([^<]*)</a>', card).group(1): card for card in cards}
+    assert "In charge: <strong>You</strong>" in by_name["Mine"]
+    assert "In charge: <strong>Bea Lead</strong>" in by_name["Theirs"]
+    assert '<span class="fact-value">Not yet</span>' in by_name["Mine"]
+    assert '<span class="fact-sub fact-line">Target 18 Dec 2026</span>' in by_name["Mine"]
+    assert "No open risks" in by_name["Mine"] and "Business line and regions not set" in by_name["Mine"]

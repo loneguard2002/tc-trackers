@@ -1,14 +1,14 @@
 /* Colour and layout tokens follow the Everton dashboard shell: navy top bar, soft canvas sidebar, light and dark themes. */
 :root {
   color-scheme: light;
-  --bg: #e8eef7; --surface: #fff; --text: #14213d; --muted: #5d6b83; --border: #dde4ee;
+  --bg: #e8eef7; --surface: #fff; --text: #14213d; --muted: #4f5d75; --border: #dde4ee;
   --primary: #1260d0; --primary-text: #fff; --success: #087553; --warning: #9a5b00; --danger: #b8283f; --info: #1260d0;
   --topbar-bg: #071a3d; --focus-ring: #1260d0; --focus-ring-on-dark: #9cc2ff;
   --radius: 10px; --topbar-height: 68px; --sidebar-width: 248px;
 }
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0f1115; --surface: #171a20; --text: #eceef2; --muted: #a3a9b4; --border: #2a2f38;
+  --bg: #0f1115; --surface: #171a20; --text: #eceef2; --muted: #b0b6c1; --border: #2a2f38;
   --primary: #6ea6ff; --primary-text: #0f1115; --success: #3ccf98; --warning: #f2a93b; --danger: #f27387; --info: #6ea6ff;
   --focus-ring: #6ea6ff;
 }
@@ -243,7 +243,23 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tracker-card-title a:hover { color: var(--primary); text-decoration: underline; }
 .role-tag { padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .75rem; font-weight: 600; }
 .tracker-card-team { margin: 2px 0 0; color: var(--muted); font-size: .8rem; }
-.tracker-card-status { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .9rem; font-weight: 600; }
+.tracker-card-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 0; font-size: .8125rem; font-weight: 700; }
+.tracker-card-disagree { --tone: var(--warning); }  /* Green yet behind: the edge warns, the status pill keeps the owner's word */
+.tracker-card-lead { margin: 0; color: var(--muted); font-size: .8rem; }
+.tracker-card-lead strong { color: var(--text); font-weight: 600; }
+.card-status-pill, .verdict-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; }
+.card-status-pill { border-color: color-mix(in srgb, var(--tone-text) 45%, var(--border)); background: color-mix(in srgb, var(--tone-text) 10%, var(--surface)); color: var(--tone-text); }
+.tracker-card-disagree .card-status-pill { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); background: color-mix(in srgb, var(--success) 10%, var(--surface)); color: var(--success); }
+.verdict-pill { background: color-mix(in srgb, var(--text) 4%, var(--surface)); color: var(--muted); font-weight: 600; }
+.verdict-pill.is-warning { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); background: color-mix(in srgb, var(--warning) 10%, var(--surface)); color: var(--warning); font-weight: 700; }
+.verdict-pill .icon { width: 14px; height: 14px; }
+.home-key { justify-content: flex-start; gap: 4px 18px; margin: 0 0 12px; }
+.fact-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .72rem; }
+.tracker-card-alerts { display: grid; gap: 5px; margin: 0; padding: 10px 18px 10px 23px; list-style: none; border-top: 1px solid var(--border); font-size: .8125rem; }
+.alert { display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start; }
+.alert .icon { width: 16px; height: 16px; margin-top: 1px; }
+.alert-warn { color: var(--warning); font-weight: 600; }
+.alert-info { color: var(--muted); }
 .status-word { color: var(--tone-text); font-weight: 700; }
 .tracker-card-progress { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 20px; align-items: start; padding: 6px 18px 16px 23px; }
 .tracker-card-total { display: grid; gap: 4px; min-width: 0; padding-top: 2px; }
@@ -255,14 +271,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tracker-card-spark { min-width: 0; }
 .spark { display: block; width: 100%; height: 84px; }
 .spark-bar { fill: var(--primary); }
-.spark-bar.is-low { fill: color-mix(in srgb, var(--danger) 70%, transparent); }
+.spark-bar.is-low { fill: color-mix(in srgb, var(--danger) 30%, transparent); stroke: var(--danger); stroke-width: 1.5; stroke-dasharray: 3 2; }  /* outlined as well as red */
 .spark-slot { fill: var(--border); }
 .spark-target { fill: none; stroke: var(--text); stroke-opacity: .6; stroke-width: 2; }
 .spark-key { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin: 6px 0 0; color: var(--muted); font-size: .78rem; }
 .spark-key strong { color: var(--text); }
 .key { display: inline-block; width: 10px; height: 10px; margin: 0 5px 0 10px; border-radius: 2px; vertical-align: -1px; }
 .key:first-child { margin-left: 0; }
-.key-on { background: var(--primary); } .key-low { background: color-mix(in srgb, var(--danger) 70%, transparent); }
+.key-on { background: var(--primary); } .key-low { background: color-mix(in srgb, var(--danger) 30%, transparent); outline: 1.5px dashed var(--danger); outline-offset: -1.5px; }
 .key-target { height: 2px; background: var(--text); opacity: .6; vertical-align: 3px; }
 .spark-empty { margin: 0; padding: 10px 0; color: var(--muted); font-size: .85rem; }
 .tracker-card-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; border-top: 1px solid var(--border); }
@@ -277,8 +293,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tracker-card-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: auto; padding: 10px 18px 10px 23px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); color: var(--muted); font-size: .8125rem; }
 .flag, .cell-sub.flag { color: var(--warning); font-weight: 600; }
 .flag.flag-mild { color: var(--muted); }  /* a status more cautious than its forecast: worth a look, not a warning */
-.tracker-card-links { display: flex; gap: 12px; margin-left: auto; }
-.tracker-card-links a { font-weight: 600; text-decoration: none; }
+.tracker-card-links { display: flex; flex-wrap: wrap; gap: 6px 16px; width: 100%; }
+.tracker-card-links a { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; text-decoration: none; }
+.tracker-card-links .icon { width: 16px; height: 16px; }
+.tracker-card-links .tracker-card-update { margin-left: auto; }
 .tracker-card-links a:hover { text-decoration: underline; }
 .tracker-list { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .tracker-list table { min-width: 860px; }
