@@ -173,7 +173,7 @@
           </select>
         </div>
         <button class="button" type="submit">{{ icon('plus') }}Add selected team</button>
-        <span class="role-note">or</span>
+        <span class="team-add-or">or</span>
         <a class="button" href="{{ url_for('teams.index', parent=team.id, _anchor='new-team') }}">{{ icon('plus') }}New team</a>
       </form>
       {% else %}
@@ -250,7 +250,7 @@
             <td>{% if archived %}<span class="badge badge-muted">Archived</span>{% else %}<span class="badge badge-success">Active</span>{% endif %}</td>
             <td class="cell-actions"><div class="row-tools"><a class="button button-small row-edit" href="{{ url_for('trackers.roles', tracker_id=t.id) }}">{{ icon('key') }}Access<span class="sr-only"> for {{ t.name }}</span></a>
               <form method="post" action="{{ url_for('trackers.set_team', tracker_id=t.id) }}"
-                data-confirm="Remove {{ t.name }} from {{ team.name }}? It moves to no team and keeps its regions. People's access to this tracker will change.">
+                data-confirm="Remove {{ t.name }} from {{ team.name }}? It moves to no team and keeps its regions. {% if active_people %}Anyone who reaches it only through {{ team.name }} or a team above it loses that access.{% else %}No one reaches it through {{ team.name }}, so no one's access changes.{% endif %}">
                 {{ csrf_field(csrf_token()) }}<input type="hidden" name="team_id" value=""><input type="hidden" name="next" value="team"><input type="hidden" name="team" value="{{ team.id }}">
                 <button class="tool-button is-danger" type="submit" title="Remove {{ t.name }} from {{ team.name }}">{{ icon('close') }}<span class="sr-only">Remove {{ t.name }} from {{ team.name }}</span></button>
               </form></div></td>

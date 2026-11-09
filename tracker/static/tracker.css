@@ -676,7 +676,7 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .team-add-below { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; }
 .team-add-below label { display: block; margin: 0 0 3px; font-size: .8125rem; font-weight: 600; }
 .team-add-below select { min-width: 220px; max-width: 100%; padding: 7px 10px; font-size: .9rem; }
-.team-add-below .role-note { align-self: center; padding: 0 2px; }
+.team-add-or { align-self: center; padding: 0 2px; color: var(--muted); font-size: .8125rem; }
 .team-add-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin: 0; color: var(--muted); font-size: .875rem; }
 .team-panel .list-table table { min-width: 560px; }
 .team-panel .list-table td.num, .team-panel .list-table .num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -693,7 +693,8 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .pager-button { min-width: 34px; min-height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
 .pager-button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); }
 .pager-button[aria-current="page"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); color: var(--primary); }
-.pager-button:disabled { opacity: .5; cursor: not-allowed; }
+/* Dimmed with the muted text colour rather than faded out, so it stays readable in both themes. */
+.pager-button:disabled { border-style: dashed; background: transparent; color: var(--muted); font-weight: 400; cursor: not-allowed; }
 .pager-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 @media (max-width: 720px) {
   .team-add-panel, .pager { padding-left: 16px; padding-right: 16px; }

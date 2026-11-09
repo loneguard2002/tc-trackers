@@ -395,3 +395,8 @@ def test_pager_uses_the_singular_noun_for_one_row(client, logged_in_admin, team_
     tracker_factory(team_id=team.id)
     raw = raw_of(client.get(f"/admin/teams/{team.id}?tab=trackers"))
     assert 'data-noun-one="tracker"' in raw and 'data-noun-many="trackers"' in raw
+
+
+def test_the_or_between_the_two_ways_to_add_a_team_below_has_its_own_style(client, logged_in_admin, estate):
+    raw = raw_of(client.get(below_url(estate["infra"])))
+    assert '<span class="team-add-or">or</span>' in raw and 'class="role-note">or<' not in raw
