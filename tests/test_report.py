@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import re
 from datetime import date, timedelta
+from html import unescape
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,6 +14,7 @@ from report_helpers import FRIDAY, WEEKS, sample_rows, synthetic_report
 
 from tracker.engine.calc import WeekRow, build_week_rows
 from tracker.formatting import fmt_dash, fmt_date, fmt_num, fmt_pct, fmt_plural, fmt_rate
+from tracker.lists.catalogue import set_tracker_regions
 from tracker.models import CompletionEntry, Group, ReportInput, Risk, Week
 from tracker.report.build import build_report, current_report_week, default_report_week, select_top_risks
 from tracker.report.chart_data import chart_payload
@@ -361,6 +363,40 @@ def test_home_shows_weekly_status_from_latest_input(client, db, small_tracker, v
     html = client.get("/").get_data(as_text=True)
     assert "tracker-card tracker-card-green" in html
     assert "tracker-card-red" not in html
+
+
+# The report header shows the tracker's business line and regions.
+
+
+def text_of(response) -> str:
+    return unescape(response.get_data(as_text=True))
+
+
+def test_report_header_shows_business_line_and_regions(
+    client, logged_in_admin, db, tracker_factory, region_factory, business_line_factory
+):
+    region = region_factory("EMEA")
+    tracker = tracker_factory(name="Reported", business_line_id=business_line_factory().id)
+    set_tracker_regions(db, tracker.id, [region.id])
+    db.commit()
+    page = text_of(client.get(f"/trackers/{tracker.id}/report"))
+    assert '<p class="report-meta">Tradition brokerage · EMEA</p>' in page
+
+
+def test_report_header_says_when_business_line_and_regions_are_not_set(client, logged_in_admin, tracker_factory):
+    tracker = tracker_factory(name="Bare report")
+    page = text_of(client.get(f"/trackers/{tracker.id}/report"))
+    assert '<p class="report-meta">Business line not set · Regions not set</p>' in page
+
+
+def test_report_labels_are_filled_by_build_report(db, tracker_factory, region_factory, business_line_factory):
+    emea, apac = region_factory("EMEA"), region_factory("APAC")
+    tracker = tracker_factory(business_line_id=business_line_factory().id)
+    set_tracker_regions(db, tracker.id, [emea.id, apac.id])
+    db.commit()
+    report = build_report(db, tracker, None, date(2026, 10, 1))
+    assert report.labels.business_line == "Tradition brokerage"
+    assert report.labels.regions == ["APAC", "EMEA"]
 
 
 # --- Template rendering without a database ----------------------------------------------------------------------
