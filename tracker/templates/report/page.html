@@ -6,7 +6,9 @@
   <script src="{{ url_for('static', filename='report-view.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% block content %}
+<h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
+{% set live_page = true %}{#- the report body titles itself by week only: the name is above the tabs -#}
 {% set tid = report.tracker.id %}{% set wk = report.week_ending %}
 {% set ns = namespace(prev=none, next=none) %}
 {% for w in weeks %}{% if w < wk %}{% set ns.prev = w %}{% elif w > wk and ns.next is none %}{% set ns.next = w %}{% endif %}{% endfor %}

@@ -14,7 +14,8 @@
 {% set group_names = {} %}{% for gp in r.groups %}{% set _ = group_names.update({gp.group_id: gp.name}) %}{% endfor %}
 <article class="report">
   <div class="report-title">
-    <h1>{{ t.name }}: week ending {{ r.week_ending|fdate }}</h1>
+    {% if live_page|default(false) %}<h2>Week ending {{ r.week_ending|fdate }}</h2>
+    {% else %}<h1>{{ t.name }}: week ending {{ r.week_ending|fdate }}</h1>{% endif %}
     {% if r.in_progress %}<span class="badge badge-info">In progress</span>{% endif %}
     <p class="report-meta">{{ labels_text(r.labels) }}</p>
   </div>

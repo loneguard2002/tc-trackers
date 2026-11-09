@@ -326,7 +326,7 @@ def test_report_page_opens_on_the_week_in_progress(client, db, small_tracker, vi
     seed(db, small_tracker)
     monkeypatch.setattr("tracker.report.views.today", lambda: date(2026, 9, 14))
     html = client.get(f"/trackers/{small_tracker.id}/report").get_data(as_text=True)
-    assert f"week ending {fmt_date(WEEKS[2])}" in html and BADGE_IN_PROGRESS in html
+    assert f"<h2>Week ending {fmt_date(WEEKS[2])}</h2>" in html and BADGE_IN_PROGRESS in html
     assert f"data.json?week={WEEKS[2].isoformat()}" in html and f"report.pdf?week={WEEKS[2].isoformat()}" in html
     data = client.get(f"/trackers/{small_tracker.id}/report/data.json").get_json()
     assert data["in_progress"] == [False, False, True, False]
@@ -620,3 +620,16 @@ def test_tooltip_swatches_match_palette():
     css = (Path(__file__).resolve().parent.parent / "tracker" / "static" / "tracker.css").read_text(encoding="utf-8")
     for key in ("plan", "actual", "forecast"):
         assert re.search(rf"\.chart-swatch-{key}\s*{{[^}}]*background:\s*{PALETTE[key]}", css), key
+
+
+def test_report_page_puts_the_tracker_name_above_the_tabs(app, client, db, small_tracker, viewer):
+    """As on the other tracker pages; the PDF and PNG keep the full title, having no tabs."""
+    from tracker.report.render import render_print_html
+
+    html = client.get(f"/trackers/{small_tracker.id}/report?week={WEEKS[1].isoformat()}").get_data(as_text=True)
+    head = html.index(f"<h1>{small_tracker.name}</h1>")
+    assert head < html.index('<nav class="tabs" aria-label="Tracker sections">')
+    assert html.count("<h1") == 1 and "<h2>Week ending 11 Sep 2026</h2>" in html
+    with app.test_request_context("/"):
+        printable = render_print_html(build_report(db, small_tracker, WEEKS[1], WEEKS[1]))
+    assert f"<h1>{small_tracker.name}: week ending 11 Sep 2026</h1>" in printable
