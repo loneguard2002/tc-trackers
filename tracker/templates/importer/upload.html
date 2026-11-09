@@ -2,7 +2,19 @@
 {% from "macros.html" import csrf_field, setting %}
 {% block content %}
 <h1>Import workbook</h1>
-<p class="page-lede">Create a new tracker from an existing tracking workbook. Step 1 of 2: read the workbook. Nothing is saved until you confirm the preview on the next page.</p>
+<p class="page-lede">Create a new tracker from a tracking workbook. Step 1 of 2: read the workbook. Nothing is saved until you confirm the preview on the next page.</p>
+<p><a class="button" href="{{ url_for('importer.template') }}">Download the template</a> <span class="muted">An Excel workbook in the right layout, with instructions and a worked example to replace.</span></p>
+<details class="import-guide">
+  <summary>What the workbook needs</summary>
+  <ul>
+    <li><strong>Settings</strong>: the report day, the first and last report dates (at most 52 weeks), the target date, anything completed before the first report, and the weeks in the moving average.</li>
+    <li><strong>By Location</strong>: up to 6 locations with their total scope, completed so far, ready but not complete, planned completion, RAG and a comment.</li>
+    <li><strong>Weekly Tracker</strong>: one row per week with the weekly target and what was actually done.</li>
+    <li><strong>Risks &amp; Issues</strong>: up to 15 risks with their owner, dates, status and RAG.</li>
+    <li><strong>Report Inputs</strong> (optional): the latest week's status, update and decisions needed.</li>
+  </ul>
+  <p>The completed-so-far figures on By Location must add up to the figure completed before the first report plus all the weekly actuals. Dates must be real Excel dates, not text.</p>
+</details>
 <div class="settings settings-narrow">
   <form method="post" action="{{ url_for('importer.preview') }}" enctype="multipart/form-data">
     {% if error %}<div class="form-alert" role="alert"><strong>The workbook could not be read.</strong><ul class="form-error"><li>{{ error }}</li></ul></div>{% endif %}

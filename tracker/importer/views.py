@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import current_app, flash, redirect, render_template, request, url_for
+from flask import current_app, flash, redirect, render_template, request, send_file, url_for
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from sqlalchemy.exc import IntegrityError
 
@@ -12,6 +12,7 @@ from ..lists.catalogue import business_line_choices, parse_business_line, parse_
 from ..teams.tree import TEAM_CHOICE_ERROR, parse_team_id, team_choices
 from ..trackers.views import WEEKDAYS
 from . import bp
+from .template import TEMPLATE_PATH, example_leftovers
 from .workbook import ImportError_, ImportMismatch, ImportPreview, create_tracker_from_preview, read_workbook
 
 SALT = "workbook-import"
@@ -41,6 +42,7 @@ def _render_confirm(preview: ImportPreview, token: str, form, error: str | None 
         render_template(
             "importer/confirm.html",
             preview=preview,
+            leftovers=example_leftovers(preview),
             token=token,
             form=form,
             error=error,
@@ -60,6 +62,13 @@ def _render_confirm(preview: ImportPreview, token: str, form, error: str | None 
 @permission_required("import_workbooks")
 def upload():
     return _render_upload()
+
+
+@bp.get("/import/template")
+@permission_required("import_workbooks")
+def template():
+    """The import template: the layout with instructions and a worked example (``flask build-import-template``)."""
+    return send_file(TEMPLATE_PATH, as_attachment=True, download_name="import-template.xlsx")
 
 
 @bp.post("/import")

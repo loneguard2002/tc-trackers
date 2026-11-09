@@ -1158,3 +1158,4 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
 .team-delete-blocked { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; max-width: 100%; }
 .team-delete-note { color: var(--muted); font-size: .8125rem; }
 .team-header:has(.team-delete-blocked) .team-divider { display: none; }
+.import-guide { margin: 0 0 16px; max-width: 80ch; } .import-guide summary { cursor: pointer; font-weight: 600; } .import-guide ul { padding-left: 20px; }
