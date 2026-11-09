@@ -655,3 +655,25 @@ def test_home_card_names_the_person_in_charge_and_the_forecast_lines(
     assert '<span class="fact-value">Not yet</span>' in by_name["Mine"]
     assert '<span class="fact-sub fact-line">Target 18 Dec 2026</span>' in by_name["Mine"]
     assert "No open risks" in by_name["Mine"] and "Business line and regions not set" in by_name["Mine"]
+
+
+def test_every_tracker_tab_has_an_icon(client, logged_in_admin, tracker_factory):
+    tracker = tracker_factory(group_label="Datacentre")
+    html = client.get(f"/trackers/{tracker.id}/settings").get_data(as_text=True)
+    nav = re.search(r'<nav class="tabs" aria-label="Tracker sections">(.*?)</nav>', html, re.S).group(1)
+    tabs = re.findall(r'<a class="tab[^"]*"[^>]*>(.*?)</a>', nav, re.S)
+    labels = [re.sub(r"<[^>]+>", "", tab).strip() for tab in tabs]
+    assert labels == [
+        "Report",
+        "Entries",
+        "Weekly inputs",
+        "Targets",
+        "Datacentres",
+        "Risks",
+        "Email",
+        "Settings",
+        "Access",
+    ]
+    assert all(tab.lstrip().startswith('<svg class="icon"') for tab in tabs)
+    icon_for = {label: re.search(r"<path d=\"([^\"]+)\"", tab).group(1) for label, tab in zip(labels, tabs)}
+    assert len(set(icon_for.values())) == len(icon_for)  # nine different icons
