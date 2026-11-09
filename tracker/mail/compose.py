@@ -103,8 +103,11 @@ def email_summary(report: Report) -> str:
     if h.this_week_target is not None:
         week += f" v +{fmt_num(h.this_week_target)}"
     progress = (
-        f"{fmt_num(h.completed)} ({week}) of {fmt_num(h.total_scope)} {report.tracker.unit_label} done"
-        f" ({fmt_pct(h.pct_complete)})"
+        f"{fmt_num(h.completed)} ({week}) of "
+        + " ".join(
+            part for part in (fmt_num(h.total_scope), report.tracker.unit_label, "done") if part
+        )  # unit optional
+        + f" ({fmt_pct(h.pct_complete)})"
     )
     return " | ".join(
         (

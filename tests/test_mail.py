@@ -174,6 +174,12 @@ def test_summary_risk_cases(open_risks, rags, ending):
     assert line.endswith(ending) and "()" not in line
 
 
+def test_summary_without_a_unit_has_no_double_space():
+    report = summary_for()
+    report.tracker.unit_label = ""
+    assert "| 25 (+5 v +3) of 180 done (14%) |" in email_summary(report)
+
+
 def test_summary_without_a_status_says_so():
     report = summary_for()
     report.inputs = None

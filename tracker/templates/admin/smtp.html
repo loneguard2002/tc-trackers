@@ -58,6 +58,7 @@
       {% call setting('Subject', 'At most 300 characters.', 'report_email_subject') %}
       <input id="report_email_subject" name="report_email_subject" value="{{ report_subject }}" maxlength="300" required autocomplete="off" spellcheck="false" aria-describedby="report_email_subject-help">
       {% endcall %}
+      {% if unknown %}<p class="warn-box" role="status">Unknown placeholders will be sent as written: {{ unknown|join(', ') }}.</p>{% endif %}
       <details class="placeholder-help">
         <summary>Placeholders</summary>
         <dl>
