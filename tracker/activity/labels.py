@@ -76,6 +76,7 @@ ACTION_LABELS: dict[str, str] = {
     "report_sent": "Report sent",
     "report_send_queued": "Report send queued",
     "report_send_failed": "Report send failed",
+    "report_reminder_sent": "Update reminder sent",
     "report_test_sent": "Test report sent",
     "permission_set_created": "Permission set created",
     "permission_set_renamed": "Permission set renamed",

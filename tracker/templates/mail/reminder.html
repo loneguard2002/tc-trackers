@@ -1,0 +1,10 @@
+{#- The reminder to write the weekly update (tracker/sched/reminders.py). -#}
+<!doctype html>
+<html lang="en-GB">
+<body style="font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 14px; line-height: 1.5;">
+<p>The weekly report for <strong>{{ tracker.name }}</strong> goes out on {{ fire.strftime('%A %d %B at %H:%M') }} ({{ tracker.send_timezone }}).</p>
+<p>The update for the week ending {{ week|fdate }} has not been written yet. Without it, the email says "No update was written for this week."</p>
+<p><a href="{{ link }}">Write the weekly update</a> (sign-in required).</p>
+<p style="color: #5d6b83; font-size: 12px;">You get this as the person in charge of this tracker, or as its owner while nobody is in charge.</p>
+</body>
+</html>
