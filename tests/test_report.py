@@ -457,9 +457,14 @@ def test_report_shows_status_colour_risk_stripes_and_group_bars(client, db, smal
 
 
 def test_report_page_template_renders_without_database(app):
+    """The live page gets its report without charts (``build_report(..., with_charts=False)``), so the template
+    links the three pictures for the week shown instead of building them in."""
+    import dataclasses
+
     from flask import g, render_template
 
     report, tracker = synthetic_report()
+    report = dataclasses.replace(report, charts={})
     with app.test_request_context("/"):
         g.role, g.tracker = "viewer", tracker
         g.current_user = STUB_USER  # read by the app's context processor, with or without a database
@@ -472,7 +477,11 @@ def test_report_page_template_renders_without_database(app):
             page_title="x",
             current_page="trackers",
         )
-    assert "Stub tracker" in html and "Needed from you" in html and html.count("data:image/svg+xml;base64,") == 3
+    assert "Stub tracker" in html and "Needed from you" in html
+    assert "data:image/svg+xml;base64," not in html
+    week = report.week_ending.isoformat()
+    for name in ("remaining", "weekly", "cumulative"):
+        assert f'src="/trackers/{tracker.id}/report/chart/{name}.svg?week={week}"' in html
     assert BADGE_IN_PROGRESS not in html
 
 
