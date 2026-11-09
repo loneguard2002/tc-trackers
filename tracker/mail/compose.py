@@ -14,7 +14,7 @@ from email.message import EmailMessage
 
 from flask import render_template
 
-from ..formatting import MISSING, fmt_data_uri, fmt_date, fmt_pct
+from ..formatting import MISSING, fmt_data_uri, fmt_date, fmt_num, fmt_pct, fmt_short_date
 from ..models import EmailTemplate
 from ..report.build import Report
 from ..report.charts import remaining_chart
@@ -22,6 +22,7 @@ from ..report.charts import remaining_chart
 CHART_CID = "remaining-chart"
 
 PLACEHOLDERS: dict[str, str] = {
+    "summary": "The week in one line: date, status, progress against this week's target, what is left and the risks",
     "tracker_name": "The tracker name",
     "week_ending": "The report week-ending date, for example 16 Oct 2026",
     "status": "The overall Red, Amber or Green status",
@@ -37,7 +38,7 @@ PLACEHOLDERS: dict[str, str] = {
     "report_link": "A link to the live report (sign-in required)",
 }
 
-DEFAULT_SUBJECT = "{{tracker_name}} – week ending {{week_ending}} – {{status}}"
+DEFAULT_SUBJECT = "{{summary}}"
 DEFAULT_BODY = """\
 <p><strong>{{tracker_name}}</strong>: week ending {{week_ending}}</p>
 <p><strong>Status:</strong> {{status}} – {{verdict}}</p>
@@ -56,6 +57,46 @@ MAX_SUBJECT_LENGTH = 300
 def report_link(app_url: str, tracker_id: int, week_ending: date) -> str:
     """The sign-in-protected report URL, built from the configured APP_URL (never from request headers)."""
     return f"{app_url.rstrip('/')}/trackers/{tracker_id}/report?week={week_ending.isoformat()}"
+
+
+def _plural(count: int, word: str) -> str:
+    return f"{fmt_num(count)} {word}" if count == 1 else f"{fmt_num(count)} {word}s"
+
+
+def _risks_text(open_risks: int, new_rags: list[str | None]) -> str:
+    """ "3 risks", or with the risks raised this week: "3 risks (1 new - red)", "(2 new - 1 red, 1 amber)", "(1 new)"."""
+    text = _plural(open_risks, "risk")
+    if not new_rags:
+        return text
+    coloured = [rag for rag in new_rags if rag]
+    if not coloured:
+        return f"{text} ({len(new_rags)} new)"
+    if len(new_rags) == 1:
+        return f"{text} (1 new - {coloured[0].lower()})"
+    counts = [f"{coloured.count(rag)} {rag.lower()}" for rag in ("Red", "Amber", "Green") if rag in coloured]
+    return f"{text} ({len(new_rags)} new - {', '.join(counts)})"
+
+
+def email_summary(report: Report) -> str:
+    """The week in one line, for the subject: ``Network refresh | 06/11/26 : Green | 25 (+5 v +3) of 180 devices
+    done (14%) | 155 left | 3 risks (1 new - red)``. A week without a target drops `` v +3``."""
+    h = report.headline
+    status = report.inputs.status if report.inputs and report.inputs.status else "No status"
+    week = f"+{fmt_num(h.this_week_actual or 0)}"
+    if h.this_week_target is not None:
+        week += f" v +{fmt_num(h.this_week_target)}"
+    progress = (
+        f"{fmt_num(h.completed)} ({week}) of {fmt_num(h.total_scope)} {report.tracker.unit_label} done"
+        f" ({fmt_pct(h.pct_complete)})"
+    )
+    return " | ".join(
+        (
+            f"{report.tracker.name} | {fmt_short_date(report.week_ending)} : {status}",
+            progress,
+            f"{fmt_num(h.remaining)} left",
+            _risks_text(report.open_risks, report.new_risk_rags),
+        )
+    )
 
 
 def placeholder_context(report: Report, link: str) -> dict[str, str]:
@@ -79,6 +120,7 @@ def placeholder_context(report: Report, link: str) -> dict[str, str]:
         "headline": text(inputs.headline if inputs else None),
         "decisions": text(inputs.decisions if inputs else None) if inputs and inputs.decisions else "None",
         "report_link": link,
+        "summary": email_summary(report),
     }
 
 

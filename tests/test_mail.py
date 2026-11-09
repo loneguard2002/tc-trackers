@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import smtplib
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -17,6 +18,7 @@ from tracker.mail.compose import (
     DEFAULT_SUBJECT,
     PLACEHOLDERS,
     build_report_email,
+    email_summary,
     normalise_recipient,
     placeholder_context,
     render_placeholders,
@@ -104,7 +106,80 @@ def test_subject_decodes_entities_for_plain_text():
 
 def test_default_subject_renders():
     report, _ = synthetic_report()
-    assert render_subject(DEFAULT_SUBJECT, placeholder_context(report, LINK)).startswith("Stub tracker – week ending")
+    assert render_subject(DEFAULT_SUBJECT, placeholder_context(report, LINK)).startswith("Stub tracker | ")
+
+
+# --- Pure: the summary line ------------------------------------------------------------------------------------
+
+
+def summary_for(**changes):
+    report, _ = synthetic_report()
+    report.inputs = SimpleNamespace(status="Green", headline="", decisions="")
+    values = {
+        "completed": 25,
+        "total_scope": 180,
+        "remaining": 155,
+        "pct_complete": 25 / 180,
+        "this_week_actual": 5,
+        "this_week_target": 3,
+    }
+    report.headline = dataclasses.replace(report.headline, **(values | changes))
+    report.tracker.name = "Network refresh"
+    report.week_ending = date(2026, 11, 6)
+    report.open_risks, report.new_risk_rags = 3, ["Red"]
+    return report
+
+
+def test_summary_matches_the_agreed_line():
+    assert email_summary(summary_for()) == (
+        "Network refresh | 06/11/26 : Green | 25 (+5 v +3) of 180 devices done (14%) | 155 left | 3 risks (1 new - red)"
+    )
+
+
+@pytest.mark.parametrize(
+    "changes, part",
+    [
+        ({"this_week_target": None}, "| 25 (+5) of 180 devices done (14%) |"),
+        ({"this_week_actual": 0}, "| 25 (+0 v +3) of 180 devices"),
+        ({"this_week_actual": None}, "| 25 (+0 v +3) of 180 devices"),  # a week with no row yet
+        (
+            {"completed": 1170, "total_scope": 2400, "remaining": 1230, "pct_complete": 1170 / 2400},
+            "| 1,170 (+5 v +3) of 2,400 devices done (49%) | 1,230 left |",
+        ),
+    ],
+)
+def test_summary_progress_cases(changes, part):
+    assert part in email_summary(summary_for(**changes))
+
+
+@pytest.mark.parametrize(
+    "open_risks, rags, ending",
+    [
+        (3, [], "| 3 risks"),
+        (1, [], "| 1 risk"),
+        (0, [], "| 0 risks"),
+        (3, ["Red", "Amber"], "| 3 risks (2 new - 1 red, 1 amber)"),
+        (4, ["Red", "Red"], "| 4 risks (2 new - 2 red)"),
+        (2, [None], "| 2 risks (1 new)"),
+        (2, ["Red", None], "| 2 risks (2 new - 1 red)"),
+    ],
+)
+def test_summary_risk_cases(open_risks, rags, ending):
+    report = summary_for()
+    report.open_risks, report.new_risk_rags = open_risks, rags
+    line = email_summary(report)
+    assert line.endswith(ending) and "()" not in line
+
+
+def test_summary_without_a_status_says_so():
+    report = summary_for()
+    report.inputs = None
+    assert " | 06/11/26 : No status | " in email_summary(report)
+
+
+def test_summary_is_a_known_placeholder_and_the_default_subject():
+    assert DEFAULT_SUBJECT == "{{summary}}" and "summary" in PLACEHOLDERS
+    assert placeholder_context(summary_for(), LINK)["summary"].startswith("Network refresh | 06/11/26")
 
 
 # --- Pure: recipient validation -----------------------------------------------------------------------------
