@@ -1,4 +1,4 @@
-"""Weekly inputs and targets pages in a real browser (database)."""
+"""Weekly update and targets pages in a real browser (database)."""
 
 from __future__ import annotations
 

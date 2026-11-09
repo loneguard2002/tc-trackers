@@ -666,7 +666,7 @@ def test_every_tracker_tab_has_an_icon(client, logged_in_admin, tracker_factory)
     assert labels == [
         "Report",
         "Entries",
-        "Weekly inputs",
+        "Weekly update",
         "Targets",
         "Datacentres",
         "Risks",
