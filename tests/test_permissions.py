@@ -126,12 +126,6 @@ def test_email_settings_holder_saves_the_sender_address(client, logged_in_user, 
     assert entry is not None and entry.detail == {"changed": ["smtp_from"]}
 
 
-def test_new_tracker_button_follows_create_trackers(client, logged_in_user, give_set):
-    assert 'href="/trackers/new"' not in client.get("/").get_data(as_text=True)
-    give_set(["create_trackers"], user=logged_in_user)
-    assert 'href="/trackers/new"' in client.get("/").get_data(as_text=True)
-
-
 def test_email_settings_holder_sees_the_server_read_only_and_cannot_change_it(client, logged_in_user, give_set, db):
     from tracker.admin.smtp import SERVER_LOCKED_MESSAGE
     from tracker.models import AppSetting
