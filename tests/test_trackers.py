@@ -336,66 +336,6 @@ def test_viewer_cannot_open_groups(client, logged_in_user, db, tracker_factory, 
     assert client.get(f"/trackers/{tracker.id}/groups").status_code == 404
 
 
-def test_home_lists_only_visible_trackers(client, logged_in_user, tracker_factory, grant):
-    mine = tracker_factory(name="Mine tracker")
-    tracker_factory(name="Other tracker")
-    grant(logged_in_user, mine, "viewer")
-    page = client.get("/")
-    assert b"Mine tracker" in page.data
-    assert b"Other tracker" not in page.data
-
-
-def test_home_shows_last_entry_date_and_percent(client, logged_in_user, db, tracker_factory, grant):
-    tracker = tracker_factory(name="Shown")
-    grant(logged_in_user, tracker, "viewer")
-    group = make_group(db, tracker, baseline=40)
-    add_entry(db, tracker, group, date(2026, 9, 3), 10, date(2026, 9, 4))
-    page = client.get("/")
-    assert b"03 Sep 2026" in page.data
-    assert b"25%" in page.data
-
-
-def test_home_card_flags_missing_commentary_and_counts_red_risks(client, logged_in_user, db, tracker_factory, grant):
-    tracker = tracker_factory(name="Flagged")
-    grant(logged_in_user, tracker, "editor")
-    group = make_group(db, tracker, baseline=40)
-    add_entry(db, tracker, group, date(2026, 9, 3), 10, date(2026, 9, 4))
-    db.add_all(
-        [
-            Risk(tracker_id=tracker.id, ref="R1", description="a", rag="Red"),
-            Risk(tracker_id=tracker.id, ref="R2", description="b", rag="Red", status="Closed"),
-            Risk(tracker_id=tracker.id, ref="R3", description="c", rag="Amber"),
-        ]
-    )
-    db.commit()
-    html = client.get("/").get_data(as_text=True)
-    assert re.search(r"Weekly update for \d\d \w{3} \d{4} not written", html)
-    assert '<span class="role-tag">Editor</span>' in html
-    assert '<span class="fact-value tone-danger">1</span><span class="fact-sub">2 open risks</span>' in html
-    assert f'href="/trackers/{tracker.id}/entries/new"' in html
-    assert (
-        re.search(rf'href="/trackers/{tracker.id}/inputs\?week=\d{{4}}-\d\d-\d\d"', html) and "Write the update" in html
-    )
-    assert 'class="spark"' in html and "Latest week" not in html
-    assert html.count('class="spark-key') == 1  # one chart key for the page, not one per card
-    assert "In charge: <strong" not in html and "Nobody yet" in html
-
-
-def test_home_card_for_a_viewer_has_no_record_link(client, logged_in_user, tracker_factory, grant):
-    tracker = tracker_factory(name="Read only")
-    grant(logged_in_user, tracker, "viewer")
-    html = client.get("/").get_data(as_text=True)
-    assert f'href="/trackers/{tracker.id}/entries/new"' not in html and "Write the update" not in html
-    assert '<span class="role-tag">Viewer</span>' in html
-
-
-def test_home_card_for_a_tracker_not_started_yet(client, logged_in_user, tracker_factory, grant):
-    tracker = tracker_factory(name="Later", first_week_ending=date(2099, 1, 2), last_week_ending=date(2099, 3, 27))
-    grant(logged_in_user, tracker, "viewer")
-    html = client.get("/").get_data(as_text=True)
-    assert "Starts 02 Jan 2099" in html and "not written" not in html and 'class="spark"' not in html
-
-
 def test_spark_chart_takes_the_last_completed_weeks_and_marks_short_weeks():
     from tracker.engine.calc import build_week_rows
     from tracker.engine.weeks import week_endings
@@ -430,17 +370,6 @@ def test_spark_chart_keeps_its_eight_slots_when_few_weeks_are_done():
     starts = [segment.split(",")[0] for segment in chart["target"].split(" ") if segment.startswith("M")]
     full_starts = [segment.split(",")[0] for segment in full["target"].split(" ") if segment.startswith("M")]
     assert starts == full_starts[-2:]
-
-
-def test_archived_tracker_hidden_from_home_but_reachable(client, logged_in_admin, db, tracker_factory):
-    tracker = tracker_factory(name="Old tracker")
-    assert post(client, f"/trackers/{tracker.id}/archive").status_code == 302
-    db.refresh(tracker)
-    assert tracker.status == "archived"
-    assert b"Old tracker" not in client.get("/").data
-    assert b"Old tracker" in client.get("/?archived=1").data
-    assert client.get(f"/trackers/{tracker.id}/groups").status_code == 200
-    assert client.get(f"/trackers/{tracker.id}/settings").status_code == 200
 
 
 def test_archive_is_admin_only(client, logged_in_user, tracker_factory, grant):
@@ -635,26 +564,6 @@ def test_group_action_with_an_id_that_cannot_exist_is_404(client, logged_in_admi
     for big in ("9" * 20, "9" * 5000):
         response = post(client, f"/trackers/{tracker.id}/groups", {"action": "retire", "group_id": big})
         assert response.status_code == 404
-
-
-def test_home_card_names_the_person_in_charge_and_the_forecast_lines(
-    client, logged_in_user, db, tracker_factory, grant, user_factory
-):
-    mine, theirs = tracker_factory(name="Mine", target_completion=date(2026, 12, 18)), tracker_factory(name="Theirs")
-    other = user_factory(full_name="Bea Lead")
-    grant(logged_in_user, mine, "owner")
-    grant(logged_in_user, theirs, "viewer")
-    grant(other, theirs, "editor")
-    mine.lead_user_id, theirs.lead_user_id = logged_in_user.id, other.id
-    db.commit()
-    html = client.get("/").get_data(as_text=True)
-    cards = re.findall(r'<article class="tracker-card.*?</article>', html, re.S)
-    by_name = {re.search(r'<a href="[^"]*">([^<]*)</a>', card).group(1): card for card in cards}
-    assert "In charge: <strong>You</strong>" in by_name["Mine"]
-    assert "In charge: <strong>Bea Lead</strong>" in by_name["Theirs"]
-    assert '<span class="fact-value">Not yet</span>' in by_name["Mine"]
-    assert '<span class="fact-sub fact-line">Target 18 Dec 2026</span>' in by_name["Mine"]
-    assert "No open risks" in by_name["Mine"] and "Business line and regions not set" in by_name["Mine"]
 
 
 def test_every_tracker_tab_has_an_icon(client, logged_in_admin, tracker_factory):

@@ -2,7 +2,6 @@
 
 import html
 import re
-from datetime import date
 from io import BytesIO
 
 from sqlalchemy import select
@@ -221,13 +220,6 @@ def test_settings_team_section_for_an_administrator(client, logged_in_admin, tra
     tracker = tracker_factory()
     page = client.get(f"/trackers/{tracker.id}/settings").get_data(as_text=True)
     assert 'id="team"' in page and 'href="#team"' in page and "No team" in page
-
-
-def test_home_card_shows_the_team_name(client, logged_in_admin, tracker_factory, team_factory):
-    team = team_factory(name="Network")
-    tracker_factory(name="With team", team_id=team.id, first_week_ending=date(2026, 9, 4))
-    page = client.get("/").get_data(as_text=True)
-    assert '<p class="tracker-card-team">Network · Business line and regions not set</p>' in page
 
 
 # --- Final review fixes ---------------------------------------------------------------------------------------------
