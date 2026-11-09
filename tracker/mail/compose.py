@@ -14,11 +14,13 @@ from email.message import EmailMessage
 from types import SimpleNamespace
 
 from flask import render_template
+from markupsafe import Markup
 
 from ..formatting import MISSING, fmt_data_uri, fmt_date, fmt_num, fmt_pct, fmt_short_date
 from ..models import AppSetting, EmailTemplate
 from ..report.build import Report
-from ..report.charts import remaining_chart
+from ..report.charts import email_chart
+from .blocks import block_context
 
 CHART_CID = "remaining-chart"
 
@@ -37,18 +39,16 @@ PLACEHOLDERS: dict[str, str] = {
     "headline": "The headline entered for the week",
     "decisions": "The decisions or support needed (None when empty)",
     "report_link": "A link to the live report (sign-in required)",
+    "figures": "Five boxes: next week's target, needed per week, target finish, forecast finish and status",
+    "this_week": "The week's update as bullet points, or a note that none was written",
+    "needed_from_you": "The decisions or support needed as bullet points (nothing when there are none)",
+    "risks": "The open risks as a table with the new ones marked (nothing when none are open)",
 }
+# Placeholders whose value is ready-made HTML for the message; they insert nothing in the subject.
+BLOCK_PLACEHOLDERS = ("figures", "this_week", "needed_from_you", "risks")
 
 DEFAULT_SUBJECT = "{{summary}}"
-DEFAULT_BODY = """\
-<p><strong>{{tracker_name}}</strong>: week ending {{week_ending}}</p>
-<p><strong>Status:</strong> {{status}} – {{verdict}}</p>
-<p>Forecast completion {{forecast_date}} against a target of {{target_date}}.
-{{percent_complete}} complete ({{completed}} of {{total_scope}}; {{remaining}} remaining).</p>
-<p>{{headline}}</p>
-<p><strong>Needed from you:</strong> {{decisions}}</p>
-<p><a href="{{report_link}}">Open the live report</a> (sign-in required).</p>
-"""
+DEFAULT_BODY = "{{figures}}\n{{this_week}}\n{{needed_from_you}}\n{{risks}}\n"  # the chart and link come after
 
 REPORT_SUBJECT_KEY = "report_email_subject"  # the app setting holding the one subject every tracker's email uses
 
@@ -119,7 +119,7 @@ def email_summary(report: Report) -> str:
     )
 
 
-def placeholder_context(report: Report, link: str) -> dict[str, str]:
+def placeholder_context(report: Report, link: str) -> dict[str, str | Markup]:
     h = report.headline
     inputs = report.inputs
 
@@ -141,15 +141,19 @@ def placeholder_context(report: Report, link: str) -> dict[str, str]:
         "decisions": text(inputs.decisions if inputs else None) if inputs and inputs.decisions else "None",
         "report_link": link,
         "summary": email_summary(report),
+        **block_context(report),
     }
 
 
 def render_placeholders(text: str, context: dict[str, str]) -> str:
-    """Replace ``{{name}}`` with the HTML-escaped value; unknown names are left in place."""
+    """Replace ``{{name}}`` with the HTML-escaped value (ready-made ``Markup`` as it is); unknown names stay."""
 
     def substitute(match: re.Match) -> str:
         name = match.group(1)
-        return html.escape(str(context[name])) if name in context else match.group(0)
+        if name not in context:
+            return match.group(0)
+        value = context[name]
+        return str(value) if isinstance(value, Markup) else html.escape(str(value))
 
     return _PLACEHOLDER_RE.sub(substitute, text)
 
@@ -170,11 +174,15 @@ def sanitise_subject(subject: str) -> str:
 
 
 def render_subject(template_subject: str, context: dict[str, str]) -> str:
-    return sanitise_subject(render_placeholders(template_subject, context))
+    plain = {name: "" if isinstance(value, Markup) else value for name, value in context.items()}
+    return sanitise_subject(render_placeholders(template_subject, plain))
 
 
 def html_to_text(markup: str) -> str:
     text = re.sub(r"(?i)<br\s*/?>|</p>|</li>|</tr>|</h\d>", "\n", markup)
+    text = re.sub(r"(?i)<li[^>]*>", "- ", text)
+    text = re.sub(r"(?i)</div>", " ", text)
+    text = re.sub(r"(?i)</t[dh]>", "  ", text)
     text = re.sub(r"(?s)<style.*?</style>|<[^>]+>", "", text)
     text = html.unescape(text)
     return re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]+", " ", text)).strip()
@@ -196,8 +204,13 @@ def render_email_html(report: Report, template: EmailTemplate | None, link: str,
     return render_subject(subject_source, context), page
 
 
+def chart_png(report: Report) -> bytes:
+    """The email's chart: remaining against plan, with each week's target and what was done."""
+    return email_chart(report.rows, report.tracker.unit_label, report.week_ending, "png")
+
+
 def preview_chart_src(report: Report) -> str:
-    return fmt_data_uri(remaining_chart(report.rows, report.tracker.unit_label, "png"), "image/png")
+    return fmt_data_uri(chart_png(report), "image/png")
 
 
 def _slug(name: str) -> str:
@@ -231,7 +244,7 @@ def build_report_email(
     msg["Bcc"] = ", ".join(recipients)
     msg.set_content(f"{html_to_text(page)}\n\nView the full report: {link}\n")
     msg.add_alternative(page, subtype="html")
-    chart = remaining_chart(report.rows, report.tracker.unit_label, "png")
+    chart = chart_png(report)
     msg.get_payload()[1].add_related(chart, "image", "png", cid=f"<{CHART_CID}>", disposition="inline")
     msg.add_attachment(pdf, maintype="application", subtype="pdf", filename=attachment_name(report))
     return msg

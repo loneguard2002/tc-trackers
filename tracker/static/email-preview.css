@@ -2,3 +2,22 @@
    email's inline styles are dropped there and this sheet gives the preview the same look (mail/email_body.html). */
 body { margin: 14px; font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 14px; line-height: 1.5; background: #fff; }
 img { max-width: 100%; height: auto; }
+/* The message parts (tracker/mail/blocks.py): the same rules as their inline styles. */
+.mail-figures { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 6px 0; margin: 0 0 4px; }
+.mail-figure { border: 1px solid #9aa5b8; background: #fff; border-radius: 6px; padding: 7px 8px; vertical-align: top; }
+.mail-figure-label { font-size: 11px; color: #5d6b83; }
+.mail-figure-value { font-size: 14px; font-weight: bold; }
+.mail-tone-green { background: #e3f4ec; border-color: #087553; color: #087553; }
+.mail-tone-amber { background: #fdf1dc; border-color: #9a5b00; color: #9a5b00; }
+.mail-tone-red { background: #fbe5e9; border-color: #b8283f; color: #b8283f; }
+.mail-tone-none { background: #f1f3f7; border-color: #9aa5b8; color: #5d6b83; }
+.mail-tone-green .mail-figure-label, .mail-tone-amber .mail-figure-label, .mail-tone-red .mail-figure-label { color: inherit; }
+.mail-heading { margin: 16px 0 4px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: #5d6b83; }
+.mail-bullets { margin: 0; padding-left: 20px; }
+.mail-empty { margin: 0; color: #5d6b83; }
+.mail-risks { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mail-risks th { text-align: left; font-weight: bold; color: #5d6b83; font-size: 11px; border-bottom: 1px solid #e1e6ee; padding: 4px 6px; }
+.mail-risks td { padding: 5px 6px; border-bottom: 1px solid #f0f2f6; vertical-align: top; }
+.mail-risks td:nth-child(2), .mail-risks td:last-child { white-space: nowrap; }
+.mail-pill { display: inline-block; font-size: 11px; font-weight: bold; padding: 2px 6px; border-radius: 4px; border: 1px solid; }
+.mail-new { font-size: 10px; font-weight: bold; color: #b8283f; border: 1px solid #b8283f; border-radius: 4px; padding: 1px 4px; }
