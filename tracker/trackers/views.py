@@ -24,7 +24,7 @@ from ..auth import (
 )
 from ..auth.accounts import vouched_refusal
 from ..auth.guards import SELF_PROMOTION_MESSAGE, raises_own_access, snapshot_access
-from ..auth.roles import give_creator_ownership, tracker_access_list
+from ..auth.roles import give_creator_ownership, lead_candidates, lead_in_charge, tracker_access_list
 from ..db import get_session
 from ..engine.calc import (
     COMPLETE,
@@ -394,6 +394,7 @@ def _form_from_tracker(t: Tracker) -> dict:
         "send_timezone": t.send_timezone,
         "business_line_id": str(t.business_line_id or ""),
         "region_ids": [str(region_id) for region_id in tracker_region_ids(get_session(), t.id)],
+        "lead_user_id": str(t.lead_user_id or ""),
     }
 
 
@@ -595,6 +596,8 @@ def _render_settings(tracker: Tracker | None, form, errors: list[str], status: i
             chosen_regions=_chosen_region_ids(form),
             team_path=_team_path(tracker),
             live=_settings_live(get_session(), tracker) if tracker is not None else None,
+            lead_choices=lead_candidates(db, tracker) if tracker is not None else [],
+            lead_missing=tracker is not None and lead_in_charge(db, tracker) is None,
             page_title="New tracker" if tracker is None else f"{tracker.name} settings",
             current_page="trackers",
         ),
@@ -642,6 +645,20 @@ def _jsonable(value):
     return value.isoformat() if isinstance(value, (date, time)) else value
 
 
+def _parse_lead(db, form, tracker: Tracker) -> tuple[User | None, str | None]:
+    """The person in charge chosen on the form: ``(None, None)`` when the form does not carry the field (it keeps the
+    stored value), an error when the choice is empty or the person cannot write the weekly update."""
+    if "lead_user_id" not in form:
+        return None, None
+    chosen = parse_id(form.get("lead_user_id"))
+    if chosen is None:
+        return None, "Choose the person in charge."
+    lead = next((user for user in lead_candidates(db, tracker) if user.id == chosen), None)
+    if lead is None:
+        return None, "Choose someone who can write the weekly update (Editor or Owner on this tracker)."
+    return lead, None
+
+
 @bp.route("/trackers/<int:tracker_id>/settings", methods=["GET", "POST"])
 @require_tracker_role("owner")
 def settings(tracker_id: int):
@@ -664,6 +681,9 @@ def settings(tracker_id: int):
             errors.append("Data exists outside the new week range. Widen the range to include it.")
     line, regions, label_errors = _parse_labels(db, request.form, tracker)
     errors += label_errors
+    lead, lead_error = _parse_lead(db, request.form, tracker)
+    if lead_error:
+        errors.append(lead_error)
     if errors:
         return _render_settings(tracker, request.form, errors, status=400)
     before = tracker_labels(db, [tracker.id])[tracker.id]
@@ -680,6 +700,10 @@ def settings(tracker_id: int):
     if region_ids != tracker_region_ids(db, tracker.id):
         changed["regions"] = [before.regions, [region.code for region in regions]]
         set_tracker_regions(db, tracker.id, region_ids)
+    if lead is not None and lead.id != tracker.lead_user_id:
+        old = db.get(User, tracker.lead_user_id) if tracker.lead_user_id else None
+        changed["lead"] = [old.full_name if old else None, lead.full_name]
+        tracker.lead_user_id = lead.id
     if changed:
         record(
             db,

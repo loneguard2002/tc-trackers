@@ -327,8 +327,10 @@ def give_creator_ownership(session: Session, tracker: Tracker, actor: User) -> N
     """Make a non-administrator who has just created ``tracker`` its owner, and log it (the caller commits).
 
     An administrator is owner everywhere already and gets no role. This is the only code that gives a creator the
-    owner role, for the New tracker screen and for the workbook import alike.
+    owner role, for the New tracker screen and for the workbook import alike. Either way the creator becomes the
+    person in charge.
     """
+    tracker.lead_user_id = actor.id
     if actor.is_admin:
         return
     session.add(TrackerRole(user_id=actor.id, tracker_id=tracker.id, role="owner"))
@@ -342,3 +344,17 @@ def give_creator_ownership(session: Session, tracker: Tracker, actor: User) -> N
         detail=change(None, "owner"),
         target_user_id=actor.id,
     )
+
+
+def lead_candidates(session: Session, tracker: Tracker) -> list[User]:
+    """The people who may be put in charge of ``tracker``: active, with Editor or Owner by any route, by name."""
+    return [row.user for row in tracker_access_list(session, tracker) if ROLE_ORDER[row.role] >= ROLE_ORDER["editor"]]
+
+
+def lead_in_charge(session: Session, tracker: Tracker) -> User | None:
+    """The tracker's person in charge while they still qualify (active, Editor or Owner); otherwise ``None``."""
+    if tracker.lead_user_id is None:
+        return None
+    lead = session.get(User, tracker.lead_user_id)
+    role = user_role(session, lead, tracker.id) if lead is not None else None
+    return lead if role is not None and ROLE_ORDER[role] >= ROLE_ORDER["editor"] else None

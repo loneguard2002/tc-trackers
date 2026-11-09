@@ -25,6 +25,13 @@
         <p>Email the weekly report to the recipients on the Email tab without anyone pressing send.</p>
       </header>
       <div class="field-stack">
+        {% if lead_missing %}<p class="warn-box" id="lead-missing">This tracker has nobody in charge. Choose the person who writes the weekly update; until then, reminders go to the people given Owner on this tracker.</p>{% endif %}
+        {% call field('Person in charge', 'Writes the weekly update, and gets a reminder 24 hours before the automatic send when it has not been written.', 'lead_user_id') %}
+        <select id="lead_user_id" name="lead_user_id" required aria-describedby="lead_user_id-help">
+          <option value=""{{ ' selected' if not form.get('lead_user_id') }}>Choose a person</option>
+          {% for person in lead_choices %}<option value="{{ person.id }}"{{ ' selected' if form.get('lead_user_id') == person.id|string }}>{{ person.full_name }}</option>{% endfor %}
+        </select>
+        {% endcall %}
         <div class="field">
           <label class="switch-row" for="schedule_enabled">
             <span class="switch">
