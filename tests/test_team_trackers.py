@@ -1,5 +1,6 @@
 """A team's Trackers tab: moving trackers into the team (picker, access preview, confirm) and the row Remove."""
 
+import html
 import re
 
 import pytest
@@ -256,6 +257,29 @@ def test_moves_need_manage_teams_and_a_team(client, logged_in_admin, user_factor
 
 
 # --- Row Remove ----------------------------------------------------------------------------------------------------
+
+
+def remove_confirm(client, team, tracker) -> str:
+    raw = raw_of(client.get(f"/admin/teams/{team.id}?tab=trackers"))
+    form = re.search(rf'<form [^>]*action="/trackers/{tracker.id}/team".*?</form>', raw, re.S).group(0)
+    return html.unescape(re.search(r'data-confirm="([^"]*)"', form).group(1))
+
+
+def test_remove_confirmation_says_no_access_changes_when_no_one_reaches_the_team(client, logged_in_admin, setup):
+    message = remove_confirm(client, setup["apps"], setup["laptops"])
+    assert message == (
+        "Remove Laptop refresh from Applications? It moves to no team and keeps its regions. "
+        "No one reaches it through Applications, so no one's access changes."
+    )
+
+
+def test_remove_confirmation_names_who_loses_access(client, logged_in_admin, user_factory, add_member, setup):
+    add_member(setup["apps"], user_factory(), "viewer")
+    message = remove_confirm(client, setup["apps"], setup["laptops"])
+    assert message.endswith(
+        "Anyone who reaches it only through Applications or a team above it loses that access."
+    )
+    assert "will change" not in message
 
 
 def test_row_remove_puts_the_tracker_in_no_team_and_returns(client, logged_in_admin, db, setup):

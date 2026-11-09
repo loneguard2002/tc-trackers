@@ -722,6 +722,45 @@ def test_pager_says_tracker_for_one_row(page, live_server, user_factory, team_fa
     _clean(page)
 
 
+CONTRAST = """el => {
+  const rgb = c => c.match(/[\\d.]+/g).slice(0, 3).map(Number);
+  const channel = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  const lum = c => { const [r, g, b] = rgb(c).map(channel); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  let bg = getComputedStyle(el).backgroundColor, node = el;
+  while (/rgba\\(.*, 0\\)|transparent/.test(bg) && node.parentElement) {
+    node = node.parentElement;
+    bg = getComputedStyle(node).backgroundColor;
+  }
+  const [a, b] = [lum(getComputedStyle(el).color), lum(bg)].sort((x, y) => y - x);
+  return { ratio: (a + 0.05) / (b + 0.05), opacity: getComputedStyle(el).opacity };
+}"""
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_unusable_pager_buttons_stay_readable(page, live_server, user_factory, team_factory, tracker_factory, theme):
+    team = team_factory(name="Infrastructure")
+    tracker_factory(name="Only one", team_id=team.id)
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{team.id}?tab=trackers")
+    page.evaluate(f"document.documentElement.dataset.theme = '{theme}'")
+    previous = page.locator('[data-pager-for="trackers-table"] button', has_text="Previous")
+    expect(previous).to_be_disabled()
+    found = previous.evaluate(CONTRAST)
+    assert found["opacity"] == "1" and found["ratio"] >= 3, found  # dimmed, not faded out
+    _clean(page)
+
+
+def test_add_below_panel_fits_a_phone(page, live_server, user_factory, team_factory):
+    infra = team_factory(name="Infrastructure")
+    team_factory(name="A team with a fairly long name to place below")
+    page.set_viewport_size({"width": 390, "height": 800})
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{infra.id}?tab=below")
+    expect(page.locator(".team-add-below")).to_be_visible()
+    assert page.evaluate("document.documentElement.scrollWidth") <= 390
+    box = page.locator(".team-add-below").bounding_box()
+    assert box["x"] >= 0 and box["x"] + box["width"] <= 390
+    _clean(page)
+
+
 def test_pager_keeps_keyboard_focus_on_the_current_page(page, live_server, user_factory, team_factory, add_member):
     team = team_factory(name="Big team")
     for n in range(60):

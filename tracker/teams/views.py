@@ -134,10 +134,13 @@ def _place_form(team: Team) -> dict[str, str]:
     return {"region_id": str(team.region_id or ""), "location_id": str(team.location_id or "")}
 
 
-def _refuse(team: Team, message: str):
-    """A refusal by a guard: the change is rolled back and the message shown on the team's page."""
+def _refuse(team: Team, message: str, back: int | None = None):
+    """A refusal by a guard: the change is rolled back and the message shown on the team's page, or on the Teams
+    below tab of ``back`` when the change was started there."""
     get_session().rollback()
     flash(message, "danger")
+    if back is not None:
+        return redirect(url_for("teams.view", team_id=back, tab="below"))
     return _to_team(team)
 
 
@@ -650,7 +653,7 @@ def change_parents(team_id: int):
     else:
         db.execute(delete(TeamParent).where(TeamParent.team_id == team.id, TeamParent.parent_id == parent_id))
     if raises_own_access(db, actor, before):
-        return _refuse(team, SELF_PROMOTION_MESSAGE)
+        return _refuse(team, SELF_PROMOTION_MESSAGE, back)
     labels = team_labels(rows)
     record(
         db,

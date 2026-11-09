@@ -252,6 +252,20 @@ def test_holder_cannot_add_a_team_under_their_own_team(
     assert entries(db) == []
 
 
+def test_a_refusal_from_a_teams_tab_returns_to_that_tab(
+    client, db, user_factory, give_set, team_factory, tracker_factory, add_member
+):
+    actor = holder(user_factory, give_set, client)
+    own = team_factory(name="Own")
+    add_member(own, actor, "owner")
+    other = team_factory(name="Other")
+    tracker_factory(team_id=other.id)
+    response = post(client, screen(other), {"action": "add", "parent_id": str(own.id), "back": str(own.id)})
+    assert response.status_code == 302 and response.headers["Location"].endswith(f"/admin/teams/{own.id}?tab=below")
+    assert SELF_PROMOTION_MESSAGE in text_of(client.get(response.headers["Location"]))
+    assert parents_of(db, other) == set()
+
+
 def test_old_move_address_is_gone(client, logged_in_admin, team_factory):
     team = team_factory(name="Windows")
     assert client.get(f"/admin/teams/{team.id}/move").status_code == 404
