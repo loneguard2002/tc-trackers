@@ -1,9 +1,13 @@
 """The home cards, list rows and filters, and the report header, show each tracker's business line and regions."""
 
+import dataclasses
 import html
 import re
+from datetime import date
 
 from tracker.lists.catalogue import set_tracker_regions
+from tracker.models import ReportInput
+from tracker.report import build
 
 
 def text_of(response) -> str:
@@ -114,3 +118,34 @@ def test_report_labels_are_filled_by_build_report(db, tracker_factory, region_fa
     report = build_report(db, tracker, None, date(2026, 10, 1))
     assert report.labels.business_line == "Tradition brokerage"
     assert report.labels.regions == ["APAC", "EMEA"]
+
+
+def test_cards_flag_a_status_the_forecast_disagrees_with(client, logged_in_admin, db, monkeypatch, tracker_factory):
+    """Green while 3 weeks behind is a warning and comes before Amber; Red while on track is a milder note."""
+    days = {"Slipping": 21, "Steady": 0, "Worried": 0, "Amber one": 21}
+    statuses = {"Slipping": "Green", "Steady": "Green", "Worried": "Red", "Amber one": "Amber"}
+    for name, status in statuses.items():
+        tracker = tracker_factory(name=name)
+        db.add(ReportInput(tracker_id=tracker.id, week_ending=date(2026, 9, 4), status=status))
+    db.commit()
+    real = build.compute_position  # the home view imports it from there when it runs
+
+    def position(session, tracker, *args):
+        found = real(session, tracker, *args)
+        headline = dataclasses.replace(
+            found.headline, forecast_vs_target_days=days[tracker.name], total_scope=10, remaining=5
+        )
+        return found._replace(headline=headline)
+
+    monkeypatch.setattr(build, "compute_position", position)
+    page = client.get("/").get_data(as_text=True)
+    cards = re.findall(r'<article class="tracker-card.*?</article>', page, re.S)
+    by_name = {re.search(r'<a href="[^"]*">([^<]*)</a>', card).group(1): card for card in cards}
+    assert '<span class="flag">Green, but the forecast is 3 weeks behind target</span>' in by_name["Slipping"]
+    assert '<span class="flag flag-mild">Red, but the forecast is on track for target</span>' in by_name["Worried"]
+    assert "but the forecast" not in by_name["Steady"] + by_name["Amber one"]
+    order = list(by_name)
+    assert order.index("Worried") < order.index("Slipping") < order.index("Amber one") < order.index("Steady")
+    rows = re.findall(r'<tr class="tracker-row.*?</tr>', page, re.S)
+    slipping = next(row for row in rows if ">Slipping<" in row)
+    assert '<span class="cell-sub flag">Green, but the forecast is 3 weeks behind target</span>' in slipping
