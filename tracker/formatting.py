@@ -23,6 +23,11 @@ def fmt_date(value: date | None) -> str:
     return MISSING if value is None else f"{value.day:02d} {value.strftime('%b %Y')}"
 
 
+def fmt_short_date(value: date | None) -> str:
+    """A date such as ``06/11/26`` (day, month, two-digit year), as the email subject shows it."""
+    return MISSING if value is None else f"{value:%d/%m/%y}"
+
+
 def fmt_num(value: int | float | None) -> str:
     """A whole number with thousands separators, for example ``1,170``."""
     return MISSING if value is None else f"{round(value):,d}"

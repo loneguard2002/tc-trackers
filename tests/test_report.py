@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import re
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -204,6 +204,23 @@ def seed(db, tracker, baseline=100):
     )
     db.commit()
     return group
+
+
+def test_build_report_lists_the_rag_of_each_risk_raised_in_the_week(db, small_tracker):
+    seed(db, small_tracker)
+    week = WEEKS[1]
+    for ref, rag, status, raised in (
+        ("OLD", "Red", "Open", week - timedelta(days=7)),  # the week before
+        ("A", "Amber", "Open", week - timedelta(days=6)),  # the week's first day
+        ("R", "Red", "In progress", week),  # the week-ending day
+        ("N", None, "Open", week - timedelta(days=2)),
+        ("SHUT", "Red", "Closed", week - timedelta(days=1)),  # raised and closed in the week
+        ("UNDATED", "Red", "Open", None),
+    ):
+        db.add(Risk(tracker_id=small_tracker.id, ref=ref, rag=rag, status=status, raised_on=raised))
+    db.commit()
+    report = build_report(db, small_tracker, week, date(2026, 9, 14))
+    assert report.new_risk_rags == ["Red", "Amber", None]  # Red, Amber, Green, then no RAG
 
 
 @pytest.fixture
