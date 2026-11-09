@@ -63,7 +63,7 @@ def test_unknown_placeholders_listed():
 
 def test_default_templates_use_only_known_placeholders():
     assert set(PLACEHOLDERS) >= set(compose._PLACEHOLDER_RE.findall(DEFAULT_SUBJECT + DEFAULT_BODY))
-    assert "report_link" in DEFAULT_BODY and "decisions" in DEFAULT_BODY and "headline" in DEFAULT_BODY
+    assert "figures" in DEFAULT_BODY and "needed_from_you" in DEFAULT_BODY and "this_week" in DEFAULT_BODY
 
 
 def test_placeholder_context_formats_values():
@@ -237,7 +237,7 @@ def test_email_html_references_chart_by_cid_and_links_report(app):
 def test_email_has_plain_text_alternative(app):
     msg = email_for(app)
     text = msg.get_body(preferencelist=("plain",)).get_content()
-    assert "Stub tracker" in text and LINK in text and "<" not in text
+    assert "Next week's target 10 devices" in text and LINK in text and "<" not in text
 
 
 def test_email_escapes_untrusted_values_in_body(app):
@@ -587,17 +587,26 @@ def test_owner_saves_template_and_preview_flags_unknown(client, db, tracker_fact
     assert "Subject: Test tracker | 11/09/26" in preview and "srcdoc" in preview
 
 
-def test_email_page_shows_the_tools_subject_read_only(client, db, tracker_factory, user_factory, grant):
+def test_email_page_shows_the_subject_as_text(client, db, tracker_factory, user_factory, grant):
     tracker, owner = tracker_factory(), user_factory()
     grant(owner, tracker, "owner")
     sign_in(client, owner)
     db.add(AppSetting(key="report_email_subject", value="[PMO] {{summary}}"))
     db.commit()
     page = client.get(f"/trackers/{tracker.id}/mail?week=2026-09-11").get_data(as_text=True)
-    field = re.search(r'<input id="subject"[^>]*>', page).group(0)
-    assert "readonly" in field and "name=" not in field and 'value="[PMO] {{summary}}"' in field
-    assert "Set by an administrator for every tracker." in page
-    assert "Subject: [PMO] Test tracker | 11/09/26 : No status | " in html.unescape(page)
+    hidden = re.search(r'<input type="hidden" id="subject"[^>]*>', page).group(0)
+    assert "name=" not in hidden and 'value="[PMO] {{summary}}"' in hidden
+    shown = re.search(r'<p class="subject-line"[^>]*>(.*?)</p>', page, re.S).group(1)
+    assert html.unescape(shown).startswith("[PMO] Test tracker | 11/09/26 : No status | ")
+    assert "Set by an administrator for every tracker." in page and "Change in Email settings" not in page
+    assert "The message sent with the report." in page and "The subject and message" not in page
+
+
+def test_email_settings_holders_get_a_link_to_change_the_subject(client, tracker_factory, user_factory):
+    tracker = tracker_factory()
+    sign_in(client, user_factory(is_admin=True))
+    page = client.get(f"/trackers/{tracker.id}/mail").get_data(as_text=True)
+    assert 'href="/admin/smtp"' in page and "Change in Email settings" in page
 
 
 def test_saving_the_template_never_changes_a_saved_subject(client, db, tracker_factory, user_factory, grant):
@@ -671,6 +680,8 @@ def render_settings(app, recipients):
             recent=[],
             next_send=None,
             current_user=user,
+            blocks=(),
+            lead_missing=False,
         )
 
 
@@ -752,3 +763,122 @@ def test_owner_manual_send_end_to_end(client, db, tracker_with_recipient, user_f
     assert len(sent_messages) == 1 and sent_messages[0]["Bcc"] == "a@example.com"
     assert db.query(AuditLog).filter_by(action="report_sent").count() == 1
     assert "was sent" in client.get(response.headers["Location"]).get_data(as_text=True)
+
+
+# --- Pure: the message blocks ---------------------------------------------------------------------------------
+
+
+def risk(ref, rag="Amber", description="d", owner="Lead", due=None):
+    return SimpleNamespace(ref=ref, rag=rag, description=description, owner_role=owner, target_date=due)
+
+
+def body_report(inputs=("Green", "", ""), unit="devices", **changes):
+    report, _ = synthetic_report()
+    report.tracker.unit_label = unit
+    report.inputs = SimpleNamespace(status=inputs[0], headline=inputs[1], decisions=inputs[2]) if inputs else None
+    values = {
+        "next_week_target": 4,
+        "required_rate": 4.8,
+        "target_completion": date(2027, 6, 18),
+        "forecast_completion": date(2027, 6, 11),
+    }
+    report.headline = dataclasses.replace(report.headline, **(values | changes))
+    report.top_risks, report.new_risks, report.open_risks = [], [], 0
+    return report
+
+
+def test_figures_are_in_the_agreed_order_with_their_colours():
+    from tracker.mail.blocks import figure_items
+
+    assert figure_items(body_report()) == [
+        ("Next week's target", "4 devices", "red"),
+        ("Needed per week", "4.8 devices", "plain"),
+        ("Target finish", "18 Jun 2027", "plain"),
+        ("Forecast finish", "11 Jun 2027", "green"),
+        ("Status", "Green", "green"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "changes, inputs, expected",
+    [
+        ({"next_week_target": 5}, ("Amber", "", ""), {0: ("5 devices", "green"), 4: ("Amber", "amber")}),
+        ({"forecast_completion": date(2027, 6, 25)}, ("Red", "", ""), {3: ("25 Jun 2027", "red"), 4: ("Red", "red")}),
+        ({"forecast_completion": date(2027, 6, 18)}, None, {3: ("18 Jun 2027", "green"), 4: ("No status", "none")}),
+        (
+            {"next_week_target": None, "required_rate": None, "target_completion": None, "forecast_completion": None},
+            ("Green", "", ""),
+            {0: ("Not set", "plain"), 1: ("Not set", "plain"), 2: ("Not set", "plain"), 3: ("Not set", "plain")},
+        ),
+    ],
+)
+def test_figure_colours_and_missing_values(changes, inputs, expected):
+    from tracker.mail.blocks import figure_items
+
+    items = figure_items(body_report(inputs=inputs, **changes))
+    for index, (value, tone) in expected.items():
+        assert items[index][1:] == (value, tone)
+
+
+def test_figures_without_a_unit_show_plain_numbers():
+    from tracker.mail.blocks import figure_items
+
+    items = figure_items(body_report(unit=""))
+    assert items[0][1] == "4" and items[1][1] == "4.8"
+
+
+def test_this_week_and_needed_from_you_are_bullets_one_per_line():
+    context = placeholder_context(body_report(inputs=("Green", "Floor 3 done\n\n- Two held back", "Approve <b>")), LINK)
+    assert "<li>Floor 3 done</li><li>Two held back</li>" in context["this_week"]
+    assert (
+        "Needed from you" in context["needed_from_you"] and "<li>Approve &lt;b&gt;</li>" in context["needed_from_you"]
+    )
+
+
+def test_without_an_update_the_message_says_so_and_needed_from_you_is_left_out():
+    context = placeholder_context(body_report(inputs=("Green", "  ", "")), LINK)
+    assert "No update was written for this week." in context["this_week"]
+    assert context["needed_from_you"] == ""
+    assert "No update was written for this week." in placeholder_context(body_report(inputs=None), LINK)["this_week"]
+
+
+def test_risks_table_marks_new_risks_and_adds_those_outside_the_top_three():
+    report = body_report()
+    top = [risk("R-01", "Red"), risk("R-02"), risk("R-03", "Green")]
+    raised = risk("R-09", None, description="Late <stock>", due=date(2026, 11, 20))
+    report.top_risks, report.new_risks, report.open_risks = top, [top[0], raised], 5
+    html_out = placeholder_context(report, LINK)["risks"]
+    assert "Risks: 5" in html_out
+    refs = re.findall(r">(R-\d\d)<", html_out)
+    assert refs == ["R-01", "R-02", "R-03", "R-09"]
+    assert html_out.count(">NEW<") == 2 and "Late &lt;stock&gt;" in html_out and "20/11/26" in html_out
+
+
+def test_no_open_risks_leaves_the_risks_part_out():
+    assert placeholder_context(body_report(), LINK)["risks"] == ""
+
+
+def test_the_default_message_is_the_four_parts_and_the_subject_ignores_them():
+    assert DEFAULT_BODY.split() == ["{{figures}}", "{{this_week}}", "{{needed_from_you}}", "{{risks}}"]
+    context = placeholder_context(body_report(inputs=("Green", "x", "")), LINK)
+    assert render_subject("A {{figures}}{{this_week}} B", context) == "A  B"
+    assert render_placeholders("{{this_week}}", context).startswith('<h3 class="mail-heading"')
+
+
+def test_email_chart_is_a_png_with_and_without_data():
+    from report_helpers import WEEKS, sample_rows
+
+    from tracker.report.charts import email_chart
+
+    assert email_chart(sample_rows(), "devices", WEEKS[1]).startswith(b"\x89PNG")
+    assert email_chart([], "", WEEKS[1]).startswith(b"\x89PNG")
+
+
+def test_the_email_has_one_report_link_and_a_readable_text_part(app):
+    report = body_report(inputs=("Green", "Floor 3 done", "Approve"))
+    report.top_risks, report.open_risks = [risk("R-01", "Red", description="Firmware")], 1
+    msg = email_for(app, report=report)
+    page = msg.get_body(preferencelist=("html",)).get_content()
+    assert page.count(LINK) == 1 and "No update" not in page
+    text_part = msg.get_body(preferencelist=("plain",)).get_content()
+    assert "- Floor 3 done" in text_part and "R-01" in text_part and "Firmware" in text_part

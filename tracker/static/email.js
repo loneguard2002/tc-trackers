@@ -15,6 +15,8 @@
   var note = document.querySelector("[data-dirty-note]");
   var preview = document.querySelector("[data-preview]");
   var context = preview ? JSON.parse(preview.dataset.context) : {};
+  // Message parts that are ready-made HTML: inserted as they are in the body, and as nothing in the subject.
+  var blocks = preview && preview.dataset.blocks ? preview.dataset.blocks.split(" ") : [];
   var saved = { subject: subject.value, body: body.value };
   var last = body;
 
@@ -27,6 +29,7 @@
   function fill(text, escape) {
     return text.replace(PLACEHOLDER, function (match, name) {
       if (!Object.prototype.hasOwnProperty.call(context, name)) return match;
+      if (blocks.indexOf(name) >= 0) return escape ? String(context[name]) : "";
       return escape ? escapeHtml(context[name]) : String(context[name]);
     });
   }
