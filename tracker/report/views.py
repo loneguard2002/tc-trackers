@@ -74,9 +74,7 @@ def chart_image(tracker_id: int, name: str):
         abort(404)
     tracker = g.tracker
     position = compute_position(get_session(), tracker, _report_week(tracker), today())
-    response = Response(draw(position.rows, tracker), mimetype="image/svg+xml")
-    response.headers["Cache-Control"] = "private, no-cache"
-    return response
+    return Response(draw(position.rows, tracker), mimetype="image/svg+xml")  # sent "no-store", like every page
 
 
 @bp.get("/trackers/<int:tracker_id>/report/data.json")
