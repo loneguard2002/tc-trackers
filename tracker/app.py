@@ -220,6 +220,16 @@ def _register_cli(app: Flask) -> None:
                 return
             time.sleep(interval)
 
+    @app.cli.command("build-import-template")
+    @click.option("--path", default=None, help="Where to write it; defaults to the stored template the page serves.")
+    def build_import_template(path: str | None) -> None:
+        """Rewrite the import template from the importer's layout (commit the file afterwards)."""
+        from .importer.template import TEMPLATE_PATH, write_template
+
+        target = path or TEMPLATE_PATH
+        write_template(target)
+        click.echo(f"Wrote {target}")
+
     @app.cli.command("import-workbook")
     @click.argument("path", type=click.Path(exists=True, dir_okay=False))
     @click.option("--name", required=True, help="Name of the new tracker.")

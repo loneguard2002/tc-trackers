@@ -6,6 +6,8 @@
 <p class="page-lede">Step 2 of 2: check what was read from the workbook, then name the tracker and create it. Nothing has been saved yet.</p>
 <div class="settings">
   {% if error %}<div class="form-alert" role="alert"><strong>The tracker was not created.</strong><ul class="form-error"><li>{{ error }}</li></ul></div>{% endif %}
+  {% if leftovers %}<div class="warn-box" role="status"><strong>The workbook still holds the example from the template.</strong> Replace or delete these before importing, unless they are really yours:
+    <ul>{% for item in leftovers %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
 
   <div class="stat-band import-summary">
     <div class="stat"><span class="stat-label">Weeks</span><span class="stat-value">{{ preview.weeks|length }}</span>
