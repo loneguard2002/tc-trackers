@@ -1,22 +1,24 @@
-{% macro tab(endpoint, label, also=()) -%}
+{% from "macros.html" import icon %}
+{#- The icons match the actions on the home cards: Report, Entries (Record completions), Weekly inputs (Write the update). -#}
+{% macro tab(endpoint, label, icon_name, also=()) -%}
 {% set active = request.endpoint == endpoint or request.endpoint in also %}
-<a class="tab{{ ' active' if active }}" href="{{ url_for(endpoint, tracker_id=tracker.id) }}"{% if active %} aria-current="page"{% endif %}>{{ label }}</a>
+<a class="tab{{ ' active' if active }}" href="{{ url_for(endpoint, tracker_id=tracker.id) }}"{% if active %} aria-current="page"{% endif %}>{{ icon(icon_name) }}{{ label }}</a>
 {%- endmacro %}
 <nav class="tabs" aria-label="Tracker sections">
   {% if g.role %}
-  {{ tab('report.view', 'Report') }}
+  {{ tab('report.view', 'Report', 'report') }}
   {% endif %}
   {% if g.role in ('editor', 'owner') %}
-  {{ tab('entries.list_entries', 'Entries', ('entries.new_entry',)) }}
-  {{ tab('entries.inputs', 'Weekly inputs') }}
-  {{ tab('entries.targets', 'Targets') }}
-  {{ tab('trackers.groups', tracker.group_label|plural if tracker.group_label else 'Groups', ('trackers.new_group', 'trackers.edit_group')) }}
-  {{ tab('entries.risks', 'Risks', ('entries.new_risk', 'entries.edit_risk')) }}
+  {{ tab('entries.list_entries', 'Entries', 'layers', ('entries.new_entry',)) }}
+  {{ tab('entries.inputs', 'Weekly inputs', 'edit') }}
+  {{ tab('entries.targets', 'Targets', 'target') }}
+  {{ tab('trackers.groups', tracker.group_label|plural if tracker.group_label else 'Groups', 'groups', ('trackers.new_group', 'trackers.edit_group')) }}
+  {{ tab('entries.risks', 'Risks', 'warning', ('entries.new_risk', 'entries.edit_risk')) }}
   {% endif %}
   {% if g.role == 'owner' %}
-  {{ tab('mail.settings', 'Email', ('mail.preview',)) }}
-  {{ tab('trackers.settings', 'Settings') }}
+  {{ tab('mail.settings', 'Email', 'mail', ('mail.preview',)) }}
+  {{ tab('trackers.settings', 'Settings', 'settings') }}
   {% endif %}
-  {% if can('manage_teams') %}{{ tab('trackers.roles', 'Access') }}{% endif %}
+  {% if can('manage_teams') %}{{ tab('trackers.roles', 'Access', 'key') }}{% endif %}
 </nav>
 {% if tracker.status == 'archived' %}<p class="flash flash-danger">This tracker is archived.</p>{% endif %}
