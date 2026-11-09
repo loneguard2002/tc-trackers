@@ -80,12 +80,12 @@ def build_reminder(tracker: Tracker, week: date, fire: datetime, recipients: lis
 
 
 def send_reminder(session, tracker_id: int, week: date, now_utc: datetime) -> bool:
-    """Claim, send and record one reminder; ``False`` when it was not sent (claimed elsewhere, nobody to send it
-    to, or the delivery failed, in which case the claim is given back)."""
+    """Claim, send and record one reminder; ``False`` when it was not sent (claimed elsewhere, or nobody to send it
+    to). A failed delivery gives the claim back and raises, so the next scheduler run tries again."""
     tracker = session.get(Tracker, tracker_id)
     recipients = reminder_recipients(session, tracker)
     if not recipients:
-        logger.warning("No one to remind about tracker %s, week %s", tracker_id, week)
+        logger.debug("No one to remind about tracker %s, week %s", tracker_id, week)
         return False
     claimed = session.execute(
         insert(ReportReminder)
@@ -93,19 +93,19 @@ def send_reminder(session, tracker_id: int, week: date, now_utc: datetime) -> bo
         .on_conflict_do_nothing()
         .returning(ReportReminder.tracker_id)
     ).scalar_one_or_none()
-    session.commit()
+    session.commit()  # a process stopped between this claim and the delivery loses that week's reminder
     if claimed is None:
         return False
     fire = next_send(tracker, now_utc)
     try:
         smtp.send_message(build_reminder(tracker, week, fire, recipients))
     except Exception:
-        logger.exception("The reminder for tracker %s, week %s could not be sent", tracker_id, week)
         session.execute(
             delete(ReportReminder).where(ReportReminder.tracker_id == tracker_id, ReportReminder.week_ending == week)
         )
         session.commit()
-        return False
+        raise
+
     record(
         session, user_id=None, tracker_id=tracker_id, action="report_reminder_sent", entity="tracker",
         entity_id=tracker_id, detail={"week_ending": week.isoformat(), "recipients": recipients},
@@ -115,12 +115,16 @@ def send_reminder(session, tracker_id: int, week: date, now_utc: datetime) -> bo
 
 
 def send_due_reminders(session, now_utc: datetime) -> int:
-    """Send every due reminder; returns how many were sent. One failure never stops the others."""
+    """Send every due reminder; returns how many were sent. After a failed delivery the rest wait for the next run,
+    so a mail outage costs one attempt per run, not one per tracker, and never holds up the report sends."""
     sent = 0
     for tracker_id, week in due_reminders(session, now_utc):
         try:
             sent += send_reminder(session, tracker_id, week, now_utc)
         except Exception:
             session.rollback()
-            logger.exception("The reminder for tracker %s, week %s could not be processed", tracker_id, week)
+            logger.exception(
+                "The reminder for tracker %s, week %s could not be sent; trying next run", tracker_id, week
+            )
+            break
     return sent

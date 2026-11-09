@@ -882,3 +882,32 @@ def test_the_email_has_one_report_link_and_a_readable_text_part(app):
     assert page.count(LINK) == 1 and "No update" not in page
     text_part = msg.get_body(preferencelist=("plain",)).get_content()
     assert "- Floor 3 done" in text_part and "R-01" in text_part and "Firmware" in text_part
+
+
+def test_a_leading_minus_is_kept_and_only_bullet_marks_are_removed():
+    from tracker.mail.blocks import lines
+
+    assert lines("- Floor 3\n-3 against target\n* Two\n•Three") == ["Floor 3", "-3 against target", "Two", "•Three"]
+
+
+def test_units_keep_their_capitals_in_the_chart_titles():
+    from tracker.report.charts import unit_title
+
+    assert unit_title("kWh", "remaining") == "KWh remaining" and unit_title("SKUs", "per week") == "SKUs per week"
+    assert unit_title("", "remaining") == "Remaining"
+
+
+def test_the_chart_has_a_fixed_width_for_outlook_and_the_text_part_separates_cells(app):
+    msg = email_for(app, report=body_report())
+    page = msg.get_body(preferencelist=("html",)).get_content()
+    assert re.search(r'<img [^>]*width="600"', page)
+    text_part = msg.get_body(preferencelist=("plain",)).get_content()
+    assert "4 devices | Needed per week" in text_part
+
+
+def test_the_risks_table_is_a_data_table_with_due_aligned_right():
+    report = body_report()
+    report.top_risks, report.open_risks = [risk("R-01", "Red")], 1
+    table = placeholder_context(report, LINK)["risks"]
+    assert '<table class="mail-risks" role="presentation"' not in table
+    assert re.search(r'<th style="[^"]*text-align:right[^"]*">Due</th>', table)

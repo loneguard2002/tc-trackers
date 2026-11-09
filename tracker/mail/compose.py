@@ -182,7 +182,7 @@ def html_to_text(markup: str) -> str:
     text = re.sub(r"(?i)<br\s*/?>|</p>|</li>|</tr>|</h\d>", "\n", markup)
     text = re.sub(r"(?i)<li[^>]*>", "- ", text)
     text = re.sub(r"(?i)</div>", " ", text)
-    text = re.sub(r"(?i)</t[dh]>", "  ", text)
+    text = re.sub(r"(?i)</t[dh]>(?=\s*<t[dh])", " | ", text)
     text = re.sub(r"(?s)<style.*?</style>|<[^>]+>", "", text)
     text = html.unescape(text)
     return re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]+", " ", text)).strip()

@@ -7,6 +7,8 @@ the classes give the Email page preview, which drops inline styles, the same loo
 
 from __future__ import annotations
 
+import re
+
 from markupsafe import Markup
 
 from ..formatting import MISSING, fmt_date, fmt_num, fmt_rate, fmt_short_date
@@ -28,10 +30,11 @@ HEADING = 'style="margin:16px 0 4px;font-size:12px;letter-spacing:.06em;text-tra
 
 
 def lines(text: str | None) -> list[str]:
-    """The non-empty lines of an owner's text, without any bullet mark typed at the start."""
+    """The non-empty lines of an owner's text, without a bullet mark typed at the start ("- ", "* ", "• "); a minus
+    sign followed by a figure stays."""
     found = []
     for line in (text or "").splitlines():
-        line = line.strip().lstrip("-*•").strip()
+        line = re.sub(r"^[-*•]\s+", "", line.strip())
         if line:
             found.append(line)
     return found
@@ -163,11 +166,13 @@ def risks_html(report) -> Markup:
             )  # fmt: skip
         )
     table = Markup(
-        '<table class="mail-risks" role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        '<table class="mail-risks" width="100%" cellpadding="0" cellspacing="0" '
         'style="width:100%;border-collapse:collapse;font-size:13px">'
         "<thead><tr><th {h}>RAG</th><th {h}>Ref</th><th {h}>Risk</th><th {h}>Owner</th>"
-        '<th {h} align="right">Due</th></tr></thead><tbody>{rows}</tbody></table>'
-    ).format(h=Markup(head), rows=Markup("").join(rows))
+        "<th {due}>Due</th></tr></thead><tbody>{rows}</tbody></table>"
+    ).format(
+        h=Markup(head), due=Markup(head.replace("text-align:left", "text-align:right")), rows=Markup("").join(rows)
+    )
     return _heading(f"Risks: {fmt_num(report.open_risks)}") + table
 
 
