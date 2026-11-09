@@ -128,7 +128,8 @@ def _send_claimed(session, tracker_id: int, send_id: int, now: datetime) -> None
 
 
 def run_scheduler_cycle(session, now_utc: datetime) -> int:
-    """Send every due report once, then retry queued sends. Returns the number of sends attempted."""
+    """Send every due report once, send the due update reminders, then retry queued sends. Returns the number of
+    report sends attempted."""
     try:
         prune_audit_log(session, now_utc)
     except Exception:
@@ -145,4 +146,11 @@ def run_scheduler_cycle(session, now_utc: datetime) -> int:
         except Exception:
             session.rollback()
             logger.exception("Scheduled send for tracker %s, week %s could not be processed", tracker_id, week_ending)
+    from .reminders import send_due_reminders  # here: reminders use next_send from this module
+
+    try:
+        send_due_reminders(session, now_utc)
+    except Exception:
+        session.rollback()
+        logger.exception("Sending update reminders failed")
     return attempted + sending.retry_queued(session, now_utc)
