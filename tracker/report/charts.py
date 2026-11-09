@@ -6,7 +6,7 @@ data and then shows a "No data yet" note.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from io import BytesIO
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -18,6 +18,8 @@ from ..engine.calc import COMPLETE, IN_PROGRESS, WeekRow
 PLAN = "#888888"
 ACTUAL = "#2c7be5"
 FORECAST = "#d39e00"
+TARGET_BAR = "#b9c3d3"
+DONE_BAR = "#2f9e76"
 PALETTE = {"plan": PLAN, "actual": ACTUAL, "forecast": FORECAST}
 FORMATS = {"svg": "svg", "png": "png"}
 SIZE = (7.0, 3.2)
@@ -148,3 +150,45 @@ def cumulative_chart(rows: list[WeekRow], fmt: str = "svg") -> bytes:
     if ax_:
         ax.plot(ax_, ay, color=ACTUAL, linestyle="-", linewidth=2.2, label="Actual")
     return _finish(fig, ax, bool(px or ax_), fmt)
+
+
+def email_chart(rows: list[WeekRow], unit_label: str, report_week: date, fmt: str = "png") -> bytes:
+    """The email's chart, both axes titled. Left axis: remaining against plan (the remaining chart's lines). Right axis:
+    each week's target (grey bars) and what was done (green bars) up to the report week, and next week's target."""
+    unit = unit_label.strip()
+    fig, ax = _new_figure("", f"{unit.capitalize()} remaining" if unit else "Remaining")
+    ax.set_xlabel("Week ending", fontsize=8)
+    bars = ax.twinx()
+    bars.set_ylabel(f"{unit.capitalize()} per week" if unit else "Per week", fontsize=8)
+    bars.tick_params(labelsize=8)
+    bars.spines["top"].set_visible(False)
+    ax.set_zorder(bars.get_zorder() + 1)  # the lines in front of the bars
+    ax.patch.set_visible(False)
+    px, py = _series(rows, "planned_remaining")
+    ax_, ay = actual_series(rows, "actual_remaining")
+    last_complete = max((r.week_ending for r in rows if r.moving_average is not None), default=None)
+    fx, fy = _series(
+        rows, "forecast_remaining", include=lambda r: last_complete is not None and r.week_ending >= last_complete
+    )
+    tx, ty = _series(rows, "target", include=lambda r: r.week_ending <= report_week + timedelta(days=7))
+    dx, dy = _series(rows, "actual", include=lambda r: r.week_ending <= report_week)
+    if tx:
+        bars.bar([x - timedelta(days=1.5) for x in tx], ty, width=3, color=TARGET_BAR, label="Weekly target")
+    if dx:
+        bars.bar([x + timedelta(days=1.5) for x in dx], dy, width=3, color=DONE_BAR, label="Done that week")
+    if px:
+        ax.plot(px, py, color=PLAN, linestyle="--", linewidth=1.6, label="Plan")
+    if ax_:
+        ax.plot(ax_, ay, color=ACTUAL, linestyle="-", linewidth=2.2, label="Actual")
+    if len(fx) > 1:
+        ax.plot(fx, fy, color=FORECAST, linestyle=":", linewidth=2.2, label="Forecast")
+    has_data = bool(px or ax_ or len(fx) > 1 or tx or dx)
+    if not has_data:
+        bars.set_yticks([])
+        bars.set_ylabel("")
+        return _finish(fig, ax, False, fmt)
+    ax.xaxis.set_major_formatter(DateFormatter("%d %b"))
+    lines, labels = ax.get_legend_handles_labels()
+    bar_lines, bar_labels = bars.get_legend_handles_labels()
+    ax.legend(lines + bar_lines, labels + bar_labels, fontsize=7, frameon=False, loc="upper right", ncols=2)
+    return _render(fig, fmt)

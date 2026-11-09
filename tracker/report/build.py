@@ -35,6 +35,7 @@ class Report:
     charts: dict[str, bytes]
     labels: TrackerLabels = field(default_factory=lambda: TrackerLabels(None, []))
     new_risk_rags: list[str | None] = field(default_factory=list)  # each open risk raised in the week: its RAG
+    new_risks: list = field(default_factory=list)  # the open risks raised in the week, in the same order
 
 
 class Position(NamedTuple):
@@ -99,15 +100,17 @@ def select_top_risks(risks, limit: int = TOP_RISKS) -> list:
     return live[:limit]
 
 
-RAG_ORDER = {"Red": 0, "Amber": 1, "Green": 2}
+def raised_in_week(risks, week_ending: date) -> list:
+    """The open risks raised within the report week (its six days before the week-ending date, and that date): Red,
+    Amber, Green, then those without a RAG."""
+    first = week_ending - timedelta(days=6)
+    found = [r for r in risks if r.status != "Closed" and r.raised_on and first <= r.raised_on <= week_ending]
+    return sorted(found, key=lambda r: RAG_ORDER.get(r.rag, len(RAG_ORDER)))
 
 
 def new_risk_rags(risks, week_ending: date) -> list[str | None]:
-    """The RAG of each open risk raised within the report week (its six days before the week-ending date, and that
-    date): Red, Amber, Green, then those without a RAG."""
-    first = week_ending - timedelta(days=6)
-    found = [r.rag for r in risks if r.status != "Closed" and r.raised_on and first <= r.raised_on <= week_ending]
-    return sorted(found, key=lambda rag: RAG_ORDER.get(rag, len(RAG_ORDER)))
+    """The RAG of each risk ``raised_in_week``, in its order."""
+    return [r.rag for r in raised_in_week(risks, week_ending)]
 
 
 def build_report(session, tracker: Tracker, week_ending: date | None, today: date, chart_format: str = "svg") -> Report:
@@ -133,4 +136,5 @@ def build_report(session, tracker: Tracker, week_ending: date | None, today: dat
         charts=charts,
         labels=tracker_labels(session, [tracker.id])[tracker.id],
         new_risk_rags=new_risk_rags(risks, position.week_ending),
+        new_risks=raised_in_week(risks, position.week_ending),
     )
