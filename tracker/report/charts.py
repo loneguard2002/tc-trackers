@@ -152,14 +152,20 @@ def cumulative_chart(rows: list[WeekRow], fmt: str = "svg") -> bytes:
     return _finish(fig, ax, bool(px or ax_), fmt)
 
 
+def unit_title(unit_label: str, rest: str) -> str:
+    """An axis title such as "Devices remaining": the unit with only its first letter raised ("kWh" stays "KWh",
+    never "Kwh"), or the rest alone, capitalised, without a unit."""
+    unit = unit_label.strip()
+    return f"{unit[:1].upper()}{unit[1:]} {rest}" if unit else rest.capitalize()
+
+
 def email_chart(rows: list[WeekRow], unit_label: str, report_week: date, fmt: str = "png") -> bytes:
     """The email's chart, both axes titled. Left axis: remaining against plan (the remaining chart's lines). Right axis:
     each week's target (grey bars) and what was done (green bars) up to the report week, and next week's target."""
-    unit = unit_label.strip()
-    fig, ax = _new_figure("", f"{unit.capitalize()} remaining" if unit else "Remaining")
+    fig, ax = _new_figure("", unit_title(unit_label, "remaining"))
     ax.set_xlabel("Week ending", fontsize=8)
     bars = ax.twinx()
-    bars.set_ylabel(f"{unit.capitalize()} per week" if unit else "Per week", fontsize=8)
+    bars.set_ylabel(unit_title(unit_label, "per week"), fontsize=8)
     bars.tick_params(labelsize=8)
     bars.spines["top"].set_visible(False)
     ax.set_zorder(bars.get_zorder() + 1)  # the lines in front of the bars

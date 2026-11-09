@@ -114,3 +114,23 @@ def test_the_scheduler_cycle_sends_reminders(app, db, scheduled, mail, monkeypat
     with app.app_context():
         run_scheduler_cycle(db, DAY_BEFORE)
     assert calls == [DAY_BEFORE]
+
+
+def test_a_mail_outage_stops_the_run_after_one_failed_reminder(
+    app, db, scheduled, tracker_factory, grant, monkeypatch, people
+):
+    second = tracker_factory(name="Second", schedule_enabled=True, send_time=time(17, 0), send_timezone="Europe/London")
+    grant(people[0], second, "editor")
+    second.lead_user_id = people[0].id
+    db.commit()
+
+    attempts = []
+
+    def refuse(msg):
+        attempts.append(msg)
+        raise smtp.MailError("down")
+
+    monkeypatch.setattr(smtp, "send_message", refuse)
+    with app.app_context():
+        assert send_due_reminders(db, DAY_BEFORE) == 0
+    assert len(attempts) == 1

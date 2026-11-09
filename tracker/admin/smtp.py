@@ -13,7 +13,7 @@ from sqlalchemy import select
 from ..audit import record
 from ..auth import current_user, permission_required
 from ..db import get_session
-from ..mail.compose import PLACEHOLDERS, REPORT_SUBJECT_KEY, report_subject, unknown_placeholders
+from ..mail.compose import BLOCK_PLACEHOLDERS, PLACEHOLDERS, REPORT_SUBJECT_KEY, report_subject, unknown_placeholders
 from ..models import AppSetting
 from . import bp
 
@@ -89,7 +89,7 @@ def smtp():
         values=_smtp_values(db),
         report_subject=report_subject(db),
         unknown=unknown_placeholders(report_subject(db)),
-        placeholders=PLACEHOLDERS,
+        placeholders={name: text for name, text in PLACEHOLDERS.items() if name not in BLOCK_PLACEHOLDERS},
         modes=SMTP_AUTH_MODES,
         server_locked=not is_admin,
         locked_message=SERVER_LOCKED_MESSAGE,

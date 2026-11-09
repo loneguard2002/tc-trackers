@@ -63,7 +63,7 @@
             {%- if can('manage_email_settings') %} <a href="{{ url_for('admin.smtp') }}">Change in Email settings</a>{% endif %}</p>
           <input type="hidden" id="subject" value="{{ values.subject }}">
         </div>
-        {% call field('Body (HTML)', 'Keep the report link placeholder so readers can open the live report.', 'body_html') %}
+        {% call field('Body (HTML)', 'The email adds the chart and a link to the live report under the message.', 'body_html') %}
         <textarea class="code-input" id="body_html" name="body_html" rows="11" required aria-describedby="body_html-help">{{ values.body_html }}</textarea>
         {% endcall %}
         <div class="field">
