@@ -235,6 +235,7 @@ class Tracker(Base):
         CheckConstraint("moving_average_weeks BETWEEN 1 AND 12", name="moving_average_weeks"),
         Index("ix_trackers_team_id", "team_id"),
         Index("ix_trackers_business_line_id", "business_line_id"),
+        Index("ix_trackers_lead_user_id", "lead_user_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
@@ -254,6 +255,7 @@ class Tracker(Base):
     schedule_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     team_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id", ondelete="RESTRICT"))
     business_line_id: Mapped[int | None] = mapped_column(ForeignKey("business_lines.id", ondelete="RESTRICT"))
+    lead_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))  # person in charge
     created_at: Mapped[datetime] = _now()
 
 
@@ -394,6 +396,17 @@ class EmailTemplate(Base):
     tracker_id: Mapped[int] = mapped_column(ForeignKey("trackers.id", ondelete="CASCADE"), primary_key=True)
     subject: Mapped[str] = mapped_column(Text)
     body_html: Mapped[str] = mapped_column(Text)
+
+
+class ReportReminder(Base):
+    """The reminder for one tracker and week, sent to the person in charge before the automatic send (one at most)."""
+
+    __tablename__ = "report_reminders"
+
+    tracker_id: Mapped[int] = mapped_column(ForeignKey("trackers.id", ondelete="CASCADE"), primary_key=True)
+    week_ending: Mapped[date] = mapped_column(Date, primary_key=True)
+    recipients: Mapped[list] = mapped_column(JSONB)
+    sent_at: Mapped[datetime] = _now()
 
 
 class ReportSend(Base):
