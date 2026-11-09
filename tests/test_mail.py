@@ -19,6 +19,7 @@ from tracker.mail.compose import (
     PLACEHOLDERS,
     build_report_email,
     email_summary,
+    report_subject,
     normalise_recipient,
     placeholder_context,
     render_placeholders,
@@ -26,7 +27,7 @@ from tracker.mail.compose import (
     sanitise_subject,
     unknown_placeholders,
 )
-from tracker.models import AuditLog, EmailTemplate, Recipient, ReportSend
+from tracker.models import AppSetting, AuditLog, EmailTemplate, Recipient, ReportSend
 
 LINK = "http://localhost:5000/trackers/1/report?week=2026-09-11"
 NOW = datetime(2026, 9, 11, 17, 0, tzinfo=timezone.utc)
@@ -501,6 +502,26 @@ def test_test_send_goes_only_to_current_user(app, client, db, tracker_with_recip
     assert len(sent_messages) == 1 and sent_messages[0]["Bcc"] == owner.email
     assert "a@example.com" not in str(sent_messages[0]["Bcc"])
     assert db.query(ReportSend).count() == 0
+
+
+def test_every_email_takes_the_tools_subject_not_a_saved_tracker_subject(
+    app, db, tracker_with_recipient, sent_messages
+):
+    db.add(EmailTemplate(tracker_id=tracker_with_recipient.id, subject="Old {{status}}", body_html="<p>Body</p>"))
+    db.add(AppSetting(key="report_email_subject", value="[PMO] {{summary}}"))
+    db.commit()
+    with app.app_context():
+        sending.send_report(db, tracker_with_recipient, WEEK, "manual", None, NOW)
+    (msg,) = sent_messages
+    assert msg["Subject"].startswith("[PMO] Test tracker | 11/09/26 : No status | ")
+    assert "<p>Body</p>" in msg.get_body(("html",)).get_content()
+
+
+def test_without_a_saved_subject_the_summary_is_used(db):
+    assert report_subject(db) == "{{summary}}"
+    db.add(AppSetting(key="report_email_subject", value="Weekly: {{summary}}"))
+    db.commit()
+    assert report_subject(db) == "Weekly: {{summary}}"
 
 
 # --- Database: routes ----------------------------------------------------------------------------------------

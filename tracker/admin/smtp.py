@@ -13,6 +13,7 @@ from sqlalchemy import select
 from ..audit import record
 from ..auth import current_user, permission_required
 from ..db import get_session
+from ..mail.compose import PLACEHOLDERS, REPORT_SUBJECT_KEY, report_subject
 from ..models import AppSetting
 from . import bp
 
@@ -21,6 +22,8 @@ SMTP_KEYS = ("smtp_host", "smtp_port", "smtp_auth", "smtp_user", "smtp_from", "s
 SENDER_KEYS = ("smtp_from",)  # the keys a holder who is not an administrator may change
 SMTP_AUTH_MODES = ("none", "plain", "xoauth2")
 SERVER_LOCKED_MESSAGE = "Only an administrator can change the mail server and how the app signs in to it."
+MAX_REPORT_SUBJECT = 300
+REPORT_SUBJECT_ERROR = f"The report email subject is required and must be at most {MAX_REPORT_SUBJECT} characters."
 
 
 def _smtp_values(db) -> dict[str, str]:
@@ -54,8 +57,16 @@ def smtp():
             abort(400, description="The SMTP port must be a number between 1 and 65535.")
         if submitted["smtp_auth"] not in SMTP_AUTH_MODES:
             abort(400, description="The authentication mode must be none, plain or xoauth2.")
+        subject_before = report_subject(db)
+        subject = subject_before
+        if REPORT_SUBJECT_KEY in request.form:  # left out of the form: kept as it is
+            subject = " ".join(request.form[REPORT_SUBJECT_KEY].split())
+            if not subject or len(subject) > MAX_REPORT_SUBJECT:
+                abort(400, description=REPORT_SUBJECT_ERROR)
         for key, value in submitted.items():
             db.merge(AppSetting(key=key, value=value))
+        if subject != subject_before:
+            db.merge(AppSetting(key=REPORT_SUBJECT_KEY, value=subject))
         record(
             db,
             user_id=current_user().id,
@@ -63,7 +74,12 @@ def smtp():
             action="smtp_settings_updated",
             entity="app_settings",
             entity_id="smtp",
-            detail={"changed": sorted(k for k in SMTP_KEYS if before[k] != submitted[k])},
+            detail={
+                "changed": sorted(
+                    [k for k in SMTP_KEYS if before[k] != submitted[k]]
+                    + ([REPORT_SUBJECT_KEY] if subject != subject_before else [])
+                )
+            },
         )
         db.commit()
         flash("Email settings saved.", "success")
@@ -71,6 +87,8 @@ def smtp():
     return render_template(
         "admin/smtp.html",
         values=_smtp_values(db),
+        report_subject=report_subject(db),
+        placeholders=PLACEHOLDERS,
         modes=SMTP_AUTH_MODES,
         server_locked=not is_admin,
         locked_message=SERVER_LOCKED_MESSAGE,
