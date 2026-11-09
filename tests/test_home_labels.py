@@ -25,7 +25,7 @@ def test_cards_show_business_line_and_regions_and_carry_filter_data(
     tracker_factory(name="Bare")
     page = client.get("/").get_data(as_text=True)
     assert "Tradition brokerage · APAC, EMEA" in page
-    assert "Business line not set · Regions not set" in page
+    assert "Business line and regions not set" in page
     assert f'data-regions=" {apac.id} {emea.id} "' in page or f'data-regions=" {emea.id} {apac.id} "' in page
     assert 'data-regions=" none "' in page
     assert f'data-line="{line.id}"' in page
@@ -141,8 +141,11 @@ def test_cards_flag_a_status_the_forecast_disagrees_with(client, logged_in_admin
     page = client.get("/").get_data(as_text=True)
     cards = re.findall(r'<article class="tracker-card.*?</article>', page, re.S)
     by_name = {re.search(r'<a href="[^"]*">([^<]*)</a>', card).group(1): card for card in cards}
-    assert '<span class="flag">Green, but the forecast is 3 weeks behind target</span>' in by_name["Slipping"]
-    assert '<span class="flag flag-mild">Red, but the forecast is on track for target</span>' in by_name["Worried"]
+    assert "Green, but the forecast is 3 weeks behind target</span>" in by_name["Slipping"]
+    assert 'class="alert alert-warn"' in by_name["Slipping"] and 'data-disagree="true"' in by_name["Slipping"]
+    assert "tracker-card-disagree" in by_name["Slipping"] and 'class="verdict-pill is-warning"' in by_name["Slipping"]
+    assert "Red, but the forecast is on track for target</span>" in by_name["Worried"]
+    assert 'data-disagree="false"' in by_name["Worried"] and "tracker-card-disagree" not in by_name["Worried"]
     assert "but the forecast" not in by_name["Steady"] + by_name["Amber one"]
     order = list(by_name)
     assert order.index("Worried") < order.index("Slipping") < order.index("Amber one") < order.index("Steady")

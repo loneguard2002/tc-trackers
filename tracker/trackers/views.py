@@ -331,11 +331,13 @@ def home():
             "entry_stale": live and (last_entry is None or (today - last_entry).days > 7),
             "behind": dvt is not None and dvt > 0,
             "mismatch": status_mismatch(status, headline),
+            "lead": lead_in_charge(db, t),
             "spark": spark_chart(position.rows),
             "labels": labels[t.id],
             "line_data": str(t.business_line_id) if t.business_line_id is not None else "none",
             "regions_data": " " + (" ".join(str(region_id) for region_id, _ in regions[t.id]) or "none") + " ",
         }
+        card["disagree"] = bool(card["mismatch"]) and card["mismatch"][0] == "warning"
         card["attention"] = (
             (10 if t.status != "active" else 0)
             + STATUS_ATTENTION.get(status, 4)

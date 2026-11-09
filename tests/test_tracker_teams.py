@@ -227,7 +227,7 @@ def test_home_card_shows_the_team_name(client, logged_in_admin, tracker_factory,
     team = team_factory(name="Network")
     tracker_factory(name="With team", team_id=team.id, first_week_ending=date(2026, 9, 4))
     page = client.get("/").get_data(as_text=True)
-    assert '<p class="tracker-card-team">Network · Business line not set · Regions not set</p>' in page
+    assert '<p class="tracker-card-team">Network · Business line and regions not set</p>' in page
 
 
 # --- Final review fixes ---------------------------------------------------------------------------------------------
