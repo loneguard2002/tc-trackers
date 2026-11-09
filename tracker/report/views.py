@@ -13,6 +13,7 @@ from ..engine.weeks import week_endings
 from . import bp
 from .build import build_report, compute_position, current_report_week
 from .chart_data import chart_payload
+from .charts import cumulative_chart, remaining_chart, weekly_chart
 from .render import html_to_pdf, html_to_png, render_print_html
 
 
@@ -43,7 +44,8 @@ def _report_week(tracker) -> date:
 @require_tracker_role("viewer")
 def view(tracker_id: int):
     tracker = g.tracker
-    report = build_report(get_session(), tracker, _report_week(tracker), today())
+    # The charts come as separate images (``chart_image``), so the page does not wait for them to be drawn.
+    report = build_report(get_session(), tracker, _report_week(tracker), today(), with_charts=False)
     weeks = week_endings(tracker.first_week_ending, tracker.last_week_ending)
     return render_template(
         "report/page.html",
@@ -53,6 +55,28 @@ def view(tracker_id: int):
         page_title=f"{tracker.name} report",
         current_page="trackers",
     )
+
+
+CHARTS = {
+    "remaining": lambda rows, tracker: remaining_chart(rows, tracker.unit_label),
+    "weekly": lambda rows, tracker: weekly_chart(rows),
+    "cumulative": lambda rows, tracker: cumulative_chart(rows),
+}
+
+
+@bp.get("/trackers/<int:tracker_id>/report/chart/<name>.svg")
+@require_tracker_role("viewer")
+def chart_image(tracker_id: int, name: str):
+    """One of the report's three pictures, for the same week as the page. The browser replaces them with interactive
+    charts; they stay when JavaScript is off or the chart data cannot be loaded."""
+    draw = CHARTS.get(name)
+    if draw is None:
+        abort(404)
+    tracker = g.tracker
+    position = compute_position(get_session(), tracker, _report_week(tracker), today())
+    response = Response(draw(position.rows, tracker), mimetype="image/svg+xml")
+    response.headers["Cache-Control"] = "private, no-cache"
+    return response
 
 
 @bp.get("/trackers/<int:tracker_id>/report/data.json")

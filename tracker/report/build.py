@@ -113,14 +113,27 @@ def new_risk_rags(risks, week_ending: date) -> list[str | None]:
     return [r.rag for r in raised_in_week(risks, week_ending)]
 
 
-def build_report(session, tracker: Tracker, week_ending: date | None, today: date, chart_format: str = "svg") -> Report:
+def build_report(
+    session,
+    tracker: Tracker,
+    week_ending: date | None,
+    today: date,
+    chart_format: str = "svg",
+    with_charts: bool = True,
+) -> Report:
+    """The report for one week. ``with_charts=False`` skips drawing the three charts (about a second each), for pages
+    that show them another way: the live page links them as separate images, the Email page does not show them."""
     position = compute_position(session, tracker, week_ending, today)
     risks = list(session.scalars(select(Risk).where(Risk.tracker_id == tracker.id, Risk.status != "Closed")))
-    charts = {
-        "remaining": remaining_chart(position.rows, tracker.unit_label, chart_format),
-        "weekly": weekly_chart(position.rows, chart_format),
-        "cumulative": cumulative_chart(position.rows, chart_format),
-    }
+    charts = (
+        {
+            "remaining": remaining_chart(position.rows, tracker.unit_label, chart_format),
+            "weekly": weekly_chart(position.rows, chart_format),
+            "cumulative": cumulative_chart(position.rows, chart_format),
+        }
+        if with_charts
+        else {}
+    )
     return Report(
         tracker=tracker,
         week_ending=position.week_ending,
