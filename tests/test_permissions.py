@@ -172,3 +172,12 @@ def test_administrator_still_changes_every_email_setting(client, logged_in_admin
     assert 'name="smtp_host"' in page and 'name="smtp_auth"' in page and "readonly" not in page
     assert post(client, "/admin/smtp", {"smtp_host": "new.example.com", "smtp_auth": "none"}).status_code == 302
     assert db.get(AppSetting, "smtp_host").value == "new.example.com"
+
+
+def test_email_settings_holder_sets_the_report_email_subject(client, logged_in_user, give_set, db):
+    from tracker.models import AppSetting
+
+    give_set(["manage_email_settings"], user=logged_in_user)
+    response = post(client, "/admin/smtp", {"smtp_from": "", "report_email_subject": "{{summary}} [weekly]"})
+    assert response.status_code == 302
+    assert db.get(AppSetting, "report_email_subject").value == "{{summary}} [weekly]"

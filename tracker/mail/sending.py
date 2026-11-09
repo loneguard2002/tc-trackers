@@ -15,12 +15,12 @@ from flask import current_app
 from sqlalchemy import select
 
 from ..audit import record
-from ..models import EmailTemplate, Recipient, ReportSend, Tracker, User
+from ..models import Recipient, ReportSend, Tracker, User
 from ..report import views as report_views
 from ..report.build import Report, build_report
 from ..report.render import html_to_pdf, render_print_html
 from . import smtp
-from .compose import build_report_email, report_link
+from .compose import build_report_email, email_template, report_link
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ def _record_failure(send: ReportSend, exc: Exception, now: datetime) -> None:
 
 def _attempt(session, send: ReportSend, tracker: Tracker, report: Report, now: datetime, user_id: int | None) -> None:
     """One delivery attempt for ``send``; updates its status and audits the outcome. The caller commits."""
-    template = session.get(EmailTemplate, tracker.id)
+    template = email_template(session, tracker.id)
     msg = build_report_email(report, template, list(send.recipients), _link(tracker, send.week_ending), send.pdf or b"")
     try:
         smtp.send_message(msg)
@@ -206,7 +206,7 @@ def retry_queued(session, now: datetime) -> int:
 def send_test(session, tracker: Tracker, week_ending: date, user: User, now: datetime) -> None:
     """Send the report to ``user`` only. Not stored as a report send; raises ``MailError`` on failure."""
     report, pdf = _report_and_pdf(session, tracker, week_ending)
-    template = session.get(EmailTemplate, tracker.id)
+    template = email_template(session, tracker.id)
     msg = build_report_email(report, template, [user.email], _link(tracker, report.week_ending), pdf)
     try:
         smtp.send_message(msg)

@@ -1,5 +1,6 @@
 """Authentication, approval and administration (database required)."""
 
+import pytest
 from conftest import TEST_PASSWORD, post
 from sqlalchemy import select
 
@@ -219,6 +220,32 @@ def test_smtp_rejects_invalid_values(client, logged_in_admin, db):
     response = post(client, "/admin/smtp", {"smtp_host": "h", "smtp_port": "abc", "smtp_auth": "plain"})
     assert response.status_code == 400
     response = post(client, "/admin/smtp", {"smtp_host": "h", "smtp_port": "25", "smtp_auth": "weird"})
+    assert response.status_code == 400
+    assert db.scalars(select(AppSetting)).first() is None
+
+
+def test_smtp_page_sets_the_report_email_subject(client, logged_in_admin, db):
+    page = client.get("/admin/smtp").get_data(as_text=True)
+    assert 'name="report_email_subject"' in page and 'value="{{summary}}"' in page
+    response = post(
+        client,
+        "/admin/smtp",
+        {"smtp_host": "h", "smtp_port": "25", "smtp_auth": "none", "report_email_subject": "  [PMO]   {{summary}} "},
+    )
+    assert response.status_code == 302
+    stored = {row.key: row.value for row in db.scalars(select(AppSetting))}
+    assert stored["report_email_subject"] == "[PMO] {{summary}}"
+    entry = db.scalars(select(AuditLog).where(AuditLog.action == "smtp_settings_updated")).one()
+    assert "report_email_subject" in entry.detail["changed"]
+
+
+@pytest.mark.parametrize("subject", ["   ", "x" * 301])
+def test_smtp_page_refuses_a_blank_or_long_subject(client, logged_in_admin, db, subject):
+    response = post(
+        client,
+        "/admin/smtp",
+        {"smtp_host": "h", "smtp_port": "25", "smtp_auth": "none", "report_email_subject": subject},
+    )
     assert response.status_code == 400
     assert db.scalars(select(AppSetting)).first() is None
 

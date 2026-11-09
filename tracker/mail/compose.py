@@ -11,11 +11,12 @@ import html
 import re
 from datetime import date
 from email.message import EmailMessage
+from types import SimpleNamespace
 
 from flask import render_template
 
 from ..formatting import MISSING, fmt_data_uri, fmt_date, fmt_num, fmt_pct, fmt_short_date
-from ..models import EmailTemplate
+from ..models import AppSetting, EmailTemplate
 from ..report.build import Report
 from ..report.charts import remaining_chart
 
@@ -49,6 +50,22 @@ DEFAULT_BODY = """\
 <p><a href="{{report_link}}">Open the live report</a> (sign-in required).</p>
 """
 
+REPORT_SUBJECT_KEY = "report_email_subject"  # the app setting holding the one subject every tracker's email uses
+
+
+def report_subject(session) -> str:
+    """The subject template every tracker's email uses, set by an administrator; ``{{summary}}`` until one is saved."""
+    stored = session.get(AppSetting, REPORT_SUBJECT_KEY)
+    return stored.value if stored is not None and stored.value.strip() else DEFAULT_SUBJECT
+
+
+def email_template(session, tracker_id: int) -> SimpleNamespace:
+    """What a tracker's email is built from: the tool's subject and the tracker's saved body (or the default body).
+    A subject saved on the tracker's own template is no longer used."""
+    saved = session.get(EmailTemplate, tracker_id)
+    return SimpleNamespace(subject=report_subject(session), body_html=saved.body_html if saved else DEFAULT_BODY)
+
+
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]+")
 MAX_SUBJECT_LENGTH = 300
@@ -64,7 +81,7 @@ def _plural(count: int, word: str) -> str:
 
 
 def _risks_text(open_risks: int, new_rags: list[str | None]) -> str:
-    """ "3 risks", or with the risks raised this week: "3 risks (1 new - red)", "(2 new - 1 red, 1 amber)", "(1 new)"."""
+    """ "3 risks", with the week's new ones: "3 risks (1 new - red)", "(2 new - 1 red, 1 amber)", "(1 new)"."""
     text = _plural(open_risks, "risk")
     if not new_rags:
         return text

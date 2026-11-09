@@ -4,7 +4,7 @@
 {% macro locked(key) %}{% if server_locked %}readonly{% else %}name="{{ key }}"{% endif %}{% endmacro %}
 {% block content %}
 <h1>Email settings</h1>
-<p class="page-lede">The mail server every tracker uses to send its weekly report. Each tracker's recipients and template are set on its own Email tab.</p>
+<p class="page-lede">The mail server and the subject every tracker uses for its weekly report. Each tracker's recipients and message are set on its own Email tab.</p>
 <div class="settings">
   <form method="post" action="{{ url_for('admin.smtp') }}">
     {{ csrf_field(csrf_token()) }}
@@ -48,6 +48,24 @@
       <input id="smtp_client_id" {{ locked("smtp_client_id") }} value="{{ values.smtp_client_id }}" autocomplete="off" spellcheck="false" class="code-input" aria-describedby="smtp_client_id-help">
       {% endcall %}
       <p class="section-foot-note">The SMTP password and the client secret are never stored here. Set them as the environment variables <code>SMTP_PASSWORD</code> and <code>SMTP_CLIENT_SECRET</code>.</p>
+    </section>
+
+    <section class="settings-section" aria-labelledby="section-report">
+      <header class="settings-section-head">
+        <h2 id="section-report">Report email</h2>
+        <p>The subject of every tracker's weekly email. <code>{% raw %}{{summary}}{% endraw %}</code> gives the week in one line; the other placeholders also work.</p>
+      </header>
+      {% call setting('Subject', 'At most 300 characters.', 'report_email_subject') %}
+      <input id="report_email_subject" name="report_email_subject" value="{{ report_subject }}" maxlength="300" required autocomplete="off" spellcheck="false" aria-describedby="report_email_subject-help">
+      {% endcall %}
+      <details class="placeholder-help">
+        <summary>Placeholders</summary>
+        <dl>
+          {% for name, description in placeholders.items() %}
+          <dt><code>{% raw %}{{{% endraw %}{{ name }}{% raw %}}}{% endraw %}</code></dt><dd>{{ description }}</dd>
+          {% endfor %}
+        </dl>
+      </details>
     </section>
 
     <div class="settings-actions span-all">
