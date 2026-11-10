@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from tracker.app import create_app
 from tracker.auth.passwords import hash_password
+from tracker.db import get_engine
 from tracker.models import (
     Base,
     BusinessLine,
@@ -62,9 +63,13 @@ def _ignore_local_env_file(monkeypatch):
 
 @pytest.fixture
 def app():
-    return create_app(
+    """A fresh app per test. Its connection pool is closed when the test ends: left to the garbage collector, the
+    pools of several parallel workers together exceed the server's connection limit."""
+    application = create_app(
         {"TESTING": True, "SECRET_KEY": "test", "DATABASE_URL": DATABASE_URL, "SESSION_COOKIE_SECURE": False}
     )
+    yield application
+    get_engine(application).dispose()
 
 
 @pytest.fixture
