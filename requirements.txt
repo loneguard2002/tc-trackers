@@ -12,6 +12,7 @@ apscheduler
 gunicorn
 python-dotenv
 pytest
+pytest-xdist
 ruff
 sqlfluff
 PyYAML
