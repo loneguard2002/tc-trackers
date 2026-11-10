@@ -12,8 +12,8 @@ from flask import g, render_template
 from tracker.auth.permissions import PERMISSIONS
 
 TEMPLATES = Path(__file__).resolve().parent.parent / "tracker" / "templates"
-# Rendered outside the browser's CSP: an email (inline styles are required) and the standalone PDF/PNG document.
-EXEMPT = {Path("mail/email_body.html"), Path("report/print.html")}
+# Rendered outside the browser's CSP: the emails (inline styles are required) and the standalone PDF/PNG document.
+EXEMPT = {Path("mail/email_body.html"), Path("mail/reminder.html"), Path("report/print.html")}
 FORBIDDEN = {
     "style attribute": re.compile(r"<[^>]*\sstyle\s*=", re.IGNORECASE),
     "style block": re.compile(r"<style\b", re.IGNORECASE),
