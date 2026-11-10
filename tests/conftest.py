@@ -1,3 +1,4 @@
+import functools
 import itertools
 import os
 import string
@@ -8,7 +9,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, make_url, text
 from sqlalchemy.orm import Session
 
 from tracker.app import create_app
@@ -30,7 +31,17 @@ from tracker.models import (
     User,
 )
 
-DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "postgresql+psycopg://localhost/tracker_test")
+BASE_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "postgresql+psycopg://localhost/tracker_test")
+# Under pytest-xdist each worker (gw0, gw1, ...) gets its own database, tracker_test_gw0 and so on, because every test
+# empties the database it uses when it ends. A run without -n keeps tracker_test.
+WORKER = os.environ.get("PYTEST_XDIST_WORKER")
+DATABASE_URL = (
+    make_url(BASE_DATABASE_URL)
+    .set(database=f"{make_url(BASE_DATABASE_URL).database}_{WORKER}")
+    .render_as_string(hide_password=False)
+    if WORKER
+    else BASE_DATABASE_URL
+)
 ROOT = Path(__file__).resolve().parent.parent
 
 _state: dict = {}
@@ -61,12 +72,27 @@ def client(app):
     return app.test_client()
 
 
+def _create_worker_database() -> None:
+    """Create this worker's database (through the server's ``postgres`` database) when it does not exist yet."""
+    url = make_url(DATABASE_URL)
+    admin = create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    try:
+        with admin.connect() as connection:
+            exists = connection.execute(text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": url.database})
+            if exists.scalar() is None:
+                connection.execute(text(f'CREATE DATABASE "{url.database}"'))
+    finally:
+        admin.dispose()
+
+
 @pytest.fixture(scope="session")
 def _db_engine():
     """Probe the database once; migrate once; skip the dependent tests when it is unreachable."""
     if "engine" not in _state:
         engine = create_engine(DATABASE_URL)
         try:
+            if WORKER:
+                _create_worker_database()
             with engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
         except Exception:
@@ -115,6 +141,12 @@ def tracker_factory(db):
 TEST_PASSWORD = "correct horse battery"
 
 
+@functools.cache
+def hashed_test_password() -> str:
+    """Every test user has TEST_PASSWORD; bcrypt takes about 0.2 s, so it is hashed once per run, not per user."""
+    return hash_password(TEST_PASSWORD)
+
+
 @pytest.fixture
 def user_factory(db):
     counter = {"n": 0}
@@ -124,7 +156,7 @@ def user_factory(db):
         values = {
             "email": f"user{counter['n']}@example.com",
             "full_name": f"User {counter['n']}",
-            "password_hash": hash_password(TEST_PASSWORD),
+            "password_hash": hashed_test_password(),
             "auth_source": "local",
             "status": "active",
             "is_admin": False,
@@ -335,6 +367,8 @@ def live_server(app, _db_engine):
 
 @pytest.fixture
 def browser():
+    """A Chromium per test: one kept open across tests would clash with the app's own Playwright session, which
+    renders the PDF and PNG (Playwright allows one sync session per thread)."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as playwright:

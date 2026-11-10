@@ -20,6 +20,7 @@ A generic Flask and Postgres application for tracking progress against defined t
 
 - `pytest` runs the suite; database tests are skipped when Postgres is unreachable. For the full run, set `TEST_DATABASE_URL` to a reachable Postgres.
 - `pytest -m db` runs the database tests only.
+- `pytest -n 6` runs the suite in six parallel processes (pytest-xdist). Each process uses its own database, named after `TEST_DATABASE_URL` with `_gw0`, `_gw1`, … added, and creates it on first use, so the database user needs the right to create databases. A run without `-n` uses `TEST_DATABASE_URL` itself. The extra databases are emptied after every test and kept between runs; drop them with `dropdb tracker_test_gw0` (and so on) when no longer wanted.
 - `alembic check` (against a real database) confirms that the models and migrations agree.
 - Golden workbook test: open the v2_27 workbook in Excel, save it, then run `python tools/capture_workbook_golden.py PATH tests/fixtures/tc_win11_golden.json`. The test skips while the fixture is absent.
 
