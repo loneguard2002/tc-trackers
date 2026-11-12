@@ -593,7 +593,7 @@ def test_row_actions_sit_in_a_more_menu(client, logged_in_admin, user_factory):
     rows = people_rows(response)
     for user in (plain, boss, off, sso):
         row = rows[user.full_name]
-        assert f'href="/admin/users/{user.id}/access">Access<' in row
+        assert f'<a class="button button-small" href="/admin/users/{user.id}/access">Access<' in row
         assert '<details class="row-menu">' in row
         assert f'More<span class="sr-only"> actions for {user.full_name}</span>' in row
     assert f'action="/admin/users/{plain.id}/disable"' in rows["Plain Person"]
@@ -602,7 +602,7 @@ def test_row_actions_sit_in_a_more_menu(client, logged_in_admin, user_factory):
     assert f'action="/admin/users/{off.id}/enable"' in rows["Off Person"]
     assert "/password" not in rows["Sso Person"]
     assert re.search(
-        r"badge-success[^<]*>Active</span></td>\s*<td[^>]*><span[^>]*badge-info[^>]*>Administrator<",
+        r'>Active</span></td>\s*<td[^>]*><span class="admin-mark" title="Administrator"><svg',
         rows["Boss Person"],
     )
     assert "Administrator" not in rows["Plain Person"].replace("Make administrator", "")
