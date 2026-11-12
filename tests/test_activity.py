@@ -135,7 +135,7 @@ def test_no_secrets_in_any_entry(client, logged_in_admin, user_factory, db):
     p1, p2, p3 = "Pass-One-1111", "Pass-Two-2222", "Pass-Three-3333"
     post(client, "/admin/users", {"email": "new@example.com", "full_name": "New Person", "password": p1})
     victim = user_factory()
-    post(client, f"/admin/users/{victim.id}/password", {"password": p2})
+    post(client, f"/admin/users/{victim.id}/password", {"password": p2, "password_confirm": p2})
     post(client, "/admin/smtp", {"smtp_host": "smtp.example.com", "smtp_port": "25", "smtp_password": "smtp-secret-9"})
     fresh = client.application.test_client()
     post(fresh, "/login", {"email": victim.email, "password": p3})

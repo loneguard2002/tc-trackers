@@ -3,6 +3,7 @@
 {% from "lists/_table.html" import sort_header %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='users.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% macro user_action(endpoint, u, text, icon_name, extra=None, confirm=None) -%}
 <form method="post" action="{{ url_for(endpoint, user_id=u.id) }}"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
@@ -112,12 +113,12 @@
           <td class="hide-narrow"><div class="chips">{% for name in sets.get(u.id, []) %}<span class="status-pill">{{ name }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>
           <td class="cell-actions"><div class="row-tools row-tools-text">
             <a class="button button-small" href="{{ url_for('admin.access', user_id=u.id) }}">{{ icon('key') }}Access<span class="sr-only"> of {{ u.full_name }}</span></a>
-            {% if can_do.enable or can_do.password or can_do.set_admin or can_do.disable %}
+            {% if can_do.password %}<a class="button button-small" href="{{ url_for('admin.password', user_id=u.id) }}" data-reset-password data-person="{{ u.full_name }} ({{ u.email }})">{{ icon('lock') }}Reset password<span class="sr-only"> of {{ u.full_name }}</span></a>{% endif %}
+            {% if can_do.enable or can_do.set_admin or can_do.disable %}
             <details class="row-menu">
               <summary class="button button-small">{{ icon('more') }}More<span class="sr-only"> actions for {{ u.full_name }}</span></summary>
               <div class="row-menu-panel">
                 {% if can_do.enable %}{{ user_action('admin.enable', u, 'Re-enable', 'restore') }}{% endif %}
-                {% if can_do.password %}<a class="button button-small" href="{{ url_for('admin.password', user_id=u.id) }}">{{ icon('lock') }}Reset password</a>{% endif %}
                 {% if can_do.set_admin %}{{ user_action('admin.set_admin', u, 'Remove administrator' if u.is_admin else 'Make administrator', 'admin', ('is_admin', '0' if u.is_admin else '1')) }}{% endif %}
                 {% if can_do.disable %}{{ user_action('admin.disable', u, 'Disable', 'ban', confirm='Disable ' ~ u.full_name ~ '? They will no longer be able to sign in.') }}{% endif %}
               </div>
@@ -132,6 +133,36 @@
     <p class="section-foot-note sign-in-legend">Sign-in: {% for value, label in sign_in_labels.items() %}<span class="badge badge-muted">{{ label }}</span> {{ sign_in_meanings[value] }}{{ '; ' if not loop.last else '.' }}{% endfor %}</p>
     {% else %}
     <p class="section-foot-note">No one matches these filters. <a href="{{ url_for('admin.users') }}">Clear</a></p>
+    {% endif %}
+    {% if actions.values()|selectattr('password')|list %}
+    {# Reset password opens this dialog (users.js) with the person's name and the form's action filled in. Without
+       JavaScript the button is a link to the person's Reset password page instead. #}
+    <dialog id="reset-dialog" class="list-dialog" aria-labelledby="reset-dialog-title">
+      <form method="post">
+        {{ csrf_field(csrf_token()) }}
+        <header class="list-dialog-head">
+          <h2 id="reset-dialog-title">Reset password</h2>
+          <button class="tool-button" type="button" data-reset-close title="Close">{{ icon('close') }}<span class="sr-only">Close</span></button>
+        </header>
+        <div class="list-dialog-body">
+          <p class="list-dialog-note">Sets a new password for <strong data-reset-person></strong>. Their old password stops working. Nothing is emailed.</p>
+          <div class="field">
+            <label for="reset-password">New password</label>
+            <input id="reset-password" name="password" type="password" autocomplete="new-password" minlength="12" required aria-describedby="reset-password-help">
+            <p class="field-help" id="reset-password-help">At least 12 characters. Share it with them securely.</p>
+          </div>
+          <div class="field">
+            <label for="reset-confirm">Confirm new password</label>
+            <input id="reset-confirm" name="password_confirm" type="password" autocomplete="new-password" minlength="12" required aria-describedby="reset-confirm-help">
+            <p class="field-help" id="reset-confirm-help">Type the same password again.</p>
+          </div>
+        </div>
+        <footer class="list-dialog-foot">
+          <button class="button" type="button" data-reset-close>Cancel</button>
+          <button class="button primary" type="submit">Set password</button>
+        </footer>
+      </form>
+    </dialog>
     {% endif %}
     {% if current_user.is_admin %}
     <p class="section-foot-note">Administrators have owner access to every tracker and every permission. You cannot disable your own account or remove your own administrator role, and the application keeps at least one active administrator.</p>
