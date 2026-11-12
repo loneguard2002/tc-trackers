@@ -64,6 +64,11 @@
           <option value="">Any status</option>
           {% for value, label in status_filters.items() %}<option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
         </select></div>
+      <div class="toolbar-field"><label for="filter-sign-in">Sign-in</label>
+        <select id="filter-sign-in" name="sign_in">
+          <option value="">Any sign-in</option>
+          {% for value, label in sign_in_labels.items() %}<option value="{{ value }}"{% if filters.sign_in == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></div>
       <div class="toolbar-field"><label for="filter-team">Team</label>
         <select id="filter-team" name="team">
           <option value="">Any team</option>
@@ -91,7 +96,7 @@
         {% set can_do = actions[u.id] %}
         <tr>
           <td class="user-person"><div class="member-cell">{{ person(u) }}</div></td>
-          <td class="user-status"><span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(u.status, 'muted') }}">{{ u.status|title }}</span>{% if u.is_admin %}<span class="badge badge-info">Administrator</span>{% endif %}</td>
+          <td class="user-status"><span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(u.status, 'muted') }}">{{ u.status|title }}</span><span class="badge badge-muted" title="Signs in with {{ 'Microsoft' if u.auth_source == 'sso' else 'a password' }}">{{ sign_in_labels[u.auth_source] }}</span>{% if u.is_admin %}<span class="badge badge-info">Administrator</span>{% endif %}</td>
           <td class="hide-narrow"><div class="chips">{% for path, role in teams.get(u.id, []) %}<span class="status-pill">{{ path }} · {{ role|title }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>
           <td class="hide-narrow"><div class="chips">{% for name in sets.get(u.id, []) %}<span class="status-pill">{{ name }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>
           <td class="cell-actions"><div class="row-tools row-tools-text">

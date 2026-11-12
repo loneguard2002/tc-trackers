@@ -519,8 +519,33 @@ def test_users_filters(client, filter_people):
     assert f'<option value="{filter_people.platform.id}" selected' in text_of(response)
 
 
+def test_users_list_shows_and_filters_how_each_person_signs_in(client, user_manager, user_factory):
+    user_factory(full_name="Sso Person", auth_source="sso", password_hash=None)
+    user_factory(full_name="Local Person")
+    response = client.get("/admin/users")
+    rows = people_rows(response)
+    sign_in = r'<span class="badge badge-muted" title="Signs in with {}">{}</span>'
+    assert re.search(r">Active</span>" + sign_in.format("Microsoft", "Microsoft"), rows["Sso Person"])
+    assert re.search(r">Active</span>" + sign_in.format("a password", "Password"), rows["Local Person"])
+    assert "Microsoft" not in rows["Local Person"] and "Password" not in rows["Sso Person"]
+    assert listed(client, "?sign_in=sso") == ["Sso Person"]
+    assert listed(client, "?sign_in=local") == ["Local Person"]
+    assert listed(client, "?sign_in=local&q=sso") == []
+    response = client.get("/admin/users?sign_in=sso")
+    assert "Showing 1 of 3 people." in text_of(response)
+    assert '<option value="sso" selected>Microsoft</option>' in text_of(response)
+
+
 def test_users_filters_ignore_bad_values(client, filter_people):
-    for query in ("?status=bogus", "?team=abc", "?team=" + "9" * 20, "?set=-1", "?team=999999", "?q="):
+    for query in (
+        "?status=bogus",
+        "?sign_in=bogus",
+        "?team=abc",
+        "?team=" + "9" * 20,
+        "?set=-1",
+        "?team=999999",
+        "?q=",
+    ):
         response = client.get(f"/admin/users{query}")
         assert response.status_code == 200
         assert len(people_rows(response)) == 5, query
@@ -560,7 +585,7 @@ def test_row_actions_sit_in_a_more_menu(client, logged_in_admin, user_factory):
     assert "Make administrator" in rows["Plain Person"] and "Remove administrator" in rows["Boss Person"]
     assert f'action="/admin/users/{off.id}/enable"' in rows["Off Person"]
     assert "/password" not in rows["Sso Person"]
-    assert re.search(r"badge-success[^<]*>Active</span>\s*<span[^>]*badge-info[^>]*>Administrator", rows["Boss Person"])
+    assert re.search(r"badge-success[^<]*>Active</span>.*badge-info[^>]*>Administrator", rows["Boss Person"])
     assert "Administrator" not in rows["Plain Person"].replace("Make administrator", "")
     # the signed-in administrator's own row offers neither Disable nor an administrator change
     own = rows[logged_in_admin.full_name]

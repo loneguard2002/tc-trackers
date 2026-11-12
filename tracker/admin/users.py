@@ -106,6 +106,7 @@ def _actions(db, actor: User, user: User) -> dict[str, bool]:
 
 
 STATUS_FILTERS = {"active": "Active", "pending": "Awaiting approval", "disabled": "Disabled"}
+SIGN_IN_LABELS = {"sso": "Microsoft", "local": "Password"}
 
 
 def _like_escaped(text: str) -> str:
@@ -116,10 +117,11 @@ def _like_escaped(text: str) -> str:
 def _list_filters(db) -> dict[str, str | int | None]:
     """The filters on the list from the query string; anything unparseable or unknown is ignored."""
     team_id, set_id = parse_id(request.args.get("team")), parse_id(request.args.get("set"))
-    status = request.args.get("status", "")
+    status, sign_in = request.args.get("status", ""), request.args.get("sign_in", "")
     return {
         "q": request.args.get("q", "").strip(),
         "status": status if status in STATUS_FILTERS else "",
+        "sign_in": sign_in if sign_in in SIGN_IN_LABELS else "",
         "team": team_id if team_id is not None and db.get(Team, team_id) is not None else None,
         "set": set_id if set_id is not None and db.get(PermissionSet, set_id) is not None else None,
     }
@@ -132,6 +134,8 @@ def _filtered_users(filters: dict[str, str | int | None]):
         query = query.where(or_(User.full_name.ilike(pattern, escape="\\"), User.email.ilike(pattern, escape="\\")))
     if filters["status"]:
         query = query.where(User.status == filters["status"])
+    if filters["sign_in"]:
+        query = query.where(User.auth_source == filters["sign_in"])
     if filters["team"] is not None:
         query = query.where(exists().where(TeamMember.user_id == User.id, TeamMember.team_id == filters["team"]))
     if filters["set"] is not None:
@@ -172,6 +176,7 @@ def users():
         filters=filters,
         filtered=filtered,
         status_filters=STATUS_FILTERS,
+        sign_in_labels=SIGN_IN_LABELS,
         team_options=team_choices(db),
         set_options=db.execute(
             select(PermissionSet.id, PermissionSet.name).order_by(func.lower(PermissionSet.name))
