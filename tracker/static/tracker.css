@@ -602,8 +602,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .row-menu { position: relative; }
 .row-menu > summary { list-style: none; cursor: pointer; }
 .row-menu > summary::-webkit-details-marker { display: none; }
-.row-menu > summary::after { content: "\25BE"; margin-left: 6px; }
-.row-menu[open] > summary::after { content: "\25B4"; }
+.row-menu[open] > summary { border-color: var(--text); }
 .row-menu-panel { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-top: 4px; }
 .row-menu-panel .button, .row-menu-panel form .button { width: 100%; text-align: left; }
 .import-summary { margin-bottom: 20px; }

@@ -547,6 +547,10 @@ def test_users_list_shows_and_filters_how_each_person_signs_in(client, user_mana
     assert listed(client, "?sign_in=sso") == ["Sso Person"]
     assert listed(client, "?sign_in=local") == ["Local Person"]
     assert listed(client, "?sign_in=local&q=sso") == []
+    assert listed(client, "?admin=yes") == ["Local Person"]
+    assert listed(client, "?admin=no") == ["Sso Person"]
+    assert listed(client, "?admin=no&sign_in=local") == []
+    assert '<option value="yes" selected>Administrators</option>' in text_of(client.get("/admin/users?admin=yes"))
     response = client.get("/admin/users?sign_in=sso")
     assert "Showing 1 of 3 people." in text_of(response)
     assert '<option value="sso" selected>SSO</option>' in text_of(response)
@@ -556,6 +560,7 @@ def test_users_filters_ignore_bad_values(client, filter_people):
     for query in (
         "?status=bogus",
         "?sign_in=bogus",
+        "?admin=bogus",
         "?team=abc",
         "?team=" + "9" * 20,
         "?set=-1",
@@ -593,12 +598,17 @@ def test_row_actions_sit_in_a_more_menu(client, logged_in_admin, user_factory):
     rows = people_rows(response)
     for user in (plain, boss, off, sso):
         row = rows[user.full_name]
-        assert f'<a class="button button-small" href="/admin/users/{user.id}/access">Access<' in row
+        assert f'<a class="button button-small" href="/admin/users/{user.id}/access"><svg' in row
+        assert f'</svg>Access<span class="sr-only"> of {user.full_name}</span></a>' in row
         assert '<details class="row-menu">' in row
-        assert f'More<span class="sr-only"> actions for {user.full_name}</span>' in row
+        assert f'</svg>More<span class="sr-only"> actions for {user.full_name}</span>' in row
     assert f'action="/admin/users/{plain.id}/disable"' in rows["Plain Person"]
     assert f'href="/admin/users/{plain.id}/password"' in rows["Plain Person"]
     assert "Make administrator" in rows["Plain Person"] and "Remove administrator" in rows["Boss Person"]
+    # every action is an icon and a word
+    for label in ("Reset password", "Make administrator", "Disable"):
+        assert f"</svg>{label}<" in rows["Plain Person"], label
+    assert "</svg>Re-enable<" in rows["Off Person"] and "</svg>Remove administrator<" in rows["Boss Person"]
     assert f'action="/admin/users/{off.id}/enable"' in rows["Off Person"]
     assert "/password" not in rows["Sso Person"]
     assert re.search(

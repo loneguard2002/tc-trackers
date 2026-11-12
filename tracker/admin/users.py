@@ -106,6 +106,7 @@ def _actions(db, actor: User, user: User) -> dict[str, bool]:
 
 
 STATUS_FILTERS = {"active": "Active", "pending": "Awaiting approval", "disabled": "Disabled"}
+ADMIN_FILTERS = {"yes": "Administrators", "no": "Not administrators"}
 SIGN_IN_LABELS = {"local": "Local", "sso": "SSO"}
 SIGN_IN_MEANINGS = {
     "local": "signs in with an email address and a password set in this app",
@@ -121,10 +122,11 @@ def _like_escaped(text: str) -> str:
 def _list_filters(db) -> dict[str, str | int | None]:
     """The filters on the list from the query string; anything unparseable or unknown is ignored."""
     team_id, set_id = parse_id(request.args.get("team")), parse_id(request.args.get("set"))
-    status, sign_in = request.args.get("status", ""), request.args.get("sign_in", "")
+    status, sign_in, admin = (request.args.get(key, "") for key in ("status", "sign_in", "admin"))
     return {
         "q": request.args.get("q", "").strip(),
         "status": status if status in STATUS_FILTERS else "",
+        "admin": admin if admin in ADMIN_FILTERS else "",
         "sign_in": sign_in if sign_in in SIGN_IN_LABELS else "",
         "team": team_id if team_id is not None and db.get(Team, team_id) is not None else None,
         "set": set_id if set_id is not None and db.get(PermissionSet, set_id) is not None else None,
@@ -138,6 +140,8 @@ def _filtered_users(filters: dict[str, str | int | None]):
         query = query.where(or_(User.full_name.ilike(pattern, escape="\\"), User.email.ilike(pattern, escape="\\")))
     if filters["status"]:
         query = query.where(User.status == filters["status"])
+    if filters["admin"]:
+        query = query.where(User.is_admin.is_(filters["admin"] == "yes"))
     if filters["sign_in"]:
         query = query.where(User.auth_source == filters["sign_in"])
     if filters["team"] is not None:
@@ -180,6 +184,7 @@ def users():
         filters=filters,
         filtered=filtered,
         status_filters=STATUS_FILTERS,
+        admin_filters=ADMIN_FILTERS,
         sign_in_labels=SIGN_IN_LABELS,
         sign_in_meanings=SIGN_IN_MEANINGS,
         team_options=team_choices(db),
