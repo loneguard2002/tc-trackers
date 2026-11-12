@@ -4,10 +4,10 @@
 {% block head_extra %}
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
 {% endblock %}
-{% macro user_action(endpoint, u, text, extra=None, confirm=None) -%}
+{% macro user_action(endpoint, u, text, icon_name, extra=None, confirm=None) -%}
 <form method="post" action="{{ url_for(endpoint, user_id=u.id) }}"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
   {{ csrf_field(csrf_token()) }}{% if extra %}<input type="hidden" name="{{ extra[0] }}" value="{{ extra[1] }}">{% endif %}
-  <button class="button button-small{{ ' button-quiet' if confirm }}" type="submit">{{ text }}</button>
+  <button class="button button-small{{ ' button-quiet' if confirm }}" type="submit">{{ icon(icon_name) }}{{ text }}</button>
 </form>
 {%- endmacro %}
 {% macro person(u) -%}
@@ -68,6 +68,11 @@
           <option value="">Any status</option>
           {% for value, label in status_filters.items() %}<option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
         </select></div>
+      <div class="toolbar-field"><label for="filter-admin">Admin</label>
+        <select id="filter-admin" name="admin">
+          <option value="">Anyone</option>
+          {% for value, label in admin_filters.items() %}<option value="{{ value }}"{% if filters.admin == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></div>
       <div class="toolbar-field"><label for="filter-sign-in">Sign-in</label>
         <select id="filter-sign-in" name="sign_in">
           <option value="">Any sign-in</option>
@@ -106,15 +111,15 @@
           <td class="hide-narrow"><div class="chips">{% for path, role in teams.get(u.id, []) %}<span class="status-pill">{{ path }} · {{ role|title }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>
           <td class="hide-narrow"><div class="chips">{% for name in sets.get(u.id, []) %}<span class="status-pill">{{ name }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>
           <td class="cell-actions"><div class="row-tools row-tools-text">
-            <a class="button button-small" href="{{ url_for('admin.access', user_id=u.id) }}">Access</a>
+            <a class="button button-small" href="{{ url_for('admin.access', user_id=u.id) }}">{{ icon('key') }}Access<span class="sr-only"> of {{ u.full_name }}</span></a>
             {% if can_do.enable or can_do.password or can_do.set_admin or can_do.disable %}
             <details class="row-menu">
-              <summary class="button button-small">More<span class="sr-only"> actions for {{ u.full_name }}</span></summary>
+              <summary class="button button-small">{{ icon('more') }}More<span class="sr-only"> actions for {{ u.full_name }}</span></summary>
               <div class="row-menu-panel">
-                {% if can_do.enable %}{{ user_action('admin.enable', u, 'Re-enable') }}{% endif %}
-                {% if can_do.password %}<a class="button button-small" href="{{ url_for('admin.password', user_id=u.id) }}">Reset password</a>{% endif %}
-                {% if can_do.set_admin %}{{ user_action('admin.set_admin', u, 'Remove administrator' if u.is_admin else 'Make administrator', ('is_admin', '0' if u.is_admin else '1')) }}{% endif %}
-                {% if can_do.disable %}{{ user_action('admin.disable', u, 'Disable', confirm='Disable ' ~ u.full_name ~ '? They will no longer be able to sign in.') }}{% endif %}
+                {% if can_do.enable %}{{ user_action('admin.enable', u, 'Re-enable', 'restore') }}{% endif %}
+                {% if can_do.password %}<a class="button button-small" href="{{ url_for('admin.password', user_id=u.id) }}">{{ icon('lock') }}Reset password</a>{% endif %}
+                {% if can_do.set_admin %}{{ user_action('admin.set_admin', u, 'Remove administrator' if u.is_admin else 'Make administrator', 'admin', ('is_admin', '0' if u.is_admin else '1')) }}{% endif %}
+                {% if can_do.disable %}{{ user_action('admin.disable', u, 'Disable', 'ban', confirm='Disable ' ~ u.full_name ~ '? They will no longer be able to sign in.') }}{% endif %}
               </div>
             </details>
             {% endif %}
