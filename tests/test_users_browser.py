@@ -81,7 +81,7 @@ def test_users_table_sorts_by_each_column(page, live_server, user_factory):
     assert sort_by("Sign-in") == ["Ann Admin", "Cal Local", "Bea Sso"]
     expect(page.locator("th", has_text="Sign-in")).to_have_attribute("aria-sort", "ascending")
     assert sort_by("Sign-in") == ["Bea Sso", "Ann Admin", "Cal Local"]
-    assert sort_by("Administrator") == ["Bea Sso", "Cal Local", "Ann Admin"]
+    assert sort_by("Admin") == ["Bea Sso", "Cal Local", "Ann Admin"]
     assert sort_by("Status") == ["Ann Admin", "Bea Sso", "Cal Local"]
     assert sort_by("Name") == ["Ann Admin", "Bea Sso", "Cal Local"]
     assert sort_by("Name") == ["Cal Local", "Bea Sso", "Ann Admin"]
