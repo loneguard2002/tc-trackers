@@ -505,6 +505,8 @@ def access(user_id: int):
         limited=limited,
         sources=permission_sources(db, user),
         permission_labels={name: label for name, (label, _description) in PERMISSIONS.items()},
+        sign_in_labels=SIGN_IN_LABELS,
+        sign_in_meanings=SIGN_IN_MEANINGS,
         page_title=f"Effective access: {user.full_name}",
         current_page="users",
     )

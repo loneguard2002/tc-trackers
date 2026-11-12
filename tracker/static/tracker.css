@@ -594,10 +594,33 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .user-table .row-tools-text .button-small { padding: 5px 8px; }
 .sign-in-legend .badge { margin: 0 2px; }
 .sign-in-legend + .section-foot-note { border-top: 0; padding-top: 0; }
-.access-head-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
-.access-head-row .row-tools { justify-content: flex-start; }
-.access-groups h3 { margin: 0 0 8px; font-size: .9375rem; }
-.access-groups h3:not(:first-child) { margin-top: 20px; }
+/* A person's Access page: who they are with the account actions, a row of counts that jump to each card, then one
+   card each for trackers, permissions, and (side by side) teams, regions and permission sets. */
+.access-person { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; }
+.access-person-who { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.access-person h1 { margin: 0; font-size: 1.375rem; line-height: 1.25; }
+.access-person .member-email { margin: 2px 0 0; font-size: .875rem; }
+.access-avatar { width: 52px; height: 52px; font-size: 20px; }
+.access-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.access-badges .badge { display: inline-flex; align-items: center; gap: 5px; }
+.access-badges .badge .icon { width: 14px; height: 14px; }
+.access-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.access-actions .icon { width: 16px; height: 16px; margin: -2px 6px -2px -2px; vertical-align: middle; }
+.access-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.access-tile { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); text-decoration: none; }
+.access-tile:hover { border-color: var(--primary); }
+.access-tile-label { color: var(--muted); font-size: .8125rem; font-weight: 600; }
+.access-tile-count { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
+.access-inactive { border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); border-left-color: var(--warning); background: color-mix(in srgb, var(--warning) 6%, var(--surface)); }
+.access-card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.access-card-head h2 { margin: 0; font-size: 1.0625rem; }
+.access-card-note { margin: 0 0 0 auto; color: var(--muted); font-size: .8125rem; }
+.access-table th:first-child { width: 40%; }
+.route-decides { border-color: var(--primary); color: var(--primary); }
+.route-decides .icon { width: 13px; height: 13px; margin: 0 4px -2px -2px; }
+.access-admin-note { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; color: var(--info); font-size: .875rem; font-weight: 600; }
+.access-admin-note .icon { width: 18px; height: 18px; }
+.access-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 16px; }
 .access-groups .empty-note { padding: 0; }
 .access-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .row-menu { position: relative; }

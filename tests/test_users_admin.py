@@ -652,12 +652,15 @@ def test_access_page_marks_the_route_that_sets_the_role(
     tracker_factory(name="Servers", team_id=windows.id)
     give_set(["manage_teams"], user=user_manager)
     page = _visible(client, person)
-    assert "Team Windows: Editor Sets the role" in page
-    assert "View all trackers: Viewer Sets the role" not in page and page.count("Sets the role") == 1
+    assert "Team Windows: Editor (sets the role)" in page
+    assert "View all trackers: Viewer (sets the role)" not in page and page.count("(sets the role)") == 1
+    assert "The ticked route decides the role." in page
     both = tracker_factory(name="Both Viewer")
     grant(person, both, "viewer")
     page = _visible(client, person)
-    assert "Direct role: Viewer Sets the role" in page and "View all trackers: Viewer Sets the role" in page
+    # two routes give the same role: only the first is ticked
+    assert "Direct role: Viewer (sets the role)" in page and "View all trackers: Viewer (sets the role)" not in page
+    assert page.count("(sets the role)") == 2
 
 
 def test_access_page_header_and_sections(client, user_manager, user_factory, team_factory, add_member, give_set, db):
@@ -666,9 +669,12 @@ def test_access_page_header_and_sections(client, user_manager, user_factory, tea
     assert "Administrator" in _visible(client, admin) and "Administrator" not in _visible(client, local)
     sso = user_factory(full_name="Sso Person", auth_source="sso", password_hash=None)
     page = _visible(client, local)
-    assert f"{local.email} · Signs in with a password" in page
+    assert f"{local.full_name} {local.email} Active Local" in page
+    assert 'title="Local: signs in with an email address and a password set in this app">Local<' in _access_html(
+        client, local
+    )
     assert "Reset password" in page and "Disable" in page and "Make administrator" not in page  # manager is no admin
-    assert "Signs in with Microsoft" in _visible(client, sso)
+    assert f"{sso.email} Active SSO" in _visible(client, sso)
     assert "Reset password" not in _visible(client, sso)
     assert "Not a member of any team." in page and "Holds no permission sets." in page
     person = user_factory(full_name="Member Person")
@@ -692,6 +698,15 @@ def test_access_page_header_and_sections(client, user_manager, user_factory, tea
     assert f'href="/admin/teams/{windows.id}"' in _access_html(client, person)
     pending = user_factory(status="pending")
     assert "Approve" in _visible(client, pending)
+    # the summary counts each card and links to it
+    for card, label, count in (("trackers", "Trackers", 0), ("teams", "Teams", 1), ("sets", "Permission sets", 2)):
+        assert (
+            f'href="#{card}"><span class="access-tile-label">{label}</span><span class="access-tile-count">{count}<'
+            in raw
+        )
+        assert f'id="{card}"' in raw
+    admin_page = _visible(client, admin)
+    assert "All 7 permissions come from being an administrator." in admin_page
 
 
 def test_access_page_lists_region_grants_of_active_and_disabled_people(
