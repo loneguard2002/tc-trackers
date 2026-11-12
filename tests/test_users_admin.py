@@ -134,9 +134,11 @@ def test_holder_sees_only_the_actions_they_may_take(client, user_manager, user_f
 def test_holder_resets_a_local_password_and_it_is_logged_without_secrets(client, user_manager, user_factory, db):
     target = user_factory(full_name="Target")
     page = client.get(f"/admin/users/{target.id}/password")
-    assert page.status_code == 200 and 'name="password"' in text_of(page)
+    assert page.status_code == 200 and 'name="password"' in text_of(page) and 'name="password_confirm"' in text_of(page)
     assert "At least 12 characters" in text_of(page)
-    response = post(client, f"/admin/users/{target.id}/password", {"password": NEW_PASSWORD})
+    response = post(
+        client, f"/admin/users/{target.id}/password", {"password": NEW_PASSWORD, "password_confirm": NEW_PASSWORD}
+    )
     assert response.status_code == 302 and response.headers["Location"] == "/admin/users"
     assert verify_password(NEW_PASSWORD, reloaded(db, target).password_hash)
     (row,) = entries(db, "password_reset")
@@ -147,11 +149,16 @@ def test_holder_resets_a_local_password_and_it_is_logged_without_secrets(client,
 
 def test_reset_password_rules_and_microsoft_accounts(client, user_manager, user_factory, db):
     target = user_factory()
-    short = post(client, f"/admin/users/{target.id}/password", {"password": "x" * 11})
+    short = post(client, f"/admin/users/{target.id}/password", {"password": "x" * 11, "password_confirm": "x" * 11})
     assert short.status_code == 400 and "at least 12 characters" in text_of(short)
+    for confirm in ({"password_confirm": NEW_PASSWORD + "x"}, {"password_confirm": ""}, {}):
+        differ = post(client, f"/admin/users/{target.id}/password", {"password": NEW_PASSWORD, **confirm})
+        assert differ.status_code == 400 and "The two passwords do not match." in text_of(differ), confirm
     assert reloaded(db, target).password_hash == target.password_hash
+    assert entries(db, "password_reset") == []
     sso = user_factory(auth_source="sso", password_hash=None, sso_subject="subject-1")
-    refused = post(client, f"/admin/users/{sso.id}/password", {"password": NEW_PASSWORD}, follow_redirects=True)
+    both = {"password": NEW_PASSWORD, "password_confirm": NEW_PASSWORD}
+    refused = post(client, f"/admin/users/{sso.id}/password", both, follow_redirects=True)
     assert SSO_MESSAGE in text_of(refused)
     assert reloaded(db, sso).password_hash is None
     assert SSO_MESSAGE in text_of(client.get(f"/admin/users/{sso.id}/password", follow_redirects=True))
@@ -603,7 +610,11 @@ def test_row_actions_sit_in_a_more_menu(client, logged_in_admin, user_factory):
         assert '<details class="row-menu">' in row
         assert f'</svg>More<span class="sr-only"> actions for {user.full_name}</span>' in row
     assert f'action="/admin/users/{plain.id}/disable"' in rows["Plain Person"]
-    assert f'href="/admin/users/{plain.id}/password"' in rows["Plain Person"]
+    # Reset password is a button in the row, outside the More menu, and opens the reset dialog
+    in_row, in_menu = rows["Plain Person"].split('<details class="row-menu">', 1)
+    assert f'href="/admin/users/{plain.id}/password" data-reset-password data-person="Plain Person (' in in_row
+    assert "/password" not in in_menu
+    assert 'id="reset-dialog"' in body and 'name="password_confirm"' in body
     assert "Make administrator" in rows["Plain Person"] and "Remove administrator" in rows["Boss Person"]
     # every action is an icon and a word
     for label in ("Reset password", "Make administrator", "Disable"):

@@ -33,6 +33,7 @@ from ..teams.tree import (
 from . import bp
 
 SSO_PASSWORD_MESSAGE = "This person signs in with Microsoft and has no password here."
+PASSWORDS_DIFFER_MESSAGE = "The two passwords do not match."
 
 
 def _get_user_or_404(user_id: int) -> User:
@@ -441,6 +442,8 @@ def password(user_id: int):
         return _render_password(user, [], 200)
     new_password = request.form.get("password", "")
     error = validate_new_password(new_password)
+    if not error and request.form.get("password_confirm", "") != new_password:
+        error = PASSWORDS_DIFFER_MESSAGE
     if error:
         return _render_password(user, [error], 400)
     user.password_hash = hash_password(new_password)

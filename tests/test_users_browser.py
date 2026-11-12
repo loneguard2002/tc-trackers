@@ -7,6 +7,8 @@ from conftest import browser_sign_in
 from playwright.sync_api import expect
 from test_report_page_browser import RECORDER
 
+from tracker.auth.passwords import verify_password
+
 pytestmark = pytest.mark.browser
 
 
@@ -32,7 +34,7 @@ def test_users_fit_without_page_scroll(page, live_server, team_factory, user_fac
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     first = page.locator("details.row-menu").first
     first.locator("summary").click()
-    expect(first.get_by_text("Reset password")).to_be_visible()
+    expect(first.get_by_text("Make administrator")).to_be_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
@@ -85,5 +87,56 @@ def test_users_table_sorts_by_each_column(page, live_server, user_factory):
     assert sort_by("Status") == ["Ann Admin", "Bea Sso", "Cal Local"]
     assert sort_by("Name") == ["Ann Admin", "Bea Sso", "Cal Local"]
     assert sort_by("Name") == ["Cal Local", "Bea Sso", "Ann Admin"]
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+@pytest.mark.parametrize("width", [1280, 1440, 1920])
+def test_users_filters_sit_on_one_row_ending_with_apply(page, live_server, user_factory, width):
+    admin = user_factory(is_admin=True)
+    page.set_viewport_size({"width": width, "height": 900})
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users")
+    search = page.locator("#filter-q").bounding_box()
+    apply = page.get_by_role("button", name="Apply").bounding_box()
+    for select in ("#filter-status", "#filter-admin", "#filter-sign-in", "#filter-team", "#filter-set"):
+        box = page.locator(select).bounding_box()
+        assert box["y"] > search["y"] + search["height"], select  # the search has the row above to itself
+        assert abs((apply["y"] + apply["height"]) - (box["y"] + box["height"])) < 4, (select, box, apply)
+        assert box["x"] + box["width"] <= apply["x"], select  # Apply ends the row
+
+
+def test_reset_password_opens_a_dialog_that_asks_twice(page, live_server, user_factory, db):
+    target = user_factory(full_name="Reset Target", email="reset.target@example.com")
+    admin = user_factory(is_admin=True)
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users")
+    dialog = page.locator("#reset-dialog")
+    row = page.locator("#people-table tbody tr", has_text="Reset Target")
+    row.get_by_role("link", name="Reset password").click()
+    expect(dialog).to_be_visible()
+    expect(dialog).to_contain_text("Sets a new password for Reset Target (reset.target@example.com).")
+    expect(page.locator("#reset-password")).to_be_focused()
+
+    new_password = "A-new-password-123"
+    page.fill("#reset-password", new_password)
+    page.fill("#reset-confirm", new_password + "x")
+    dialog.get_by_role("button", name="Set password").click()
+    expect(dialog).to_be_visible()  # the browser holds the form back: the two do not match
+    assert (
+        page.evaluate("document.querySelector('#reset-confirm').validationMessage") == "The two passwords do not match."
+    )
+
+    dialog.get_by_role("button", name="Cancel").click()
+    expect(dialog).to_be_hidden()
+    row.get_by_role("link", name="Reset password").click()
+    expect(page.locator("#reset-password")).to_have_value("")  # nothing typed is kept
+    page.fill("#reset-password", new_password)
+    page.fill("#reset-confirm", new_password)
+    dialog.get_by_role("button", name="Set password").click()
+    expect(page.get_by_text("Set a new password for Reset Target.")).to_be_visible()
+    db.expire_all()
+    assert verify_password(new_password, db.get(type(target), target.id).password_hash)
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []

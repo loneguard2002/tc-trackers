@@ -577,20 +577,21 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .member-cell { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .row-tools-text { gap: 4px; flex-wrap: wrap; }
 .row-tools-text .button-small { padding: 5px 10px; font-size: .8125rem; white-space: nowrap; }
-.user-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
-.user-filters input, .user-filters select { width: auto; padding: 7px 10px; font-size: .9rem; }
-.user-filter-search { flex: 1 1 14rem; }
-.user-filter-search input { width: 100%; }
-.user-filters select { max-width: 16rem; }
+/* The search on a row of its own; under it the five drop-downs share the width equally, with Apply at the row's end. */
+.user-filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; align-items: end; gap: 10px 14px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.user-filters input, .user-filters select { width: 100%; min-width: 0; padding: 7px 10px; font-size: .9rem; }
+.user-filter-search { grid-column: 1 / -1; }
 .user-filter-buttons { display: flex; gap: 6px; }
 .user-count { border-top: 0; padding-bottom: 0; }
 .user-table .user-badge { white-space: nowrap; }
+.user-table .user-person { width: 16rem; }
+.user-table :is(th, td):not(:first-child):not(:last-child) { padding-left: 8px; padding-right: 8px; }
 .user-table .admin-mark { display: inline-flex; color: var(--info); }
 .user-table .admin-mark .icon { width: 20px; height: 20px; }
-.user-table .member-email { overflow-wrap: anywhere; }
 .user-table .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .user-table .status-pill { white-space: normal; }
 .user-table .row-tools-text { flex-wrap: nowrap; }
+.user-table .row-tools-text .button-small { padding: 5px 8px; }
 .sign-in-legend .badge { margin: 0 2px; }
 .sign-in-legend + .section-foot-note { border-top: 0; padding-top: 0; }
 .access-head-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
@@ -764,6 +765,8 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
   .member, .section-body { padding-left: 16px; padding-right: 16px; }
   .toolbar-end { margin-left: 0; }
   .settings-section-head.has-action { flex-wrap: wrap; }
+  .user-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 16px; padding-right: 16px; }
+  .user-filter-buttons { grid-column: 1 / -1; }
   .register :is(table, tbody, tfoot) { display: block; }
   .register tr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
   .register tr:last-child { border-bottom: 0; }
