@@ -474,7 +474,7 @@ def people_rows(response) -> dict[str, str]:
     """Name to the HTML of its row in the People table."""
     body = text_of(response)
     table = body.split('id="section-users"', 1)[1]
-    rows = re.findall(r"<tr>(.*?)</tr>", table, flags=re.S)[1:]
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", table, flags=re.S)[1:]
     return {re.search(r'class="member-name">([^<]*)', row).group(1).strip(): row for row in rows}
 
 
@@ -521,19 +521,35 @@ def test_users_filters(client, filter_people):
 
 def test_users_list_shows_and_filters_how_each_person_signs_in(client, user_manager, user_factory):
     user_factory(full_name="Sso Person", auth_source="sso", password_hash=None)
-    user_factory(full_name="Local Person")
+    user_factory(full_name="Local Person", is_admin=True)
     response = client.get("/admin/users")
+    body = text_of(response)
+    headings = re.findall(r'data-sort="([^"]+)"', body.split("<thead>", 1)[1].split("</thead>", 1)[0])
+    assert headings == ["name", "status", "admin", "sign-in", "teams", "sets"]
     rows = people_rows(response)
-    sign_in = r'<span class="badge badge-muted" title="Signs in with {}">{}</span>'
-    assert re.search(r">Active</span>" + sign_in.format("Microsoft", "Microsoft"), rows["Sso Person"])
-    assert re.search(r">Active</span>" + sign_in.format("a password", "Password"), rows["Local Person"])
-    assert "Microsoft" not in rows["Local Person"] and "Password" not in rows["Sso Person"]
+
+    def cells(name: str) -> list[str]:
+        """The Status, Administrator and Sign-in cells of a row, as the reader sees them."""
+        found = re.findall(r'<td class="user-badge">(.*?)</td>', rows[name], flags=re.S)
+        return [re.sub(r"<[^>]+>", "", cell).strip() for cell in found]
+
+    assert cells("Sso Person") == ["Active", "Not an administrator", "SSO"]
+    assert cells("Local Person") == ["Active", "Administrator", "Local"]
+    assert 'title="SSO: signs in with a Microsoft work account (single sign-on)"' in rows["Sso Person"]
+    sso_row = body.split('data-sort-name="Sso Person"', 1)[1].split(">", 1)[0]
+    assert 'data-sort-status="active"' in sso_row and 'data-sort-admin=""' in sso_row
+    assert 'data-sort-sign-in="SSO"' in sso_row
+    legend = re.sub(r"<[^>]+>", "", body.split('class="section-foot-note sign-in-legend">', 1)[1].split("</p>", 1)[0])
+    assert " ".join(legend.split()) == (
+        "Sign-in: Local signs in with an email address and a password set in this app; "
+        "SSO signs in with a Microsoft work account (single sign-on)."
+    )
     assert listed(client, "?sign_in=sso") == ["Sso Person"]
     assert listed(client, "?sign_in=local") == ["Local Person"]
     assert listed(client, "?sign_in=local&q=sso") == []
     response = client.get("/admin/users?sign_in=sso")
     assert "Showing 1 of 3 people." in text_of(response)
-    assert '<option value="sso" selected>Microsoft</option>' in text_of(response)
+    assert '<option value="sso" selected>SSO</option>' in text_of(response)
 
 
 def test_users_filters_ignore_bad_values(client, filter_people):
@@ -585,7 +601,10 @@ def test_row_actions_sit_in_a_more_menu(client, logged_in_admin, user_factory):
     assert "Make administrator" in rows["Plain Person"] and "Remove administrator" in rows["Boss Person"]
     assert f'action="/admin/users/{off.id}/enable"' in rows["Off Person"]
     assert "/password" not in rows["Sso Person"]
-    assert re.search(r"badge-success[^<]*>Active</span>.*badge-info[^>]*>Administrator", rows["Boss Person"])
+    assert re.search(
+        r"badge-success[^<]*>Active</span></td>\s*<td[^>]*><span[^>]*badge-info[^>]*>Administrator<",
+        rows["Boss Person"],
+    )
     assert "Administrator" not in rows["Plain Person"].replace("Make administrator", "")
     # the signed-in administrator's own row offers neither Disable nor an administrator change
     own = rows[logged_in_admin.full_name]

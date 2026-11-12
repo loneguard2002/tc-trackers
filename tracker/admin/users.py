@@ -106,7 +106,11 @@ def _actions(db, actor: User, user: User) -> dict[str, bool]:
 
 
 STATUS_FILTERS = {"active": "Active", "pending": "Awaiting approval", "disabled": "Disabled"}
-SIGN_IN_LABELS = {"sso": "Microsoft", "local": "Password"}
+SIGN_IN_LABELS = {"local": "Local", "sso": "SSO"}
+SIGN_IN_MEANINGS = {
+    "local": "signs in with an email address and a password set in this app",
+    "sso": "signs in with a Microsoft work account (single sign-on)",
+}
 
 
 def _like_escaped(text: str) -> str:
@@ -177,6 +181,7 @@ def users():
         filtered=filtered,
         status_filters=STATUS_FILTERS,
         sign_in_labels=SIGN_IN_LABELS,
+        sign_in_meanings=SIGN_IN_MEANINGS,
         team_options=team_choices(db),
         set_options=db.execute(
             select(PermissionSet.id, PermissionSet.name).order_by(func.lower(PermissionSet.name))

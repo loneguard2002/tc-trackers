@@ -584,13 +584,13 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .user-filters select { max-width: 16rem; }
 .user-filter-buttons { display: flex; gap: 6px; }
 .user-count { border-top: 0; padding-bottom: 0; }
-.user-table .user-status { white-space: nowrap; }
-.user-table .user-status .badge { display: block; width: fit-content; }
-.user-table .user-status .badge + .badge { margin-top: 4px; }
+.user-table .user-badge { white-space: nowrap; }
 .user-table .member-email { overflow-wrap: anywhere; }
 .user-table .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .user-table .status-pill { white-space: normal; }
 .user-table .row-tools-text { flex-wrap: nowrap; }
+.sign-in-legend .badge { margin: 0 2px; }
+.sign-in-legend + .section-foot-note { border-top: 0; padding-top: 0; }
 .access-head-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
 .access-head-row .row-tools { justify-content: flex-start; }
 .access-groups h3 { margin: 0 0 8px; font-size: .9375rem; }
