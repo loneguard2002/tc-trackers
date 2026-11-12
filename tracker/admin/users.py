@@ -109,7 +109,7 @@ STATUS_FILTERS = {"active": "Active", "pending": "Awaiting approval", "disabled"
 SIGN_IN_LABELS = {"local": "Local", "sso": "SSO"}
 SIGN_IN_MEANINGS = {
     "local": "signs in with an email address and a password set in this app",
-    "sso": "signs in with a Microsoft work account (single sign-on)",
+    "sso": "signs in with a work account (single sign-on)",
 }
 
 
