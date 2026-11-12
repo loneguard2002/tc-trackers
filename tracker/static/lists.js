@@ -1,4 +1,5 @@
-// Behaviours for the Regions and Locations tables (lists/_table.html). The search box, status buttons, region filter
+// Behaviours for the Regions and Locations tables (lists/_table.html), and the sort buttons of any other table marked
+// data-sortable (the Users list). The search box, status buttons, region filter
 // and sort buttons render with the `hidden` attribute, because they do nothing without JavaScript; this script reveals
 // them. Add and Edit open their dialog as a modal instead of following the link to their own page, and a dialog the
 // server rendered open (data-reopen) is reopened as a modal. Plain ES5 style, no modules.
@@ -231,7 +232,7 @@
     refresh();  // applies a region chosen in the address (?region=<id>) and any search the browser kept
   }
 
-  each(document.querySelectorAll(".list-table table[id]"), setUpTable);
+  each(document.querySelectorAll(".list-table table[id], table[data-sortable][id]"), setUpTable);
 
   // --- Dialogs ------------------------------------------------------------------------------------------------------
 

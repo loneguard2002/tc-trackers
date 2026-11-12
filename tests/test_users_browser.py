@@ -63,3 +63,27 @@ def test_users_table_fits_its_box_at_1440(page, live_server, team_factory, user_
     for text in ("Access", "More"):
         button = box.locator("tbody tr").first.get_by_text(text, exact=False).first
         assert button.bounding_box()["height"] < 40
+
+
+def test_users_table_sorts_by_each_column(page, live_server, user_factory):
+    user_factory(full_name="Bea Sso", auth_source="sso", password_hash=None)
+    user_factory(full_name="Cal Local", status="disabled")
+    admin = user_factory(full_name="Ann Admin", is_admin=True)
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users")
+    names = page.locator("#people-table tbody .member-name")
+
+    def sort_by(label: str) -> list[str]:
+        page.get_by_role("button", name=label, exact=True).click()
+        return [name.split(" (you)")[0] for name in names.all_inner_texts()]
+
+    assert sort_by("Sign-in") == ["Ann Admin", "Cal Local", "Bea Sso"]
+    expect(page.locator("th", has_text="Sign-in")).to_have_attribute("aria-sort", "ascending")
+    assert sort_by("Sign-in") == ["Bea Sso", "Ann Admin", "Cal Local"]
+    assert sort_by("Administrator") == ["Bea Sso", "Cal Local", "Ann Admin"]
+    assert sort_by("Status") == ["Ann Admin", "Bea Sso", "Cal Local"]
+    assert sort_by("Name") == ["Ann Admin", "Bea Sso", "Cal Local"]
+    assert sort_by("Name") == ["Cal Local", "Bea Sso", "Ann Admin"]
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []

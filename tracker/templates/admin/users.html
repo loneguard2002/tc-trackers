@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, icon %}
+{% from "lists/_table.html" import sort_header %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% macro user_action(endpoint, u, text, extra=None, confirm=None) -%}
 <form method="post" action="{{ url_for(endpoint, user_id=u.id) }}"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
   {{ csrf_field(csrf_token()) }}{% if extra %}<input type="hidden" name="{{ extra[0] }}" value="{{ extra[1] }}">{% endif %}
@@ -87,16 +91,18 @@
     {% if filtered %}<p class="section-foot-note user-count">Showing {{ users|length }} of {{ total }} people.</p>{% endif %}
     {% if users %}
     <div class="section-table register">
-      <table class="table user-table">
-        <thead><tr><th scope="col">Name</th><th scope="col">Status</th>
-          <th scope="col" class="hide-narrow">Teams</th>
-          <th scope="col" class="hide-narrow">Permission sets</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <table class="table user-table" id="people-table" data-sortable>
+        <thead><tr>{{ sort_header('Name', 'name') }}{{ sort_header('Status', 'status') }}{{ sort_header('Administrator', 'admin') }}{{ sort_header('Sign-in', 'sign-in') }}
+          {{ sort_header('Teams', 'teams', 'hide-narrow') }}
+          {{ sort_header('Permission sets', 'sets', 'hide-narrow') }}<th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
         <tbody>
         {% for u in users %}
         {% set can_do = actions[u.id] %}
-        <tr>
+        <tr data-sort-name="{{ u.full_name }}" data-sort-status="{{ u.status }}" data-sort-admin="{{ 'Administrator' if u.is_admin }}" data-sort-sign-in="{{ sign_in_labels[u.auth_source] }}" data-sort-teams="{{ teams.get(u.id, [])|map('first')|join(', ') }}" data-sort-sets="{{ sets.get(u.id, [])|join(', ') }}">
           <td class="user-person"><div class="member-cell">{{ person(u) }}</div></td>
-          <td class="user-status"><span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(u.status, 'muted') }}">{{ u.status|title }}</span><span class="badge badge-muted" title="Signs in with {{ 'Microsoft' if u.auth_source == 'sso' else 'a password' }}">{{ sign_in_labels[u.auth_source] }}</span>{% if u.is_admin %}<span class="badge badge-info">Administrator</span>{% endif %}</td>
+          <td class="user-badge"><span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(u.status, 'muted') }}">{{ u.status|title }}</span></td>
+          <td class="user-badge">{% if u.is_admin %}<span class="badge badge-info">Administrator</span>{% else %}<span class="sr-only">Not an administrator</span>{% endif %}</td>
+          <td class="user-badge"><span class="badge badge-muted" title="{{ sign_in_labels[u.auth_source] }}: {{ sign_in_meanings[u.auth_source] }}">{{ sign_in_labels[u.auth_source] }}</span></td>
           <td class="hide-narrow"><div class="chips">{% for path, role in teams.get(u.id, []) %}<span class="status-pill">{{ path }} · {{ role|title }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>
           <td class="hide-narrow"><div class="chips">{% for name in sets.get(u.id, []) %}<span class="status-pill">{{ name }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>
           <td class="cell-actions"><div class="row-tools row-tools-text">
@@ -118,6 +124,7 @@
         </tbody>
       </table>
     </div>
+    <p class="section-foot-note sign-in-legend">Sign-in: {% for value, label in sign_in_labels.items() %}<span class="badge badge-muted">{{ label }}</span> {{ sign_in_meanings[value] }}{{ '; ' if not loop.last else '.' }}{% endfor %}</p>
     {% else %}
     <p class="section-foot-note">No one matches these filters. <a href="{{ url_for('admin.users') }}">Clear</a></p>
     {% endif %}
