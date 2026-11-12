@@ -140,3 +140,23 @@ def test_reset_password_opens_a_dialog_that_asks_twice(page, live_server, user_f
     assert verify_password(new_password, db.get(type(target), target.id).password_hash)
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
+
+
+def test_access_page_resets_a_password_in_the_dialog(page, live_server, user_factory, db):
+    target = user_factory(full_name="Access Target", email="access.target@example.com")
+    admin = user_factory(is_admin=True)
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users/{target.id}/access")
+    page.get_by_role("link", name="Reset password").click()
+    dialog = page.locator("#reset-dialog")
+    expect(dialog).to_contain_text("Sets a new password for Access Target (access.target@example.com).")
+    new_password = "Another-password-456"
+    page.fill("#reset-password", new_password)
+    page.fill("#reset-confirm", new_password)
+    dialog.get_by_role("button", name="Set password").click()
+    expect(page.get_by_text("Set a new password for Access Target.")).to_be_visible()
+    db.expire_all()
+    assert verify_password(new_password, db.get(type(target), target.id).password_hash)
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []

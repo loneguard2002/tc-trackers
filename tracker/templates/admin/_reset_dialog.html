@@ -1,0 +1,30 @@
+{% from "macros.html" import csrf_field, icon %}
+{# The Reset password dialog of the Users list and a person's Access page. A link marked data-reset-password opens it
+   (users.js) with the person's name and the form's action filled in. Without
+   JavaScript the button is a link to the person's Reset password page instead. #}
+<dialog id="reset-dialog" class="list-dialog" aria-labelledby="reset-dialog-title">
+  <form method="post">
+    {{ csrf_field(csrf_token()) }}
+    <header class="list-dialog-head">
+      <h2 id="reset-dialog-title">Reset password</h2>
+      <button class="tool-button" type="button" data-reset-close title="Close">{{ icon('close') }}<span class="sr-only">Close</span></button>
+    </header>
+    <div class="list-dialog-body">
+      <p class="list-dialog-note">Sets a new password for <strong data-reset-person></strong>. Their old password stops working. Nothing is emailed.</p>
+      <div class="field">
+        <label for="reset-password">New password</label>
+        <input id="reset-password" name="password" type="password" autocomplete="new-password" minlength="12" required aria-describedby="reset-password-help">
+        <p class="field-help" id="reset-password-help">At least 12 characters. Share it with them securely.</p>
+      </div>
+      <div class="field">
+        <label for="reset-confirm">Confirm new password</label>
+        <input id="reset-confirm" name="password_confirm" type="password" autocomplete="new-password" minlength="12" required aria-describedby="reset-confirm-help">
+        <p class="field-help" id="reset-confirm-help">Type the same password again.</p>
+      </div>
+    </div>
+    <footer class="list-dialog-foot">
+      <button class="button" type="button" data-reset-close>Cancel</button>
+      <button class="button primary" type="submit">Set password</button>
+    </footer>
+  </form>
+</dialog>

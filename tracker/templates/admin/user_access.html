@@ -1,101 +1,151 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
-{% macro action(endpoint, text, extra=None, confirm=None) -%}
+{% from "macros.html" import csrf_field, icon %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='users.js', v=app_version) }}" defer></script>
+{% endblock %}
+{% macro action(endpoint, text, icon_name, extra=None, confirm=None) -%}
 <form method="post" action="{{ url_for(endpoint, user_id=person.id) }}"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
   {{ csrf_field(csrf_token()) }}{% if extra %}<input type="hidden" name="{{ extra[0] }}" value="{{ extra[1] }}">{% endif %}
-  <button class="button button-small{{ ' button-quiet' if confirm }}" type="submit">{{ text }}</button>
+  <button class="button button-small{{ ' button-quiet' if confirm }}" type="submit">{{ icon(icon_name) }}{{ text }}</button>
 </form>
 {%- endmacro %}
+{# One card: its title with a count and an optional note, then the body (the call). #}
+{% macro card(id, title, count, note='') -%}
+<section class="settings-section access-card" id="{{ id }}" aria-labelledby="{{ id }}-title">
+  <header class="access-card-head">
+    <h2 id="{{ id }}-title">{{ title }}</h2>
+    <span class="count-pill">{{ count }}</span>
+    {% if note %}<p class="access-card-note">{{ note }}</p>{% endif %}
+  </header>
+  {{ caller() }}
+</section>
+{%- endmacro %}
 {% block content %}
-<h1>Effective access</h1>
 <p class="page-lede"><a href="{{ url_for('admin.users') }}">Users</a> › {{ person.full_name }}</p>
-<div class="settings settings-narrow">
-  <section class="settings-section" aria-labelledby="section-access">
-    <header class="settings-section-head">
-      <h2 id="section-access">{{ person.full_name }}</h2>
-      <p>{{ person.email }} · {{ 'Signs in with Microsoft' if person.auth_source == 'sso' else 'Signs in with a password' }}</p>
-      <div class="access-head-row">
-      <span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(person.status, 'muted') }}">{{ person.status|title }}</span>{% if person.is_admin %}<span class="badge badge-info">Administrator</span>{% endif %}
-      {% if actions.approve or actions.enable or actions.password or actions.set_admin or actions.disable %}
-      <div class="row-tools row-tools-text">
-        {% if actions.approve %}{{ action('admin.approve', 'Approve') }}{% endif %}
-        {% if actions.enable %}{{ action('admin.enable', 'Re-enable') }}{% endif %}
-        {% if actions.password %}<a class="button button-small" href="{{ url_for('admin.password', user_id=person.id) }}">Reset password</a>{% endif %}
-        {% if actions.set_admin %}{{ action('admin.set_admin', 'Remove administrator' if person.is_admin else 'Make administrator', ('is_admin', '0' if person.is_admin else '1')) }}{% endif %}
-        {% if actions.disable %}{{ action('admin.disable', 'Disable', confirm='Disable ' ~ person.full_name ~ '? They will no longer be able to sign in.') }}{% endif %}
+{% set active = person.status == 'active' %}
+<div class="settings">
+<section class="settings-section access-person" aria-labelledby="person-name">
+  <div class="access-person-who">
+    <span class="member-avatar access-avatar" aria-hidden="true">{{ person.full_name[:1]|upper }}</span>
+    <div>
+      <h1 id="person-name">{{ person.full_name }}</h1>
+      <p class="member-email">{{ person.email }}</p>
+      <div class="access-badges">
+        <span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(person.status, 'muted') }}">{{ person.status|title }}</span>
+        {% if person.is_admin %}<span class="badge badge-info">{{ icon('admin') }}<span aria-hidden="true">Admin</span><span class="sr-only">Administrator</span></span>{% endif %}
+        <span class="badge badge-muted" title="{{ sign_in_labels[person.auth_source] }}: {{ sign_in_meanings[person.auth_source] }}">{{ sign_in_labels[person.auth_source] }}</span>
       </div>
-      {% endif %}
-      </div>
-      <p>Every tracker this person can open, with their role and each route that gives it, then every permission they hold, the teams they belong to and their permission sets.</p>
-    </header>
-    {% if person.status != 'active' %}
-    <p class="empty-note">This account is not active, so it gives no access to trackers and no permissions. Any teams, region access and permission sets it keeps apply again once it is active.</p>
+    </div>
+  </div>
+  {% if actions.approve or actions.enable or actions.password or actions.set_admin or actions.disable %}
+  <div class="access-actions">
+    {% if actions.approve %}{{ action('admin.approve', 'Approve', 'check') }}{% endif %}
+    {% if actions.enable %}{{ action('admin.enable', 'Re-enable', 'restore') }}{% endif %}
+    {% if actions.password %}<a class="button button-small" href="{{ url_for('admin.password', user_id=person.id) }}" data-reset-password data-person="{{ person.full_name }} ({{ person.email }})">{{ icon('lock') }}Reset password</a>{% endif %}
+    {% if actions.set_admin %}{{ action('admin.set_admin', 'Remove administrator' if person.is_admin else 'Make administrator', 'admin', ('is_admin', '0' if person.is_admin else '1')) }}{% endif %}
+    {% if actions.disable %}{{ action('admin.disable', 'Disable', 'ban', confirm='Disable ' ~ person.full_name ~ '? They will no longer be able to sign in.') }}{% endif %}
+  </div>
+  {% endif %}
+</section>
+
+<nav class="access-tiles" aria-label="Summary">
+  {% for id, label, count in (('trackers', 'Trackers', trackers|length), ('permissions', 'Permissions', sources|length), ('teams', 'Teams', teams|length), ('regions', 'Regions', regions|length), ('sets', 'Permission sets', held_sets|length)) %}
+  <a class="access-tile" href="#{{ id }}"><span class="access-tile-label">{{ label }}</span><span class="access-tile-count">{{ count }}</span></a>
+  {% endfor %}
+</nav>
+
+{% if not active %}
+<p class="form-alert access-inactive">This account is not active, so it gives no access to trackers and no permissions. Any teams, region access and permission sets it keeps apply again once it is active.</p>
+{% endif %}
+
+{% call card('trackers', 'Trackers', trackers|length, 'The ticked route decides the role.' if trackers else '') %}
+  {% if trackers %}
+  <div class="section-table register">
+    <table class="table access-table">
+      <thead><tr><th scope="col">Tracker</th><th scope="col">Role</th><th scope="col">Through</th></tr></thead>
+      <tbody>
+      {% for a in trackers %}
+      <tr>
+        <td><span class="cell-title">{{ a.tracker.name }}</span>{% if a.tracker.status == 'archived' %} <span class="badge badge-muted">Archived</span>{% endif %}</td>
+        <td>{{ a.role|title }}</td>
+        <td><div class="chips">
+          {%- set marked = namespace(done=false) %}
+          {%- for route in a.routes %}
+          {%- set decides = not marked.done and route.role == a.role %}{% if decides %}{% set marked.done = true %}{% endif %}
+          <span class="status-pill{{ ' route-decides' if decides }}">{% if decides %}{{ icon('check') }}{% endif %}{{ route.text }}{% if decides %}<span class="sr-only"> (sets the role)</span>{% endif %}</span>
+          {%- endfor %}
+        </div></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% elif active and not limited %}
+  <p class="empty-note">This person cannot open any tracker.</p>
+  {% endif %}
+  {% if limited %}<p class="section-foot-note">Only trackers you can open are listed.</p>{% endif %}
+{% endcall %}
+
+{% call card('permissions', 'Permissions', sources|length) %}
+  {% if sources and person.is_admin %}
+  <div class="section-body">
+    <p class="access-admin-note">{{ icon('admin') }}All {{ sources|length }} permissions come from being an administrator.</p>
+    <ul class="access-list">{% for name in sources %}<li class="status-pill">{{ permission_labels[name] }}</li>{% endfor %}</ul>
+  </div>
+  {% elif sources %}
+  <div class="section-table register">
+    <table class="table access-table">
+      <thead><tr><th scope="col">Permission</th><th scope="col">Comes from</th></tr></thead>
+      <tbody>
+      {% for name, found in sources.items() %}
+      <tr>
+        <td><span class="cell-title">{{ permission_labels[name] }}</span></td>
+        <td><div class="chips">{% for source in found %}<span class="status-pill">{{ source }}</span>{% endfor %}</div></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty-note">This person holds no permissions.</p>
+  {% endif %}
+{% endcall %}
+
+<div class="access-groups">
+  {% call card('teams', 'Teams', teams|length) %}
+  <div class="section-body">
+    {% if teams %}
+    <ul class="access-list">
+      {% for path, team_id, role in teams %}<li class="status-pill">{% if can_view_teams %}<a href="{{ url_for('teams.view', team_id=team_id) }}">{{ path }}</a>{% else %}{{ path }}{% endif %} · {{ role|title }}</li>{% endfor %}
+    </ul>
     {% else %}
-    {% if trackers %}
-    <div class="section-table register">
-      <table class="table">
-        <thead><tr><th scope="col">Tracker</th><th scope="col">Role</th><th scope="col">Through</th></tr></thead>
-        <tbody>
-        {% for a in trackers %}
-        <tr>
-          <td><span class="cell-title">{{ a.tracker.name }}</span>{% if a.tracker.status == 'archived' %} <span class="badge badge-muted">Archived</span>{% endif %}</td>
-          <td>{{ a.role|title }}</td>
-          <td>{% for route in a.routes %}<span class="cell-sub">{{ route.text }}{% if route.role == a.role %} <span class="badge badge-info">Sets the role</span>{% endif %}</span>{% endfor %}</td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% elif not limited %}
-    <p class="empty-note">This person cannot open any tracker.</p>
+    <p class="empty-note">Not a member of any team.</p>
     {% endif %}
-    {% if limited %}
-    <p class="section-foot-note">Only trackers you can open are listed.</p>
-    {% endif %}
-    {% if sources %}
-    <div class="section-table register">
-      <table class="table">
-        <thead><tr><th scope="col">Permission</th><th scope="col">Comes from</th></tr></thead>
-        <tbody>
-        {% for name, found in sources.items() %}
-        <tr>
-          <td><span class="cell-title">{{ permission_labels[name] }}</span></td>
-          <td>{% for source in found %}<span class="cell-sub">{{ source }}</span>{% endfor %}</td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
+  </div>
+  {% endcall %}
+  {% call card('regions', 'Regions', regions|length) %}
+  <div class="section-body">
+    {% if regions %}
+    <ul class="access-list">
+      {% for region_id, code, role in regions %}<li class="status-pill">{% if can_view_regions %}<a href="{{ url_for('lists.region_access', region_id=region_id) }}">{{ code }}</a>{% else %}{{ code }}{% endif %} · {{ role|title }}</li>{% endfor %}
+    </ul>
     {% else %}
-    <p class="empty-note">This person holds no permissions.</p>
+    <p class="empty-note">Has no region access.</p>
     {% endif %}
+  </div>
+  {% endcall %}
+  {% call card('sets', 'Permission sets', held_sets|length) %}
+  <div class="section-body">
+    {% if held_sets %}
+    <ul class="access-list">
+      {% for name, team_id in held_sets %}<li class="status-pill">{{ name }}, {% if team_id is none %}held directly{% else %}held by team {{ team_labels.get(team_id, '') }}{% endif %}</li>{% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-note">Holds no permission sets.</p>
     {% endif %}
-    <div class="section-body access-groups">
-      <h3>Teams</h3>
-      {% if teams %}
-      <ul class="access-list">
-        {% for path, team_id, role in teams %}<li class="status-pill">{% if can_view_teams %}<a href="{{ url_for('teams.view', team_id=team_id) }}">{{ path }}</a>{% else %}{{ path }}{% endif %} · {{ role|title }}</li>{% endfor %}
-      </ul>
-      {% else %}
-      <p class="empty-note">Not a member of any team.</p>
-      {% endif %}
-      <h3>Regions</h3>
-      {% if regions %}
-      <ul class="access-list">
-        {% for region_id, code, role in regions %}<li class="status-pill">{% if can_view_regions %}<a href="{{ url_for('lists.region_access', region_id=region_id) }}">{{ code }}</a>{% else %}{{ code }}{% endif %} · {{ role|title }}</li>{% endfor %}
-      </ul>
-      {% else %}
-      <p class="empty-note">Has no region access.</p>
-      {% endif %}
-      <h3>Permission sets</h3>
-      {% if held_sets %}
-      <ul class="access-list">
-        {% for name, team_id in held_sets %}<li class="status-pill">{{ name }}, {% if team_id is none %}held directly{% else %}held by team {{ team_labels.get(team_id, '') }}{% endif %}</li>{% endfor %}
-      </ul>
-      {% else %}
-      <p class="empty-note">Holds no permission sets.</p>
-      {% endif %}
-    </div>
-  </section>
+  </div>
+  {% endcall %}
 </div>
+</div>
+{% if actions.password %}{% include "admin/_reset_dialog.html" %}{% endif %}
 {% endblock %}
