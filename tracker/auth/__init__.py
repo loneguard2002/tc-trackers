@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from flask import Blueprint, current_app, redirect, render_template, request, session, url_for
-from sqlalchemy import select
 
 from ..audit import record
 from ..db import get_session
 from ..models import User
+from .accounts import find_by_email
 from .csrf import LoginThrottle, csrf_token, safe_next_url, valid_csrf
 from .passwords import verify_against_dummy, verify_password
 from .permissions import PERMISSIONS, has_permission, permission_required, user_permissions
@@ -97,7 +97,7 @@ def login():
     if len(email) > MAX_EMAIL_LENGTH or len(password) > MAX_PASSWORD_LENGTH:
         email, password = "", ""
     db = get_session()
-    user = db.scalar(select(User).where(User.email == email)) if email else None
+    user = find_by_email(db, email) if email else None
     if user is None or not user.password_hash:
         verify_against_dummy(password)
         password_ok = False

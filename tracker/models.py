@@ -47,11 +47,11 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint("auth_source IN ('local', 'sso')", name="auth_source"),
-        CheckConstraint("status IN ('pending', 'active', 'disabled')", name="status"),
+        CheckConstraint("status IN ('pending', 'active', 'disabled', 'deleted')", name="status"),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
-    email: Mapped[str] = mapped_column(Text, unique=True)
+    email: Mapped[str] = mapped_column(Text)
     full_name: Mapped[str] = mapped_column(Text)
     password_hash: Mapped[str | None] = mapped_column(Text)
     sso_subject: Mapped[str | None] = mapped_column(Text, unique=True)
@@ -63,6 +63,11 @@ class User(Base):
     @validates("email")
     def _normalise_email(self, _key: str, value: str) -> str:
         return value.strip().lower()
+
+
+# A deleted person keeps their row, and so their name in the history, but no longer holds their email: it is free for
+# a new account.
+Index("uq_users_email", User.email, unique=True, postgresql_where=text("status <> 'deleted'"))
 
 
 class Region(Base):
