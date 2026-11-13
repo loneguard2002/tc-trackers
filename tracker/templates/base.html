@@ -64,7 +64,7 @@
         <button class="nav-link" type="submit" data-label="Sign out">{{ icon('logout') }}<span>Sign out</span></button>
       </form>
     </div>
-    <span class="app-version" title="Deployed version {{ app_version }}">v{{ app_version }}</span>
+    <span class="app-version" title="{{ 'Version ' ~ app_version ~ (': commit ' ~ app_commit if app_commit else ', not from a known commit') ~ (', ' ~ app_commit_date if app_commit_date else '') }}">v{{ app_version }}</span>
   </aside>
   {% endif %}
 

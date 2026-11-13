@@ -57,6 +57,8 @@ def create_app(overrides: dict | None = None) -> Flask:
         return {
             "current_year": datetime.now(timezone.utc).year,
             "app_version": app.config["APP_VERSION"],
+            "app_commit": app.config["APP_COMMIT"],
+            "app_commit_date": app.config["APP_COMMIT_DATE"],
             "current_user": current_user(),
         }
 
