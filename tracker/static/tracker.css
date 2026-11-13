@@ -1132,6 +1132,10 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .list-head .page-lede { margin: 0; }
 .list-head > div:first-child { flex: 1 1 320px; min-width: 0; }
 .list-head > .button { flex: none; white-space: nowrap; }
+/* A title that starts with the page above it as a link ("Users › Access"): the link is muted until pointed at. */
+.title-crumb a { color: var(--muted); text-decoration: none; }
+.title-crumb a:hover { color: var(--text); text-decoration: underline; }
+.title-crumb-sep { margin: 0 10px; color: var(--muted); font-weight: 400; }
 /* A count beside a page title, as on the Users page. */
 .title-count { margin-left: 8px; font-size: .875rem; vertical-align: 4px; }
 .list-page > .form-alert { margin-bottom: 20px; }
