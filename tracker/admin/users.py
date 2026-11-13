@@ -46,6 +46,7 @@ from .deletion import delete_person, deletion_summary
 SSO_PASSWORD_MESSAGE = "This person signs in with Microsoft and has no password here."
 PASSWORDS_DIFFER_MESSAGE = "The two passwords do not match."
 EMAIL_MISMATCH_MESSAGE = "The email does not match."
+ALREADY_DISABLED_MESSAGE = "This person is already disabled."
 
 
 def _get_user_or_404(user_id: int, lock: bool = False) -> User:
@@ -308,9 +309,10 @@ def approve(user_id: int):
     """Approve a pending user, optionally placing them in one team with a role (``manage_teams`` holders only).
 
     The person approved is never the actor (``account_refusal`` refuses one's own account), so the place cannot
-    change the actor's own access and needs no self-promotion check.
+    change the actor's own access and needs no self-promotion check. The person is locked as a delete locks them, so an
+    approval waits for a delete in progress and then refuses, instead of writing ``active`` over ``deleted``.
     """
-    user = _get_user_or_404(user_id)
+    user = _get_user_or_404(user_id, lock=True)
     db = get_session()
     actor = current_user()
     refusal = account_refusal(db, actor, user)
@@ -375,7 +377,12 @@ def approve(user_id: int):
 @bp.post("/users/<int:user_id>/enable")
 @permission_required("manage_users")
 def enable(user_id: int):
-    user = _get_user_or_404(user_id)
+    """Re-enable a disabled person.
+
+    The person is locked as a delete locks them, so a re-enable waits for a delete in progress and then refuses, instead
+    of writing ``active`` over ``deleted``.
+    """
+    user = _get_user_or_404(user_id, lock=True)
     db = get_session()
     actor = current_user()
     refusal = account_refusal(db, actor, user)
@@ -403,6 +410,12 @@ def enable(user_id: int):
 @bp.post("/users/<int:user_id>/disable")
 @permission_required("manage_users")
 def disable(user_id: int):
+    """Disable a person.
+
+    The administrators are locked first (``_admin_loss_refusal``), and only then the person, read again as a delete
+    locks them, so a delete committed meanwhile is seen and refused instead of being overwritten with ``disabled``.
+    Locking the person first could deadlock two disables of two administrators.
+    """
     user = _get_user_or_404(user_id)
     db = get_session()
     actor = current_user()
@@ -411,12 +424,16 @@ def disable(user_id: int):
         return _refuse(refusal)
     _abort_if_deleted(user)
     if user.status == "disabled":
-        abort(400, description="This person is already disabled.")
+        abort(400, description=ALREADY_DISABLED_MESSAGE)
     if user.id == actor.id:
         return _refuse("You cannot disable your own account.")
     refusal = _admin_loss_refusal(db, user)
     if refusal:
         return _refuse(refusal)
+    db.refresh(user, with_for_update={"key_share": True})
+    _abort_if_deleted(user)
+    if user.status == "disabled":
+        abort(400, description=ALREADY_DISABLED_MESSAGE)
     previous = user.status
     user.status = "disabled"
     record(
