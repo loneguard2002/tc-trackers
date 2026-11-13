@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any, NamedTuple
 
+from ..auth.permissions import PERMISSIONS
+
 ACTION_LABELS: dict[str, str] = {
     "login": "Signed in",
     "sso_login": "Signed in with Microsoft",
@@ -104,6 +106,19 @@ LEGACY_PAIR_ACTIONS = frozenset(
 )
 
 
+# Entries whose detail lists permissions: shown by name ("Manage regions and lists"), not by the stored key.
+PERMISSION_DETAIL_KEYS = {
+    "permission_set_permissions_changed": ("before", "after"),
+    "permission_set_deleted": ("permissions",),
+}
+
+
+def _permission_names(value: Any) -> Any:
+    if isinstance(value, (list, tuple)):
+        return [PERMISSIONS[item][0] if isinstance(item, str) and item in PERMISSIONS else item for item in value]
+    return value
+
+
 class DetailLine(NamedTuple):
     """One line of an entry's detail: a change (``before``/``after``) or a plain ``value``; ``field`` may be empty."""
 
@@ -135,6 +150,8 @@ def describe(action: str, detail: Any) -> list[DetailLine]:
         return []
     if not isinstance(detail, dict):
         return [DetailLine("", None, None, _text(detail))]
+    keys = PERMISSION_DETAIL_KEYS.get(action, ())
+    detail = {key: _permission_names(value) if key in keys else value for key, value in detail.items()}
     lines: list[DetailLine] = []
     if "before" in detail or "after" in detail:
         before, after = detail.get("before"), detail.get("after")

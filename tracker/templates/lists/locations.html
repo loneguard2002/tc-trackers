@@ -112,7 +112,7 @@
           <td class="list-name">{{ loc.city }}</td>
           <td class="list-region-cell">{{ region.code }} — {{ region.name }}{% if region.retired %} <span class="muted">(retired)</span>{% endif %}</td>
           <td>{% if country %}<span class="country-cell"><img class="country-flag" src="{{ url_for('static', filename=flag_path(loc.country_code)) }}" alt="" width="20" height="15">{{ country }}</span>{% else %}<span class="muted">Country not set</span>{% endif %}</td>
-          <td class="num">{{ count_pill(teams, url_for('teams.index'), 'team' ~ ('s' if teams != 1) ~ ' at ' ~ loc.city) }}</td>
+          <td class="num">{{ count_pill(teams, url_for('teams.index') if can('manage_teams'), 'team' ~ ('s' if teams != 1) ~ ' at ' ~ loc.city) }}</td>
           <td>{{ status_badge(loc.retired) }}</td>
           <td class="cell-actions">{{ row_actions(url_for('lists.edit_location', location_id=loc.id), url_for('lists.update_location', location_id=loc.id), loc.retired, 'the location ' ~ label, label, location_in_use if teams else '') }}</td>
         </tr>

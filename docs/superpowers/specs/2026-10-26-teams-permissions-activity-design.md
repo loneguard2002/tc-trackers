@@ -106,6 +106,7 @@ The fixed list. Each permission gives access to the screens and actions named; n
 |---|---|
 | `manage_users` | Approve pending Entra users; create local users; reset local users' passwords; disable and re-enable users. |
 | `manage_teams` | Create, rename, move and delete teams; add and remove members and change their roles; put trackers in teams and move them between teams; manage direct per-tracker roles (the tracker Access screen). |
+| `manage_lists` | Add, edit, retire and delete regions, locations and business lines (the Regions & business lines screens). A region's Access screen stays with administrators. |
 | `create_trackers` | Create trackers, in any team or in none. |
 | `import_workbooks` | Use the Import workbook screen and the import confirmation, which creates a tracker. |
 | `manage_email_settings` | Change the application's email (SMTP) settings. |
@@ -144,6 +145,7 @@ The sidebar's Administration section shows each link only to those who may use i
 | Users | Administrators and `manage_users` holders |
 | Teams | Administrators and `manage_teams` holders |
 | Permission sets | Administrators |
+| Regions & business lines | Administrators and `manage_lists` holders |
 | Import workbook | Administrators and `import_workbooks` holders |
 | Email settings | Administrators and `manage_email_settings` holders |
 | Activity | Administrators and `view_activity` holders |

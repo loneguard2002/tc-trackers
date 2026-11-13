@@ -25,6 +25,7 @@ def test_permission_names_in_order():
     assert list(PERMISSIONS) == [
         "manage_users",
         "manage_teams",
+        "manage_lists",
         "create_trackers",
         "import_workbooks",
         "manage_email_settings",

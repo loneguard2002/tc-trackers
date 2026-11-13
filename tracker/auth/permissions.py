@@ -26,6 +26,11 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
         "Create, rename, move and delete teams; add and remove members and change their roles; put trackers in teams "
         "and move them between teams; manage direct per-tracker roles (the tracker Access screen).",
     ),
+    "manage_lists": (
+        "Manage regions and lists",
+        "Add, edit, retire and delete regions, locations and business lines. Who has access to a region stays with "
+        "administrators.",
+    ),
     "create_trackers": ("Create trackers", "Create trackers, in any team or in none."),
     "import_workbooks": (
         "Import workbooks",
@@ -39,6 +44,7 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
 # How the Permission sets screen groups the permissions on each card. Every permission appears in exactly one group.
 PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("People and teams", ("manage_users", "manage_teams")),
+    ("Lists", ("manage_lists",)),
     ("Trackers", ("create_trackers", "import_workbooks", "view_all_trackers")),
     ("Application", ("manage_email_settings", "view_activity")),
 )

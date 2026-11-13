@@ -268,7 +268,7 @@ def cards(page: str) -> list[str]:
 
 
 def test_permission_groups_cover_every_permission_once():
-    assert [name for name, _ in PERMISSION_GROUPS] == ["People and teams", "Trackers", "Application"]
+    assert [name for name, _ in PERMISSION_GROUPS] == ["People and teams", "Lists", "Trackers", "Application"]
     grouped = [p for _, keys in PERMISSION_GROUPS for p in keys]
     assert sorted(grouped) == sorted(PERMISSIONS) and len(grouped) == len(set(grouped))
 
@@ -278,10 +278,10 @@ def test_index_shows_the_locked_administrators_card_then_a_card_per_set(client, 
     make_set(db, "Auditors", [])
     page = text_of(client.get("/admin/permission-sets"))
     assert page.index("Administrators") < page.index("Auditors") < page.index("PMO")
-    assert "Built in" in page and "7/7" in page and "Every permission, always." in page
-    assert "1/7" in page and "0/7" in page and "No description." in page
+    assert "Built in" in page and "8/8" in page and "Every permission, always." in page
+    assert "1/8" in page and "0/8" in page and "No description." in page
     assert 'aria-label="View activity for PMO"' in page and f'name="set-{pmo.id}"' in page
-    assert "People and teams" in page and "Application" in page
+    assert "People and teams" in page and "Lists" in page and "Application" in page
     assert len(cards(page)) == 2 and "data-permission-cards" in page
     assert "Saving applies every card at once." in page
 

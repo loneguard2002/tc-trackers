@@ -15,7 +15,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
-from ..auth import admin_required, current_user
+from ..auth import current_user, has_permission, permission_required
 from ..db import get_session
 from ..ids import in_range, parse_id
 from ..models import BusinessLine, Location, Region, RegionGrant, Team, Tracker, TrackerRegion
@@ -24,12 +24,14 @@ from . import bp
 from .catalogue import REGION_CHOICE_ERROR, location_label
 from .countries import COUNTRIES, country_name, flag_path, parse_country
 
-manage_lists_required = admin_required
+# Regions, locations and business lines: administrators and ``manage_lists`` holders. A region's Access screen
+# (``lists.access``) stays with administrators, since a region grant gives access to trackers.
+manage_lists_required = permission_required("manage_lists")
 
 
 def can_manage_lists(user) -> bool:
     """Whether ``user`` may change these lists, retiring a region included: the rule ``manage_lists_required`` keeps."""
-    return user is not None and user.is_admin
+    return user is not None and has_permission(user, "manage_lists")
 
 
 MAX_CODE_LENGTH = 20
