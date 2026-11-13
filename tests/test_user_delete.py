@@ -186,16 +186,16 @@ def test_delete_records_each_removal_and_a_summary(client, db, s, logged_in_admi
     before = db.scalar(select(func.max(AuditLog.id)))
     post(client, delete_url(s.person), {"confirm_email": EMAIL})
     rows = db.scalars(select(AuditLog).where(AuditLog.id > before).order_by(AuditLog.id)).all()
-    summary = {
+    summary = {  # keyed in the delete dialog's words, as the Activity page prints each key as it is
         "name": "Jordan Lee",
         "email": EMAIL,
-        "teams": 1,
-        "regions": 1,
-        "tracker_roles": 1,
-        "permission_sets": 1,
-        "trackers_led": 1,
-        "report_emails": 2,
         "administrator": True,
+        "teams": 1,
+        "region access": 1,
+        "tracker roles": 1,
+        "permission sets": 1,
+        "trackers led": 1,
+        "report emails": 2,
     }
     emptied = {  # the shape every change of a send to failed records
         "recipient_count": 0,
@@ -487,6 +487,9 @@ def test_activity_hides_tracker_removals_from_viewers_who_cannot_open_the_tracke
     summary = row("user_deleted")
     assert HIDDEN not in summary and "jordan.lee@example.com" in summary
     assert "Laptop refresh" not in summary and "Desktop rollout" not in summary
+    for label in ("region access", "tracker roles", "permission sets", "trackers led", "report emails"):
+        assert f'<span class="activity-field">{label}</span>' in summary, label  # words, not stored keys
+    assert "_" not in re.sub(r"<[^>]*>", "", summary)
 
 
 # --- Deleted people on the Users list and their Access page ---------------------------------------------------------
