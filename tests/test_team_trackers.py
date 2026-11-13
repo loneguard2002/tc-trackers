@@ -138,7 +138,9 @@ def test_preview_lists_access_changes_and_confirm_moves_and_adds_the_region(
     response = client.get(f"{moves(infra)}?{query(laptops, payroll)}")
     assert response.status_code == 200
     page = flat(raw_of(response))
-    assert "Move trackers to Infrastructure" in page
+    assert "Move trackers to Infrastructure" in page  # the browser tab's title
+    assert "Teams › Infrastructure › Move trackers" in page and raw_of(response).count("<h1") == 1
+    assert "Check who gains or loses access before the trackers move to Infrastructure." in page
     assert "Infra Lead gains Editor on Laptop refresh." in page
     assert "Infra Lead gains Editor on Payroll audit." in page
     assert "Apps Lead loses Owner on Laptop refresh." in page
@@ -276,9 +278,7 @@ def test_remove_confirmation_says_no_access_changes_when_no_one_reaches_the_team
 def test_remove_confirmation_names_who_loses_access(client, logged_in_admin, user_factory, add_member, setup):
     add_member(setup["apps"], user_factory(), "viewer")
     message = remove_confirm(client, setup["apps"], setup["laptops"])
-    assert message.endswith(
-        "Anyone who reaches it only through Applications or a team above it loses that access."
-    )
+    assert message.endswith("Anyone who reaches it only through Applications or a team above it loses that access.")
     assert "will change" not in message
 
 

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, field, icon, people_count %}
+{% from "macros.html" import csrf_field, field, icon, people_count, title_crumb %}
 {% from "lists/_table.html" import code_badge, search_box, status_filters, sort_header, no_match, pager %}
 {% from "teams/_tracker_regions.html" import regions_after %}
 {% block head_extra %}
@@ -7,7 +7,12 @@
   <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% block content %}
-<p class="page-lede teams-crumb"><a href="{{ url_for('teams.index') }}">Teams</a> › {{ team.name }}</p>
+<header class="list-head">
+  <div>
+    {{ title_crumb([(url_for('teams.index'), 'Teams')], team.name) }}
+    <p class="page-lede">{{ team.description or "People in this team reach its trackers, and the trackers of every team below it." }}</p>
+  </div>
+</header>
 <div class="teams-layout">
   {% include "teams/_tree.html" %}
   <div class="teams-main">
@@ -19,7 +24,7 @@
       {% if editing %}
       <header class="team-header team-edit">
         {{ alert }}
-        <h1>Edit details</h1>
+        <h2>Edit details</h2>
         <form method="post" action="{{ url_for('teams.rename', team_id=team.id) }}">
           {{ csrf_field(csrf_token()) }}
           {% if tab != 'people' %}<input type="hidden" name="tab" value="{{ tab }}">{% endif %}
@@ -42,10 +47,6 @@
       <header class="team-header">
         {{ alert }}
         <div class="team-header-text">
-          <div class="team-title-row">
-            <h1>{{ team.name }}</h1>
-            {% if team.description %}<p class="team-description">{{ team.description }}</p>{% endif %}
-          </div>
           <div class="team-pills">
             {% if place %}<span class="team-pill team-header-place"><strong>{{ place.region_code }}</strong>{% if place.location %}{{ icon('pin') }}{{ place.location }}{% endif %}</span>{% else %}<span class="team-pill team-header-place is-unset">Region not set</span>{% endif %}
             <span class="team-pill">{% if under %}Under {% for id, name in under %}{{ ' and ' if loop.last and not loop.first else (', ' if not loop.first else '') }}<a href="{{ url_for('teams.view', team_id=id) }}">{{ name }}</a>{% endfor %}{% else %}Top level{% endif %}</span>

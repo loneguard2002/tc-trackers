@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, icon %}
+{% from "macros.html" import csrf_field, icon, title_crumb %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='users.js', v=app_version) }}" defer></script>
 {% endblock %}
@@ -23,7 +23,7 @@
 {% block content %}
 <header class="list-head">
   <div>
-    <h1 class="title-crumb"><a href="{{ url_for('admin.users') }}">Users</a><span class="title-crumb-sep" aria-hidden="true">›</span>Access</h1>
+    {{ title_crumb([(url_for('admin.users'), 'Users')], 'Access') }}
     <p class="page-lede">What {{ person.full_name }} can open, and where that access comes from.</p>
   </div>
 </header>
