@@ -11,9 +11,10 @@ from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import event, func, select
+from sqlalchemy import event, func, select, update
 
 from tests.conftest import post, sign_in
+from tracker.admin import users
 from tracker.admin.deletion import DeletionSummary, deletion_summary
 from tracker.admin.users import _actions
 from tracker.db import get_engine
@@ -310,9 +311,8 @@ def test_delete_is_for_administrators_only(client, db, s, user_factory, give_set
     assert_unchanged(db, s)
 
 
-def test_the_delete_locks_the_person_without_blocking_foreign_keys(client, db, s):
-    """``FOR NO KEY UPDATE``, not ``FOR UPDATE``: a retry of a queued send holds the send and then writes an entry whose
-    foreign key takes ``KEY SHARE`` on its creator's row, so ``FOR UPDATE`` on that person could deadlock with it."""
+def user_locks(client, path: str, data: dict | None = None) -> tuple[int, list[str]]:
+    """POST ``data`` to ``path``: the response status and each lock taken on ``users`` rows, in the order taken."""
     statements = []
 
     def capture(_connection, _cursor, statement, *_args):
@@ -321,12 +321,63 @@ def test_the_delete_locks_the_person_without_blocking_foreign_keys(client, db, s
     engine = get_engine(client.application)
     event.listen(engine, "before_cursor_execute", capture)
     try:
-        assert post(client, delete_url(s.person), {"confirm_email": EMAIL}).status_code == 302
+        status = post(client, path, data).status_code
     finally:
         event.remove(engine, "before_cursor_execute", capture)
-    locks = [lock for st in statements for lock in re.findall(r"\bFROM users\b.*?\bFOR ((?:NO KEY )?UPDATE)", st, re.S)]
-    assert locks == ["NO KEY UPDATE"]
+    return status, [
+        lock for st in statements for lock in re.findall(r"\bFROM users\b.*?\bFOR ((?:NO KEY )?UPDATE)", st, re.S)
+    ]
+
+
+def test_the_delete_locks_the_person_without_blocking_foreign_keys(client, db, s):
+    """``FOR NO KEY UPDATE``, not ``FOR UPDATE``: a retry of a queued send holds the send and then writes an entry whose
+    foreign key takes ``KEY SHARE`` on its creator's row, so ``FOR UPDATE`` on that person could deadlock with it."""
+    assert user_locks(client, delete_url(s.person), {"confirm_email": EMAIL}) == (302, ["NO KEY UPDATE"])
     assert reloaded(db, s.person).status == "deleted"
+
+
+@pytest.mark.parametrize(("action", "status"), [("approve", "pending"), ("enable", "disabled")])
+def test_approve_and_reenable_lock_the_person_so_a_delete_in_progress_holds_them_off(
+    client, db, logged_in_admin, user_factory, action, status
+):
+    """The same lock as the delete: they wait for a delete in progress, then find the person deleted and refuse, instead
+    of writing ``active`` over ``deleted``."""
+    person = user_factory(status=status)
+    assert user_locks(client, f"/admin/users/{person.id}/{action}") == (302, ["NO KEY UPDATE"])
+    assert reloaded(db, person).status == "active"
+
+
+@pytest.mark.parametrize(("is_admin", "locks"), [(True, ["UPDATE", "NO KEY UPDATE"]), (False, ["NO KEY UPDATE"])])
+def test_disable_reads_the_person_again_under_a_lock_after_the_administrators(
+    client, db, logged_in_admin, user_factory, is_admin, locks
+):
+    """The administrators first (``FOR UPDATE``, when the person is one), then the person (``FOR NO KEY UPDATE``):
+    locking the person first could deadlock two disables of two administrators."""
+    person = user_factory(is_admin=is_admin)
+    assert user_locks(client, f"/admin/users/{person.id}/disable") == (302, locks)
+    assert reloaded(db, person).status == "disabled"
+
+
+@pytest.mark.parametrize(
+    ("meanwhile", "message"), [("deleted", DELETED_MESSAGE), ("disabled", "This person is already disabled.")]
+)
+def test_disable_refuses_a_person_deleted_or_disabled_while_it_checked(
+    client, db, logged_in_admin, user_factory, monkeypatch, meanwhile, message
+):
+    person = user_factory(status="pending")
+    original = users._admin_loss_refusal
+
+    def change_first(session, user):  # another administrator's change commits after this request read the person
+        db.execute(update(User).where(User.id == person.id).values(status=meanwhile))
+        db.commit()
+        return original(session, user)
+
+    monkeypatch.setattr(users, "_admin_loss_refusal", change_first)
+    entries = db.scalar(select(func.count()).select_from(AuditLog))
+    response = post(client, f"/admin/users/{person.id}/disable")
+    assert response.status_code == 400 and message in text_of(response)
+    assert reloaded(db, person).status == meanwhile
+    assert db.scalar(select(func.count()).select_from(AuditLog)) == entries
 
 
 def test_delete_needs_a_disabled_or_pending_account(client, db, s, user_factory):
