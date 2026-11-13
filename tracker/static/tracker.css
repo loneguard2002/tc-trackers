@@ -579,7 +579,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .user-filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; align-items: end; gap: 10px 14px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
 .user-filters input, .user-filters select { width: 100%; min-width: 0; padding: 7px 10px; font-size: .9rem; }
 .user-filter-search { grid-column: 1 / -1; }
-.user-filter-buttons { display: flex; gap: 6px; }
+.user-filter-buttons { display: flex; gap: 6px; white-space: nowrap; }
 .user-count { border-top: 0; padding-bottom: 0; }
 .user-table .user-badge { white-space: nowrap; }
 .user-table .user-person { width: 16rem; }
@@ -615,7 +615,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
    card each for trackers, permissions, and (side by side) teams, regions and permission sets. */
 .access-person { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; }
 .access-person-who { display: flex; align-items: center; gap: 16px; min-width: 0; }
-.access-person h1 { margin: 0; font-size: 1.375rem; line-height: 1.25; }
+.access-person h2 { margin: 0; font-size: 1.375rem; line-height: 1.25; }
 .access-person .member-email { margin: 2px 0 0; font-size: .875rem; }
 .access-avatar { width: 52px; height: 52px; font-size: 20px; }
 .access-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -788,6 +788,16 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 @media (max-width: 720px) {
   .team-pick { margin: 12px 16px; padding: 14px; }
   .team-pick-head .list-search { max-width: none; }
+}
+
+/* Medium screens: the Users filters take two rows of three (Apply and Clear end the second) and the table drops its
+   Permission sets column and the initials, so nothing spills out of the box. */
+@media (min-width: 721px) and (max-width: 1240px) {
+  .user-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .user-table .hide-mid { display: none; }
+  .user-table .user-person { width: 10rem; }
+  .user-table .member-avatar { display: none; }
+  .user-table :is(th, td):not(:first-child):not(:last-child) { padding-left: 6px; padding-right: 6px; }
 }
 
 @media (max-width: 900px) {
@@ -1120,7 +1130,10 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
    status buttons, the table and its footer line. The search, status and sort buttons stay hidden without JavaScript. */
 .list-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
 .list-head .page-lede { margin: 0; }
+.list-head > div:first-child { flex: 1 1 320px; min-width: 0; }
 .list-head > .button { flex: none; white-space: nowrap; }
+/* A count beside a page title, as on the Users page. */
+.title-count { margin-left: 8px; font-size: .875rem; vertical-align: 4px; }
 .list-page > .form-alert { margin-bottom: 20px; }
 .list-page > .tabs { margin-top: 0; margin-bottom: 20px; }
 @media (max-width: 480px) {  /* all three tabs fit a 390 px phone, so the bar never needs to scroll */

@@ -41,6 +41,36 @@ def test_users_fit_without_page_scroll(page, live_server, team_factory, user_fac
     assert page.evaluate("window.__errors") == []
 
 
+@pytest.mark.parametrize("width", [1440, 1280, 1024, 993, 900, 721])
+def test_filtered_users_fit_with_clear_in_view(
+    page, live_server, team_factory, user_factory, add_member, give_set, width
+):
+    """After Apply, Clear shows as a button beside Apply, and neither the filters nor the table spill out of the box."""
+    apps = team_factory(name="Applications and platform engineering")
+    for n in range(3):
+        person = user_factory(
+            full_name=f"Alexandria Montgomery-Smith {n}", email=f"alexandria.montgomery{n}@example.com"
+        )
+        add_member(apps, person, "editor")
+        give_set(["manage_teams"], user=person, name=f"Team managers {n}")
+    admin = user_factory(is_admin=True)
+    page.set_viewport_size({"width": width, "height": 900})
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users")
+    page.select_option("#filter-status", "active")
+    page.get_by_role("button", name="Apply").click()
+    clear = page.locator(".user-filters").get_by_role("link", name="Clear")
+    expect(clear).to_be_visible()
+    form = page.locator(".user-filters").bounding_box()
+    box, apply = clear.bounding_box(), page.get_by_role("button", name="Apply").bounding_box()
+    assert box["x"] + box["width"] <= form["x"] + form["width"], (box, form)  # Clear sits inside the box
+    assert abs(box["y"] - apply["y"]) < 4 and box["x"] > apply["x"]  # beside Apply
+    for selector in (".user-filters", ".section-table"):
+        fit = page.locator(selector).evaluate("el => [el.scrollWidth, el.clientWidth]")
+        assert fit[0] <= fit[1], (selector, fit)
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+
 def test_users_table_fits_its_box_at_1440(page, live_server, team_factory, user_factory, add_member, give_set):
     infra = team_factory(name="Infrastructure")
     windows = team_factory(name="Windows servers", parent=infra)

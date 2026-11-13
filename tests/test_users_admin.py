@@ -740,3 +740,23 @@ def test_access_page_lists_region_grants_of_active_and_disabled_people(
     assert "AMER · Owner" in page[page.index("Regions") :]
     assert "Any teams, region access and permission sets it keeps apply again once it is active." in page
     assert "Has no region access." in _visible(client, user_factory(full_name="No Region"))
+
+
+def test_users_and_access_pages_open_with_a_title_and_a_description(client, logged_in_admin, user_factory):
+    """Like Teams and Permission sets: a title (Users with its count) and a short description, then the content."""
+    person = user_factory(full_name="Head Person")
+    user_factory(full_name="Gone Person", status="disabled")
+    users = client.get("/admin/users").get_data(as_text=True)
+    head = users[users.index('<header class="list-head">') : users.index("</header>", users.index('class="list-head"'))]
+    assert (
+        '<h1 id="users-title">Users <span class="count-pill title-count">3<span class="sr-only"> people</span>' in head
+    )
+    assert '<p class="page-lede">Everyone who can sign in.' in head and "Add a user</a>" in head
+    assert ">People</h2>" not in users
+
+    access = _access_html(client, person)
+    head = access[access.index('<header class="list-head">') : access.index("</header>", access.index("list-head"))]
+    assert "<h1>Access</h1>" in head and access.count("<h1") == 1
+    assert '<p class="page-lede">What Head Person can reach and why:' in head
+    assert 'href="/admin/users">Back to Users</a>' in head
+    assert '<h2 id="person-name">Head Person</h2>' in access
