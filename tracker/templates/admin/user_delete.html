@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field, setting %}
+{% block content %}
+<h1>Users</h1>
+<div class="settings settings-narrow">
+  <form method="post" action="{{ url_for('admin.delete', user_id=person.id) }}">
+    {% include "entries/_errors.html" %}
+    {{ csrf_field(csrf_token()) }}
+    <section class="settings-section" aria-labelledby="section-delete">
+      <header class="settings-section-head">
+        <h2 id="section-delete">Delete {{ person.full_name }}</h2>
+        <p>{{ person.email }}</p>
+      </header>
+      {% call setting('Type ' ~ person.email ~ ' to confirm', 'This cannot be undone.', 'confirm-email') %}
+      <input id="confirm-email" name="confirm_email" type="text" autocomplete="off" spellcheck="false" required autofocus aria-describedby="confirm-email-help">
+      {% endcall %}
+    </section>
+    <div class="settings-actions">
+      <a class="button" href="{{ url_for('admin.access', user_id=person.id) }}">Cancel</a>
+      <button class="button danger" type="submit">Delete</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -22,7 +22,7 @@ from ..auth import (
     user_role,
     visible_trackers,
 )
-from ..auth.accounts import vouched_refusal
+from ..auth.accounts import DELETED_MESSAGE, vouched_refusal
 from ..auth.guards import SELF_PROMOTION_MESSAGE, raises_own_access, snapshot_access
 from ..auth.roles import give_creator_ownership, lead_candidates, lead_in_charge, tracker_access_list
 from ..db import get_session
@@ -968,6 +968,8 @@ def roles(tracker_id: int):
         choice = request.form.get("role", "")
         if user is None or user.is_admin or choice not in (*ROLES, "remove"):
             abort(400, description="Choose a user and a role.")
+        if user.status == "deleted":
+            abort(400, description=DELETED_MESSAGE)
         existing = db.get(TrackerRole, (user.id, tracker.id))
         previous = existing.role if existing else None
         if previous == (None if choice == "remove" else choice):

@@ -1,10 +1,11 @@
 """The Users screen (spec sections 6.3, 7 and 8.1): people, approval, password reset, the switch to Microsoft sign-in,
-re-enable and effective access.
+re-enable, delete and effective access.
 
-Open to ``manage_users`` holders; the administrator flag stays administrator-only. Every action on a person asks
-``account_refusal`` first and only then looks at the account's status, so a refusal on one's own or an elevated
-account always gives its own message. Each change is committed with its activity entries in one transaction, and the
-entries name the affected user in ``target_user_id``.
+Open to ``manage_users`` holders; the administrator flag and deleting a person stay administrator-only. Every action on
+a person asks ``account_refusal`` first and only then looks at the account's status, so a refusal on one's own or an
+elevated account always gives its own message. A deleted person is kept for the history only: every action refuses
+them. Each change is committed with its activity entries in one transaction, and the entries name the affected user in
+``target_user_id``.
 """
 
 from __future__ import annotations
@@ -15,7 +16,13 @@ from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import ROLES, admin_required, current_user, has_permission, permission_required, tracker_roles
-from ..auth.accounts import account_refusal, last_admin_refusal, last_password_admin_refusal, vouched_refusal
+from ..auth.accounts import (
+    DELETED_MESSAGE,
+    account_refusal,
+    last_admin_refusal,
+    last_password_admin_refusal,
+    vouched_refusal,
+)
 from ..auth.guards import TEAM_WITH_SETS_MESSAGE, team_holds_sets
 from ..auth.passwords import hash_password, validate_new_password
 from ..auth.permissions import PERMISSIONS, permission_sources
@@ -32,16 +39,24 @@ from ..teams.tree import (
     team_labels,
 )
 from . import bp
+from .deletion import delete_person
 
 SSO_PASSWORD_MESSAGE = "This person signs in with Microsoft and has no password here."
 PASSWORDS_DIFFER_MESSAGE = "The two passwords do not match."
+EMAIL_MISMATCH_MESSAGE = "The email does not match."
 
 
-def _get_user_or_404(user_id: int) -> User:
-    user = get_session().get(User, user_id) if in_range(user_id) else None
+def _get_user_or_404(user_id: int, lock: bool = False) -> User:
+    """The user, read ``FOR UPDATE`` with ``lock`` (held until the request commits or rolls back)."""
+    user = get_session().get(User, user_id, with_for_update=lock) if in_range(user_id) else None
     if user is None:
         abort(404)
     return user
+
+
+def _abort_if_deleted(user: User) -> None:
+    if user.status == "deleted":
+        abort(400, description=DELETED_MESSAGE)
 
 
 def _refuse(message: str):
@@ -107,9 +122,9 @@ def _held_sets(db, user: User, labels: dict[int, str]) -> list[tuple[str, int | 
 
 
 def _actions(db, actor: User, user: User) -> dict[str, bool]:
-    """The actions the actor may take on the user, so the row offers only those."""
+    """The actions the actor may take on the user, so the row offers only those; none on a deleted person."""
     may_act = account_refusal(db, actor, user) is None
-    return {
+    actions = {
         "approve": may_act and user.status == "pending",
         "enable": may_act and user.status == "disabled",
         "disable": may_act and user.status != "disabled" and user.id != actor.id,
@@ -119,7 +134,9 @@ def _actions(db, actor: User, user: User) -> dict[str, bool]:
         and user.status in ("active", "disabled")
         and current_app.config["SSO_ENABLED"],
         "set_admin": actor.is_admin and user.id != actor.id,
+        "delete": actor.is_admin and user.id != actor.id and user.status in ("disabled", "pending"),
     }
+    return dict.fromkeys(actions, False) if user.status == "deleted" else actions
 
 
 STATUS_FILTERS = {"active": "Active", "pending": "Awaiting approval", "disabled": "Disabled"}
@@ -286,6 +303,7 @@ def approve(user_id: int):
     refusal = account_refusal(db, actor, user)
     if refusal:
         return _refuse(refusal)
+    _abort_if_deleted(user)
     if user.status != "pending":
         abort(400, description="Only a person awaiting approval can be approved.")
     team, role, path = None, None, None
@@ -350,6 +368,7 @@ def enable(user_id: int):
     refusal = account_refusal(db, actor, user)
     if refusal:
         return _refuse(refusal)
+    _abort_if_deleted(user)
     if user.status != "disabled":
         abort(400, description="Only a disabled person can be re-enabled.")
     user.status = "active"
@@ -377,6 +396,7 @@ def disable(user_id: int):
     refusal = account_refusal(db, actor, user)
     if refusal:
         return _refuse(refusal)
+    _abort_if_deleted(user)
     if user.status == "disabled":
         abort(400, description="This person is already disabled.")
     if user.id == actor.id:
@@ -405,6 +425,7 @@ def disable(user_id: int):
 @admin_required
 def set_admin(user_id: int):
     user = _get_user_or_404(user_id)
+    _abort_if_deleted(user)
     make_admin = request.form.get("is_admin") == "1"
     actor = current_user()
     if user.id == actor.id and not make_admin:
@@ -452,6 +473,7 @@ def password(user_id: int):
     refusal = account_refusal(db, actor, user)
     if refusal:
         return _refuse(refusal)
+    _abort_if_deleted(user)
     if user.auth_source != "local":
         return _refuse(SSO_PASSWORD_MESSAGE)
     if request.method == "GET":
@@ -520,6 +542,45 @@ def switch_sign_in(user_id: int):
     db.commit()
     flash(f"{user.full_name} now signs in with Microsoft.", "success")
     return redirect(url_for("admin.access", user_id=user.id))
+
+
+# --- Deleting a person ----------------------------------------------------------------------------------------------
+
+
+def _render_delete(user: User, errors: list[str], status: int):
+    page = render_template(
+        "admin/user_delete.html", person=user, errors=errors, page_title="Delete person", current_page="users"
+    )
+    return page, status
+
+
+@bp.route("/users/<int:user_id>/delete", methods=["GET", "POST"])
+@admin_required
+def delete(user_id: int):
+    """Delete a disabled or pending person (``delete_person``), once the administrator has typed their email.
+
+    The POST reads the person ``FOR UPDATE`` and checks the status again, so a person re-enabled since the page opened
+    is not deleted. The typed email matches ignoring case and surrounding spaces.
+    """
+    user = _get_user_or_404(user_id, lock=request.method == "POST")
+    db = get_session()
+    actor = current_user()
+    if user.id == actor.id:
+        return _refuse("You cannot delete your own account.")
+    if user.status not in ("disabled", "pending"):
+        abort(400, description="Only a disabled or pending person can be deleted.")
+    refusal = last_admin_refusal(db, user)
+    if refusal:
+        return _refuse(refusal)
+    if request.method == "GET":
+        return _render_delete(user, [], 200)
+    if request.form.get("confirm_email", "").strip().lower() != user.email:
+        return _render_delete(user, [EMAIL_MISMATCH_MESSAGE], 400)
+    name, email = user.full_name, user.email
+    delete_person(db, actor, user)
+    db.commit()
+    flash(f"Deleted {name} ({email}).", "success")
+    return redirect(url_for("admin.users"))
 
 
 # --- Effective access -----------------------------------------------------------------------------------------------

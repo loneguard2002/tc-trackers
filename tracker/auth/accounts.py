@@ -19,6 +19,7 @@ LAST_ADMIN_MESSAGE = "The application must keep at least one active administrato
 LAST_PASSWORD_ADMIN_MESSAGE = (
     "Keep at least one administrator who signs in with a password, in case Microsoft sign-in stops working."
 )
+DELETED_MESSAGE = "This person has been deleted."
 VOUCHED_MESSAGE = "You created this account or set its password, so another person must give it access."
 VOUCHED_ACTIONS = ("user_created", "password_reset")
 
