@@ -22,20 +22,20 @@ def test_ticking_updates_the_card_and_the_note(page, live_server, user_factory, 
     expect(note).to_have_text("No unsaved changes")
 
     page.get_by_label("Manage users for PMO").check()
-    expect(card.locator("[data-count]")).to_have_text("2/7")
+    expect(card.locator("[data-count]")).to_have_text("2/8")
     expect(card).to_have_class(re.compile(r"\bis-changed\b"))
     expect(card.get_by_text("Changed")).to_be_visible()
     expect(note).to_have_text("Unsaved changes in 1 set")
 
     page.get_by_label("Manage users for PMO").uncheck()
-    expect(card.locator("[data-count]")).to_have_text("1/7")
+    expect(card.locator("[data-count]")).to_have_text("1/8")
     expect(card.get_by_text("Changed")).to_be_hidden()
     expect(note).to_have_text("No unsaved changes")
 
     page.get_by_label("Create trackers for PMO").check()
     page.get_by_role("button", name="Save permissions").click()
     expect(page.get_by_text("Saved the permissions.")).to_be_visible()
-    expect(page.locator("article[data-set-card]", has_text="PMO").locator("[data-count]")).to_have_text("2/7")
+    expect(page.locator("article[data-set-card]", has_text="PMO").locator("[data-count]")).to_have_text("2/8")
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
 

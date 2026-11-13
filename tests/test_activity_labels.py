@@ -24,6 +24,26 @@ def test_labels_are_sentence_case_and_unknown_actions_fall_back():
     assert action_label("mystery") == "mystery"
 
 
+def test_permission_set_entries_name_the_permissions():
+    changed = describe(
+        "permission_set_permissions_changed",
+        {"set": "List keepers", "before": ["manage_teams"], "after": ["manage_lists", "manage_teams"]},
+    )
+    assert changed == [
+        DetailLine("", "Manage teams", "Manage regions and lists, Manage teams", None),
+        DetailLine("set", None, None, "List keepers"),
+    ]
+    deleted = describe("permission_set_deleted", {"name": "Old", "permissions": ["manage_lists", "retired_key"]})
+    assert deleted == [
+        DetailLine("name", None, None, "Old"),
+        DetailLine("permissions", None, None, "Manage regions and lists, retired_key"),
+    ]
+    # other entries keep their values as stored
+    assert describe("smtp_settings_updated", {"changed": ["manage_lists"]}) == [
+        DetailLine("changed", None, None, "manage_lists")
+    ]
+
+
 def test_describe_reads_the_new_shape():
     assert describe("team_member_role_changed", {"team": "Windows", "before": "viewer", "after": "editor"}) == [
         DetailLine("", "viewer", "editor", None),

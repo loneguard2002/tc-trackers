@@ -43,7 +43,7 @@
       {% set show_users = can('manage_users') %}
       {% set show_permsets = current_user.is_admin %}
       {% set show_teams = can('manage_teams') %}
-      {% set show_lists = current_user.is_admin %}
+      {% set show_lists = can('manage_lists') %}
       {% set show_smtp = can('manage_email_settings') %}
       {% set show_activity = can('view_activity') %}
       {% if show_users or show_permsets or show_teams or show_lists or show_smtp or show_activity %}

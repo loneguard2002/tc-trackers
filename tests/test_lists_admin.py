@@ -98,6 +98,42 @@ def test_lists_are_for_administrators_only(
     assert entries(db) == []
 
 
+def test_manage_lists_holders_change_the_lists_but_not_region_access(
+    client, logged_in_user, give_set, db, region_factory, user_factory
+):
+    """The Manage regions and lists permission opens the three lists to a non-administrator, every change is in the
+    activity log under their name, and a region's Access screen stays with administrators."""
+    give_set(["manage_lists"], user=logged_in_user)
+    for url in ("/admin/regions", "/admin/regions/new", "/admin/locations", "/admin/business-lines"):
+        assert client.get(url).status_code == 200, url
+    assert post(client, "/admin/regions", {"code": "EMEA", "name": "Europe"}).status_code == 302
+    region = db.scalar(select(Region).where(Region.code == "EMEA"))
+    location = {"region_id": str(region.id), "code": "LON", "city": "London", "country_code": "GB"}
+    assert post(client, "/admin/locations", location).status_code == 302
+    assert post(client, "/admin/business-lines", {"name": "Brokerage"}).status_code == 302
+    assert (
+        post(
+            client, f"/admin/regions/{region.id}", {"action": "save", "code": "EMEA", "name": "Europe and Africa"}
+        ).status_code
+        == 302
+    )
+    actions = [(entry.action, entry.user_id) for entry in entries(db)]
+    assert actions == [
+        ("region_created", logged_in_user.id),
+        ("location_created", logged_in_user.id),
+        ("business_line_created", logged_in_user.id),
+        ("region_changed", logged_in_user.id),
+    ]
+    # who reaches a region's trackers is not theirs to change, and the page does not link there or to Teams
+    other = region_factory("APAC")
+    assert client.get(f"/admin/regions/{other.id}/access").status_code == 403
+    grant = {"action": "give", "user_id": str(user_factory().id), "role": "viewer"}
+    assert post(client, f"/admin/regions/{other.id}/access", grant).status_code == 403
+    page = client.get("/admin/regions").get_data(as_text=True)
+    assert "/access" not in page and 'href="/admin/teams"' not in page
+    assert 'href="/admin/regions"' in page  # the sidebar link
+
+
 def test_lists_send_signed_out_visitors_to_sign_in(client):
     for url in ("/admin/regions", "/admin/regions/new", "/admin/regions/1/edit", "/admin/business-lines/new"):
         response = client.get(url)
@@ -1151,7 +1187,10 @@ def test_locations_page_has_no_inline_script_or_style(
 
 def test_team_form_points_to_the_lists_screen(client, logged_in_admin):
     page = text_of(client.get("/admin/teams"))
-    assert "No regions are available yet. An administrator adds them under Lists." in page
+    assert (
+        "No regions are available yet. An administrator, or someone who may manage regions and lists, adds them under "
+        "Regions & business lines." in page
+    )
     assert "Regions and locations" not in page
 
 
@@ -1268,7 +1307,9 @@ def test_tab_bar_counts_are_zero_on_empty_lists(client, logged_in_admin):
 def test_tab_bar_shows_on_new_and_edit_pages(client, logged_in_admin, region_factory, business_line_factory):
     line = business_line_factory()
     for url in ("/admin/regions/new", "/admin/business-lines/new", f"/admin/business-lines/{line.id}/edit"):
-        assert '<nav class="tabs" aria-label="Regions &amp; business lines">' in client.get(url).get_data(as_text=True), url
+        assert '<nav class="tabs" aria-label="Regions &amp; business lines">' in client.get(url).get_data(
+            as_text=True
+        ), url
 
 
 # --- Business lines table -------------------------------------------------------------------------------------------

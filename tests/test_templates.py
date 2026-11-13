@@ -75,6 +75,7 @@ def render_sidebar(app, is_admin: bool, held: set[str]) -> str:
 LINKS = {
     "manage_users": 'href="/admin/users"',
     "manage_teams": 'href="/admin/teams"',
+    "manage_lists": 'href="/admin/regions"',
     "import_workbooks": 'href="/import"',
     "manage_email_settings": 'href="/admin/smtp"',
     "view_activity": 'href="/admin/activity"',
@@ -90,6 +91,7 @@ LINKS = {
         {"import_workbooks", "manage_email_settings"},
         {"view_all_trackers"},
         {"manage_teams"},
+        {"manage_lists"},
         {"manage_users"},
         {"view_activity"},
     ],
