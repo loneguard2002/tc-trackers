@@ -5,10 +5,15 @@
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='users.js', v=app_version) }}" defer></script>
 {% endblock %}
-{% macro user_action(endpoint, u, text, icon_name, extra=None, confirm=None) -%}
+{# A row action is a square icon button; its word shows above it on hover or keyboard focus (icon-tip) and is read
+   out with the person's name. #}
+{% macro tip(text, u) -%}
+<span class="icon-tip" aria-hidden="true">{{ text }}</span><span class="sr-only">{{ text }}, {{ u.full_name }}</span>
+{%- endmacro %}
+{% macro user_action(endpoint, u, text, icon_name, extra=None, confirm=None, on=False) -%}
 <form method="post" action="{{ url_for(endpoint, user_id=u.id) }}"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
   {{ csrf_field(csrf_token()) }}{% if extra %}<input type="hidden" name="{{ extra[0] }}" value="{{ extra[1] }}">{% endif %}
-  <button class="button button-small{{ ' button-quiet' if confirm }}" type="submit">{{ icon(icon_name) }}{{ text }}</button>
+  <button class="button button-icon{{ ' is-danger' if confirm }}{{ ' is-on' if on }}" type="submit">{{ icon(icon_name) }}{{ tip(text, u) }}</button>
 </form>
 {%- endmacro %}
 {% macro person(u) -%}
@@ -16,7 +21,7 @@
 <span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
 {%- endmacro %}
 {% block content %}
-<h1>Users</h1>
+<h1 id="users-title">Users</h1>
 <div class="settings">
   {% if pending %}
   <section class="settings-section" aria-labelledby="section-pending">
@@ -53,10 +58,9 @@
   </section>
   {% endif %}
 
-  <section class="settings-section" aria-labelledby="section-users">
+  <section class="settings-section" id="section-users" aria-labelledby="users-title">
     <header class="settings-section-head has-action">
       <div>
-        <h2 id="section-users">People</h2>
         <p>Everyone who can sign in. {% if pending %}<strong>{{ pending|length }} awaiting approval</strong>, listed first. {% endif %}People reach trackers through their teams and the roles given on each tracker's Access tab.</p>
       </div>
       <a class="button primary button-small" href="{{ url_for('admin.new_user') }}">{{ icon('plus') }}Add a user</a>
@@ -111,19 +115,13 @@
           <td class="user-badge"><span class="badge badge-muted" title="{{ sign_in_labels[u.auth_source] }}: {{ sign_in_meanings[u.auth_source] }}">{{ sign_in_labels[u.auth_source] }}</span></td>
           <td class="hide-narrow"><div class="chips">{% for path, role in teams.get(u.id, []) %}<span class="status-pill">{{ path }} · {{ role|title }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>
           <td class="hide-narrow"><div class="chips">{% for name in sets.get(u.id, []) %}<span class="status-pill">{{ name }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>
-          <td class="cell-actions"><div class="row-tools row-tools-text">
-            <a class="button button-small" href="{{ url_for('admin.access', user_id=u.id) }}">{{ icon('key') }}Access<span class="sr-only"> of {{ u.full_name }}</span></a>
-            {% if can_do.password %}<a class="button button-small" href="{{ url_for('admin.password', user_id=u.id) }}" data-reset-password data-person="{{ u.full_name }} ({{ u.email }})">{{ icon('lock') }}Reset password<span class="sr-only"> of {{ u.full_name }}</span></a>{% endif %}
-            {% if can_do.enable or can_do.set_admin or can_do.disable %}
-            <details class="row-menu">
-              <summary class="button button-small">{{ icon('more') }}More<span class="sr-only"> actions for {{ u.full_name }}</span></summary>
-              <div class="row-menu-panel">
-                {% if can_do.enable %}{{ user_action('admin.enable', u, 'Re-enable', 'restore') }}{% endif %}
-                {% if can_do.set_admin %}{{ user_action('admin.set_admin', u, 'Remove administrator' if u.is_admin else 'Make administrator', 'admin', ('is_admin', '0' if u.is_admin else '1')) }}{% endif %}
-                {% if can_do.disable %}{{ user_action('admin.disable', u, 'Disable', 'ban', confirm='Disable ' ~ u.full_name ~ '? They will no longer be able to sign in.') }}{% endif %}
-              </div>
-            </details>
-            {% endif %}
+          <td class="cell-actions"><div class="row-tools user-tools">
+            <a class="button button-icon" href="{{ url_for('admin.access', user_id=u.id) }}">{{ icon('key') }}{{ tip('Access', u) }}</a>
+            {% if can_do.password %}<a class="button button-icon" href="{{ url_for('admin.password', user_id=u.id) }}" data-reset-password data-person="{{ u.full_name }} ({{ u.email }})">{{ icon('lock') }}{{ tip('Reset password', u) }}</a>{% else %}<span class="button-icon-gap" aria-hidden="true"></span>{% endif %}
+            {% if can_do.set_admin %}{{ user_action('admin.set_admin', u, 'Remove administrator' if u.is_admin else 'Make administrator', 'admin', ('is_admin', '0' if u.is_admin else '1'), on=u.is_admin) }}{% else %}<span class="button-icon-gap" aria-hidden="true"></span>{% endif %}
+            {% if can_do.enable %}{{ user_action('admin.enable', u, 'Re-enable', 'restore') }}
+            {%- elif can_do.disable %}{{ user_action('admin.disable', u, 'Disable', 'ban', confirm='Disable ' ~ u.full_name ~ '? They will no longer be able to sign in.') }}
+            {%- else %}<span class="button-icon-gap" aria-hidden="true"></span>{% endif %}
           </div></td>
         </tr>
         {% endfor %}
@@ -131,6 +129,7 @@
       </table>
     </div>
     <p class="section-foot-note sign-in-legend">Sign-in: {% for value, label in sign_in_labels.items() %}<span class="badge badge-muted">{{ label }}</span> {{ sign_in_meanings[value] }}{{ '; ' if not loop.last else '.' }}{% endfor %}</p>
+    <p class="section-foot-note row-actions-legend">Actions: {{ icon('key') }} Access; {{ icon('lock') }} Reset password (Local sign-in only); {{ icon('admin') }} Make or remove administrator; {{ icon('ban') }} Disable; {{ icon('restore') }} Re-enable. Point at a button to see its name.</p>
     {% else %}
     <p class="section-foot-note">No one matches these filters. <a href="{{ url_for('admin.users') }}">Clear</a></p>
     {% endif %}

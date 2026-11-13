@@ -135,6 +135,8 @@ def test_holder_resets_a_local_password_and_it_is_logged_without_secrets(client,
     target = user_factory(full_name="Target")
     page = client.get(f"/admin/users/{target.id}/password")
     assert page.status_code == 200 and 'name="password"' in text_of(page) and 'name="password_confirm"' in text_of(page)
+    # each field has an eye button, hidden until users.js shows it
+    assert text_of(page).count('aria-pressed="false" hidden><svg') == 2 and "users.js" in text_of(page)
     assert "At least 12 characters" in text_of(page)
     response = post(
         client, f"/admin/users/{target.id}/password", {"password": NEW_PASSWORD, "password_confirm": NEW_PASSWORD}
@@ -594,7 +596,7 @@ def test_awaiting_approval_ignores_filters(client, user_manager, user_factory):
     assert "Pat Pending" not in body.split('id="section-users"')[1]
 
 
-def test_row_actions_sit_in_a_more_menu(client, logged_in_admin, user_factory):
+def test_row_actions_are_icon_buttons_in_fixed_slots(client, logged_in_admin, user_factory):
     plain = user_factory(full_name="Plain Person")
     boss = user_factory(full_name="Boss Person", is_admin=True)
     off = user_factory(full_name="Off Person", status="disabled")
@@ -602,34 +604,41 @@ def test_row_actions_sit_in_a_more_menu(client, logged_in_admin, user_factory):
     response = client.get("/admin/users")
     body = text_of(response)
     assert "Sign-in</th>" not in body and ">Role</th>" not in body
+    assert ">People</h2>" not in body and 'aria-labelledby="users-title"' in body  # the page title names the list
     rows = people_rows(response)
+    for name, row in rows.items():
+        assert "row-menu" not in row and "More" not in row, name  # every action is in the row, none behind More
+        # four slots, filled or kept empty, so each action sits in the same place on every row
+        assert row.count('class="button button-icon') + row.count('class="button-icon-gap"') == 4, name
+
+    def button(text, name):
+        return f'<span class="icon-tip" aria-hidden="true">{text}</span><span class="sr-only">{text}, {name}</span>'
+
     for user in (plain, boss, off, sso):
         row = rows[user.full_name]
-        assert f'<a class="button button-small" href="/admin/users/{user.id}/access"><svg' in row
-        assert f'</svg>Access<span class="sr-only"> of {user.full_name}</span></a>' in row
-        assert '<details class="row-menu">' in row
-        assert f'</svg>More<span class="sr-only"> actions for {user.full_name}</span>' in row
-    assert f'action="/admin/users/{plain.id}/disable"' in rows["Plain Person"]
-    # Reset password is a button in the row, outside the More menu, and opens the reset dialog
-    in_row, in_menu = rows["Plain Person"].split('<details class="row-menu">', 1)
-    assert f'href="/admin/users/{plain.id}/password" data-reset-password data-person="Plain Person (' in in_row
-    assert "/password" not in in_menu
+        assert f'<a class="button button-icon" href="/admin/users/{user.id}/access"><svg' in row
+        assert button("Access", user.full_name) in row
+    plain_row = rows["Plain Person"]
+    assert f'href="/admin/users/{plain.id}/password" data-reset-password data-person="Plain Person (' in plain_row
     assert 'id="reset-dialog"' in body and 'name="password_confirm"' in body
-    assert "Make administrator" in rows["Plain Person"] and "Remove administrator" in rows["Boss Person"]
-    # every action is an icon and a word
-    for label in ("Reset password", "Make administrator", "Disable"):
-        assert f"</svg>{label}<" in rows["Plain Person"], label
-    assert "</svg>Re-enable<" in rows["Off Person"] and "</svg>Remove administrator<" in rows["Boss Person"]
-    assert f'action="/admin/users/{off.id}/enable"' in rows["Off Person"]
-    assert "/password" not in rows["Sso Person"]
+    for text in ("Reset password", "Make administrator", "Disable"):
+        assert button(text, "Plain Person") in plain_row, text
+    assert f'action="/admin/users/{plain.id}/disable" data-confirm="Disable Plain Person?' in plain_row
+    assert '<button class="button button-icon is-danger" type="submit">' in plain_row
+    assert '<button class="button button-icon is-on" type="submit">' in rows["Boss Person"]  # already an administrator
+    assert button("Remove administrator", "Boss Person") in rows["Boss Person"]
+    assert button("Re-enable", "Off Person") in rows["Off Person"]
+    assert f'action="/admin/users/{off.id}/enable"' in rows["Off Person"] and "/disable" not in rows["Off Person"]
+    assert "/password" not in rows["Sso Person"] and 'class="button-icon-gap"' in rows["Sso Person"]
     assert re.search(
         r'>Active</span></td>\s*<td[^>]*><span class="admin-mark" title="Administrator"><svg',
         rows["Boss Person"],
     )
-    assert "Administrator" not in rows["Plain Person"].replace("Make administrator", "")
+    assert "Administrator" not in plain_row.replace("Make administrator", "")
     # the signed-in administrator's own row offers neither Disable nor an administrator change
     own = rows[logged_in_admin.full_name]
-    assert "/disable" not in own and "administrator</button>" not in own
+    assert "/disable" not in own and '/admin"' not in own
+    assert "Actions:" in body and "Point at a button to see its name." in body  # the legend under the table
 
 
 def _visible(client, person) -> str:

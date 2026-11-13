@@ -575,8 +575,6 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 
 /* Users and import preview. */
 .member-cell { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.row-tools-text { gap: 4px; flex-wrap: wrap; }
-.row-tools-text .button-small { padding: 5px 10px; font-size: .8125rem; white-space: nowrap; }
 /* The search on a row of its own; under it the five drop-downs share the width equally, with Apply at the row's end. */
 .user-filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; align-items: end; gap: 10px 14px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
 .user-filters input, .user-filters select { width: 100%; min-width: 0; padding: 7px 10px; font-size: .9rem; }
@@ -590,8 +588,27 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .user-table .admin-mark .icon { width: 20px; height: 20px; }
 .user-table .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .user-table .status-pill { white-space: normal; }
-.user-table .row-tools-text { flex-wrap: nowrap; }
-.user-table .row-tools-text .button-small { padding: 5px 8px; }
+/* Row actions: square icon buttons in fixed slots (an empty slot keeps its place), so each action lines up down the
+   table; the word shows above the button on hover or keyboard focus. */
+.user-tools { gap: 4px; }
+.button.button-icon { position: relative; display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; color: var(--muted); }
+.button.button-icon .icon { width: 17px; height: 17px; margin: 0; }
+.button.button-icon:hover { border-color: var(--text); color: var(--text); }
+.button.button-icon.is-on { color: var(--info); }
+.button.button-icon.is-danger:hover { border-color: var(--danger); color: var(--danger); }
+.button-icon-gap { display: inline-block; width: 32px; height: 32px; }
+.icon-tip { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 3; padding: 4px 8px; border-radius: 6px; background: var(--text); color: var(--surface); font-size: .75rem; font-weight: 600; line-height: 1.3; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .12s; }
+.button-icon:hover .icon-tip, .button-icon:focus-visible .icon-tip { opacity: 1; }
+.row-actions-legend .icon { width: 14px; height: 14px; margin: 0 1px 0 4px; vertical-align: -2px; }
+/* A password field with the eye button inside its right edge. */
+.password-field { position: relative; }
+.password-field input { width: 100%; padding-right: 42px; }
+.password-toggle { position: absolute; top: 50%; right: 4px; display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; transform: translateY(-50%); }
+.password-toggle[hidden] { display: none; }
+.password-toggle:hover { color: var(--text); }
+.password-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+.password-toggle .icon { width: 18px; height: 18px; }
+.password-toggle[aria-pressed="true"] .icon-show, .password-toggle[aria-pressed="false"] .icon-hide { display: none; }
 .sign-in-legend .badge { margin: 0 2px; }
 .sign-in-legend + .section-foot-note { border-top: 0; padding-top: 0; }
 /* A person's Access page: who they are with the account actions, a row of counts that jump to each card, then one
@@ -623,12 +640,6 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .access-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 16px; }
 .access-groups .empty-note { padding: 0; }
 .access-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.row-menu { position: relative; }
-.row-menu > summary { list-style: none; cursor: pointer; }
-.row-menu > summary::-webkit-details-marker { display: none; }
-.row-menu[open] > summary { border-color: var(--text); }
-.row-menu-panel { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-top: 4px; }
-.row-menu-panel .button, .row-menu-panel form .button { width: 100%; text-align: left; }
 .import-summary { margin-bottom: 20px; }
 .key-values { display: grid; margin: 0; }
 .key-values div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; padding: 10px 20px; }
