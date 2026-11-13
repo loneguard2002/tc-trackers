@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, field %}
+{% macro person(name, email, deleted) -%}
+{% if name %}{{ name }}<span class="member-email">{{ email }}</span>{% if deleted %}<span class="badge badge-muted">Deleted</span>{% endif %}{% else %}–{% endif %}
+{%- endmacro %}
 {% block content %}
 <h1>Activity</h1>
 <p class="page-lede">Every recorded change and sign-in, newest first. Entries never contain passwords or other secrets.</p>
@@ -16,7 +19,7 @@
       {% call field('Person', 'Who acted or was affected.', 'filter-person') %}
       <select id="filter-person" name="person">
         <option value="">Anyone</option>
-        {% for id, name in people %}<option value="{{ id }}"{{ ' selected' if filters.person == id }}>{{ name }}</option>{% endfor %}
+        {% for id, label in people %}<option value="{{ id }}"{{ ' selected' if filters.person == id }}>{{ label }}</option>{% endfor %}
       </select>
       {% endcall %}
       {% call field('Action', '', 'filter-action') %}
@@ -50,8 +53,8 @@
           {% for e in entries %}
           <tr data-entry="{{ e.id }}">
             <td class="activity-time">{{ e.at.strftime('%d %b %Y %H:%M') if e.at else '–' }}</td>
-            <td>{{ e.actor or '–' }}</td>
-            <td>{{ e.affected or '–' }}</td>
+            <td>{{ person(e.actor, e.actor_email, e.actor_deleted) }}</td>
+            <td>{{ person(e.affected, e.affected_email, e.affected_deleted) }}</td>
             <td>{{ e.label }}</td>
             <td>{{ e.tracker or '–' }}</td>
             <td>

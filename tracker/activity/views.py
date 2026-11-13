@@ -90,7 +90,16 @@ def index():
     filters = parse_filters(request.args)
     actor, affected = aliased(User), aliased(User)
     query = (
-        select(AuditLog, actor.full_name, affected.full_name, Tracker.name)
+        select(
+            AuditLog,
+            actor.full_name,
+            actor.email,
+            actor.status,
+            affected.full_name,
+            affected.email,
+            affected.status,
+            Tracker.name,
+        )
         .outerjoin(actor, actor.id == AuditLog.user_id)
         .outerjoin(affected, affected.id == AuditLog.target_user_id)
         .outerjoin(Tracker, Tracker.id == AuditLog.tracker_id)
@@ -119,17 +128,36 @@ def index():
             "id": entry.id,
             "at": entry.at,
             "actor": actor_name,
+            "actor_email": actor_email,
+            "actor_deleted": actor_status == "deleted",
             "affected": affected_name,
+            "affected_email": affected_email,
+            "affected_deleted": affected_status == "deleted",
             "label": action_label(entry.action),
             "tracker": tracker_name,
             "hidden": hidden(entry),
             "lines": [] if hidden(entry) else describe(entry.action, entry.detail),
         }
-        for entry, actor_name, affected_name, tracker_name in rows[:PAGE_SIZE]
+        for (
+            entry,
+            actor_name,
+            actor_email,
+            actor_status,
+            affected_name,
+            affected_email,
+            affected_status,
+            tracker_name,
+        ) in rows[:PAGE_SIZE]
     ]
     newer = url_for("activity.index", **_query_args(filters, filters.page - 1)) if filters.page > 1 else None
     older = url_for("activity.index", **_query_args(filters, filters.page + 1)) if len(rows) > PAGE_SIZE else None
-    people = db.execute(select(User.id, User.full_name).order_by(User.full_name, User.id)).all()
+    # People can share a name, and a deleted person's email may be reused by a new account, so a label carries both.
+    people = [
+        (id, f"{name} ({email})" + (" – deleted" if status == "deleted" else ""))
+        for id, name, email, status in db.execute(
+            select(User.id, User.full_name, User.email, User.status).order_by(User.full_name, User.email, User.id)
+        )
+    ]
     return render_template(
         "activity/index.html",
         current_page="activity",
