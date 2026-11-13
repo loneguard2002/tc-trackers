@@ -239,16 +239,16 @@ def delete_person(session: Session, actor: User, user: User) -> None:
         action="user_deleted",
         entity="user",
         entity_id=user.id,
-        detail={
+        detail={  # the Activity page prints each key as it is, so the keys use the Delete dialog's words
             "name": user.full_name,
             "email": user.email,
-            "teams": len(teams),
-            "regions": len(regions),
-            "tracker_roles": len(roles),
-            "permission_sets": len(sets),
-            "trackers_led": len(led),
-            "report_emails": len({tracker_id for _id, tracker_id, _name, _email in recipients}),
             "administrator": user.is_admin,  # read before the flag is cleared below
+            "teams": len(teams),
+            "region access": len(regions),
+            "tracker roles": len(roles),
+            "permission sets": len(sets),
+            "trackers led": len(led),
+            "report emails": len({tracker_id for _id, tracker_id, _name, _email in recipients}),
         },
     )
     user.is_admin = False
