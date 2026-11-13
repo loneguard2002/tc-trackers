@@ -1,0 +1,28 @@
+{% from "macros.html" import csrf_field, icon %}
+{# The Delete dialog of a person's Access page: what is removed and what stays, then the person's email to type. A link
+   marked data-delete-person opens it (users.js), and the Delete button waits until the typed email matches, ignoring
+   case and spaces around it. The server checks the email again. Without JavaScript the link goes to the Delete page
+   instead. #}
+<dialog id="delete-dialog" class="list-dialog" aria-labelledby="delete-dialog-title">
+  <form method="post" action="{{ url_for('admin.delete', user_id=person.id) }}">
+    {{ csrf_field(csrf_token()) }}
+    <header class="list-dialog-head">
+      <div>
+        <h2 id="delete-dialog-title">Delete {{ person.full_name }}</h2>
+        <p class="list-dialog-sub">{{ person.email }}</p>
+      </div>
+      <button class="tool-button" type="button" data-delete-close title="Close">{{ icon('close') }}<span class="sr-only">Close</span></button>
+    </header>
+    <div class="list-dialog-body">
+      {% include "admin/_delete_summary.html" %}
+      <div class="field">
+        <label for="delete-confirm">Type {{ person.email }} to confirm</label>
+        <input id="delete-confirm" name="confirm_email" type="text" autocomplete="off" spellcheck="false" required data-delete-confirm data-email="{{ person.email }}">
+      </div>
+    </div>
+    <footer class="list-dialog-foot">
+      <button class="button" type="button" data-delete-close>Cancel</button>
+      <button class="button danger" type="submit" data-delete-submit disabled>Delete</button>
+    </footer>
+  </form>
+</dialog>

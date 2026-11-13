@@ -1,0 +1,28 @@
+{# What deleting a person removes and what stays, with counts as they stand now (deletion is a DeletionSummary), then
+   the note. Shared by the Delete dialog on a person's Access page and the Delete page. A count of 0 is shown, in muted
+   text, so that nothing is left to guess. #}
+{% macro noun(count, word) -%}{{ word if count == 1 else word|plural }}{%- endmacro %}
+{% macro line(count) -%}<li{% if count == 0 %} class="is-none"{% endif %}>{{ caller() }}</li>{%- endmacro %}
+<div class="delete-summary">
+  <section class="delete-summary-column delete-summary-removed">
+    <h3>Removed</h3>
+    <ul>
+      {% call line(deletion.teams|length) %}Teams: <strong>{{ deletion.teams|length }}</strong>{% endcall %}
+      {% call line(deletion.regions|length) %}Region access: <strong>{{ deletion.regions|length }}</strong>{% endcall %}
+      {% call line(deletion.roles|length) %}Tracker roles: <strong>{{ deletion.roles|length }}</strong>{% endcall %}
+      {% call line(deletion.sets|length) %}Permission sets: <strong>{{ deletion.sets|length }}</strong>{% endcall %}
+      {% call line(deletion.led|length) %}Lead of <strong>{{ deletion.led|length }}</strong> {{ noun(deletion.led|length, 'tracker') }}{% endcall %}
+      {% call line(deletion.recipient_trackers|length) %}Report emails: <strong>{{ deletion.recipient_trackers|length }}</strong> {{ noun(deletion.recipient_trackers|length, 'tracker') }}{% endcall %}
+      <li>Sign-in</li>
+    </ul>
+  </section>
+  <section class="delete-summary-column delete-summary-kept">
+    <h3>Kept</h3>
+    <ul>
+      {% call line(deletion.activity_entries) %}<strong>{{ deletion.activity_entries }}</strong> {{ noun(deletion.activity_entries, 'activity entry') }}{% endcall %}
+      {% call line(deletion.report_inputs) %}<strong>{{ deletion.report_inputs }}</strong> {{ noun(deletion.report_inputs, 'report input') }}{% endcall %}
+      <li>Their name in all history</li>
+    </ul>
+  </section>
+</div>
+<p class="list-dialog-note">The email address becomes free, so the person can be added again as a new account. This cannot be undone.</p>

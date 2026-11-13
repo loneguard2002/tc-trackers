@@ -37,10 +37,36 @@ DELETED_MESSAGE = "This person has been deleted."
 HIDDEN = "Details hidden: you cannot open this tracker."
 NEW_PASSWORD = "new-password-456"
 NOW = datetime(2026, 11, 13, 12, 0, tzinfo=timezone.utc)
+NOTE = "The email address becomes free, so the person can be added again as a new account. This cannot be undone."
+# What the confirmation says for the fixture's person: what is removed, what stays.
+SUMMARY_LINES = [
+    "Removed",
+    "Teams: 1",
+    "Region access: 1",
+    "Tracker roles: 1",
+    "Permission sets: 1",
+    "Lead of 1 tracker",
+    "Report emails: 2 trackers",
+    "Sign-in",
+    "Kept",
+    "3 activity entries",
+    "1 report input",
+    "Their name in all history",
+    NOTE,
+]
 
 
 def text_of(response) -> str:
     return html.unescape(response.get_data(as_text=True))
+
+
+def plain(markup: str) -> str:
+    """The text of some markup, with the tags dropped and the spaces collapsed."""
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", markup)).split())
+
+
+def title_with_email_beneath(markup: str) -> bool:
+    return re.search(r"<h2[^>]*>Delete Jordan Lee</h2>\s*<p[^>]*>jordan\.lee@example\.com</p>", markup) is not None
 
 
 def delete_url(user: User) -> str:
@@ -206,6 +232,52 @@ def test_summary_counts(db, s):
         activity_entries=3,
         report_inputs=1,
     )
+
+
+# --- The confirmation ------------------------------------------------------------------------------------------------
+
+
+def test_access_page_has_the_delete_dialog_for_a_disabled_person(client, s):
+    page = text_of(client.get(f"/admin/users/{s.person.id}/access"))
+    assert f'href="{delete_url(s.person)}"' in page and "data-delete-person" in page  # the danger button
+    dialog = re.search(r'<dialog id="delete-dialog".*?</dialog>', page, re.S).group(0)
+    assert title_with_email_beneath(dialog)
+    text = plain(dialog)
+    assert "Type jordan.lee@example.com to confirm" in text
+    for line in SUMMARY_LINES:
+        assert line in text, line
+    assert 'data-email="jordan.lee@example.com"' in dialog
+    assert re.search(r"<button\b(?=[^>]*\bdata-delete-submit\b)(?=[^>]*\bdisabled\b)", dialog)  # waits for the email
+    assert f'action="{delete_url(s.person)}"' in dialog
+
+
+def test_the_delete_dialog_is_offered_only_where_delete_is_allowed(client, s, user_factory, give_set):
+    assert 'id="delete-dialog"' in text_of(client.get(f"/admin/users/{s.person.id}/access"))  # an administrator sees it
+    for path in (f"/admin/users/{s.other.id}/access", "/admin/users"):  # an active person; the list has no dialog
+        page = text_of(client.get(path))
+        assert 'id="delete-dialog"' not in page and "data-delete-person" not in page, path
+    manager = user_factory(full_name="Manager")
+    give_set(["manage_users"], user=manager)
+    sign_in(client, manager)
+    page = text_of(client.get(f"/admin/users/{s.person.id}/access"))  # a disabled person, seen by a non-administrator
+    assert 'id="delete-dialog"' not in page and "data-delete-person" not in page
+
+
+def test_delete_page_works_without_javascript(client, s):
+    response = client.get(delete_url(s.person))
+    assert response.status_code == 200
+    page = text_of(response)
+    assert "<title>Delete Jordan Lee · " in page
+    assert title_with_email_beneath(page)
+    text = plain(page)
+    assert "Type jordan.lee@example.com to confirm" in text
+    for line in SUMMARY_LINES:
+        assert line in text, line
+    assert f'<form method="post" action="{delete_url(s.person)}">' in page and 'name="confirm_email"' in page
+    assert re.search(r'<button class="button danger" type="submit">\s*Delete\s*</button>', page)  # not locked
+    for href, name in ((f"/admin/users/{s.person.id}/access", "Access"), ("/admin/users", "Users")):
+        assert f'<a href="{href}">{name}</a>' in page  # the title crumb
+    assert 'id="delete-dialog"' not in page
 
 
 # --- Who may delete whom --------------------------------------------------------------------------------------------

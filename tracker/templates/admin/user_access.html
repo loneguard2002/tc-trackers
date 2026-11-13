@@ -42,7 +42,7 @@
       </div>
     </div>
   </div>
-  {% if actions.approve or actions.enable or actions.password or actions.switch or actions.set_admin or actions.disable %}
+  {% if actions.approve or actions.enable or actions.password or actions.switch or actions.set_admin or actions.disable or actions.delete %}
   <div class="access-actions">
     {% if actions.approve %}{{ action('admin.approve', 'Approve', 'check') }}{% endif %}
     {% if actions.enable %}{{ action('admin.enable', 'Re-enable', 'restore') }}{% endif %}
@@ -64,6 +64,7 @@
     {% endif %}
     {% if actions.set_admin %}{{ action('admin.set_admin', 'Remove administrator' if person.is_admin else 'Make administrator', 'admin', ('is_admin', '0' if person.is_admin else '1')) }}{% endif %}
     {% if actions.disable %}{{ action('admin.disable', 'Disable', 'ban', confirm='Disable ' ~ person.full_name ~ '? They will no longer be able to sign in.') }}{% endif %}
+    {% if actions.delete %}<a class="button button-small danger" href="{{ url_for('admin.delete', user_id=person.id) }}" data-delete-person>{{ icon('trash') }}Delete</a>{% endif %}
   </div>
   {% endif %}
 </section>
@@ -168,4 +169,5 @@
 </div>
 </div>
 {% if actions.password %}{% include "admin/_reset_dialog.html" %}{% endif %}
+{% if actions.delete %}{% include "admin/_delete_dialog.html" %}{% endif %}
 {% endblock %}
