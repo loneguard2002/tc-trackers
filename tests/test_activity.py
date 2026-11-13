@@ -2,6 +2,7 @@
 
 import html
 import json
+import re
 from datetime import datetime, timezone
 
 import pytest
@@ -178,3 +179,65 @@ def test_a_very_long_person_filter_is_ignored(client, logged_in_admin, db):
     add(db)
     response = client.get(URL + "?person=" + "9" * 5000)
     assert response.status_code == 200 and text_of(response).count("<tr data-entry") == 1
+
+
+# --- Emails beside names ----------------------------------------------------------------------------------------------
+
+
+def cells_of(body: str, entry: AuditLog) -> list[str]:
+    """The inner HTML of each cell in an entry's row: time, performed by, user affected, action, tracker, detail."""
+    row = re.search(rf'<tr data-entry="{entry.id}">(.*?)</tr>', body, re.DOTALL)
+    assert row, f"entry {entry.id} is not on the page"
+    return re.findall(r"<td[^>]*>(.*?)</td>", row.group(1), re.DOTALL)
+
+
+def test_entries_show_the_email_under_each_name(client, logged_in_admin, db, user_factory):
+    first = user_factory(full_name="Jordan Lee", email="jordan.first@example.com")
+    second = user_factory(full_name="Jordan Lee", email="jordan.second@example.com")
+    forward = add(db, user_id=first.id, target_user_id=second.id)
+    backward = add(db, user_id=second.id, target_user_id=first.id)
+    body = client.get(URL).get_data(as_text=True)
+    first_email = '<span class="member-email">jordan.first@example.com</span>'
+    second_email = '<span class="member-email">jordan.second@example.com</span>'
+    performed, affected = cells_of(body, forward)[1:3]
+    assert "Jordan Lee" in performed and first_email in performed and second_email not in performed
+    assert "Jordan Lee" in affected and second_email in affected and first_email not in affected
+    performed, affected = cells_of(body, backward)[1:3]
+    assert second_email in performed and first_email not in performed
+    assert first_email in affected and second_email not in affected
+
+
+def test_a_deleted_person_shows_a_deleted_badge_and_stays_in_the_filter(client, logged_in_admin, db, user_factory):
+    gone = user_factory(full_name="Jordan Lee", email="jordan.lee@example.com", status="deleted")
+    kept = user_factory(full_name="Jordan Lee", email="jordan.kept@example.com")
+    entry = add(db, user_id=gone.id, target_user_id=kept.id)
+    body = client.get(URL).get_data(as_text=True)
+    assert f'<option value="{gone.id}">Jordan Lee (jordan.lee@example.com) – deleted</option>' in body
+    assert f'<option value="{kept.id}">Jordan Lee (jordan.kept@example.com)</option>' in body
+    badge = '<span class="badge badge-muted">Deleted</span>'
+    performed, affected = cells_of(body, entry)[1:3]
+    assert "jordan.lee@example.com" in performed and badge in performed
+    assert "jordan.kept@example.com" in affected and badge not in affected
+
+
+def test_filtering_by_a_new_account_with_a_reused_email_shows_only_its_entries(
+    client, logged_in_admin, db, user_factory
+):
+    old = user_factory(full_name="Jordan Lee", email="jordan.lee@example.com", status="deleted")
+    new = user_factory(full_name="Jordan Lee", email="jordan.lee@example.com")
+    old_entry, new_entry = add(db, user_id=old.id), add(db, user_id=new.id)
+    body = client.get(f"{URL}?person={new.id}").get_data(as_text=True)
+    assert f'data-entry="{new_entry.id}"' in body and f'data-entry="{old_entry.id}"' not in body
+    assert f'<option value="{new.id}" selected>Jordan Lee (jordan.lee@example.com)</option>' in body
+    assert f'<option value="{old.id}">Jordan Lee (jordan.lee@example.com) – deleted</option>' in body
+
+
+def test_entries_without_a_person_show_a_dash(client, logged_in_admin, db, user_factory):
+    person = user_factory(full_name="Jordan Lee", email="jordan.lee@example.com")
+    nobody = add(db, user_id=None, target_user_id=None)
+    only_affected = add(db, user_id=None, target_user_id=person.id)
+    body = client.get(URL).get_data(as_text=True)
+    assert [cell.strip() for cell in cells_of(body, nobody)[1:3]] == ["–", "–"]
+    performed, affected = cells_of(body, only_affected)[1:3]
+    assert performed.strip() == "–"
+    assert "jordan.lee@example.com" in affected
