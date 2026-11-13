@@ -16,6 +16,9 @@ from ..models import AuditLog, PermissionSetHolder, TeamMember, User
 OWN_ACCOUNT_MESSAGE = "You cannot change your own account here."
 ELEVATED_MESSAGE = "Only an administrator can change an administrator or a user with elevated permissions."
 LAST_ADMIN_MESSAGE = "The application must keep at least one active administrator."
+LAST_PASSWORD_ADMIN_MESSAGE = (
+    "Keep at least one administrator who signs in with a password, in case Microsoft sign-in stops working."
+)
 VOUCHED_MESSAGE = "You created this account or set its password, so another person must give it access."
 VOUCHED_ACTIONS = ("user_created", "password_reset")
 
@@ -67,18 +70,40 @@ def vouched_refusal(session: Session, actor: User, target: User) -> str | None:
     return VOUCHED_MESSAGE if session.scalar(select(vouched)) else None
 
 
-def last_admin_refusal(session: Session, target: User) -> str | None:
-    """``LAST_ADMIN_MESSAGE`` when ``target`` is the only active administrator, else ``None``.
+def _lock_active_admins(session: Session) -> dict[int, str]:
+    """Each active administrator's id with their ``auth_source``, read ``FOR UPDATE`` (held until the caller ends).
 
-    The active administrators are read ``FOR UPDATE`` (held until the caller commits or rolls back), so two
-    administrators cannot disable each other, or remove each other's flag, at the same moment.
+    The caller's transaction holds the locks until it commits or rolls back, so two administrators cannot disable each
+    other, or remove each other's flag, at the same moment.
     """
-    if not (target.is_admin and target.status == "active"):
-        return None
-    admins = session.scalars(
-        select(User.id)
+    rows = session.execute(
+        select(User.id, User.auth_source)
         .where(User.is_admin.is_(True), User.status == "active")
         .order_by(User.id)  # one lock order, so two of these cannot deadlock
         .with_for_update()
     ).all()
-    return LAST_ADMIN_MESSAGE if set(admins) <= {target.id} else None
+    return dict(rows)
+
+
+def last_admin_refusal(session: Session, target: User) -> str | None:
+    """``LAST_ADMIN_MESSAGE`` when ``target`` is the only active administrator, else ``None``.
+
+    The active administrators are locked (see ``_lock_active_admins``).
+    """
+    if not (target.is_admin and target.status == "active"):
+        return None
+    return LAST_ADMIN_MESSAGE if set(_lock_active_admins(session)) <= {target.id} else None
+
+
+def last_password_admin_refusal(session: Session, target: User) -> str | None:
+    """``LAST_PASSWORD_ADMIN_MESSAGE`` when ``target`` is the only active administrator who signs in with a password.
+
+    Asked only while Microsoft sign-in is on, before an account stops being an active administrator who signs in with
+    a password: a Microsoft sign-in failure must never lock out every administrator. The active administrators are
+    locked as ``last_admin_refusal`` does.
+    """
+    if not (target.is_admin and target.status == "active" and target.auth_source == "local"):
+        return None
+    admins = _lock_active_admins(session)
+    others = any(source == "local" for admin_id, source in admins.items() if admin_id != target.id)
+    return None if others else LAST_PASSWORD_ADMIN_MESSAGE
