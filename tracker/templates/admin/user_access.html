@@ -21,14 +21,19 @@
 </section>
 {%- endmacro %}
 {% block content %}
-<p class="page-lede"><a href="{{ url_for('admin.users') }}">Users</a> › {{ person.full_name }}</p>
+<header class="list-head">
+  <div>
+    <h1>Access</h1>
+    <p class="page-lede">What {{ person.full_name }} can reach and why: each tracker with the role it gives, every permission and where it comes from, and the teams, regions and permission sets behind them. <a href="{{ url_for('admin.users') }}">Back to Users</a></p>
+  </div>
+</header>
 {% set active = person.status == 'active' %}
 <div class="settings">
 <section class="settings-section access-person" aria-labelledby="person-name">
   <div class="access-person-who">
     <span class="member-avatar access-avatar" aria-hidden="true">{{ person.full_name[:1]|upper }}</span>
     <div>
-      <h1 id="person-name">{{ person.full_name }}</h1>
+      <h2 id="person-name">{{ person.full_name }}</h2>
       <p class="member-email">{{ person.email }}</p>
       <div class="access-badges">
         <span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(person.status, 'muted') }}">{{ person.status|title }}</span>

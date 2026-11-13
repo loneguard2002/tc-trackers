@@ -21,7 +21,13 @@
 <span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
 {%- endmacro %}
 {% block content %}
-<h1 id="users-title">Users</h1>
+<header class="list-head">
+  <div>
+    <h1 id="users-title">Users <span class="count-pill title-count">{{ total }}<span class="sr-only"> people</span></span></h1>
+    <p class="page-lede">Everyone who can sign in. {% if pending %}<strong>{{ pending|length }} awaiting approval</strong>, listed first. {% endif %}People reach trackers through their teams and the roles given on each tracker's Access tab.</p>
+  </div>
+  <a class="button primary" href="{{ url_for('admin.new_user') }}">{{ icon('plus') }}Add a user</a>
+</header>
 <div class="settings">
   {% if pending %}
   <section class="settings-section" aria-labelledby="section-pending">
@@ -59,12 +65,6 @@
   {% endif %}
 
   <section class="settings-section" id="section-users" aria-labelledby="users-title">
-    <header class="settings-section-head has-action">
-      <div>
-        <p>Everyone who can sign in. {% if pending %}<strong>{{ pending|length }} awaiting approval</strong>, listed first. {% endif %}People reach trackers through their teams and the roles given on each tracker's Access tab.</p>
-      </div>
-      <a class="button primary button-small" href="{{ url_for('admin.new_user') }}">{{ icon('plus') }}Add a user</a>
-    </header>
     <form class="user-filters" method="get" action="{{ url_for('admin.users') }}" role="search">
       <div class="toolbar-field user-filter-search"><label for="filter-q">Search name or email</label>
         <input id="filter-q" type="search" name="q" value="{{ filters.q }}" autocomplete="off"></div>
@@ -90,12 +90,12 @@
         </select></div>
       <div class="toolbar-field"><label for="filter-set">Permission set</label>
         <select id="filter-set" name="set">
-          <option value="">Any permission set</option>
+          <option value="">Any set</option>
           {% for id, name in set_options %}<option value="{{ id }}"{% if filters.set == id %} selected{% endif %}>{{ name }}</option>{% endfor %}
         </select></div>
       <div class="user-filter-buttons">
         <button class="button primary button-small" type="submit">Apply</button>
-        {% if filtered %}<a class="button button-small button-quiet" href="{{ url_for('admin.users') }}">Clear</a>{% endif %}
+        {% if filtered %}<a class="button button-small" href="{{ url_for('admin.users') }}">{{ icon('close') }}Clear</a>{% endif %}
       </div>
     </form>
     {% if filtered %}<p class="section-foot-note user-count">Showing {{ users|length }} of {{ total }} people.</p>{% endif %}
@@ -104,7 +104,7 @@
       <table class="table user-table" id="people-table" data-sortable>
         <thead><tr>{{ sort_header('Name', 'name') }}{{ sort_header('Status', 'status') }}{{ sort_header('Admin', 'admin') }}{{ sort_header('Sign-in', 'sign-in') }}
           {{ sort_header('Teams', 'teams', 'hide-narrow') }}
-          {{ sort_header('Permission sets', 'sets', 'hide-narrow') }}<th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          {{ sort_header('Permission sets', 'sets', 'hide-narrow hide-mid') }}<th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
         <tbody>
         {% for u in users %}
         {% set can_do = actions[u.id] %}
@@ -114,7 +114,7 @@
           <td class="user-badge">{% if u.is_admin %}<span class="admin-mark" title="Administrator">{{ icon('admin') }}<span class="sr-only">Administrator</span></span>{% else %}<span class="sr-only">Not an administrator</span>{% endif %}</td>
           <td class="user-badge"><span class="badge badge-muted" title="{{ sign_in_labels[u.auth_source] }}: {{ sign_in_meanings[u.auth_source] }}">{{ sign_in_labels[u.auth_source] }}</span></td>
           <td class="hide-narrow"><div class="chips">{% for path, role in teams.get(u.id, []) %}<span class="status-pill">{{ path }} · {{ role|title }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>
-          <td class="hide-narrow"><div class="chips">{% for name in sets.get(u.id, []) %}<span class="status-pill">{{ name }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>
+          <td class="hide-narrow hide-mid"><div class="chips">{% for name in sets.get(u.id, []) %}<span class="status-pill">{{ name }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>
           <td class="cell-actions"><div class="row-tools user-tools">
             <a class="button button-icon" href="{{ url_for('admin.access', user_id=u.id) }}">{{ icon('key') }}{{ tip('Access', u) }}</a>
             {% if can_do.password %}<a class="button button-icon" href="{{ url_for('admin.password', user_id=u.id) }}" data-reset-password data-person="{{ u.full_name }} ({{ u.email }})">{{ icon('lock') }}{{ tip('Reset password', u) }}</a>{% else %}<span class="button-icon-gap" aria-hidden="true"></span>{% endif %}
