@@ -1,6 +1,6 @@
 # Switching a person to Microsoft sign-in, and deleting a person
 
-Date: 2026-11-13. Status: agreed in conversation with the owner, reviewed by a builder; awaiting the owner's approval.
+Date: 2026-11-13. Status: Approved by the owner on 2026-11-13; built on branch feat/user-delete-sso-switch.
 
 ## Why
 
@@ -107,7 +107,11 @@ a deleted person makes this more likely to matter.
   - *Our call:* without JavaScript, the Delete button is a link to a confirmation page at
     `/admin/users/<id>/delete` with the same content; the form posts to the same URL. This mirrors Reset password.
   - The counts are shown as they stand when the dialog opens; the delete works on the state at the moment it runs.
-- **Effect, in one transaction**, with the person's row locked (`FOR UPDATE`) and the status checked again:
+- **Effect, in one transaction**, with the person's row locked (`FOR NO KEY UPDATE`) and the status checked again.
+  That lock still serialises every change of the person's status, and it lets through the `KEY SHARE` lock that a
+  report retry takes on the person who queued the send, through the foreign key of the activity entry it writes; with
+  `FOR UPDATE`, that retry and the delete could deadlock. Re-enable and Approve take the same lock; Disable locks the
+  administrators first and then reads the person again under it, so none of them can write over a delete:
   - remove their `team_members`, `region_grants`, `tracker_roles` and `permission_set_holders` (user) rows;
   - set `trackers.lead_user_id` to NULL wherever they lead;
   - **(the owner's decision)** remove the person's email from every tracker's report recipient list (`recipients` rows
