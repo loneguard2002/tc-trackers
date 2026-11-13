@@ -1,4 +1,4 @@
-"""The Users list in a real browser: it fits the screen and its actions menu opens (database)."""
+"""The Users list in a real browser: it fits the screen and its icon buttons name themselves (database)."""
 
 from __future__ import annotations
 
@@ -32,9 +32,10 @@ def test_users_fit_without_page_scroll(page, live_server, team_factory, user_fac
     page.goto(f"{live_server}/admin/users")
 
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-    first = page.locator("details.row-menu").first
-    first.locator("summary").click()
-    expect(first.get_by_text("Make administrator")).to_be_visible()
+    first = page.locator("#people-table tbody tr").first.locator(".button-icon").nth(2)
+    first.hover()
+    expect(first.locator(".icon-tip")).to_have_css("opacity", "1")  # the word shows above the button
+    assert first.locator(".icon-tip").inner_text() in ("Make administrator", "Remove administrator")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
@@ -62,9 +63,15 @@ def test_users_table_fits_its_box_at_1440(page, live_server, team_factory, user_
     fit = box.evaluate("el => [el.scrollWidth, el.clientWidth]")
     assert fit[0] <= fit[1], fit
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-    for text in ("Access", "More"):
-        button = box.locator("tbody tr").first.get_by_text(text, exact=False).first
-        assert button.bounding_box()["height"] < 40
+    # the four slots are one line high and line up down the table
+    slots = [
+        [b["x"] for b in row.locator(".user-tools > *").evaluate_all("els => els.map(e => e.getBoundingClientRect())")]
+        for row in box.locator("tbody tr").all()
+    ]
+    assert all(len(row) == 4 for row in slots), slots
+    assert all(row == slots[0] for row in slots), slots
+    heights = box.locator(".user-tools").evaluate_all("els => els.map(e => e.getBoundingClientRect().height)")
+    assert max(heights) < 40, heights
 
 
 def test_users_table_sorts_by_each_column(page, live_server, user_factory):
@@ -119,6 +126,18 @@ def test_reset_password_opens_a_dialog_that_asks_twice(page, live_server, user_f
     expect(dialog).to_contain_text("Sets a new password for Reset Target (reset.target@example.com).")
     expect(page.locator("#reset-password")).to_be_focused()
 
+    # the eye button shows what was typed in its own field, and hides it again
+    eye = dialog.get_by_role("button", name="Show password").first
+    page.fill("#reset-password", "Peek-at-this-1")
+    expect(eye).to_have_attribute("aria-pressed", "false")
+    eye.click()
+    expect(page.locator("#reset-password")).to_have_attribute("type", "text")
+    expect(page.locator("#reset-confirm")).to_have_attribute("type", "password")
+    expect(eye).to_have_attribute("aria-pressed", "true")
+    eye.click()
+    expect(page.locator("#reset-password")).to_have_attribute("type", "password")
+    eye.click()
+
     new_password = "A-new-password-123"
     page.fill("#reset-password", new_password)
     page.fill("#reset-confirm", new_password + "x")
@@ -132,6 +151,7 @@ def test_reset_password_opens_a_dialog_that_asks_twice(page, live_server, user_f
     expect(dialog).to_be_hidden()
     row.get_by_role("link", name="Reset password").click()
     expect(page.locator("#reset-password")).to_have_value("")  # nothing typed is kept
+    expect(page.locator("#reset-password")).to_have_attribute("type", "password")  # and nothing is left shown
     page.fill("#reset-password", new_password)
     page.fill("#reset-confirm", new_password)
     dialog.get_by_role("button", name="Set password").click()
