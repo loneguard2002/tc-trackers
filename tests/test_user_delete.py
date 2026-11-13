@@ -467,6 +467,21 @@ def test_users_list_hides_deleted_people_and_the_filter_shows_them(client, gone)
     assert "Jordan Lee" in text_of(client.get("/admin/users?status=deleted&q=jordan"))
 
 
+def user_count_note(client, query: str) -> str:
+    """The line under the filters that says how many people are shown."""
+    page = text_of(client.get(f"/admin/users?{query}"))
+    return plain(re.search(r'<p class="section-foot-note user-count">(.*?)</p>', page, re.S).group(1))
+
+
+def test_the_count_line_under_the_deleted_filter_counts_deleted_people(client, user_factory, gone):
+    assert user_count_note(client, "status=deleted") == "Showing 1 deleted person."
+    user_factory(full_name="Kim Ghost", status="deleted")
+    user_factory(full_name="Lee Ghost", status="deleted")
+    assert user_count_note(client, "status=deleted") == "Showing 3 deleted people."  # Ann Admin and Sam Other stay out
+    assert user_count_note(client, "status=deleted&q=ghost") == "Showing 2 deleted people."
+    assert user_count_note(client, "status=active") == "Showing 2 of 2 people."  # any other filter reads as before
+
+
 def test_access_page_of_a_deleted_person(client, db, gone):
     page = access_page(client, gone.person)
     assert '<span class="badge badge-muted">Deleted</span>' in page

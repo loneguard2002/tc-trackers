@@ -98,7 +98,8 @@
         {% if filtered %}<a class="button button-small" href="{{ url_for('admin.users') }}">{{ icon('close') }}Clear</a>{% endif %}
       </div>
     </form>
-    {% if filtered %}<p class="section-foot-note user-count">Showing {{ users|length }} of {{ total }} people.</p>{% endif %}
+    {# The total leaves deleted people out, so under the Deleted filter the line counts them on their own. #}
+    {% if filtered %}<p class="section-foot-note user-count">{% if filters.status == 'deleted' %}Showing {{ users|length }} deleted {{ 'person' if users|length == 1 else 'people' }}.{% else %}Showing {{ users|length }} of {{ total }} people.{% endif %}</p>{% endif %}
     {% if users %}
     <div class="section-table register">
       <table class="table user-table" id="people-table" data-sortable>
