@@ -756,7 +756,11 @@ def test_users_and_access_pages_open_with_a_title_and_a_description(client, logg
 
     access = _access_html(client, person)
     head = access[access.index('<header class="list-head">') : access.index("</header>", access.index("list-head"))]
-    assert "<h1>Access</h1>" in head and access.count("<h1") == 1
-    assert '<p class="page-lede">What Head Person can reach and why:' in head
-    assert 'href="/admin/users">Back to Users</a>' in head
+    # the title leads back to Users: "Users › Access", with Users the link
+    title = (
+        '<h1 class="title-crumb"><a href="/admin/users">Users</a>'
+        '<span class="title-crumb-sep" aria-hidden="true">›</span>Access</h1>'
+    )
+    assert title in head and access.count("<h1") == 1 and "Back to Users" not in access
+    assert '<p class="page-lede">What Head Person can open, and where that access comes from.</p>' in head
     assert '<h2 id="person-name">Head Person</h2>' in access

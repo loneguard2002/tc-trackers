@@ -23,8 +23,8 @@
 {% block content %}
 <header class="list-head">
   <div>
-    <h1>Access</h1>
-    <p class="page-lede">What {{ person.full_name }} can reach and why: each tracker with the role it gives, every permission and where it comes from, and the teams, regions and permission sets behind them. <a href="{{ url_for('admin.users') }}">Back to Users</a></p>
+    <h1 class="title-crumb"><a href="{{ url_for('admin.users') }}">Users</a><span class="title-crumb-sep" aria-hidden="true">›</span>Access</h1>
+    <p class="page-lede">What {{ person.full_name }} can open, and where that access comes from.</p>
   </div>
 </header>
 {% set active = person.status == 'active' %}
