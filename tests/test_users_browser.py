@@ -210,3 +210,75 @@ def test_access_page_resets_a_password_in_the_dialog(page, live_server, user_fac
     assert verify_password(new_password, db.get(type(target), target.id).password_hash)
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
+
+
+def test_delete_dialog_unlocks_only_for_the_matching_email(page, live_server, user_factory, db):
+    target = user_factory(full_name="Jordan Lee", email="jordan.lee@example.com", status="disabled")
+    admin = user_factory(is_admin=True)
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users/{target.id}/access")
+    dialog = page.locator("#delete-dialog")
+    expect(dialog).to_be_hidden()
+    page.get_by_role("link", name="Delete").click()
+    expect(dialog).to_be_visible()
+    expect(dialog).to_contain_text("Delete Jordan Lee")
+    submit = dialog.locator("[data-delete-submit]")
+    confirm = dialog.locator("[data-delete-confirm]")
+    expect(submit).to_have_text("Delete")
+    expect(submit).to_be_disabled()
+    expect(confirm).to_be_focused()
+
+    confirm.fill("jordan.lee@exam")
+    expect(submit).to_be_disabled()
+    confirm.press("Enter")  # the keyboard cannot get past the locked button either
+    expect(dialog).to_be_visible()
+    confirm.fill("jordan.lee@example.com.au")
+    expect(submit).to_be_disabled()
+
+    dialog.get_by_role("button", name="Cancel").click()
+    expect(dialog).to_be_hidden()
+    page.get_by_role("link", name="Delete").click()
+    expect(confirm).to_have_value("")  # nothing typed is kept
+    expect(submit).to_be_disabled()
+
+    confirm.fill("  Jordan.Lee@Example.COM ")
+    expect(submit).to_be_enabled()
+    confirm.fill("jordan.lee@exam")  # and it locks again when the text stops matching
+    expect(submit).to_be_disabled()
+    confirm.fill("  Jordan.Lee@Example.COM ")
+    submit.click()
+    expect(page.get_by_text("Deleted Jordan Lee (jordan.lee@example.com).")).to_be_visible()
+    assert page.url == f"{live_server}/admin/users"
+    db.expire_all()
+    assert db.get(type(target), target.id).status == "deleted"
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("width", [390, 1280])
+def test_delete_dialog_fits_the_screen_in_both_themes(page, live_server, user_factory, team_factory, theme, width):
+    target = user_factory(
+        full_name="Alexandria Montgomery-Smith",
+        email="alexandria.montgomery-smith-with-a-long-address@example-corporation.example.com",
+        status="disabled",
+    )
+    team_factory(name="Applications and platform engineering")
+    admin = user_factory(is_admin=True)
+    page.set_viewport_size({"width": width, "height": 844})
+    page.add_init_script(f"localStorage.setItem('tracker-theme', '{theme}')")
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users/{target.id}/access")
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == theme
+    page.get_by_role("link", name="Delete").click()
+    dialog = page.locator("#delete-dialog")
+    expect(dialog).to_be_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    fit = dialog.evaluate("el => [el.scrollWidth, el.clientWidth]")
+    assert fit[0] <= fit[1], fit  # nothing inside spills out of the dialog
+    box = dialog.bounding_box()
+    assert box["x"] >= 0 and box["x"] + box["width"] <= width, box
+    for name in ("Cancel", "Delete"):
+        button = dialog.get_by_role("button", name=name, exact=True).bounding_box()
+        assert box["x"] <= button["x"] and button["x"] + button["width"] <= box["x"] + box["width"], (name, button)

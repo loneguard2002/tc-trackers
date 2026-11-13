@@ -1,7 +1,12 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, setting %}
+{% from "macros.html" import csrf_field, title_crumb %}
+{# The page behind the Delete button when there is no JavaScript: the Delete dialog's content on a page of its own. #}
 {% block content %}
-<h1>Users</h1>
+<header class="list-head">
+  <div>
+    {{ title_crumb([(url_for('admin.users'), 'Users'), (url_for('admin.access', user_id=person.id), 'Access')], 'Delete') }}
+  </div>
+</header>
 <div class="settings settings-narrow">
   <form method="post" action="{{ url_for('admin.delete', user_id=person.id) }}">
     {% include "entries/_errors.html" %}
@@ -11,9 +16,13 @@
         <h2 id="section-delete">Delete {{ person.full_name }}</h2>
         <p>{{ person.email }}</p>
       </header>
-      {% call setting('Type ' ~ person.email ~ ' to confirm', 'This cannot be undone.', 'confirm-email') %}
-      <input id="confirm-email" name="confirm_email" type="text" autocomplete="off" spellcheck="false" required autofocus aria-describedby="confirm-email-help">
-      {% endcall %}
+      <div class="list-dialog-body">
+        {% include "admin/_delete_summary.html" %}
+        <div class="field">
+          <label for="confirm-email">Type {{ person.email }} to confirm</label>
+          <input id="confirm-email" name="confirm_email" type="text" autocomplete="off" spellcheck="false" required autofocus>
+        </div>
+      </div>
     </section>
     <div class="settings-actions">
       <a class="button" href="{{ url_for('admin.access', user_id=person.id) }}">Cancel</a>

@@ -39,7 +39,7 @@ from ..teams.tree import (
     team_labels,
 )
 from . import bp
-from .deletion import delete_person
+from .deletion import delete_person, deletion_summary
 
 SSO_PASSWORD_MESSAGE = "This person signs in with Microsoft and has no password here."
 PASSWORDS_DIFFER_MESSAGE = "The two passwords do not match."
@@ -555,7 +555,12 @@ def switch_sign_in(user_id: int):
 
 def _render_delete(user: User, errors: list[str], status: int):
     page = render_template(
-        "admin/user_delete.html", person=user, errors=errors, page_title="Delete person", current_page="users"
+        "admin/user_delete.html",
+        person=user,
+        deletion=deletion_summary(get_session(), user),
+        errors=errors,
+        page_title=f"Delete {user.full_name}",
+        current_page="users",
     )
     return page, status
 
@@ -618,10 +623,12 @@ def access(user_id: int):
     labels = team_labels(load_team_rows(db))
     memberships = db.execute(select(TeamMember.team_id, TeamMember.role).where(TeamMember.user_id == user.id))
     teams = sorted(((labels.get(team_id, ""), team_id, role) for team_id, role in memberships))
+    actions = _actions(db, viewer, user)
     return render_template(
         "admin/user_access.html",
         person=user,
-        actions=_actions(db, viewer, user),
+        actions=actions,
+        deletion=deletion_summary(db, user) if actions["delete"] else None,
         teams=teams,
         team_labels=labels,
         can_view_teams=has_permission(viewer, "manage_teams"),
