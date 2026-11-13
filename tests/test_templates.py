@@ -118,3 +118,17 @@ def test_sidebar_shows_every_link_to_administrators(app):
 def test_permission_sets_link_only_for_administrators(app, held):
     assert 'href="/admin/permission-sets"' not in render_sidebar(app, is_admin=False, held=held)
     assert 'href="/admin/permission-sets"' in render_sidebar(app, is_admin=True, held=set())
+
+
+def test_sidebar_version_names_the_commit_and_its_date(app, monkeypatch):
+    monkeypatch.setitem(app.config, "APP_VERSION", "7f08841")
+    monkeypatch.setitem(app.config, "APP_COMMIT", "7f08841" + "0" * 33)
+    monkeypatch.setitem(app.config, "APP_COMMIT_DATE", "13 Nov 2026 07:20")
+    html = render_sidebar(app, is_admin=False, held=set())
+    expected = f'title="Version 7f08841: commit 7f08841{"0" * 33}, 13 Nov 2026 07:20">v7f08841</span>'
+    assert f'<span class="app-version" {expected}' in html
+    monkeypatch.setitem(app.config, "APP_VERSION", "local")
+    monkeypatch.setitem(app.config, "APP_COMMIT", "")
+    monkeypatch.setitem(app.config, "APP_COMMIT_DATE", "")
+    html = render_sidebar(app, is_admin=False, held=set())
+    assert '<span class="app-version" title="Version local, not from a known commit">vlocal</span>' in html
