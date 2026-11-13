@@ -17,13 +17,16 @@ LINES = """el => {
 }"""
 
 
-def deletion_entries(ann, jordan, tracker) -> list[AuditLog]:
-    """The entries that deleting a person writes, as the Activity page shows them: each removal, then the summary."""
+def deletion_entries(ann, jordan, tracker, mary, alexandria) -> list[AuditLog]:
+    """The entries that deleting a person writes, as the Activity page shows them: each removal, then the summary.
 
-    def entry(action, entity, entity_id, detail, tracker_id=None) -> AuditLog:
+    Two more entries name people whose emails hold hyphens, which a line may break at.
+    """
+
+    def entry(action, entity, entity_id, detail, tracker_id=None, by=ann, affecting=jordan) -> AuditLog:
         return AuditLog(
-            user_id=ann.id,
-            target_user_id=jordan.id,
+            user_id=by.id,
+            target_user_id=affecting.id,
             tracker_id=tracker_id,
             action=action,
             entity=entity,
@@ -68,6 +71,8 @@ def deletion_entries(ann, jordan, tracker) -> list[AuditLog]:
                 "report emails": 2,
             },
         ),
+        entry("user_approved", "user", mary.id, None, by=ann, affecting=mary),
+        entry("user_enabled", "user", alexandria.id, None, by=mary, affecting=alexandria),
     ]
 
 
@@ -77,7 +82,11 @@ def test_activity_emails_stay_whole_and_the_page_does_not_scroll_sideways(
 ):
     ann = user_factory(full_name="Ann Admin", email="ann.admin@example.com", is_admin=True)
     jordan = user_factory(full_name="Jordan Lee", email="jordan.lee@example.com", status="deleted")
-    db.add_all(deletion_entries(ann, jordan, tracker_factory(name="Desktop rollout")))
+    mary = user_factory(full_name="Mary-Jane Smith", email="mary-jane.smith@example.com")
+    alexandria = user_factory(
+        full_name="Alexandria Montgomery-Smith", email="alexandria.montgomery-smith@example-corporation.example.com"
+    )
+    db.add_all(deletion_entries(ann, jordan, tracker_factory(name="Desktop rollout"), mary, alexandria))
     db.commit()
     page.set_viewport_size({"width": width, "height": 900})
     page.add_init_script("localStorage.setItem('tracker-theme', 'dark')")
@@ -86,7 +95,7 @@ def test_activity_emails_stay_whole_and_the_page_does_not_scroll_sideways(
     assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
 
     emails = page.locator("table.activity-table .member-email")
-    assert emails.count() >= 14  # both people on each of the seven entries (and Ann's own sign-in)
+    assert emails.count() >= 18  # both people on each of the nine entries (and Ann's own sign-in)
     for index in range(emails.count()):  # Performed by and User affected, on every row
         email = emails.nth(index)
         assert email.evaluate(LINES) == 1, (email.inner_text(), email.bounding_box())
