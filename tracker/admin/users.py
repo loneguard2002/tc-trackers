@@ -8,13 +8,13 @@ entries name the affected user in ``target_user_id``.
 
 from __future__ import annotations
 
-from flask import abort, flash, redirect, render_template, request, url_for
+from flask import abort, current_app, flash, redirect, render_template, request, url_for
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import ROLES, admin_required, current_user, has_permission, permission_required, tracker_roles
-from ..auth.accounts import account_refusal, last_admin_refusal, vouched_refusal
+from ..auth.accounts import account_refusal, last_admin_refusal, last_password_admin_refusal, vouched_refusal
 from ..auth.guards import TEAM_WITH_SETS_MESSAGE, team_holds_sets
 from ..auth.passwords import hash_password, validate_new_password
 from ..auth.permissions import PERMISSIONS, permission_sources
@@ -48,6 +48,17 @@ def _refuse(message: str):
     get_session().rollback()
     flash(message, "danger")
     return redirect(url_for("admin.users"))
+
+
+def _admin_loss_refusal(db, user: User) -> str | None:
+    """Why ``user`` may not stop being an active administrator, or ``None``.
+
+    The last administrator is kept, and, while Microsoft sign-in is on, the last one who signs in with a password.
+    """
+    refusal = last_admin_refusal(db, user)
+    if not refusal and current_app.config["SSO_ENABLED"]:
+        refusal = last_password_admin_refusal(db, user)
+    return refusal
 
 
 # --- The list -------------------------------------------------------------------------------------------------------
@@ -365,7 +376,7 @@ def disable(user_id: int):
         abort(400, description="This person is already disabled.")
     if user.id == actor.id:
         return _refuse("You cannot disable your own account.")
-    refusal = last_admin_refusal(db, user)
+    refusal = _admin_loss_refusal(db, user)
     if refusal:
         return _refuse(refusal)
     previous = user.status
@@ -398,7 +409,7 @@ def set_admin(user_id: int):
         return redirect(url_for("admin.users"))
     db = get_session()
     if not make_admin:
-        refusal = last_admin_refusal(db, user)
+        refusal = _admin_loss_refusal(db, user)
         if refusal:
             return _refuse(refusal)
     user.is_admin = make_admin
