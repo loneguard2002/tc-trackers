@@ -104,7 +104,7 @@ The fixed list. Each permission gives access to the screens and actions named; n
 
 | Permission | Lets the holder |
 |---|---|
-| `manage_users` | Approve pending Entra users; create local users; reset local users' passwords; disable and re-enable users. |
+| `manage_users` | Approve pending Entra users; create local users; reset local users' passwords; switch a local user to Microsoft sign-in; disable and re-enable users. |
 | `manage_teams` | Create, rename, move and delete teams; add and remove members and change their roles; put trackers in teams and move them between teams; manage direct per-tracker roles (the tracker Access screen). |
 | `manage_lists` | Add, edit, retire and delete regions, locations and business lines (the Regions & business lines screens). A region's Access screen stays with administrators. |
 | `create_trackers` | Create trackers, in any team or in none. |
@@ -113,7 +113,7 @@ The fixed list. Each permission gives access to the screens and actions named; n
 | `view_all_trackers` | Viewer on every tracker. |
 | `view_activity` | Read the Activity screen. |
 
-**Administrators only**, never delegable: the administrator flag; creating, editing and deleting permission sets and choosing who holds them; the audit retention setting.
+**Administrators only**, never delegable: the administrator flag; deleting a person; creating, editing and deleting permission sets and choosing who holds them; the audit retention setting.
 
 **Who holds a permission:** an administrator holds every permission. Anyone else holds a permission when a set containing it is held by them directly, or by a team of which they are a direct member (any role). A set held by a team does not apply to members of the teams below it, nor to members of the teams above it.
 
@@ -124,9 +124,10 @@ The fixed list. Each permission gives access to the screens and actions named; n
 ### 6.3 Guards against misuse
 
 - **No self-promotion.** A holder of `manage_teams` who is not an administrator cannot make any change that would raise their own role on any tracker. This covers changing their own memberships or direct roles, moving a team they belong to, and moving a tracker into a team they belong to. The check compares the actor's tracker roles before and after the change inside the same transaction and refuses the change, with a message, if any role would rise or any tracker would become visible to them. Granting access to someone else at their request is possible and is logged; it is not prevented.
-- **No account takeover.** Holders of `manage_users` who are not administrators cannot reset the password of, disable or re-enable an elevated user. An elevated user is anyone with the administrator flag, or anyone who holds any permission set directly or through any team membership, whatever the account's status (so a disabled former administrator cannot be re-enabled this way). They also cannot act on their own account.
+- **No account takeover.** Holders of `manage_users` who are not administrators cannot reset the password of, switch to Microsoft sign-in, disable or re-enable an elevated user. An elevated user is anyone with the administrator flag, or anyone who holds any permission set directly or through any team membership, whatever the account's status (so a disabled former administrator cannot be re-enabled this way). They also cannot act on their own account.
 - **Team places at approval.** The optional team and role offered when approving an Entra user appear, and are accepted, only for administrators and `manage_teams` holders, and the self-promotion rule applies.
 - **The last administrator stays.** The application refuses to disable, or remove the administrator flag from, the last active administrator. This adds to the existing rule that administrators cannot disable themselves or remove their own flag.
+- **One administrator keeps a password.** While Microsoft sign-in is configured, the application refuses to disable, remove the administrator flag from, or switch to Microsoft sign-in the last active administrator who signs in with a password, so a failure of Microsoft sign-in cannot lock every administrator out. This applies to administrators as well as to `manage_users` holders.
 - **Pending and disabled users** keep any memberships and holdings in the database, but those give nothing until the user is active.
 
 ### 6.4 Team tree rules
@@ -156,7 +157,7 @@ The Administration heading appears when at least one link does. The home page's 
 - **Tracker settings and the new tracker form**: a Team field. Only administrators and `manage_teams` holders can change it on an existing tracker, with confirmation. Whoever creates a tracker chooses its team, or none.
 - **Tracker Access** (the existing roles screen): open to administrators and `manage_teams` holders. It keeps direct roles and adds a read-only list, "Access through teams", showing each person who reaches the tracker through a team, the team path (for example "Infrastructure › Windows") and their role.
 - **Permission sets** (administrators): a grid like the capacity app's role permissions screen, with sets as columns and permissions as rows, saved in one action. It also allows creating, renaming and deleting sets, and adding and removing holders (teams and users) for each set.
-- **Users**: the existing screen, including its existing "create local user" form (`POST /admin/users`), opens to `manage_users` holders within the guards of section 6.3. New: "Reset password" for local users (new password typed by the person resetting it, checked against the existing password rules; nothing is emailed; today this exists only as the `reset-password` command) and "Re-enable" for disabled users. Each user's row shows their teams and their permission sets, with a link to Effective access. Approving a pending Entra user can optionally add them to one team with a role in the same step (section 6.3).
+- **Users**: the existing screen, including its existing "create local user" form (`POST /admin/users`), opens to `manage_users` holders within the guards of section 6.3. New: "Reset password" for local users (new password typed by the person resetting it, checked against the existing password rules; nothing is emailed; today this exists only as the `reset-password` command), "Re-enable" for disabled users, and, on the person's Effective access page and while Microsoft sign-in is configured, "Switch to Microsoft sign-in" for active and disabled local users (it removes the password and links the account by email at the person's next Microsoft sign-in; section 6.3 guards it). Deleting a person is administrator-only (section 6.2). Each user's row shows their teams and their permission sets, with a link to Effective access. Approving a pending Entra user can optionally add them to one team with a role in the same step (section 6.3).
 - **Import confirmation**: gains the same Team field as the new tracker form.
 - **Effective access** (one user, shown to administrators and `manage_users` holders): every tracker the user can see with their role and every route that gives it (administrator, direct role, team path and role, view all trackers), then every permission they hold and where it comes from.
 - **Activity**: newest first, 50 entries a page, with columns for time, performed by, user affected, action (as a readable label), tracker and detail (shown as before → after where there is one). It can be filtered by person (as the one who acted or the one affected), by action and by date range. At the foot, administrators see the retention setting.

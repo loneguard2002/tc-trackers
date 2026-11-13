@@ -42,11 +42,26 @@
       </div>
     </div>
   </div>
-  {% if actions.approve or actions.enable or actions.password or actions.set_admin or actions.disable %}
+  {% if actions.approve or actions.enable or actions.password or actions.switch or actions.set_admin or actions.disable %}
   <div class="access-actions">
     {% if actions.approve %}{{ action('admin.approve', 'Approve', 'check') }}{% endif %}
     {% if actions.enable %}{{ action('admin.enable', 'Re-enable', 'restore') }}{% endif %}
     {% if actions.password %}<a class="button button-small" href="{{ url_for('admin.password', user_id=person.id) }}" data-reset-password data-person="{{ person.full_name }} ({{ person.email }})">{{ icon('lock') }}Reset password</a>{% endif %}
+    {% if actions.switch %}
+    {% set switch_who = person.full_name ~ ' (' ~ person.email ~ ')' %}
+    <form method="post" action="{{ url_for('admin.switch_sign_in', user_id=person.id) }}"
+      data-confirm="Switch {{ switch_who }} to Microsoft sign-in? Their password stops working now. They keep all their access, and sign in with Microsoft using this email address from now on." data-inline-confirm>
+      {{ csrf_field(csrf_token()) }}
+      <button class="button button-small" type="submit" data-ask>{{ icon('key') }}Switch to Microsoft sign-in</button>
+      <div class="confirm-box" data-confirm-box hidden>
+        <p>Switch <strong>{{ switch_who }}</strong> to Microsoft sign-in? Their password stops working now. They keep all their access, and sign in with Microsoft using this email address from now on.</p>
+        <div class="confirm-box-actions">
+          <button class="button" type="button" data-confirm-no>Cancel</button>
+          <button class="button danger" type="button" data-confirm-yes>Switch</button>
+        </div>
+      </div>
+    </form>
+    {% endif %}
     {% if actions.set_admin %}{{ action('admin.set_admin', 'Remove administrator' if person.is_admin else 'Make administrator', 'admin', ('is_admin', '0' if person.is_admin else '1')) }}{% endif %}
     {% if actions.disable %}{{ action('admin.disable', 'Disable', 'ban', confirm='Disable ' ~ person.full_name ~ '? They will no longer be able to sign in.') }}{% endif %}
   </div>
