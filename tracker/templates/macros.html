@@ -2,6 +2,10 @@
 {% macro password_toggle(field_id) -%}
 <button class="password-toggle" type="button" data-password-toggle="{{ field_id }}" aria-pressed="false" hidden>{{ icon('eye', 'icon icon-show') }}{{ icon('eye-off', 'icon icon-hide') }}<span class="sr-only">Show password</span></button>
 {%- endmacro %}
+{# A page title that starts with the pages above it as links ("Teams › Desktops"); links is a list of (href, text). #}
+{% macro title_crumb(links, current) -%}
+<h1 class="title-crumb">{% for href, text in links %}<a href="{{ href }}">{{ text }}</a><span class="title-crumb-sep" aria-hidden="true">›</span>{% endfor %}{{ current }}</h1>
+{%- endmacro %}
 {% macro icon(name, class_name='icon') -%}
 <svg class="{{ class_name }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
   {% if name == 'trackers' %}<path d="M4 13h6V4H4v9Zm0 7h6v-3H4v3Zm10 0h6v-9h-6v9Zm0-13h6V4h-6v3Z"/>

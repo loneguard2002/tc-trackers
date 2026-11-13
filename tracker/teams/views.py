@@ -184,6 +184,7 @@ def _render_index(form, errors: list[str], status: int):
         selected_parent=form.get("parent_id", "") if form else _parent_choice(rows, request.args.get("parent")),
         form=form,
         errors=errors,
+        team_total=len(rows),
         page_title="Teams",
         current_page="teams",
     )

@@ -693,16 +693,12 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .teams-tree-card { margin-bottom: 0; }
 .teams-tree-card .section-body { padding: 12px 20px 16px; }
 .teams-main { min-width: 0; }
-.teams-crumb { margin-bottom: 12px; }
 .tree-filter { display: block; width: calc(100% - 40px); margin: 12px 20px 0; padding: 7px 10px; font-size: .9rem; }
 .team-tree a[aria-current="page"] { color: var(--text); font-weight: 700; }
 .team-tree a[aria-current="page"]::before { content: ""; display: inline-block; width: 3px; height: 1em; margin-right: 8px; vertical-align: -2px; border-radius: 2px; background: var(--primary); }
 .team-card { overflow: hidden; }
 .team-header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 8px; padding: 14px 20px 12px; }
 .team-header-text { display: grid; flex: 1 1 320px; gap: 8px; min-width: 0; margin-right: 8px; }
-.team-title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
-.team-header h1 { margin: 0; font-size: 26px; line-height: 1.15; overflow-wrap: anywhere; }
-.team-description { margin: 0; color: var(--muted); font-size: .875rem; }
 .team-pills { display: flex; flex-wrap: wrap; gap: 6px 8px; }
 .team-pill { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--text) 7%, transparent); font-size: .8125rem; }
 .team-pill .icon { width: 14px; height: 14px; }
@@ -715,7 +711,7 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .button.icon-only .icon { margin: 0; }
 .team-alert { flex: 1 1 100%; margin: 0 0 4px; }
 .team-edit { display: block; }
-.team-edit h1 { margin-bottom: 12px; font-size: 1.25rem; }
+.team-edit h2 { margin: 0 0 12px; font-size: 1.25rem; }
 .team-edit-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .team-tabs { margin: 0; padding: 0 12px; border-top: 1px solid var(--border); border-bottom: 0; }
 .team-tabs .tab { margin-bottom: 0; }
@@ -1133,6 +1129,7 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .list-head > div:first-child { flex: 1 1 320px; min-width: 0; }
 .list-head > .button { flex: none; white-space: nowrap; }
 /* A title that starts with the page above it as a link ("Users › Access"): the link is muted until pointed at. */
+.title-crumb { overflow-wrap: anywhere; }
 .title-crumb a { color: var(--muted); text-decoration: none; }
 .title-crumb a:hover { color: var(--text); text-decoration: underline; }
 .title-crumb-sep { margin: 0 10px; color: var(--muted); font-weight: 400; }

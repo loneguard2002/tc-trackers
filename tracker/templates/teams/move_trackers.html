@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, icon %}
+{% from "macros.html" import csrf_field, icon, title_crumb %}
 {% from "teams/_changes.html" import access_changes %}
 {% from "teams/_tracker_regions.html" import regions_after %}
 {% block head_extra %}
@@ -7,8 +7,12 @@
 {% endblock %}
 {% block content %}
 {% set count = moving|length %}
-<h1>Move trackers to {{ team.name }}</h1>
-<p class="page-lede"><a href="{{ url_for('teams.index') }}">Teams</a> › <a href="{{ url_for('teams.view', team_id=team.id, tab='trackers') }}">{{ team.name }}</a> › Move trackers</p>
+<header class="list-head">
+  <div>
+    {{ title_crumb([(url_for('teams.index'), 'Teams'), (url_for('teams.view', team_id=team.id, tab='trackers'), team.name)], 'Move trackers') }}
+    <p class="page-lede">Check who gains or loses access before the trackers move to {{ team.name }}.</p>
+  </div>
+</header>
 <div class="settings settings-narrow">
   <section class="settings-section" aria-labelledby="section-moving">
     <header class="settings-section-head">

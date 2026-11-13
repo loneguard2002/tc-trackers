@@ -1,10 +1,14 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import csrf_field, title_crumb %}
 {% from "teams/_changes.html" import access_changes %}
 {% block content %}
 {% set adding = change_to and change_to[0] == 'add' %}
-<h1>Higher teams for {{ team.name }}</h1>
-<p class="page-lede"><a href="{{ url_for('teams.index') }}">Teams</a> › <a href="{{ url_for('teams.view', team_id=team.id) }}">{{ team.name }}</a> › Higher teams</p>
+<header class="list-head">
+  <div>
+    {{ title_crumb([(url_for('teams.index'), 'Teams'), (url_for('teams.view', team_id=team.id), team.name)], 'Higher teams') }}
+    <p class="page-lede">The teams {{ team.name }} sits under. People in a higher team reach this team's trackers.</p>
+  </div>
+</header>
 <div class="settings settings-narrow">
   {% if errors %}
   <div class="form-alert" role="alert">

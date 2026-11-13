@@ -22,17 +22,39 @@ def desktops(team_factory, region_factory, location_factory):
 
 def test_header_shows_place_under_and_description_and_actions(client, logged_in_admin, desktops):
     raw = raw_of(client.get(f"/admin/teams/{desktops.id}"))
+    # the page title leads back to Teams ("Teams › Desktops"); the team's description sits under it, once
+    title = (
+        '<h1 class="title-crumb"><a href="/admin/teams">Teams</a>'
+        '<span class="title-crumb-sep" aria-hidden="true">›</span>Desktops</h1>'
+    )
+    assert title in raw and raw.count("<h1") == 1
+    assert '<p class="page-lede">Laptops and desks.</p>' in raw and raw.count("Laptops and desks.") == 1
     header = header_of(raw)
-    assert re.search(r"<h1[^>]*>\s*Desktops\s*</h1>", header)
     text = flat(header)
     assert "EMEA" in text and "London, United Kingdom" in text
     assert "Under Applications and Windows" in text
-    assert "Laptops and desks." in text
     assert len(re.findall(r'href="/admin/teams/\d+"', header)) == 2
     assert f'href="/admin/teams/{desktops.id}?edit=1"' in header and "Edit details" in text
     assert f'href="/admin/teams/{desktops.id}/parents"' in header and "Higher teams" in text
     assert re.search(r'<button[^>]*title="Delete team"', header)
     assert 'id="details"' not in raw and ">Details<" not in raw
+
+
+def test_teams_pages_open_with_a_title_and_a_description(client, logged_in_admin, desktops, team_factory):
+    """Teams carries its count; a team without a description says what a team does; its sub-pages lead back."""
+    index = raw_of(client.get("/admin/teams"))
+    assert '<h1>Teams <span class="count-pill title-count">3<span class="sr-only"> teams</span>' in index
+    plain = team_factory(name="Plain")
+    page = raw_of(client.get(f"/admin/teams/{plain.id}"))
+    assert (
+        '<p class="page-lede">People in this team reach its trackers, and the trackers of every team below it.</p>'
+        in page
+    )
+    crumbs = '<a href="/admin/teams">Teams</a><span class="title-crumb-sep" aria-hidden="true">›</span>'
+    parents = raw_of(client.get(f"/admin/teams/{desktops.id}/parents"))
+    assert f'{crumbs}<a href="/admin/teams/{desktops.id}">Desktops</a>' in parents
+    assert '<span class="title-crumb-sep" aria-hidden="true">›</span>Higher teams</h1>' in parents
+    assert "The teams Desktops sits under." in parents and parents.count("<h1") == 1
 
 
 def test_header_shows_the_region_alone_without_a_location(client, logged_in_admin, team_factory, region_factory):
