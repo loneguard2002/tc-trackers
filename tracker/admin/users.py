@@ -1,4 +1,5 @@
-"""The Users screen (spec sections 6.3, 7 and 8.1): people, approval, password reset, re-enable and effective access.
+"""The Users screen (spec sections 6.3, 7 and 8.1): people, approval, password reset, the switch to Microsoft sign-in,
+re-enable and effective access.
 
 Open to ``manage_users`` holders; the administrator flag stays administrator-only. Every action on a person asks
 ``account_refusal`` first and only then looks at the account's status, so a refusal on one's own or an elevated
@@ -113,6 +114,10 @@ def _actions(db, actor: User, user: User) -> dict[str, bool]:
         "enable": may_act and user.status == "disabled",
         "disable": may_act and user.status != "disabled" and user.id != actor.id,
         "password": may_act and user.auth_source == "local",
+        "switch": may_act
+        and user.auth_source == "local"
+        and user.status in ("active", "disabled")
+        and current_app.config["SSO_ENABLED"],
         "set_admin": actor.is_admin and user.id != actor.id,
     }
 
@@ -471,6 +476,50 @@ def password(user_id: int):
     db.commit()
     flash(f"Set a new password for {user.full_name}. Share it with them securely.", "success")
     return redirect(url_for("admin.users"))
+
+
+# --- Switching to Microsoft sign-in ---------------------------------------------------------------------------------
+
+
+@bp.post("/users/<int:user_id>/sign-in")
+@permission_required("manage_users")
+def switch_sign_in(user_id: int):
+    """Turn a password account into a Microsoft one, with no password and no Microsoft link yet.
+
+    The person's next Microsoft sign-in links the account by its email address (``_resolve_user``). A session already
+    signed in is not ended, as after a password reset. The switch is not an administrator loss, so only the last
+    administrator who signs in with a password is guarded, not the last administrator.
+    """
+    user = _get_user_or_404(user_id)
+    db = get_session()
+    actor = current_user()
+    refusal = account_refusal(db, actor, user)
+    if refusal:
+        return _refuse(refusal)
+    if not current_app.config["SSO_ENABLED"]:
+        abort(400, description="Microsoft sign-in is not set up.")
+    if user.auth_source != "local":
+        abort(400, description="This person already signs in with Microsoft.")
+    if user.status not in ("active", "disabled"):
+        abort(400, description="Only an active or disabled person can be switched to Microsoft sign-in.")
+    refusal = last_password_admin_refusal(db, user)
+    if refusal:
+        return _refuse(refusal)
+    user.auth_source = "sso"
+    user.password_hash = None
+    record(
+        db,
+        user_id=actor.id,
+        tracker_id=None,
+        action="sign_in_switched",
+        entity="user",
+        entity_id=user.id,
+        detail=change("local", "sso"),
+        target_user_id=user.id,
+    )
+    db.commit()
+    flash(f"{user.full_name} now signs in with Microsoft.", "success")
+    return redirect(url_for("admin.access", user_id=user.id))
 
 
 # --- Effective access -----------------------------------------------------------------------------------------------
