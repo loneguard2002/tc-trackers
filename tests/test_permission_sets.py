@@ -254,7 +254,10 @@ def test_removing_a_holder_removed_at_the_same_moment(client, logged_in_admin, d
 
 def test_permission_sets_screen_warns_about_users_and_teams_together(client, logged_in_admin):
     page = text_of(client.get("/admin/permission-sets"))
-    assert "Holding both Manage users and Manage teams gives reach close to an administrator's" in page
+    assert (
+        "Manage users and Manage teams together give almost administrator-level access, so give that pair with care."
+        in page
+    )
 
 
 # --- The cards ------------------------------------------------------------------------------------------------------
