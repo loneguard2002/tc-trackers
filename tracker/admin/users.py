@@ -47,8 +47,14 @@ EMAIL_MISMATCH_MESSAGE = "The email does not match."
 
 
 def _get_user_or_404(user_id: int, lock: bool = False) -> User:
-    """The user, read ``FOR UPDATE`` with ``lock`` (held until the request commits or rolls back)."""
-    user = get_session().get(User, user_id, with_for_update=lock) if in_range(user_id) else None
+    """The user, read ``FOR NO KEY UPDATE`` with ``lock`` (held until the request commits or rolls back).
+
+    That lock waits for, and holds off, any other change to the row, such as a re-enable, but not the ``KEY SHARE``
+    lock a foreign key to the row takes. ``FOR UPDATE`` would also block that: a report retry holding a queued send
+    that the person created, and then writing its entry, would wait for the delete while the delete waits for the send.
+    """
+    for_update = {"key_share": True} if lock else None
+    user = get_session().get(User, user_id, with_for_update=for_update) if in_range(user_id) else None
     if user is None:
         abort(404)
     return user
@@ -559,8 +565,8 @@ def _render_delete(user: User, errors: list[str], status: int):
 def delete(user_id: int):
     """Delete a disabled or pending person (``delete_person``), once the administrator has typed their email.
 
-    The POST reads the person ``FOR UPDATE`` and checks the status again, so a person re-enabled since the page opened
-    is not deleted. The typed email matches ignoring case and surrounding spaces.
+    The POST locks the person (``_get_user_or_404``) and checks the status again, so a person re-enabled since the page
+    opened is not deleted. The typed email matches ignoring case and surrounding spaces.
     """
     user = _get_user_or_404(user_id, lock=request.method == "POST")
     db = get_session()

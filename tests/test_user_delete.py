@@ -11,11 +11,12 @@ from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 
 from tests.conftest import post, sign_in
 from tracker.admin.deletion import DeletionSummary, deletion_summary
 from tracker.admin.users import _actions
+from tracker.db import get_engine
 from tracker.models import (
     AuditLog,
     PermissionSetHolder,
@@ -217,6 +218,25 @@ def test_delete_is_for_administrators_only(client, db, s, user_factory, give_set
     assert client.get(delete_url(s.person)).status_code == 403
     assert post(client, delete_url(s.person), {"confirm_email": EMAIL}).status_code == 403
     assert_unchanged(db, s)
+
+
+def test_the_delete_locks_the_person_without_blocking_foreign_keys(client, db, s):
+    """``FOR NO KEY UPDATE``, not ``FOR UPDATE``: a retry of a queued send holds the send and then writes an entry whose
+    foreign key takes ``KEY SHARE`` on its creator's row, so ``FOR UPDATE`` on that person could deadlock with it."""
+    statements = []
+
+    def capture(_connection, _cursor, statement, *_args):
+        statements.append(statement)
+
+    engine = get_engine(client.application)
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        assert post(client, delete_url(s.person), {"confirm_email": EMAIL}).status_code == 302
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+    locks = [lock for st in statements for lock in re.findall(r"\bFROM users\b.*?\bFOR ((?:NO KEY )?UPDATE)", st, re.S)]
+    assert locks == ["NO KEY UPDATE"]
+    assert reloaded(db, s.person).status == "deleted"
 
 
 def test_delete_needs_a_disabled_or_pending_account(client, db, s, user_factory):
