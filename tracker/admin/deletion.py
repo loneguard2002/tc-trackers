@@ -7,8 +7,9 @@ recipient list and on report sends still queued for a retry, and their sign-in (
 administrator flag). Recipients are typed-in addresses with no link to accounts, so they are matched by email,
 ignoring case.
 
-Each removal is recorded with the entry the same change writes elsewhere, then one ``user_deleted`` entry holds the
-name, the email and the counts; every entry names the person in ``target_user_id``. Entries about one tracker carry its
+Each removal is recorded with the entry the same change writes elsewhere (a queued send left with nobody records its
+failure, as a send that fails does), then one ``user_deleted`` entry holds the name, the email, whether they were an
+administrator and the counts; every entry names the person in ``target_user_id``. Entries about one tracker carry its
 ``tracker_id``, so the Activity page hides their detail from viewers who cannot open that tracker; the summary names no
 tracker.
 """
@@ -22,6 +23,7 @@ from sqlalchemy import Select, delete, func, or_, select, update
 from sqlalchemy.orm import Session, defer
 
 from ..audit import change, record
+from ..mail import sending
 from ..models import (
     AuditLog,
     PermissionSet,
@@ -136,20 +138,43 @@ def deletion_summary(session: Session, user: User) -> DeletionSummary:
     )
 
 
-def _drop_from_queued_sends(session: Session, email: str) -> None:
-    """Take ``email`` (any case) off every report send still queued for a retry; a send left with nobody fails.
+def _drop_from_queued_sends(session: Session, actor: User, user: User) -> None:
+    """Take the person's email (any case) off every report send still queued for a retry, and record each change.
 
-    The queued sends are read ``FOR UPDATE``, so a retry that has claimed one finishes first, and none starts until the
-    caller commits.
+    A send that keeps other recipients records a ``recipient_removed`` entry for each address taken off; a send left
+    with nobody fails, and records the ``report_send_failed`` entry that any failed send records.
+
+    The queued sends are read ``FOR UPDATE``, in id order, so a retry that has claimed one finishes first, and none
+    starts until the caller commits.
     """
-    queued = select(ReportSend).options(defer(ReportSend.pdf)).where(ReportSend.status == "queued").with_for_update()
-    for send in session.scalars(queued):
-        kept = [address for address in send.recipients if address.lower() != email.lower()]
-        if len(kept) == len(send.recipients):
+    queued = (
+        select(ReportSend)
+        .options(defer(ReportSend.pdf))
+        .where(ReportSend.status == "queued")
+        .order_by(ReportSend.id)
+        .with_for_update()
+    )
+    email = user.email.lower()
+    for send in session.scalars(queued).all():
+        removed = [address for address in send.recipients if address.lower() == email]
+        if not removed:
             continue
-        send.recipients = kept
-        if not kept:
+        send.recipients = [address for address in send.recipients if address.lower() != email]
+        if not send.recipients:
             send.status, send.error, send.next_attempt_at = "failed", NO_RECIPIENTS_LEFT, None
+            sending._audit(session, send, session.get(Tracker, send.tracker_id), actor.id, target_user_id=user.id)
+            continue
+        for address in removed:
+            record(
+                session,
+                user_id=actor.id,
+                tracker_id=send.tracker_id,
+                action="recipient_removed",
+                entity="report_send",
+                entity_id=send.id,
+                detail={"email": address, "week_ending": send.week_ending.isoformat()},
+                target_user_id=user.id,
+            )
 
 
 def delete_person(session: Session, actor: User, user: User) -> None:
@@ -204,6 +229,11 @@ def delete_person(session: Session, actor: User, user: User) -> None:
             entity_id=email,
             detail={"email": email},
         )
+    for model in (TeamMember, RegionGrant, TrackerRole, PermissionSetHolder):
+        session.execute(delete(model).where(model.user_id == user.id))
+    session.execute(update(Tracker).where(Tracker.lead_user_id == user.id).values(lead_user_id=None))
+    session.execute(delete(Recipient).where(Recipient.id.in_([recipient_id for recipient_id, *_ in recipients])))
+    _drop_from_queued_sends(session, actor, user)
     log(
         tracker_id=None,
         action="user_deleted",
@@ -218,13 +248,9 @@ def delete_person(session: Session, actor: User, user: User) -> None:
             "permission_sets": len(sets),
             "trackers_led": len(led),
             "report_emails": len({tracker_id for _id, tracker_id, _name, _email in recipients}),
+            "administrator": user.is_admin,  # read before the flag is cleared below
         },
     )
-    for model in (TeamMember, RegionGrant, TrackerRole, PermissionSetHolder):
-        session.execute(delete(model).where(model.user_id == user.id))
-    session.execute(update(Tracker).where(Tracker.lead_user_id == user.id).values(lead_user_id=None))
-    session.execute(delete(Recipient).where(Recipient.id.in_([recipient_id for recipient_id, *_ in recipients])))
-    _drop_from_queued_sends(session, user.email)
     user.is_admin = False
     user.password_hash = None
     user.sso_subject = None

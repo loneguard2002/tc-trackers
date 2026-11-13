@@ -194,6 +194,16 @@ def test_delete_records_each_removal_and_a_summary(client, db, s, logged_in_admi
         "permission_sets": 1,
         "trackers_led": 1,
         "report_emails": 2,
+        "administrator": True,
+    }
+    emptied = {  # the shape every change of a send to failed records
+        "recipient_count": 0,
+        "recipients": [],
+        "trigger": "manual",
+        "status": "failed",
+        "week_ending": "2026-09-04",
+        "attempts": 1,
+        "error": "No recipients left",
     }
     person_id = str(s.person.id)
     assert [(row.action, row.tracker_id, row.entity, row.entity_id, row.detail) for row in rows] == [
@@ -204,6 +214,14 @@ def test_delete_records_each_removal_and_a_summary(client, db, s, logged_in_admi
         ("settings_updated", s.desktops.id, "tracker", str(s.desktops.id), {"lead": ["Jordan Lee", None]}),
         ("recipient_removed", s.desktops.id, "email_settings", MIXED, {"email": MIXED}),
         ("recipient_removed", s.laptops.id, "email_settings", EMAIL, {"email": EMAIL}),
+        ("report_send_failed", s.desktops.id, "report_send", str(s.queued.id), emptied),
+        (
+            "recipient_removed",
+            s.desktops.id,
+            "report_send",
+            str(s.shared.id),
+            {"email": EMAIL, "week_ending": "2026-09-11"},
+        ),
         ("user_deleted", None, "user", person_id, summary),
     ]
     assert {(row.user_id, row.target_user_id) for row in rows} == {(logged_in_admin.id, s.person.id)}

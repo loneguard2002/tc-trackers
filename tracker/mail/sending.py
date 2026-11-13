@@ -54,7 +54,7 @@ def _link(tracker: Tracker, week_ending: date) -> str:
     return report_link(current_app.config["APP_URL"], tracker.id, week_ending)
 
 
-def _audit(session, send: ReportSend, tracker: Tracker, user_id: int | None) -> None:
+def _audit(session, send: ReportSend, tracker: Tracker, user_id: int | None, target_user_id: int | None = None) -> None:
     action = {"sent": "report_sent", "queued": "report_send_queued", "failed": "report_send_failed"}[send.status]
     detail = {
         "recipient_count": len(send.recipients),
@@ -68,7 +68,7 @@ def _audit(session, send: ReportSend, tracker: Tracker, user_id: int | None) -> 
         detail["error"] = send.error
     record(
         session, user_id=user_id, tracker_id=tracker.id, action=action, entity="report_send", entity_id=send.id,
-        detail=detail,
+        detail=detail, target_user_id=target_user_id,
     )  # fmt: skip
 
 
