@@ -250,6 +250,7 @@ def test_delete_dialog_unlocks_only_for_the_matching_email(page, live_server, us
     submit.click()
     expect(page.get_by_text("Deleted Jordan Lee (jordan.lee@example.com).")).to_be_visible()
     assert page.url == f"{live_server}/admin/users"
+    expect(page.locator("#people-table")).not_to_contain_text("Jordan Lee")
     db.expire_all()
     assert db.get(type(target), target.id).status == "deleted"
     assert page.evaluate("window.__csp") == []

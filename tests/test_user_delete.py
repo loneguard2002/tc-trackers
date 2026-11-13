@@ -418,3 +418,72 @@ def test_activity_hides_tracker_removals_from_viewers_who_cannot_open_the_tracke
     summary = row("user_deleted")
     assert HIDDEN not in summary and "jordan.lee@example.com" in summary
     assert "Laptop refresh" not in summary and "Desktop rollout" not in summary
+
+
+# --- Deleted people on the Users list and their Access page ---------------------------------------------------------
+
+
+@pytest.fixture
+def gone(client, db, user_factory):
+    """Ann Admin, signed in, has deleted Jordan Lee; Sam Other stays active."""
+    ann = user_factory(full_name="Ann Admin", is_admin=True)
+    user_factory(full_name="Sam Other")
+    person = user_factory(email=EMAIL, full_name="Jordan Lee", status="disabled")
+    sign_in(client, ann)
+    assert post(client, delete_url(person), {"confirm_email": EMAIL}).status_code == 302
+    client.get("/admin/users")  # shows the "Deleted" message once, so the pages under test start without it
+    return SimpleNamespace(ann=ann, person=person)
+
+
+def deleted_on(db) -> str:
+    """The date of the delete as the Access page words it, from the entry the delete recorded."""
+    return db.scalars(select(AuditLog).where(AuditLog.action == "user_deleted")).one().at.strftime("%d %b %Y")
+
+
+def access_page(client, person: User) -> str:
+    return text_of(client.get(f"/admin/users/{person.id}/access"))
+
+
+def deleted_note(page: str) -> str:
+    found = re.search(r'<p[^>]*id="deleted-note"[^>]*>(.*?)</p>', page, re.S)
+    assert found, "the page has no deleted note"
+    return plain(found.group(1))
+
+
+def test_users_list_hides_deleted_people_and_the_filter_shows_them(client, gone):
+    page = text_of(client.get("/admin/users"))
+    assert "Jordan Lee" not in page and EMAIL not in page
+    assert re.search(r'title-count">2<', page)  # Ann Admin and Sam Other
+    assert "Jordan Lee" not in text_of(client.get("/admin/users?q=jordan"))  # a search does not bring them back
+
+    page = text_of(client.get("/admin/users?status=deleted"))
+    assert '<option value="deleted" selected>Deleted</option>' in page
+    assert re.findall(r'<tr data-sort-name="([^"]*)"', page) == ["Jordan Lee"]  # nobody else is listed
+    row = re.search(r'<tr data-sort-name="Jordan Lee".*?</tr>', page, re.S).group(0)
+    assert EMAIL in row and '<span class="badge badge-muted">Deleted</span>' in row
+    assert re.findall(r'href="([^"]+)"', row) == [f"/admin/users/{gone.person.id}/access"]
+    assert re.findall(r'class="icon-tip" aria-hidden="true">([^<]*)<', row) == ["Access"]
+    assert "<form" not in row
+    assert "Jordan Lee" in text_of(client.get("/admin/users?status=deleted&q=jordan"))
+
+
+def test_access_page_of_a_deleted_person(client, db, gone):
+    page = access_page(client, gone.person)
+    assert '<span class="badge badge-muted">Deleted</span>' in page
+    assert deleted_note(page) == f"Deleted on {deleted_on(db)} by Ann Admin."
+    assert 'class="access-actions"' not in page
+    assert "This account is not active" not in page
+
+
+def test_the_deleted_note_leaves_out_an_administrator_who_is_gone(client, db, gone):
+    entry = db.scalars(select(AuditLog).where(AuditLog.action == "user_deleted")).one()
+    entry.user_id = None  # as the foreign key leaves it when that administrator's account is removed
+    db.commit()
+    assert deleted_note(access_page(client, gone.person)) == f"Deleted on {deleted_on(db)}."
+
+
+def test_the_deleted_note_without_a_delete_entry(client, user_factory, gone):
+    unrecorded = user_factory(full_name="Kim Ghost", status="deleted")  # set directly, so no entry was written
+    page = access_page(client, unrecorded)
+    assert deleted_note(page) == DELETED_MESSAGE
+    assert "This account is not active" not in page

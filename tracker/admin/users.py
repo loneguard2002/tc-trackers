@@ -10,6 +10,8 @@ them. Each change is committed with its activity entries in one transaction, and
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from flask import abort, current_app, flash, redirect, render_template, request, url_for
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -29,7 +31,7 @@ from ..auth.permissions import PERMISSIONS, permission_sources
 from ..auth.roles import tracker_access_routes
 from ..db import get_session
 from ..ids import in_range, parse_id
-from ..models import PermissionSet, PermissionSetHolder, Region, RegionGrant, Team, TeamMember, User
+from ..models import AuditLog, PermissionSet, PermissionSetHolder, Region, RegionGrant, Team, TeamMember, User
 from ..teams.tree import (
     ALREADY_MEMBER_MESSAGE,
     CHOOSE_ROLE_MESSAGE,
@@ -145,7 +147,7 @@ def _actions(db, actor: User, user: User) -> dict[str, bool]:
     return dict.fromkeys(actions, False) if user.status == "deleted" else actions
 
 
-STATUS_FILTERS = {"active": "Active", "pending": "Awaiting approval", "disabled": "Disabled"}
+STATUS_FILTERS = {"active": "Active", "pending": "Awaiting approval", "disabled": "Disabled", "deleted": "Deleted"}
 ADMIN_FILTERS = {"yes": "Administrators", "no": "Not administrators"}
 SIGN_IN_LABELS = {"local": "Local", "sso": "SSO"}
 SIGN_IN_MEANINGS = {
@@ -180,6 +182,8 @@ def _filtered_users(filters: dict[str, str | int | None]):
         query = query.where(or_(User.full_name.ilike(pattern, escape="\\"), User.email.ilike(pattern, escape="\\")))
     if filters["status"]:
         query = query.where(User.status == filters["status"])
+    if filters["status"] != "deleted":  # a deleted person is listed only when asked for
+        query = query.where(User.status != "deleted")
     if filters["admin"]:
         query = query.where(User.is_admin.is_(filters["admin"] == "yes"))
     if filters["sign_in"]:
@@ -202,10 +206,13 @@ def _filtered_users(filters: dict[str, str | int | None]):
 def users():
     db = get_session()
     actor = current_user()
-    everyone = db.scalars(select(User).order_by(User.status != "pending", User.full_name, User.id)).all()
+    everyone = db.scalars(
+        select(User).where(User.status != "deleted").order_by(User.status != "pending", User.full_name, User.id)
+    ).all()
     filters = _list_filters(db)
     filtered = any(filters.values())
     rows = db.scalars(_filtered_users(filters)).all()
+    shown = everyone + [user for user in rows if user.status == "deleted"]
     labels = team_labels(load_team_rows(db))
     teams, sets = _teams_and_sets(db, labels)
     place_choices = []
@@ -233,7 +240,7 @@ def users():
         ).all(),
         teams=teams,
         sets=sets,
-        actions={user.id: _actions(db, actor, user) for user in everyone},
+        actions={user.id: _actions(db, actor, user) for user in shown},
         place_choices=place_choices,
         roles=ROLES,
         page_title="Users",
@@ -597,6 +604,24 @@ def delete(user_id: int):
 # --- Effective access -----------------------------------------------------------------------------------------------
 
 
+def _deleted_note(db, user: User) -> tuple[datetime, str | None] | None:
+    """When a deleted person was deleted and by whom, from the latest ``user_deleted`` entry for them.
+
+    The name is None when that entry no longer names the administrator (their account was removed since).
+    """
+    if user.status != "deleted":
+        return None
+    row = db.execute(
+        select(AuditLog.at, User.full_name)
+        .select_from(AuditLog)
+        .outerjoin(User, User.id == AuditLog.user_id)
+        .where(AuditLog.action == "user_deleted", AuditLog.target_user_id == user.id)
+        .order_by(AuditLog.at.desc(), AuditLog.id.desc())
+        .limit(1)
+    ).first()
+    return (row.at, row.full_name) if row else None
+
+
 @bp.get("/users/<int:user_id>/access")
 @permission_required("manage_users")
 def access(user_id: int):
@@ -629,6 +654,7 @@ def access(user_id: int):
         person=user,
         actions=actions,
         deletion=deletion_summary(db, user) if actions["delete"] else None,
+        deleted_note=_deleted_note(db, user),
         teams=teams,
         team_labels=labels,
         can_view_teams=has_permission(viewer, "manage_teams"),

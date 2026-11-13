@@ -75,7 +75,9 @@
   {% endfor %}
 </nav>
 
-{% if not active %}
+{% if person.status == 'deleted' %}
+<p class="form-alert access-inactive" id="deleted-note">{% if deleted_note %}Deleted on {{ deleted_note[0].strftime('%d %b %Y') }}{% if deleted_note[1] %} by {{ deleted_note[1] }}{% endif %}.{% else %}This person has been deleted.{% endif %}</p>
+{% elif not active %}
 <p class="form-alert access-inactive">This account is not active, so it gives no access to trackers and no permissions. Any teams, region access and permission sets it keeps apply again once it is active.</p>
 {% endif %}
 
