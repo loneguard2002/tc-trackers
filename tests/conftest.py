@@ -77,6 +77,29 @@ def client(app):
     return app.test_client()
 
 
+TENANT = "tenant-1"
+
+
+@pytest.fixture
+def sso_app():
+    return create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "DATABASE_URL": DATABASE_URL,
+            "SESSION_COOKIE_SECURE": False,
+            "SSO_TENANT_ID": TENANT,
+            "SSO_CLIENT_ID": "client",
+            "SSO_CLIENT_SECRET": "secret",
+        }
+    )
+
+
+@pytest.fixture
+def sso_client(sso_app):
+    return sso_app.test_client()
+
+
 def _create_worker_database() -> None:
     """Create this worker's database (through the server's ``postgres`` database) when it does not exist yet."""
     url = make_url(DATABASE_URL)

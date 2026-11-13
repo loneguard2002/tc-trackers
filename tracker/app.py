@@ -18,6 +18,7 @@ from .admin import bp as admin_bp
 from .audit import record
 from .auth import bp as auth_bp
 from .auth import current_user, has_permission
+from .auth.accounts import find_by_email
 from .auth.csrf import install_csrf
 from .auth.passwords import hash_password, validate_new_password
 from .config import load_config, validate_config
@@ -147,7 +148,7 @@ def _register_cli(app: Flask) -> None:
             raise click.ClickException("Enter a valid email address.")
         password = _read_valid_password(password)
         db = get_session()
-        if db.query(User).filter(User.email == email).first() is not None:
+        if find_by_email(db, email) is not None:
             raise click.ClickException(f"A user with the email {email} already exists.")
         user = User(
             email=email,
@@ -180,7 +181,7 @@ def _register_cli(app: Flask) -> None:
         email = email.strip().lower()
         password = _read_valid_password(password)
         db = get_session()
-        user = db.query(User).filter(User.email == email).first()
+        user = find_by_email(db, email)
         if user is None:
             raise click.ClickException(f"No user with the email {email} exists.")
         if user.auth_source != "local":
@@ -250,7 +251,7 @@ def _register_cli(app: Flask) -> None:
 
         db = get_session()
         if owner:
-            user = db.query(User).filter(User.email == owner.strip().lower()).first()
+            user = find_by_email(db, owner.strip().lower())
         else:
             admins = db.query(User).filter(User.is_admin.is_(True), User.status == "active").all()
             user = admins[0] if len(admins) == 1 else None

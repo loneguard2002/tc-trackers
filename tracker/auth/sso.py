@@ -8,6 +8,7 @@ from sqlalchemy import select
 from ..audit import change, record
 from ..db import get_session
 from ..models import User
+from .accounts import find_by_email
 from .session import login_user
 
 bp = Blueprint("sso", __name__)
@@ -52,7 +53,7 @@ def _resolve_user(db, subject: str, claims: dict, full_name: str):
     email = (claims.get("email") or claims.get("preferred_username") or "").strip().lower()
     if not email:
         return None, "Sign-in failed: no email address was returned by the identity provider."
-    user = db.scalar(select(User).where(User.email == email))
+    user = find_by_email(db, email)
     if user is None:
         user = User(
             email=email,

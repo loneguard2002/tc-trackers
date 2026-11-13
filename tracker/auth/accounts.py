@@ -20,6 +20,14 @@ VOUCHED_MESSAGE = "You created this account or set its password, so another pers
 VOUCHED_ACTIONS = ("user_created", "password_reset")
 
 
+def find_by_email(session: Session, email: str) -> User | None:
+    """The account with this email, already lower case, whose status is not ``deleted``, or ``None``.
+
+    A deleted person keeps their row and their email, so every lookup of a person by email goes through here.
+    """
+    return session.scalar(select(User).where(User.email == email, User.status != "deleted"))
+
+
 def is_elevated(session: Session, user: User) -> bool:
     """The administrator flag, or any permission set held directly or through any team membership.
 

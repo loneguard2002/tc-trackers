@@ -1,14 +1,11 @@
 """SSO callback behaviour with MSAL replaced by a fake."""
 
 import pytest
-from conftest import DATABASE_URL
+from conftest import TENANT
 from sqlalchemy import select
 
-from tracker.app import create_app
 from tracker.auth import sso
 from tracker.models import AuditLog, User
-
-TENANT = "tenant-1"
 
 
 class FakeMsal:
@@ -26,26 +23,6 @@ class FakeMsal:
 
 def claims(oid="oid-1", tid=TENANT, email="person@example.com", name="Person"):
     return {"id_token_claims": {"tid": tid, "oid": oid, "email": email, "name": name}}
-
-
-@pytest.fixture
-def sso_app():
-    return create_app(
-        {
-            "TESTING": True,
-            "SECRET_KEY": "test",
-            "DATABASE_URL": DATABASE_URL,
-            "SESSION_COOKIE_SECURE": False,
-            "SSO_TENANT_ID": TENANT,
-            "SSO_CLIENT_ID": "client",
-            "SSO_CLIENT_SECRET": "secret",
-        }
-    )
-
-
-@pytest.fixture
-def sso_client(sso_app):
-    return sso_app.test_client()
 
 
 def use(monkeypatch, fake):
