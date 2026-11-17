@@ -47,8 +47,8 @@ own access lists) gets sorting, the count line and the phone cards, but no searc
 
 - **A. Grow the shared toolkit Locations already uses** (chosen). `lists/_table.html` (macros) and `lists.js` gain the
   missing parts, and every table moves onto them. Lists that load in full are searched, sorted and paged in the
-  browser. Activity, which can hold thousands of rows, does the same on the server with the same look and the same
-  address format.
+  browser. Activity and Entries, which can hold thousands of rows, do the same on the server with the same look and
+  the same address format.
 - B. Everything on the server: works without JavaScript and gets address memory for free, but every click reloads the
   page and every route changes.
 - C. A table library: the redesign removed one (Tabulator); libraries fight the strict Content Security Policy and
@@ -56,8 +56,8 @@ own access lists) gets sorting, the count line and the phone cards, but no searc
 
 ## How it behaves (decided)
 
-- **Without JavaScript** every row shows, unsorted controls stay hidden (as today), and nothing breaks. Server-side
-  Activity works fully without JavaScript.
+- **Without JavaScript** every row shows, the sort and search controls stay hidden (as today), and nothing breaks.
+  Server-side Activity and Entries work fully without JavaScript.
 - **Address format**: `q`, `filter`, `sort` (column key, `-` prefix for descending), `page`, `size`. A page with
   several tables (the Team page) prefixes each table's keys with its name, for example `people-q`. Typing updates the
   address with `replaceState`, so Back leaves the page rather than stepping through each keystroke; opening a row and
@@ -81,20 +81,49 @@ own access lists) gets sorting, the count line and the phone cards, but no searc
 | Entries | location and note | location chips and week, as now | newest week first | no |
 | Activity (server) | text in person, tracker and detail | the current selects stay; no chips | newest first | no |
 
-**Entries** keeps its week grouping. Sorting applies within each week; paging is by weeks (10 weeks a page), so a week
-is never split; the footer reads "Showing weeks 1–10 of 23 · 214 entries". The 500-row cap goes once paging is by
-weeks.
+**Entries** (server, see call 3) keeps its week grouping. Sorting applies within each week; paging is by weeks (10
+weeks a page), so a week is never split; the footer reads "Showing weeks 1–10 of 23 · 214 entries".
 
 **Activity** moves its paging to the standard footer on the server: total count, page numbers, 25 / 50 / 100 rows,
 sortable Time, Performed by, Action and Tracker columns, and a search box, all in the address alongside today's filters.
+
+## Calls made after the builder check
+
+These were settled by the author, not the owner; each is easy to change.
+
+1. **Activity search respects hidden detail.** A viewer who cannot open a tracker sees its entries without their
+   detail; search matches the detail only for trackers the viewer can open (otherwise searching would reveal what the
+   page hides). Access is applied in the query, with a test.
+2. **Moving locations up and down on the tracker's Locations tab** only makes sense in the owner's own order. The Up
+   and Down buttons show only while the table is in its default order with no search, filter or paging; otherwise
+   they are hidden and a short note says "Clear the sort and filters to change the order." They sit first in the row
+   actions, before Edit.
+3. **Entries pages and searches on the server**, like Activity, instead of in the browser. A tracker can build up
+   thousands of entries (20 locations recording daily for a year is over 5,000), too many to send to the browser at
+   once. Week groups stay newest first; clicking a column heading sorts the rows inside each week only. Search (`q`),
+   the location chip (`group`) and the week (`week`) are address keys as today, and the existing form keeps working.
+   The footer counts every matching week and entry, not a capped slice. The 500-row cap goes.
+4. **Activity** keeps its existing keys (`person`, `action`, `from`, `to`, `page`) and adds `q`, `sort` and `size`.
+   The default page size becomes 25 like every other table; old links with `page` keep working. "Performed by" sorts
+   by name.
+5. **Home** keeps its current keys for the selects and chips and adds them to the address: `filter` (chip), `line`,
+   `region`, `sort` (the Sort select, shared by the cards and the List view, so both stay in the same order), `q`
+   (search) and `layout`. Clicking a List view heading sets the same `sort`.
+6. **Team page prefixes**: `people-`, `below-` and `trackers-`.
+7. **Home's footer** reads "Showing 12 of 15 trackers"; archived trackers are counted only while "Show archived" is
+   on, as today. No "N active" on Home.
+8. **Search is fixed per table**, not decided by the number of rows: every table in scope has it except a person's
+   Access page.
+9. **Sticky headings** pin at `--topbar-height` plus `--subnav-height` on pages with section links, and at
+   `--topbar-height` elsewhere.
 
 ## Build order (one PR each)
 
 1. Toolkit: add address memory, sticky headings, Clear filters, typed sorting, the combined count and paging footer and
    phone cards to `lists/_table.html` and `lists.js`; apply to Lists, Users and the Team page.
 2. Move the remaining browser-side tables onto it: tracker Locations tab, Risks, Access, Home list, Permission set
-   holders, a person's Access page, Entries.
-3. Activity on the server with the same look.
+   holders, a person's Access page.
+3. Activity and Entries on the server with the same look.
 
 ## Left to the builder
 
