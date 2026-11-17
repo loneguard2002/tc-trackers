@@ -323,3 +323,19 @@ def test_users_sort_is_kept_with_server_filters(page, live_server, user_factory)
     assert [name.split(" (you)")[0] for name in names.all_inner_texts()] == order
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
+
+
+def test_card_shows_no_label_for_an_empty_cell(page, live_server, user_factory):
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, user_factory(is_admin=True, full_name="Ada Admin"))
+    user_factory(full_name="Norma Normal")
+    page.goto(f"{live_server}/admin/users")
+
+    row = page.locator("#people-table tbody tr", has_text="Norma Normal")
+    admin_cell = row.locator("td.user-badge").nth(1)  # Status, Admin, Sign-in
+    assert admin_cell.evaluate("el => getComputedStyle(el, '::before').content") in ("none", "normal")
+    ada = page.locator("#people-table tbody tr", has_text="Ada Admin").locator("td.user-badge").nth(1)
+    assert ada.evaluate("el => getComputedStyle(el, '::before').content") not in ("none", "normal")
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []

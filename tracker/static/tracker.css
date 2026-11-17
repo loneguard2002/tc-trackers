@@ -847,6 +847,7 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
   :is(.register, .card-rows) .cell-actions { width: auto; margin-left: auto; }
   :is(.register.section-table, .card-rows) :is(thead, td.hide-narrow) { display: none; }
   .list-table table.card-rows, .team-panel .list-table table.card-rows { min-width: 0; }
+  .team-panel .list-table .card-rows .cell-actions { width: auto; white-space: normal; }  /* beats the table's 1% / nowrap actions column */
   .entry-filters, .risk-filters, .quick-add-row, .field-stack { padding-left: 16px; padding-right: 16px; }
   .key-values div { grid-template-columns: 1fr; gap: 2px; padding: 10px 16px; }
   .segmented { display: flex; }

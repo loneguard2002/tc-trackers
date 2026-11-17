@@ -269,3 +269,22 @@ def test_team_tables_keep_their_own_keys(page, live_server, team_factory, user_f
     page.locator("#trackers-table-search").fill("old")
     assert query()["trackers-q"] == "old" and query()["q"] == "keep"
     _clean(page)
+
+
+def test_team_rows_are_cards_with_actions_inside_on_a_phone(page, live_server, team_factory, user_factory, add_member):
+    infra = team_factory(name="Infrastructure")
+    windows = team_factory(name="Windows", parent=infra)
+    for name in ("Hana Head", "Mia Member", "Ola Owner"):
+        add_member(windows, user_factory(full_name=name), "viewer")
+    page.set_viewport_size({"width": 390, "height": 844})
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{windows.id}")
+
+    rows = page.locator("#people-table tbody tr:visible")
+    assert rows.count() >= 3
+    for index in range(rows.count()):
+        row_right = rows.nth(index).evaluate("el => el.getBoundingClientRect().right")
+        cell = rows.nth(index).locator(".cell-actions")
+        assert cell.evaluate("el => el.getBoundingClientRect().right") <= row_right + 0.5
+        assert cell.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
+    assert page.evaluate("document.documentElement.scrollWidth") <= 390
+    _clean(page)

@@ -246,6 +246,15 @@
     // On a phone a table marked card-rows shows each row as a card, and CSS prints a cell's data-label before its
     // value. Cells the server did not label take their column heading's visible text (the sort label when the heading
     // has one); a column whose heading shows no text (Actions, Remove, Choose) stays unlabelled.
+    // A cell with nothing to see (only screen-reader text, such as "Not an administrator") gets no label: a card must not
+    // print "Admin" with nothing after it.
+    function isBlank(cell) {
+      if (cell.querySelector("img, svg, input, select, textarea, button, a")) return false;
+      var copy = cell.cloneNode(true);
+      each(copy.querySelectorAll(".sr-only"), function (hidden) { hidden.parentNode.removeChild(hidden); });
+      return copy.textContent.trim() === "";
+    }
+
     (function labelCells() {
       var head = table.tHead && table.tHead.rows[0];
       if (!head) return;
@@ -258,7 +267,7 @@
       });
       each(body.rows, function (row) {
         each(row.cells, function (cell, position) {
-          if (labels[position] && !cell.hasAttribute("data-label")) cell.setAttribute("data-label", labels[position]);
+          if (labels[position] && !cell.hasAttribute("data-label") && !isBlank(cell)) cell.setAttribute("data-label", labels[position]);
         });
       });
     })();
