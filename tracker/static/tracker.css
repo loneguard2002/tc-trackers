@@ -87,7 +87,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
   .topbar { padding: 0 14px; }
   .sidebar { transform: translateX(-100%); transition: transform .2s; }
   .sidebar.open { transform: none; box-shadow: 14px 0 34px rgba(0, 0, 0, .2); }
-  .sidebar-backdrop { position: fixed; inset: var(--topbar-height) 0 0; z-index: 1020; background: rgba(2, 12, 30, .55); }
+  .sidebar-backdrop { position: fixed; inset: var(--topbar-height) 0 0; z-index: 1020; background: color-mix(in srgb, var(--topbar-bg) 70%, transparent); }
   .sidebar-backdrop.open { display: block; }
   .main-content { width: 100%; margin: 0; padding: 28px 22px 20px; }
 }
@@ -419,6 +419,16 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 /* Tracker section tabs */
 .tabs { display: flex; gap: 2px; margin: 6px 0 24px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
+/* Rows that scroll sideways (tabs, section links, week strip) fade the edge that has more items behind it, so the
+   cut-off item reads as a row that keeps going (docs/design-rules.md). tracker.js sets .more-before and .more-after;
+   each pseudo-element stays pinned to its edge and cancels its own width and the row gap, so nothing moves. */
+.tabs { --fade-bg: var(--bg); --row-gap: 2px; }
+.subnav { --fade-bg: var(--bg); --row-gap: 24px; }
+.week-strip { --fade-bg: var(--surface); --row-gap: 4px; }
+:is(.tabs, .subnav, .week-strip)::before, :is(.tabs, .subnav, .week-strip)::after { content: ""; position: sticky; z-index: 1; flex: none; align-self: stretch; width: 40px; opacity: 0; pointer-events: none; transition: opacity .15s; }
+:is(.tabs, .subnav, .week-strip)::before { left: 0; margin-right: calc(-40px - var(--row-gap)); background: linear-gradient(to right, var(--fade-bg), transparent); }
+:is(.tabs, .subnav, .week-strip)::after { right: 0; margin-left: calc(-40px - var(--row-gap)); background: linear-gradient(to left, var(--fade-bg), transparent); }
+.more-before::before, .more-after::after { opacity: 1; }
 .tab { flex: none; margin-bottom: -1px; padding: 10px 12px; border-bottom: 2px solid transparent; color: var(--muted); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: color .15s, border-color .15s; }
 .tab:hover { color: var(--text); border-bottom-color: var(--border); }
 .tab.active { color: var(--text); border-bottom-color: var(--primary); }
@@ -1190,7 +1200,8 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
 /* The Add and Edit dialogs. Opened by lists.js they are modal, centred over a dimmed page. Without JavaScript the
    server renders one open, which is not modal: it then sits in the page above the table as a raised card. */
 .list-dialog { width: min(560px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: 0 18px 48px -12px color-mix(in srgb, var(--topbar-bg) 45%, transparent); }
-.list-dialog::backdrop { background: color-mix(in srgb, var(--topbar-bg) 55%, transparent); }
+/* Dim the background (docs/design-rules.md): 70% navy leaves the page behind at about 2.5:1 in both themes. */
+.list-dialog::backdrop { background: color-mix(in srgb, var(--topbar-bg) 70%, transparent); }
 .list-dialog:not(:modal) { position: relative; z-index: 1; width: 100%; max-width: 560px; max-height: none; margin: 0 auto 20px; }
 .list-dialog form { margin: 0; }
 .list-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 14px 14px 20px; border-bottom: 1px solid var(--border); }
