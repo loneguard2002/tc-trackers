@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
 import pytest
@@ -83,3 +84,51 @@ def test_home_toolbar_fits_a_phone_screen(page, live_server, db, tracker_factory
     page.goto(live_server + "/")
     expect(page.get_by_label("Region", exact=True)).to_be_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+
+
+def test_cards_scroll_sideways_with_a_third_of_the_next_showing(page, live_server, tracker_factory, user_factory):
+    for k in range(5):
+        tracker_factory(name=f"Tracker {k + 1}", unit_label="Thin Clients")
+    page.add_init_script(RECORDER)
+    page.set_viewport_size({"width": 1835, "height": 1000})
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(live_server + "/")
+    row = page.locator("[data-home-cards]")
+    cards = row.locator("[data-card]")
+    expect(cards).to_have_count(5)
+    boxes = [cards.nth(k).bounding_box() for k in range(5)]
+    assert len({round(box["y"]) for box in boxes}) == 1  # one row
+    assert min(box["width"] for box in boxes) >= 480
+    view = row.bounding_box()
+    # Whole cards, then about a third of the next one.
+    right = view["x"] + view["width"]
+    shown = [max(0.0, min(box["x"] + box["width"], right) - box["x"]) / box["width"] for box in boxes]
+    partial = [part for part in shown if 0 < part < 0.99]
+    assert len(partial) == 1 and 0.25 <= partial[0] <= 0.4
+    expect(row).to_have_class(re.compile(r"\bmore-after\b"))
+    expect(row).not_to_have_class(re.compile(r"\bmore-before\b"))
+    # Nothing on a card is cut off with an ellipsis.
+    clipped = page.evaluate(
+        "[...document.querySelectorAll('[data-card] .fact-line')]"
+        ".filter(el => el.scrollWidth > el.clientWidth + 1).length"
+    )
+    assert clipped == 0
+    row.evaluate("el => el.scrollTo({left: el.scrollWidth})")
+    expect(row).to_have_class(re.compile(r"\bmore-before\b"))
+    expect(row).not_to_have_class(re.compile(r"\bmore-after\b"))
+    # A filter that leaves fewer cards starts the row again from the left.
+    page.locator("[data-filter=none]").click()
+    expect(row).not_to_have_class(re.compile(r"\bmore-before\b"))
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
+
+
+def test_cards_stack_on_a_phone(page, live_server, tracker_factory, user_factory):
+    for k in range(3):
+        tracker_factory(name=f"Tracker {k + 1}")
+    page.set_viewport_size({"width": 390, "height": 844})
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(live_server + "/")
+    first, second = (page.locator("[data-home-cards] [data-card]").nth(k).bounding_box() for k in (0, 1))
+    assert second["y"] >= first["y"] + first["height"]  # one under the other
+    assert second["y"] - (first["y"] + first["height"]) <= 17  # the usual gap, no empty fade rows between
+    assert first["width"] > 300

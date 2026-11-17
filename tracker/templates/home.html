@@ -112,7 +112,7 @@
 
 <p class="spark-key home-key" aria-label="Chart key"><span><i class="key key-on"></i>Done, on or above target<i class="key key-low"></i>Done, below target<i class="key key-target"></i>Weekly target</span><span class="muted">Bars show the latest weeks.</span></p>
 
-<div class="tracker-cards" data-home-cards>
+<div class="tracker-cards" data-home-cards role="region" aria-label="Tracker cards" tabindex="0">
   {% for c in cards %}
   {% set t = c.tracker %}{% set h = c.headline %}{% set tone = rag_tone(c.status) %}
   {% set dvt = h.forecast_vs_target_days %}

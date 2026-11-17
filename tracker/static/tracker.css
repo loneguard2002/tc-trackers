@@ -234,7 +234,19 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .toggle button { min-height: 32px; padding: 4px 12px; border: 0; background: var(--surface); color: var(--muted); font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; }
 .toggle button[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary); }
-.tracker-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 16px; }
+.tracker-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+/* Wider than a phone, the cards sit in one row that scrolls sideways (docs/design-rules.md rule 2): as many whole cards
+   as fit at 480px or more, then about a third (32%) of the next, so the row reads as one that keeps going. */
+@media (max-width: 700px) {
+  .tracker-cards::before, .tracker-cards::after { content: none; }  /* no sideways row, so no fade */
+}
+@media (min-width: 701px) {
+  .tracker-cards { --fade-bg: var(--bg); --row-gap: 16px; display: flex; align-items: stretch; padding-bottom: 8px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: thin; container-type: inline-size; }
+  .tracker-cards > .tracker-card { --cards: 1; flex: 0 0 calc((100cqw - var(--cards) * 16px) / (var(--cards) + .32)); scroll-snap-align: start; }
+  @container (min-width: 1146px) { .tracker-cards > .tracker-card { --cards: 2; } }
+  @container (min-width: 1642px) { .tracker-cards > .tracker-card { --cards: 3; } }
+  @container (min-width: 2154px) { .tracker-cards > .tracker-card { --cards: 4; } }
+}
 .tracker-card { --tone: color-mix(in srgb, var(--muted) 55%, var(--surface)); --tone-text: var(--muted); position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); }
 .tracker-card::before, .tracker-row-status::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--tone); }
 .tracker-card-red, .tracker-row-red { --tone: var(--danger); --tone-text: var(--danger); }
@@ -258,7 +270,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .verdict-pill.is-warning { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); background: color-mix(in srgb, var(--warning) 10%, var(--surface)); color: var(--warning); font-weight: 700; }
 .verdict-pill .icon { width: 14px; height: 14px; }
 .home-key { justify-content: flex-start; gap: 4px 18px; margin: 0 0 12px; }
-.fact-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .72rem; }
+.fact-line { font-size: .72rem; }
 .tracker-card-alerts { display: grid; gap: 5px; margin: 0; padding: 10px 18px 10px 23px; list-style: none; border-top: 1px solid var(--border); font-size: .8125rem; }
 .alert { display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start; }
 .alert .icon { width: 16px; height: 16px; margin-top: 1px; }
@@ -423,15 +435,15 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 /* Tracker section tabs */
 .tabs { display: flex; gap: 2px; margin: 6px 0 24px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
-/* Rows that scroll sideways (tabs, section links, week strip) fade the edge that has more items behind it, so the
+/* Rows that scroll sideways (tabs, section links, week strip, Home cards) fade the edge that has more items behind it, so the
    cut-off item reads as a row that keeps going (docs/design-rules.md). tracker.js sets .more-before and .more-after;
    each pseudo-element stays pinned to its edge and cancels its own width and the row gap, so nothing moves. */
 .tabs { --fade-bg: var(--bg); --row-gap: 2px; }
 .subnav { --fade-bg: var(--bg); --row-gap: 24px; }
 .week-strip { --fade-bg: var(--surface); --row-gap: 4px; }
-:is(.tabs, .subnav, .week-strip)::before, :is(.tabs, .subnav, .week-strip)::after { content: ""; position: sticky; z-index: 1; flex: none; align-self: stretch; width: 40px; opacity: 0; pointer-events: none; transition: opacity .15s; }
-:is(.tabs, .subnav, .week-strip)::before { left: 0; margin-right: calc(-40px - var(--row-gap)); background: linear-gradient(to right, var(--fade-bg), transparent); }
-:is(.tabs, .subnav, .week-strip)::after { right: 0; margin-left: calc(-40px - var(--row-gap)); background: linear-gradient(to left, var(--fade-bg), transparent); }
+:is(.tabs, .subnav, .week-strip, .tracker-cards)::before, :is(.tabs, .subnav, .week-strip, .tracker-cards)::after { content: ""; position: sticky; z-index: 1; flex: none; align-self: stretch; width: 40px; opacity: 0; pointer-events: none; transition: opacity .15s; }
+:is(.tabs, .subnav, .week-strip, .tracker-cards)::before { left: 0; margin-right: calc(-40px - var(--row-gap)); background: linear-gradient(to right, var(--fade-bg), transparent); }
+:is(.tabs, .subnav, .week-strip, .tracker-cards)::after { right: 0; margin-left: calc(-40px - var(--row-gap)); background: linear-gradient(to left, var(--fade-bg), transparent); }
 .more-before::before, .more-after::after { opacity: 1; }
 .tab { flex: none; margin-bottom: -1px; padding: 10px 12px; border-bottom: 2px solid transparent; color: var(--muted); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: color .15s, border-color .15s; }
 .tab:hover { color: var(--text); border-bottom-color: var(--border); }
