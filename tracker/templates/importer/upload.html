@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, setting %}
+{% from "macros.html" import csrf_field, icon, setting %}
 {% block content %}
 <h1>Import workbook</h1>
 <p class="page-lede">Create a new tracker from a tracking workbook. Step 1 of 2: read the workbook. Nothing is saved until you confirm the preview on the next page.</p>
-<p><a class="button" href="{{ url_for('importer.template') }}">Download the template</a> <span class="muted">An Excel workbook in the right layout, with instructions and a worked example to replace.</span></p>
+<p><a class="button" href="{{ url_for('importer.template') }}">{{ icon('download') }}Download the template</a> <span class="muted">An Excel workbook in the right layout, with instructions and a worked example to replace.</span></p>
 <details class="import-guide">
   <summary>What the workbook needs</summary>
   <ul>
