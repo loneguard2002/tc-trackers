@@ -236,13 +236,15 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .toggle button[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary); }
 .tracker-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 /* Wider than a phone, the cards sit in one row that scrolls sideways (docs/design-rules.md rule 2): as many whole cards
-   as fit at 480px or more, then about a third (32%) of the next, so the row reads as one that keeps going. */
+   as fit at 480px or more, then about a third (32%) of the next, so the row reads as one that keeps going. Cards stop
+   growing at 560px; where that cap applies, more than a third of the next card shows, and the faded edge still says
+   the row goes on. */
 @media (max-width: 700px) {
   .tracker-cards::before, .tracker-cards::after { content: none; }  /* no sideways row, so no fade */
 }
 @media (min-width: 701px) {
   .tracker-cards { --fade-bg: var(--bg); --row-gap: 16px; display: flex; align-items: stretch; padding-bottom: 8px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: thin; container-type: inline-size; }
-  .tracker-cards > .tracker-card { --cards: 1; flex: 0 0 calc((100cqw - var(--cards) * 16px) / (var(--cards) + .32)); scroll-snap-align: start; }
+  .tracker-cards > .tracker-card { --cards: 1; flex: 0 0 min(560px, calc((100cqw - var(--cards) * 16px) / (var(--cards) + .32))); scroll-snap-align: start; }
   @container (min-width: 1146px) { .tracker-cards > .tracker-card { --cards: 2; } }
   @container (min-width: 1642px) { .tracker-cards > .tracker-card { --cards: 3; } }
   @container (min-width: 2154px) { .tracker-cards > .tracker-card { --cards: 4; } }
