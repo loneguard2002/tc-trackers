@@ -163,6 +163,7 @@
         var numbers = pager.querySelector("[data-pager-pages]");
         if (numbers) showPages(pages, numbers);
       }
+      keepWideTableReachable();
     }
 
     // The Clear filters buttons (beside the chips and in the no-match line) show while a search, a status button other
@@ -241,6 +242,41 @@
       if (type === "date") return first < second ? -1 : first > second ? 1 : 0;
       return first.localeCompare(second, undefined, { sensitivity: "base", numeric: true });
     }
+
+    // On a phone a table marked card-rows shows each row as a card, and CSS prints a cell's data-label before its
+    // value. Cells the server did not label take their column heading's visible text (the sort label when the heading
+    // has one); a column whose heading shows no text (Actions, Remove, Choose) stays unlabelled.
+    (function labelCells() {
+      var head = table.tHead && table.tHead.rows[0];
+      if (!head) return;
+      var labels = Array.prototype.map.call(head.cells, function (cell) {
+        var sortLabel = cell.querySelector("[data-sort-label]");
+        if (sortLabel) return sortLabel.textContent.trim();
+        var copy = cell.cloneNode(true);
+        each(copy.querySelectorAll(".sr-only"), function (hidden) { hidden.parentNode.removeChild(hidden); });
+        return copy.textContent.replace(/\s+/g, " ").trim();
+      });
+      each(body.rows, function (row) {
+        each(row.cells, function (cell, position) {
+          if (labels[position] && !cell.hasAttribute("data-label")) cell.setAttribute("data-label", labels[position]);
+        });
+      });
+    })();
+
+    // The table's wrapper clips rather than scrolls above 720px, so that the headings can stick. A table too wide for
+    // its wrapper (a narrow window) would then lose its last columns, so the wrapper is marked is-wide and CSS lets it
+    // scroll sideways again; its headings then scroll with the page.
+    var wrapper = table.closest(".section-table");
+
+    function keepWideTableReachable() {
+      if (!wrapper) return;
+      wrapper.classList.remove("is-wide");
+      if (wrapper.scrollWidth > wrapper.clientWidth + 1) wrapper.classList.add("is-wide");
+    }
+    window.addEventListener("resize", keepWideTableReachable);
+    window.addEventListener("load", keepWideTableReachable);  // the flags and fonts have arrived
+    // A tab's table is measured as it is first shown; a hidden table has no width.
+    if (wrapper && window.ResizeObserver) new window.ResizeObserver(keepWideTableReachable).observe(wrapper);
 
     var headers = Array.prototype.filter.call(table.querySelectorAll("thead th"), function (header) {
       return Boolean(header.querySelector("button.sort-button[data-sort]"));
