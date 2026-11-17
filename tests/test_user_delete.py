@@ -530,8 +530,8 @@ def test_users_list_hides_deleted_people_and_the_filter_shows_them(client, gone)
 
     page = text_of(client.get("/admin/users?status=deleted"))
     assert '<option value="deleted" selected>Deleted</option>' in page
-    assert re.findall(r'<tr data-sort-name="([^"]*)"', page) == ["Jordan Lee"]  # nobody else is listed
-    row = re.search(r'<tr data-sort-name="Jordan Lee".*?</tr>', page, re.S).group(0)
+    assert re.findall(r'<tr data-status="[^"]*" data-sort-name="([^"]*)"', page) == ["Jordan Lee"]  # nobody else is listed
+    row = re.search(r'<tr data-status="[^"]*" data-sort-name="Jordan Lee".*?</tr>', page, re.S).group(0)
     assert EMAIL in row and '<span class="badge badge-muted">Deleted</span>' in row
     assert re.findall(r'href="([^"]+)"', row) == [f"/admin/users/{gone.person.id}/access"]
     assert re.findall(r'class="icon-tip" aria-hidden="true">([^<]*)<', row) == ["Access"]
