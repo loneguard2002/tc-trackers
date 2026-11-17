@@ -24,6 +24,15 @@
   // locations \u00b7 28 active" otherwise (the active part only on a table that says so, and counting every row with the
   // "active" status, whatever the search and filters); its [data-pager-controls] show only while more than 25 rows
   // match.
+  //
+  // The view is kept in the address, so that a reload, a shared link and the Back button's neighbours show the same
+  // rows: q (the search box), filter (the status button), region (the region select), sort ("name" ascending,
+  // "-name" descending), page and size, each written with history.replaceState and only when it is not the default.
+  // A table marked data-state-prefix="people-" reads and writes people-q, people-filter and so on, so that two tables
+  // on one page never meet. A table writes only the keys of the controls it has (the Users table's own search is a
+  // server form, whose keys are left alone); every other key and the hash stay as they are. A value that does not
+  // fit (an unknown filter or sort, a size other than 25, 50 or 100, a page that is not a positive whole number or
+  // lies beyond the last) is ignored and is gone from the address after the next change.
   function setUpTable(table) {
     var id = table.id;
     var body = table.tBodies[0];
@@ -47,6 +56,8 @@
     var status = "all";
     var pageNumber = 1;
     var pageSize = 25;
+    var prefix = table.getAttribute("data-state-prefix") || "";
+    var settingUp = true;  // until the first refresh, so that a page from the address is checked, not clamped
 
     each(buttons, function (button) {
       if (button.getAttribute("aria-pressed") === "true") status = button.getAttribute("data-status");
@@ -76,6 +87,7 @@
         pageNumber = number;
         focusCurrent = true;
         refresh();
+        writeState();
       });
       return button;
     }
@@ -117,7 +129,7 @@
         if (rowTokens.indexOf("active") !== -1) active += 1;
       });
       var pages = Math.max(1, Math.ceil(matching.length / pageSize));
-      if (pageNumber > pages) pageNumber = pages;
+      if (pageNumber > pages) pageNumber = settingUp ? 1 : pages;
       var first = pager ? (pageNumber - 1) * pageSize : 0;
       var last = pager ? first + pageSize : matching.length;
       var shown = 0;
@@ -151,10 +163,11 @@
       }
     }
 
-    // A change of search, filter or sort starts again at the first page.
+    // A change of search, filter, region, sort or size starts again at the first page.
     function restart() {
       pageNumber = 1;
       refresh();
+      writeState();
     }
 
     if (pager) {
@@ -167,8 +180,8 @@
           restart();
         });
       }
-      if (previous) previous.addEventListener("click", function () { pageNumber -= 1; focusCurrent = true; refresh(); });
-      if (next) next.addEventListener("click", function () { pageNumber += 1; focusCurrent = true; refresh(); });
+      if (previous) previous.addEventListener("click", function () { pageNumber -= 1; focusCurrent = true; refresh(); writeState(); });
+      if (next) next.addEventListener("click", function () { pageNumber += 1; focusCurrent = true; refresh(); writeState(); });
     }
 
     if (search && input) {
@@ -211,10 +224,9 @@
       header.setAttribute("aria-sort", header.hasAttribute("data-sort-default") ? "ascending" : "none");
       button.hidden = false;
       if (label) label.hidden = true;
-      button.addEventListener("click", function () {
+      header.sortBy = function (direction) {
         var key = "data-sort-" + button.getAttribute("data-sort");
         var type = header.getAttribute("data-sort-type") || "text";
-        var direction = header.getAttribute("aria-sort") === "ascending" ? "descending" : "ascending";
         var sign = direction === "ascending" ? 1 : -1;
         // A value that is empty, or not a number in a number column, counts as empty.
         function value(item) {
@@ -233,11 +245,87 @@
         headers.forEach(function (other) { other.setAttribute("aria-sort", "none"); });
         header.setAttribute("aria-sort", direction);
         sorted.forEach(function (item) { body.appendChild(item.row); });
+      };
+      button.addEventListener("click", function () {
+        header.sortBy(header.getAttribute("aria-sort") === "ascending" ? "descending" : "ascending");
         restart();
       });
     });
 
+    // --- The view in the address ---
+    function key(name) {
+      return prefix + name;
+    }
+
+    function headerFor(name) {
+      return headers.filter(function (header) {
+        return header.querySelector("button.sort-button[data-sort]").getAttribute("data-sort") === name;
+      })[0];
+    }
+
+    // The sorted heading as an address value, or "" while the rows are in the server's order (or in the order of the
+    // column marked data-sort-default, which is where they start).
+    function sortValue() {
+      var found = headers.filter(function (header) { return header.getAttribute("aria-sort") !== "none"; })[0];
+      if (!found) return "";
+      var descending = found.getAttribute("aria-sort") === "descending";
+      if (!descending && found.hasAttribute("data-sort-default")) return "";
+      return (descending ? "-" : "") + found.querySelector("button.sort-button[data-sort]").getAttribute("data-sort");
+    }
+
+    function readState() {
+      var params = new URLSearchParams(window.location.search);
+      var text = params.get(key("q"));
+      if (input && text) input.value = text;
+      var wanted = params.get(key("filter"));
+      if (wanted) {
+        var chosen = Array.prototype.filter.call(buttons, function (button) {
+          return button.getAttribute("data-status") === wanted;
+        })[0];
+        if (chosen) {
+          status = wanted;
+          each(buttons, function (other) { other.setAttribute("aria-pressed", other === chosen ? "true" : "false"); });
+        }
+      }
+      var order = params.get(key("sort")) || "";
+      var descending = order.charAt(0) === "-";
+      var header = headerFor(descending ? order.slice(1) : order);
+      // Ascending on the column the rows already arrive in is the starting order, so there is nothing to apply.
+      if (header && (descending || !header.hasAttribute("data-sort-default"))) {
+        header.sortBy(descending ? "descending" : "ascending");
+      }
+      var size = params.get(key("size"));
+      if (sizeSelect && (size === "25" || size === "50" || size === "100")) {
+        pageSize = Number(size);
+        sizeSelect.value = size;
+      }
+      var number = params.get(key("page"));
+      if (pager && /^[1-9][0-9]{0,8}$/.test(number || "")) pageNumber = Number(number);
+    }
+
+    // Rebuilds this table's keys in the address from the state, leaving every other key and the hash as they are.
+    function writeState() {
+      var params = new URLSearchParams(window.location.search);
+      function put(name, value, isDefault) {
+        if (isDefault) params.delete(key(name));
+        else params.set(key(name), value);
+      }
+      if (input) put("q", input.value.trim(), input.value.trim() === "");
+      if (statusGroup) put("filter", status, status === "all");
+      if (regionFilter) put("region", regionFilter.value, regionFilter.value === "");
+      if (headers.length) put("sort", sortValue(), sortValue() === "");
+      if (sizeSelect) put("size", String(pageSize), pageSize === 25);
+      if (pager) put("page", String(pageNumber), pageNumber === 1);
+      var query = params.toString();
+      try {
+        window.history.replaceState(window.history.state, "",
+          window.location.pathname + (query ? "?" + query : "") + window.location.hash);
+      } catch (error) { /* an address that cannot be rewritten leaves the view as it is */ }
+    }
+
+    readState();
     refresh();  // applies a region chosen in the address (?region=<id>) and any search the browser kept
+    settingUp = false;
   }
 
   each(document.querySelectorAll(".list-table table[id], table[data-sortable][id]"), setUpTable);

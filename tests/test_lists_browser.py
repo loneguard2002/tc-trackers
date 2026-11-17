@@ -876,3 +876,107 @@ def test_moving_into_a_retired_region_asks_in_a_modal_whether_to_archive(
     tracker = db.get(type(payroll), payroll.id)
     assert (tracker.team_id, tracker.status) == (closed.id, "archived")
     _clean(page)
+
+
+# --- The view kept in the address ------------------------------------------------------------------------------------
+
+
+def _query(page):
+    return page.evaluate("Object.fromEntries(new URLSearchParams(location.search))")
+
+
+def test_the_view_survives_a_reload(page, live_server, user_factory, region_factory, location_factory):
+    emea = region_factory("EMEA")
+    for number in range(30):  # the controls for paging show past 25 matching rows
+        location_factory(emea, f"Gen {number:02d}", "GB", code=f"X{number:02d}", retired=True)
+    location_factory(emea, "Gen Active", "GB", code="GA")
+    location_factory(emea, "London", "GB", code="LON", retired=True)
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+
+    page.locator("#locations-table-search").fill("gen")
+    page.locator('[data-status-for] button[data-status="retired"]').click()
+    page.get_by_role("button", name="Name", exact=True).click()
+    page.get_by_role("button", name="Name", exact=True).click()
+    page.locator("[data-pager-size]").select_option("50")
+    query = _query(page)
+    assert query == {"q": "gen", "filter": "retired", "sort": "-name", "size": "50"}
+    names = _names(page)
+    assert names[:2] == ["Gen 29", "Gen 28"] and len(names) == 30
+
+    page.reload()
+    expect(page.locator("#locations-table-search")).to_have_value("gen")
+    expect(page.locator('[data-status-for] button[data-status="retired"]')).to_have_attribute("aria-pressed", "true")
+    expect(page.locator("th", has_text="Name")).to_have_attribute("aria-sort", "descending")
+    expect(page.locator("[data-pager-size]")).to_have_value("50")
+    assert _names(page) == names
+    assert _query(page) == query
+    _clean(page)
+
+
+def test_bad_address_values_fall_back(page, live_server, user_factory, region_factory, location_factory):
+    emea = region_factory("EMEA")
+    for name in ("Zurich", "Amsterdam", "Madrid"):
+        location_factory(emea, name, "GB", code=name[:3].upper())
+    _open(
+        page,
+        live_server,
+        user_factory(is_admin=True),
+        "/admin/locations?sort=nonsense&page=999&size=7&filter=unknown&q=",
+    )
+
+    assert _names(page) == ["Amsterdam", "Madrid", "Zurich"]  # the default order, by name
+    assert _foot(page).startswith("Showing 3 of 3 locations")
+    expect(page.locator("[data-status-for] button[data-status=all]")).to_have_attribute("aria-pressed", "true")
+    expect(page.locator("[data-pager-size]")).to_have_value("25")
+    expect(page.locator("th[aria-sort=descending]")).to_have_count(0)
+    page.locator("#locations-table-search").fill("a")
+    assert _query(page) == {"q": "a"}
+    _clean(page)
+
+
+def test_page_beyond_the_last_falls_back_to_page_one(page, live_server, user_factory, region_factory, location_factory):
+    emea = region_factory("EMEA")
+    for number in range(30):
+        location_factory(emea, f"City {number:02d}", "GB", code=f"X{number:02d}")
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations?page=999&size=7")
+    assert _foot(page).startswith("Showing 1–25 of 30")
+    _clean(page)
+
+
+def test_search_text_round_trips(page, live_server, user_factory, region_factory, location_factory):
+    emea = region_factory("EMEA")
+    location_factory(emea, "London", "GB", code="LON")
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+    text = 'a&b "c" 50%+'
+    page.locator("#locations-table-search").fill(text)
+    assert _query(page) == {"q": text}
+    page.reload()
+    expect(page.locator("#locations-table-search")).to_have_value(text)
+    _clean(page)
+
+
+def test_page_three_returns_to_one_on_change(page, live_server, user_factory, region_factory, location_factory):
+    emea = region_factory("EMEA")
+    for number in range(80):
+        location_factory(emea, f"City {number:02d}", "GB", code=f"X{number:02d}")
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+    page.locator("[data-pager-next]").click()
+    page.locator("[data-pager-next]").click()
+    assert _query(page) == {"page": "3"}
+    assert _foot(page).startswith("Showing 51–75")
+    page.reload()
+    assert _foot(page).startswith("Showing 51–75")
+    page.get_by_role("button", name="Name", exact=True).click()
+    assert "page" not in _query(page)
+    assert _foot(page).startswith("Showing 1–25")
+    _clean(page)
+
+
+def test_region_and_other_keys_and_hash_are_kept(page, live_server, user_factory, places):
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/locations?region={places['emea'].id}&x=1#top")
+    page.locator("#locations-table-search").fill("lon")
+    assert _query(page) == {"region": str(places["emea"].id), "x": "1", "q": "lon"}
+    assert page.evaluate("location.hash") == "#top"
+    page.locator("#locations-table-region").select_option("")
+    assert _query(page) == {"x": "1", "q": "lon"}
+    _clean(page)

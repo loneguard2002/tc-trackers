@@ -301,3 +301,25 @@ def test_users_list_pages_past_25_people(page, live_server, user_factory):
     expect(pager.locator("[data-pager-count]")).to_have_text("Showing 26–30 of 30 people · 30 active")
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
+
+
+def test_users_sort_is_kept_with_server_filters(page, live_server, user_factory):
+    user_factory(full_name="Bea Sso")
+    user_factory(full_name="Cal Local")
+    admin = user_factory(full_name="Ann Admin", is_admin=True)
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users?status=active")
+    names = page.locator("#people-table tbody .member-name")
+    page.get_by_role("button", name="Name", exact=True).click()
+    page.get_by_role("button", name="Name", exact=True).click()
+    query = lambda: page.evaluate("Object.fromEntries(new URLSearchParams(location.search))")  # noqa: E731
+    assert query() == {"status": "active", "sort": "-name"}
+    order = [name.split(" (you)")[0] for name in names.all_inner_texts()]
+    assert order == ["Cal Local", "Bea Sso", "Ann Admin"]
+    page.reload()
+    assert query() == {"status": "active", "sort": "-name"}
+    expect(page.locator("th", has_text="Name")).to_have_attribute("aria-sort", "descending")
+    assert [name.split(" (you)")[0] for name in names.all_inner_texts()] == order
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
