@@ -120,7 +120,8 @@ def test_users_table_sorts_by_each_column(page, live_server, user_factory):
     assert sort_by("Sign-in") == ["Ann Admin", "Cal Local", "Bea Sso"]
     expect(page.locator("th", has_text="Sign-in")).to_have_attribute("aria-sort", "ascending")
     assert sort_by("Sign-in") == ["Bea Sso", "Ann Admin", "Cal Local"]
-    assert sort_by("Admin") == ["Ann Admin", "Bea Sso", "Cal Local"]  # blank values come last
+    assert sort_by("Admin") == ["Bea Sso", "Cal Local", "Ann Admin"]  # "No" before "Yes"
+    assert sort_by("Admin") == ["Ann Admin", "Bea Sso", "Cal Local"]  # and back, administrators first
     assert sort_by("Status") == ["Ann Admin", "Bea Sso", "Cal Local"]
     assert sort_by("Name") == ["Ann Admin", "Bea Sso", "Cal Local"]
     assert sort_by("Name") == ["Cal Local", "Bea Sso", "Ann Admin"]
@@ -337,5 +338,46 @@ def test_card_shows_no_label_for_an_empty_cell(page, live_server, user_factory):
     assert admin_cell.evaluate("el => getComputedStyle(el, '::before').content") in ("none", "normal")
     ada = page.locator("#people-table tbody tr", has_text="Ada Admin").locator("td.user-badge").nth(1)
     assert ada.evaluate("el => getComputedStyle(el, '::before').content") not in ("none", "normal")
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+def test_disabling_someone_keeps_the_filter_and_sort(page, live_server, user_factory):
+    user_factory(full_name="Bea Sso")
+    user_factory(full_name="Cal Local")
+    admin = user_factory(full_name="Ann Admin", is_admin=True)
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users?status=active")
+    page.get_by_role("button", name="Name", exact=True).click()
+    page.get_by_role("button", name="Name", exact=True).click()
+    page.on("dialog", lambda dialog: dialog.accept())
+    page.locator("#people-table tbody tr", has_text="Bea Sso").get_by_role("button", name="Disable").click()
+    page.wait_for_load_state("networkidle")
+    assert page.evaluate("Object.fromEntries(new URLSearchParams(location.search))") == {
+        "status": "active",
+        "sort": "-name",
+    }
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+def test_apply_and_clear_filters_keep_the_sort_and_size(page, live_server, user_factory):
+    user_factory(full_name="Bea Sso")
+    admin = user_factory(full_name="Ann Admin", is_admin=True)
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users?status=active&sort=-name&size=50")
+    page.get_by_role("button", name="Apply").click()
+    page.wait_for_load_state("networkidle")
+    query = lambda: {  # noqa: E731
+        key: value
+        for key, value in page.evaluate("Object.fromEntries(new URLSearchParams(location.search))").items()
+        if value
+    }
+    assert query() == {"status": "active", "sort": "-name", "size": "50"}
+    page.get_by_role("link", name="Clear filters").click()
+    page.wait_for_load_state("networkidle")
+    assert query() == {"sort": "-name", "size": "50"}
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []

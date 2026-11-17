@@ -4,7 +4,7 @@
 <div class="team-pick" role="group" aria-labelledby="pick-heading">
   <div class="team-pick-head">
     <h3 id="pick-heading">Add trackers to {{ team.name }}</h3>
-    {% if pick %}{{ search_box('pick-table', 'Search trackers to add') }}{% endif %}
+    {% if pick %}{{ search_box('pick-table', 'Search trackers to add') }}{{ clear_filters('pick-table') }}{% endif %}
   </div>
   {% if errors %}
   <div class="form-alert" role="alert">

@@ -546,7 +546,7 @@ def test_users_list_shows_and_filters_how_each_person_signs_in(client, user_mana
     assert cells("Local Person") == ["Active", "Administrator", "Local"]
     assert 'title="SSO: signs in with a work account (single sign-on)"' in rows["Sso Person"]
     sso_row = body.split('data-sort-name="Sso Person"', 1)[1].split(">", 1)[0]
-    assert 'data-sort-status="active"' in sso_row and 'data-sort-admin=""' in sso_row
+    assert 'data-sort-status="active"' in sso_row and 'data-sort-admin="No"' in sso_row
     assert 'data-sort-sign-in="SSO"' in sso_row
     legend = re.sub(r"<[^>]+>", "", body.split('class="section-foot-note sign-in-legend">', 1)[1].split("</p>", 1)[0])
     assert " ".join(legend.split()) == (

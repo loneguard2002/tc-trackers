@@ -65,7 +65,9 @@
   {% endif %}
 
   <section class="settings-section" id="section-users" aria-labelledby="users-title">
-    <form class="user-filters" method="get" action="{{ url_for('admin.users') }}" role="search">
+    <form class="user-filters" method="get" action="{{ url_for('admin.users') }}" role="search" data-keeps-sort>
+      {% if request.args.get('sort') %}<input type="hidden" name="sort" value="{{ request.args.get('sort') }}">{% endif %}
+      {% if request.args.get('size') %}<input type="hidden" name="size" value="{{ request.args.get('size') }}">{% endif %}
       <div class="toolbar-field user-filter-search"><label for="filter-q">Search name or email</label>
         <input id="filter-q" type="search" name="q" value="{{ filters.q }}" autocomplete="off"></div>
       <div class="toolbar-field"><label for="filter-status">Status</label>
@@ -95,7 +97,7 @@
         </select></div>
       <div class="user-filter-buttons">
         <button class="button primary button-small" type="submit">Apply</button>
-        {% if filtered %}<a class="button button-small" href="{{ url_for('admin.users') }}">Clear filters</a>{% endif %}
+        {% if filtered %}<a class="button button-small" data-keeps-sort href="{{ url_for('admin.users', sort=request.args.get('sort') or none, size=request.args.get('size') or none) }}">Clear filters</a>{% endif %}
       </div>
     </form>
     {# The total leaves deleted people out, so under the Deleted filter the line counts them on their own. #}
@@ -109,7 +111,7 @@
         <tbody>
         {% for u in users %}
         {% set can_do = actions[u.id] %}
-        <tr data-status="{{ u.status }}" data-sort-name="{{ u.full_name }}" data-sort-status="{{ u.status }}" data-sort-admin="{{ 'Administrator' if u.is_admin }}" data-sort-sign-in="{{ sign_in_labels[u.auth_source] }}" data-sort-teams="{{ teams.get(u.id, [])|map('first')|join(', ') }}" data-sort-sets="{{ sets.get(u.id, [])|join(', ') }}">
+        <tr data-status="{{ u.status }}" data-sort-name="{{ u.full_name }}" data-sort-status="{{ u.status }}" data-sort-admin="{{ 'Yes' if u.is_admin else 'No' }}" data-sort-sign-in="{{ sign_in_labels[u.auth_source] }}" data-sort-teams="{{ teams.get(u.id, [])|map('first')|join(', ') }}" data-sort-sets="{{ sets.get(u.id, [])|join(', ') }}">
           <td class="user-person"><div class="member-cell">{{ person(u) }}</div></td>
           <td class="user-badge"><span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(u.status, 'muted') }}">{{ u.status|title }}</span></td>
           <td class="user-badge">{% if u.is_admin %}<span class="admin-mark" title="Administrator">{{ icon('admin') }}<span class="sr-only">Administrator</span></span>{% else %}<span class="sr-only">Not an administrator</span>{% endif %}</td>
@@ -133,7 +135,7 @@
     <p class="section-foot-note sign-in-legend">Sign-in: {% for value, label in sign_in_labels.items() %}<span class="badge badge-muted">{{ label }}</span> {{ sign_in_meanings[value] }}{{ '; ' if not loop.last else '.' }}{% endfor %}</p>
     <p class="section-foot-note row-actions-legend">Actions: {{ icon('key') }} Access; {{ icon('lock') }} Reset password (Local sign-in only); {{ icon('admin') }} Make or remove administrator; {{ icon('ban') }} Disable; {{ icon('restore') }} Re-enable. Point at a button to see its name.</p>
     {% else %}
-    <p class="section-foot-note">No one matches these filters. <a href="{{ url_for('admin.users') }}">Clear</a></p>
+    <p class="section-foot-note">No one matches these filters. <a data-keeps-sort href="{{ url_for('admin.users', sort=request.args.get('sort') or none, size=request.args.get('size') or none) }}">Clear filters</a></p>
     {% endif %}
     {% if actions.values()|selectattr('password')|list %}
     {% include "admin/_reset_dialog.html" %}

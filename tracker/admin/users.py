@@ -31,6 +31,7 @@ from ..auth.permissions import PERMISSIONS, permission_sources
 from ..auth.roles import tracker_access_routes
 from ..db import get_session
 from ..ids import in_range, parse_id
+from ..listview import list_url
 from ..models import AuditLog, PermissionSet, PermissionSetHolder, Region, RegionGrant, Team, TeamMember, User
 from ..teams.tree import (
     ALREADY_MEMBER_MESSAGE,
@@ -68,11 +69,16 @@ def _abort_if_deleted(user: User) -> None:
         abort(400, description=DELETED_MESSAGE)
 
 
+def _users_url() -> str:
+    """The Users list as the reader had it (the posted view), for after a row action."""
+    return list_url("admin.users", USERS_VIEW_KEYS)
+
+
 def _refuse(message: str):
     """A refusal by a guard: nothing is changed (any lock taken is released) and the message is shown on Users."""
     get_session().rollback()
     flash(message, "danger")
-    return redirect(url_for("admin.users"))
+    return redirect(_users_url())
 
 
 def _admin_loss_refusal(db, user: User) -> str | None:
@@ -150,6 +156,9 @@ def _actions(db, actor: User, user: User) -> dict[str, bool]:
 
 STATUS_FILTERS = {"active": "Active", "pending": "Awaiting approval", "disabled": "Disabled", "deleted": "Deleted"}
 ADMIN_FILTERS = {"yes": "Administrators", "no": "Not administrators"}
+# The keys of the Users view (lists.js writes sort, page and size to the address; the server filters are the others)
+# that a row action sends the reader back to.
+USERS_VIEW_KEYS = ("q", "status", "sign_in", "admin", "team", "set", "sort", "page", "size")
 SIGN_IN_LABELS = {"local": "Local", "sso": "SSO"}
 SIGN_IN_MEANINGS = {
     "local": "signs in with an email address and a password set in this app",
@@ -405,7 +414,7 @@ def enable(user_id: int):
     )
     db.commit()
     flash(f"{user.full_name} can sign in again.", "success")
-    return redirect(url_for("admin.users"))
+    return redirect(_users_url())
 
 
 @bp.post("/users/<int:user_id>/disable")
@@ -449,7 +458,7 @@ def disable(user_id: int):
     )
     db.commit()
     flash(f"{user.full_name} has been disabled.", "success")
-    return redirect(url_for("admin.users"))
+    return redirect(_users_url())
 
 
 @bp.post("/users/<int:user_id>/admin")
@@ -463,7 +472,7 @@ def set_admin(user_id: int):
         return _refuse("You cannot remove your own administrator access.")
     if user.is_admin == make_admin:
         flash(NO_CHANGES_MESSAGE, "info")
-        return redirect(url_for("admin.users"))
+        return redirect(_users_url())
     db = get_session()
     if not make_admin:
         refusal = _admin_loss_refusal(db, user)
@@ -482,7 +491,7 @@ def set_admin(user_id: int):
     )
     db.commit()
     flash(f"Administrator access {'granted to' if make_admin else 'removed from'} {user.full_name}.", "success")
-    return redirect(url_for("admin.users"))
+    return redirect(_users_url())
 
 
 # --- Password reset -------------------------------------------------------------------------------------------------
@@ -528,7 +537,7 @@ def password(user_id: int):
     )
     db.commit()
     flash(f"Set a new password for {user.full_name}. Share it with them securely.", "success")
-    return redirect(url_for("admin.users"))
+    return redirect(_users_url())
 
 
 # --- Switching to Microsoft sign-in ---------------------------------------------------------------------------------

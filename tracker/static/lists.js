@@ -53,7 +53,9 @@
     var sizeSelect = pager ? pager.querySelector("[data-pager-size]") : null;
     var countText = pager ? pager.querySelector("[data-pager-count]") : null;
     var controls = pager ? pager.querySelector("[data-pager-controls]") : null;
-    var status = "all";
+    // The first status button is the default view ("All", or "All open"); a table without buttons matches every row.
+    var defaultStatus = buttons.length ? buttons[0].getAttribute("data-status") : "all";
+    var status = defaultStatus;
     var pageNumber = 1;
     var pageSize = 25;
     var prefix = table.getAttribute("data-state-prefix") || "";
@@ -125,7 +127,11 @@
           counts.all += 1;
           rowTokens.forEach(function (token) { counts[token] = (counts[token] || 0) + 1; });
         }
-        if (found && (status === "all" || rowTokens.indexOf(status) !== -1)) matching.push(row);
+        row.matchIndex = -1;  // its place among the matching rows, for the page it falls on
+        if (found && (status === "all" || rowTokens.indexOf(status) !== -1)) {
+          row.matchIndex = matching.length;
+          matching.push(row);
+        }
         if (rowTokens.indexOf("active") !== -1) active += 1;
       });
       var pages = Math.max(1, Math.ceil(matching.length / pageSize));
@@ -134,7 +140,7 @@
       var last = pager ? first + pageSize : matching.length;
       var shown = 0;
       Array.prototype.forEach.call(body.rows, function (row) {
-        var index = matching.indexOf(row);
+        var index = row.matchIndex;
         var show = index !== -1 && index >= first && index < last;
         row.hidden = !show;
         if (show) shown += 1;
@@ -172,7 +178,7 @@
 
     function filtersInUse() {
       return Boolean((input && input.value.trim() !== "") || (regionFilter && regionFilter.value !== "")
-        || (buttons.length && status !== buttons[0].getAttribute("data-status")));
+        || status !== defaultStatus);
     }
 
     // A change of search, filter, region, sort or size starts again at the first page.
@@ -383,21 +389,96 @@
         else params.set(key(name), value);
       }
       if (input) put("q", input.value.trim(), input.value.trim() === "");
-      if (statusGroup) put("filter", status, status === "all");
+      if (statusGroup) put("filter", status, status === defaultStatus);
       if (regionFilter) put("region", regionFilter.value, regionFilter.value === "");
       if (headers.length) put("sort", sortValue(), sortValue() === "");
       if (sizeSelect) put("size", String(pageSize), pageSize === 25);
       if (pager) put("page", String(pageNumber), pageNumber === 1);
       var query = params.toString();
+      keepViewInForms(query ? "?" + query : "", params);
       try {
         window.history.replaceState(window.history.state, "",
           window.location.pathname + (query ? "?" + query : "") + window.location.hash);
       } catch (error) { /* an address that cannot be rewritten leaves the view as it is */ }
     }
 
+    // A row action or the Edit dialog posts the view (the address's query) with it, so that the server sends the reader
+    // back to the same search, filters, sort and page. The server keeps only the keys the list understands. The Users
+    // filter form and its Clear filters link (data-keeps-sort) carry the sort and the rows per page, which the form's
+    // own fields do not hold. Dialogs marked data-keeps-view belong to the table that has no state prefix.
+    function keepViewInForms(query, params) {
+      var forms = Array.prototype.slice.call(body.querySelectorAll("form"));
+      if (!prefix) {
+        each(document.querySelectorAll("dialog[data-keeps-view] form"), function (form) { forms.push(form); });
+      }
+      forms.forEach(function (form) {
+        var field = form.querySelector('input[type="hidden"][name="view"]');
+        if (!field) {
+          field = document.createElement("input");
+          field.type = "hidden";
+          field.name = "view";
+          form.appendChild(field);
+        }
+        field.value = query;
+      });
+      if (prefix) return;
+      each(document.querySelectorAll("form[data-keeps-sort]"), function (form) {
+        ["sort", "size"].forEach(function (name) {
+          var field = form.querySelector('input[type="hidden"][name="' + name + '"]');
+          if (!params.get(name)) {
+            if (field) field.parentNode.removeChild(field);
+            return;
+          }
+          if (!field) {
+            field = document.createElement("input");
+            field.type = "hidden";
+            field.name = name;
+            form.appendChild(field);
+          }
+          field.value = params.get(name);
+        });
+      });
+      each(document.querySelectorAll("a[data-keeps-sort]"), function (link) {
+        var kept = new URLSearchParams();
+        ["sort", "size"].forEach(function (name) { if (params.get(name)) kept.set(name, params.get(name)); });
+        var text = kept.toString();
+        link.setAttribute("href", window.location.pathname + (text ? "?" + text : ""));
+      });
+    }
+
+    // A row named by the address's hash (#location-12, where a row action sent the reader) is brought onto the page
+    // shown, when the search and filters leave it in the table. Otherwise the view stays as it is. Returns the row
+    // when the page changed, to scroll to.
+    function revealHashRow() {
+      var target = null;
+      try {
+        target = document.getElementById(decodeURIComponent(window.location.hash.replace(/^#/, "")));
+      } catch (error) { /* a hash that is not a valid address component names no row */ }
+      if (!target || target.parentNode !== body || !pager) return null;
+      var position = 0;
+      var found = Array.prototype.some.call(body.rows, function (row) {
+        if (!inSearchAndRegion(row) || !(status === "all" || tokens(row).indexOf(status) !== -1)) return false;
+        if (row === target) return true;
+        position += 1;
+        return false;
+      });
+      if (!found) return null;
+      var wanted = Math.floor(position / pageSize) + 1;
+      if (wanted === pageNumber) return null;
+      pageNumber = wanted;
+      return target;
+    }
+
     readState();
+    var moved = revealHashRow();
     refresh();  // applies a region chosen in the address (?region=<id>) and any search the browser kept
     settingUp = false;
+    if (moved) {
+      writeState();
+      moved.scrollIntoView();
+    } else {
+      keepViewInForms(window.location.search, new URLSearchParams(window.location.search));
+    }
   }
 
   each(document.querySelectorAll(".list-table table[id], table[data-sortable][id]"), setUpTable);

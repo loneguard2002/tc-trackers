@@ -116,7 +116,7 @@
    its own page without JavaScript. ``action`` is left out of a closed Edit dialog until lists.js fills it, and
    ``title_prefix`` ("Edit location") is what lists.js puts before the entry's code in the title. #}
 {% macro list_dialog(name, title, action, is_open, errors, submit_label, cancel_url, title_prefix='') -%}
-<dialog id="{{ name }}-dialog" class="list-dialog" aria-labelledby="{{ name }}-dialog-title"{% if is_open %} open data-reopen{% endif %}>
+<dialog id="{{ name }}-dialog" class="list-dialog" aria-labelledby="{{ name }}-dialog-title"{% if name == 'edit' %} data-keeps-view{% endif %}{% if is_open %} open data-reopen{% endif %}>
   <form method="post"{% if action %} action="{{ action }}"{% endif %}>
     {{ csrf_field(csrf_token()) }}
     {% if name == 'edit' %}<input type="hidden" name="action" value="save">{% endif %}

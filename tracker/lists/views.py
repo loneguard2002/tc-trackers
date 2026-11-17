@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 
-from flask import abort, flash, redirect, render_template, request, url_for
+from flask import abort, flash, redirect, render_template, request
 from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 
@@ -18,6 +18,7 @@ from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import current_user, has_permission, permission_required
 from ..db import get_session
 from ..ids import in_range, parse_id
+from ..listview import list_url
 from ..models import BusinessLine, Location, Region, RegionGrant, Team, Tracker, TrackerRegion
 from ..naming import MAX_NAME_LENGTH, name_error
 from . import bp
@@ -27,6 +28,9 @@ from .countries import COUNTRIES, country_name, flag_path, parse_country
 # Regions, locations and business lines: administrators and ``manage_lists`` holders. A region's Access screen
 # (``lists.access``) stays with administrators, since a region grant gives access to trackers.
 manage_lists_required = permission_required("manage_lists")
+
+# The keys of a list screen's view (lists.js writes them to the address) that a row action sends the reader back to.
+LIST_VIEW_KEYS = ("q", "filter", "region", "sort", "page", "size")
 
 
 def can_manage_lists(user) -> bool:
@@ -238,7 +242,7 @@ def _render_regions(
 
 
 def _to_regions(anchor: str | None = None):
-    return redirect(url_for("lists.regions", _anchor=anchor))
+    return redirect(list_url("lists.regions", LIST_VIEW_KEYS, _anchor=anchor))
 
 
 @bp.get("/regions")
@@ -398,7 +402,7 @@ def _render_locations(
 
 
 def _to_locations(anchor: str | None = None):
-    return redirect(url_for("lists.locations", _anchor=anchor))
+    return redirect(list_url("lists.locations", LIST_VIEW_KEYS, _anchor=anchor))
 
 
 def _location_values(location: Location) -> dict:
@@ -564,7 +568,7 @@ def _render_business_lines(
 
 
 def _to_business_lines(anchor: str | None = None):
-    return redirect(url_for("lists.business_lines", _anchor=anchor))
+    return redirect(list_url("lists.business_lines", LIST_VIEW_KEYS, _anchor=anchor))
 
 
 @bp.get("/business-lines")
