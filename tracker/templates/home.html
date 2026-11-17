@@ -159,7 +159,7 @@
     </ul>
     <footer class="tracker-card-foot">
       <span class="tracker-card-links"><a href="{{ url_for('report.view', tracker_id=t.id) }}">{{ icon('report') }}Report</a>
-        {% if can_edit %}<a href="{{ url_for('entries.new_entry', tracker_id=t.id) }}">{{ icon('layers') }}Record completions</a>
+        {% if can_edit %}<a href="{{ url_for('entries.list_entries', tracker_id=t.id) }}">{{ icon('layers') }}Record completions</a>
         <a class="tracker-card-update" href="{{ url_for('entries.inputs', tracker_id=t.id, week=h.report_week.isoformat()) }}">{{ icon('edit') }}Write the update</a>{% endif %}</span>
     </footer>
   </article>

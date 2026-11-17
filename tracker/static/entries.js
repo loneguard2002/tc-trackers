@@ -1,4 +1,5 @@
-// Entries: the quick-add form names the week a date counts towards. Without JavaScript the form still records.
+// Entries: the quick-add form names the week a date counts towards, or says the date is after today.
+// Without JavaScript the form still records, and the server refuses the same dates.
 // (Delete asks in the row itself through tracker.js's data-inline-confirm.)
 (function () {
   "use strict";
@@ -21,6 +22,7 @@
     var weekday = Number(form.dataset.weekday);
     var first = parse(form.dataset.first);
     var last = parse(form.dataset.last);
+    var today = parse(input.max);
 
     var showWeek = function () {
       var d = parse(input.value);
@@ -32,7 +34,10 @@
       // Python numbers weekdays from Monday (0); getUTCDay counts from Sunday (0).
       var ahead = (weekday - (d.getUTCDay() + 6) % 7 + 7) % 7;
       var ending = new Date(d.getTime() + ahead * 864e5);
-      if (ending < first || ending > last) {
+      if (today && d > today) {
+        hint.textContent = "The date cannot be after today";
+        hint.classList.add("tone-danger");
+      } else if (ending < first || ending > last) {
         hint.textContent = "Outside this tracker's weeks";
         hint.classList.add("tone-danger");
       } else {

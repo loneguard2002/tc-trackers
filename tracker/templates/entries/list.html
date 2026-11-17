@@ -12,42 +12,45 @@
 {% set chosen = groups.get(selected_group) if selected_group is not none else none %}
 {% set week_arg = selected_week.isoformat() if selected_week else none %}
 <div class="settings entries-page">
-  {% if active and active_groups %}
+  {% if active and (active_groups or errors) %}{# also when the only location was retired after the form was sent #}
   <form class="settings-section quick-add" method="post" action="{{ url_for('entries.new_entry', tracker_id=tracker.id) }}" data-quick-add
     data-weekday="{{ tracker.week_ending_weekday }}" data-first="{{ tracker.first_week_ending.isoformat() }}" data-last="{{ tracker.last_week_ending.isoformat() }}">
     {{ csrf_field(csrf_token()) }}
-    <input type="hidden" name="return_to" value="list">
-    <header class="settings-section-head has-action">
+    {# The list's filters, so Record comes back to the list as it was. #}
+    {% if week_arg %}<input type="hidden" name="filter_week" value="{{ week_arg }}">{% endif %}
+    {% if selected_group is not none %}<input type="hidden" name="filter_group" value="{{ selected_group }}">{% endif %}
+    <header class="settings-section-head">
       <div>
         <h2 id="section-record">Record completions</h2>
         <p>Work finished on a day. It counts towards the week ending on or after that date and shows on the report straight away.</p>
       </div>
-      <a class="button button-small" href="{{ url_for('entries.new_entry', tracker_id=tracker.id) }}">Full form</a>
     </header>
+    {% if errors %}<div class="quick-add-errors">{% include "entries/_errors.html" %}</div>{% endif %}
     <div class="quick-add-row">
       <div class="field">
         <label for="qa-group">{{ label }}</label>
         <select id="qa-group" name="group_id" required><option value="">Choose</option>
-          {% for grp in active_groups %}<option value="{{ grp.id }}" {{ 'selected' if grp.id == selected_group }}>{{ grp.name }}</option>{% endfor %}</select>
+          {% for grp in active_groups %}<option value="{{ grp.id }}" {{ 'selected' if grp.id|string == form.get('group_id')|string }}>{{ grp.name }}</option>{% endfor %}</select>
       </div>
       <div class="field">
         <label for="qa-date">Date</label>
-        <input id="qa-date" name="entry_date" type="date" value="{{ today.isoformat() }}" required aria-describedby="qa-date-hint">
+        <input id="qa-date" name="entry_date" type="date" value="{{ form.get('entry_date', '') }}" max="{{ today.isoformat() }}" required aria-describedby="qa-date-hint">
         <span class="field-help" id="qa-date-hint" data-week-hint aria-live="polite"></span>
       </div>
       <div class="field">
         <label for="qa-quantity">Quantity</label>
         <div class="input-affix">
-          <input id="qa-quantity" name="quantity" type="number" min="1" step="1" inputmode="numeric" required>
+          <input id="qa-quantity" name="quantity" type="number" min="1" step="1" inputmode="numeric" value="{{ form.get('quantity', '') }}" required{{ ' autofocus' if recorded }}>
           <span aria-hidden="true">{{ unit }}</span>
         </div>
       </div>
       <div class="field field-grow">
         <label for="qa-note">Note <span class="field-optional">(optional, not on the report)</span></label>
-        <input id="qa-note" name="note">
+        <input id="qa-note" name="note" value="{{ form.get('note', '') }}">
       </div>
       <div class="quick-add-actions"><button class="button primary" type="submit">Record</button></div>
     </div>
+    {% if recorded %}<p class="quick-add-result" role="status">{{ recorded.message }} The {{ label|lower }} and date stay as they are for the next entry.</p>{% endif %}
   </form>
   {% endif %}
 
@@ -101,7 +104,7 @@
             <tbody>
             {% for e in items %}
             {% set where = groups[e.group_id].name if e.group_id in groups else e.group_id %}
-            <tr>
+            {% if recorded and e.id == recorded.entry %}<tr class="is-new" data-entry="{{ e.id }}">{% else %}<tr>{% endif %}
               <td class="entry-date">{{ e.entry_date.strftime('%a %d %b') }}</td>
               <td>{{ where }}</td>
               <td class="num">{{ e.quantity|num }}</td>
