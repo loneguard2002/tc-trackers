@@ -474,7 +474,7 @@ def test_filters_render_hidden_for_no_script(client, logged_in_admin, team_facto
         [tag] = re.findall(rf"<[a-z]+[^>]*{marker}[^>]*>", raw)
         assert re.search(r"\bhidden\b", tag), marker
     assert 'src="/static/admin.js' in raw
-    assert re.search(r"<nav[^>]*data-pager-for=[^>]*\bhidden\b", raw) and 'src="/static/lists.js' in raw
+    assert re.search(r"data-pager-for=.*?data-pager-controls hidden", raw, re.S) and 'src="/static/lists.js' in raw
 
 
 # --- Members --------------------------------------------------------------------------------------------------------

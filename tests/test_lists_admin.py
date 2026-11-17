@@ -837,7 +837,7 @@ def test_locations_table_shows_code_region_country_flag_teams(
     assert re.findall(r'<th [^>]*data-sort-default[^>]*><button [^>]*data-sort="(\w+)"', page) == ["region"]
     assert '<p class="list-no-match" data-no-match hidden>No locations match.</p>' in page
     text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split())
-    assert "Showing 1 of 1 location \u00b7 1 active" in text in text
+    assert "Showing 1 of 1 location \u00b7 1 active" in text
 
 
 def test_locations_are_ordered_by_region_then_city_and_filtered_by_region(

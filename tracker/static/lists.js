@@ -23,8 +23,7 @@
   // reads "Showing 1\u201325 of 30 locations \u00b7 28 active" when the matches fill more than one page and "Showing 3 of 30
   // locations \u00b7 28 active" otherwise (the active part only on a table that says so, and counting every row with the
   // "active" status, whatever the search and filters); its [data-pager-controls] show only while more than 25 rows
-  // match. A pager without [data-pager-count] (the older kind, still on the Team page) is shown whole and keeps its own
-  // range, total and noun spans.
+  // match.
   function setUpTable(table) {
     var id = table.id;
     var body = table.tBodies[0];
@@ -143,15 +142,6 @@
         if (controls) controls.hidden = matching.length <= 25;
       }
       if (pager) {
-        var range = pager.querySelector("[data-pager-range]");
-        var total = pager.querySelector("[data-pager-total]");
-        if (range) range.textContent = shown === 0 ? "0" : (first + 1) + "\u2013" + (first + shown);
-        if (total) total.textContent = String(matching.length);
-        var noun = pager.querySelector("[data-pager-noun]");
-        if (noun) {
-          var one = noun.getAttribute("data-noun-one");
-          noun.textContent = matching.length === 1 && one ? one : noun.getAttribute("data-noun-many");
-        }
         var previous = pager.querySelector("[data-pager-prev]");
         var next = pager.querySelector("[data-pager-next]");
         if (previous) previous.disabled = pageNumber <= 1;
@@ -168,7 +158,6 @@
     }
 
     if (pager) {
-      if (!countText) pager.hidden = false;
       var previous = pager.querySelector("[data-pager-prev]");
       var next = pager.querySelector("[data-pager-next]");
       if (sizeSelect) {

@@ -511,7 +511,7 @@ def listed(client, query: str = "") -> list[str]:
 def test_users_filters(client, filter_people):
     everyone = ["Ada Lovelace", "Bo Peep", "Cy Young", "Di Gone"]
     assert sorted(listed(client)) == sorted(everyone)
-    assert "Showing" not in text_of(client.get("/admin/users"))
+    assert "user-count" not in client.get("/admin/users").get_data(as_text=True)  # no filtered-list note
     assert listed(client, "?q=LOVELACE") == ["Ada Lovelace"]
     assert listed(client, "?q=example.org") == ["Bo Peep"]
     assert listed(client, "?q=cy_") == ["Cy Young"]  # an underscore is literal, not a wildcard
@@ -579,7 +579,7 @@ def test_users_filters_ignore_bad_values(client, filter_people):
         response = client.get(f"/admin/users{query}")
         assert response.status_code == 200
         assert len(people_rows(response)) == 5, query
-        assert "Showing" not in text_of(response)
+        assert "user-count" not in response.get_data(as_text=True)
 
 
 def test_empty_filtered_list_says_so(client, filter_people):

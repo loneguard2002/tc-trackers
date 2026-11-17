@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, icon %}
-{% from "lists/_table.html" import sort_header %}
+{% from "lists/_table.html" import sort_header, table_pager %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='users.js', v=app_version) }}" defer></script>
@@ -109,7 +109,7 @@
         <tbody>
         {% for u in users %}
         {% set can_do = actions[u.id] %}
-        <tr data-sort-name="{{ u.full_name }}" data-sort-status="{{ u.status }}" data-sort-admin="{{ 'Administrator' if u.is_admin }}" data-sort-sign-in="{{ sign_in_labels[u.auth_source] }}" data-sort-teams="{{ teams.get(u.id, [])|map('first')|join(', ') }}" data-sort-sets="{{ sets.get(u.id, [])|join(', ') }}">
+        <tr data-status="{{ u.status }}" data-sort-name="{{ u.full_name }}" data-sort-status="{{ u.status }}" data-sort-admin="{{ 'Administrator' if u.is_admin }}" data-sort-sign-in="{{ sign_in_labels[u.auth_source] }}" data-sort-teams="{{ teams.get(u.id, [])|map('first')|join(', ') }}" data-sort-sets="{{ sets.get(u.id, [])|join(', ') }}">
           <td class="user-person"><div class="member-cell">{{ person(u) }}</div></td>
           <td class="user-badge"><span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(u.status, 'muted') }}">{{ u.status|title }}</span></td>
           <td class="user-badge">{% if u.is_admin %}<span class="admin-mark" title="Administrator">{{ icon('admin') }}<span class="sr-only">Administrator</span></span>{% else %}<span class="sr-only">Not an administrator</span>{% endif %}</td>
@@ -129,6 +129,7 @@
         </tbody>
       </table>
     </div>
+    {{ table_pager('people-table', 'people', 'person', users|length, active=active_count) }}
     <p class="section-foot-note sign-in-legend">Sign-in: {% for value, label in sign_in_labels.items() %}<span class="badge badge-muted">{{ label }}</span> {{ sign_in_meanings[value] }}{{ '; ' if not loop.last else '.' }}{% endfor %}</p>
     <p class="section-foot-note row-actions-legend">Actions: {{ icon('key') }} Access; {{ icon('lock') }} Reset password (Local sign-in only); {{ icon('admin') }} Make or remove administrator; {{ icon('ban') }} Disable; {{ icon('restore') }} Re-enable. Point at a button to see its name.</p>
     {% else %}

@@ -283,3 +283,21 @@ def test_delete_dialog_fits_the_screen_in_both_themes(page, live_server, user_fa
     for name in ("Cancel", "Delete"):
         button = dialog.get_by_role("button", name=name, exact=True).bounding_box()
         assert box["x"] <= button["x"] and button["x"] + button["width"] <= box["x"] + box["width"], (name, button)
+
+
+def test_users_list_pages_past_25_people(page, live_server, user_factory):
+    for n in range(29):
+        user_factory(full_name=f"Person {n:02d}")
+    admin = user_factory(full_name="Ann Admin", is_admin=True)  # the signed-in administrator counts too: 30 people
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users")
+    pager = page.locator('[data-pager-for="people-table"]')
+    rows = page.locator("#people-table tbody tr:visible")
+    expect(rows).to_have_count(25)
+    expect(pager.locator("[data-pager-count]")).to_have_text("Showing 1–25 of 30 people · 30 active")
+    pager.get_by_role("button", name="Next").click()
+    expect(rows).to_have_count(5)
+    expect(pager.locator("[data-pager-count]")).to_have_text("Showing 26–30 of 30 people · 30 active")
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
