@@ -43,3 +43,6 @@ Scope to settle in the spec:
   page, the same permission should sit at the same height in every set's card, so a row reads straight across and the
   sets are easy to compare. Today each card sizes its rows by its own content, so a permission whose text wraps in one
   card pushes the rows below it out of line with the neighbouring cards.
+- **Permission sets: a frosted save bar.** Requested 17 Nov 2026. The blue bar for saving permission changes should
+  have a translucent, blurred background (frosted glass, as on an iPhone), so the permissions scrolling underneath
+  show through it softly instead of being hidden behind a solid bar.
