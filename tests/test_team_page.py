@@ -188,7 +188,7 @@ def test_people_table_columns_filters_and_add_form_on_top(
     group = group[group.index(">") + 1 : group.index("</div>")]
     assert re.findall(r'data-status="(\w+)"', group) == ["all", "direct", "inherited"]
     assert flat(group) == "All 2 Direct 1 From teams above 1"
-    assert re.search(r'data-pager-for="people-table"[^>]*\bhidden\b', raw)
+    assert re.search(r'data-pager-for="people-table".*?data-pager-controls hidden', raw, re.S)
     direct = row_of(raw, "Mia Member")
     assert 'data-status="direct"' in direct and "<select" in direct and "Mia Member" in direct
     assert re.search(

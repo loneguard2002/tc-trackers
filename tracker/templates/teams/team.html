@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, field, icon, people_count, title_crumb %}
-{% from "lists/_table.html" import code_badge, search_box, status_filters, sort_header, no_match, pager %}
+{% from "lists/_table.html" import code_badge, search_box, status_filters, sort_header, no_match, table_pager %}
 {% from "teams/_tracker_regions.html" import regions_after %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
@@ -155,7 +155,7 @@
         </table>
       {{ no_match('No people match the search.') }}
       </div>
-      {{ pager('people-table', 'people', people|length, 'person') }}
+      {{ table_pager('people-table', 'people', 'person', people|length) }}
       {% else %}
       <p class="empty-note">No one reaches this team yet.</p>
       {% endif %}
@@ -190,8 +190,8 @@
           <thead><tr>
             {{ sort_header('Team', 'team', default=True) }}
             {{ sort_header('Place', 'place') }}
-            {{ sort_header('People', 'people', 'num') }}
-            {{ sort_header('Trackers', 'trackers', 'num') }}
+            {{ sort_header('People', 'people', 'num', type='number') }}
+            {{ sort_header('Trackers', 'trackers', 'num', type='number') }}
             <th scope="col"><span class="sr-only">Actions</span></th>
           </tr></thead>
           <tbody>
@@ -212,7 +212,7 @@
         </table>
       {{ no_match('No teams match the search.') }}
       </div>
-      {{ pager('below-table', 'teams below', below|length, 'team below') }}
+      {{ table_pager('below-table', 'teams below', 'team below', below|length) }}
       {% else %}
       <p class="empty-note">No teams are below this one.</p>
       {% endif %}
@@ -261,7 +261,7 @@
         </table>
       {{ no_match('No trackers match the search.') }}
       </div>
-      {{ pager('trackers-table', 'trackers', trackers|length, 'tracker') }}
+      {{ table_pager('trackers-table', 'trackers', 'tracker', trackers|length, active=active_trackers) }}
       {% else %}
       <p class="empty-note">No trackers are in this team.</p>
       {% endif %}

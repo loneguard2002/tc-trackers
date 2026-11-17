@@ -229,6 +229,7 @@ def users():
         users=rows,
         pending=[user for user in everyone if user.status == "pending"],
         total=len(everyone),
+        active_count=sum(1 for user in rows if user.status == "active"),
         filters=filters,
         filtered=filtered,
         status_filters=STATUS_FILTERS,

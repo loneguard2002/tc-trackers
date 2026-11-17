@@ -225,3 +225,19 @@ def test_tree_filter_shows_every_appearance(page, live_server, team_factory, use
     page.set_viewport_size({"width": 390, "height": 900})
     assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
     _clean(page)
+
+
+def test_team_trackers_footer_counts_active(page, live_server, team_factory, user_factory, tracker_factory):
+    team = team_factory(name="Windows")
+    tracker_factory(name="Patching", team_id=team.id)
+    tracker_factory(name="Backups", team_id=team.id)
+    tracker_factory(name="Old audit", team_id=team.id, status="archived")
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(f"{live_server}/admin/teams/{team.id}?tab=trackers")
+    count = page.locator('[data-pager-for="trackers-table"] [data-pager-count]')
+    expect(count).to_have_text("Showing 3 of 3 trackers · 2 active")
+    page.locator("button[data-status=archived]").click()
+    expect(count).to_have_text("Showing 1 of 3 trackers · 2 active")
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
