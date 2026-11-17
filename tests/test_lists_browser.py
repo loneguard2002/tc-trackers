@@ -38,7 +38,7 @@ def _chip(page, status):
 
 
 def _foot(page):
-    return " ".join(page.locator(".list-foot").inner_text().split())
+    return " ".join(page.locator("[data-pager-count]").inner_text().split())
 
 
 def _is_modal(page, dialog_id):
@@ -90,7 +90,7 @@ def test_search_filters_rows_and_counts(page, live_server, user_factory, region_
     search.fill("lon")
     expect(page.locator(ROWS)).to_have_count(1)
     assert _names(page) == ["London"]
-    assert _foot(page) == "Showing 1 of 3 locations 3 active"  # every active row, whatever is shown
+    assert _foot(page) == "Showing 1 of 3 locations · 3 active"  # every active row, whatever is shown
     expect(_chip(page, "all")).to_have_text("1")
     expect(_chip(page, "active")).to_have_text("1")
 
@@ -100,7 +100,53 @@ def test_search_filters_rows_and_counts(page, live_server, user_factory, region_
     assert _names(page) == ["Singapore"]
     search.fill("")
     expect(page.locator(ROWS)).to_have_count(3)
-    assert _foot(page) == "Showing 3 of 3 locations 3 active"
+    assert _foot(page) == "Showing 3 of 3 locations · 3 active"
+    _clean(page)
+
+
+def test_footer_counts_and_pages_appear_only_past_25_rows(
+    page, live_server, user_factory, region_factory, location_factory
+):
+    emea = region_factory("EMEA", "Europe, Middle East and Africa")
+    for number in range(30):
+        location_factory(emea, f"City {number:02d}", "GB", code=f"X{number:02d}", retired=number < 2)
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+
+    expect(page.locator("#locations-table tbody tr:visible")).to_have_count(25)
+    assert _foot(page) == "Showing 1\u201325 of 30 locations \u00b7 28 active"
+    expect(page.locator("[data-pager-controls]")).to_be_visible()
+    page.locator("[data-pager-next]").click()
+    expect(page.locator(ROWS)).to_have_count(5)
+    assert _foot(page) == "Showing 26\u201330 of 30 locations \u00b7 28 active"
+    page.locator("#locations-table-search").fill("zzz")
+    expect(page.locator(ROWS)).to_have_count(0)
+    assert _foot(page) == "Showing 0 of 30 locations \u00b7 28 active"
+    expect(page.locator("[data-pager-controls]")).to_be_hidden()
+    _clean(page)
+
+
+def test_footer_has_no_controls_on_one_page(page, live_server, user_factory, region_factory, location_factory):
+    emea = region_factory("EMEA", "Europe, Middle East and Africa")
+    for city in ("London", "Geneva", "Zurich"):
+        location_factory(emea, city, "GB")
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+    assert _foot(page) == "Showing 3 of 3 locations \u00b7 3 active"
+    expect(page.locator("[data-pager-controls]")).to_be_hidden()
+    _clean(page)
+
+
+def test_codes_sort_naturally_with_blanks_last(page, live_server, user_factory, region_factory, location_factory, db):
+    emea = region_factory("EMEA", "Europe, Middle East and Africa")
+    for city, code in (("Ten", "LD10"), ("Five", "LD5"), ("Blank", None), ("Ab", "AB1")):
+        location = location_factory(emea, city, "GB", code="TMP")
+        location.code = code
+    db.commit()
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+    button = page.locator('#locations-table th button[data-sort="code"]')
+    button.click()
+    assert _names(page) == ["Ab", "Five", "Ten", "Blank"]
+    button.click()
+    assert _names(page) == ["Ten", "Five", "Ab", "Blank"]
     _clean(page)
 
 
@@ -139,14 +185,14 @@ def test_status_and_region_filters_combine(page, live_server, user_factory, plac
     expect(retired).to_have_attribute("aria-pressed", "true")
     expect(page.locator('[data-status-for] button[data-status="all"]')).to_have_attribute("aria-pressed", "false")
     assert sorted(_names(page)) == ["Geneva", "Tokyo"]
-    assert _foot(page) == "Showing 2 of 4 locations 2 active"  # the active count ignores the filters
+    assert _foot(page) == "Showing 2 of 4 locations · 2 active"  # the active count ignores the filters
     page.select_option("#locations-table-region", str(places["apac"].id))
     assert _names(page) == ["Tokyo"]
     # The counts follow the region filter: APAC has one active and one retired location.
     expect(_chip(page, "all")).to_have_text("2")
     expect(_chip(page, "active")).to_have_text("1")
     expect(_chip(page, "retired")).to_have_text("1")
-    assert _foot(page) == "Showing 1 of 4 locations 2 active"
+    assert _foot(page) == "Showing 1 of 4 locations · 2 active"
     page.locator('[data-status-for] button[data-status="active"]').click()
     assert _names(page) == ["Singapore"]
     page.select_option("#locations-table-region", "")
@@ -185,7 +231,7 @@ def test_region_query_presets_filter(page, live_server, user_factory, places):
 
     expect(page.locator("#locations-table-region")).to_have_value(str(places["apac"].id))
     assert sorted(_names(page)) == ["Singapore", "Tokyo"]
-    assert _foot(page) == "Showing 2 of 4 locations 2 active"
+    assert _foot(page) == "Showing 2 of 4 locations · 2 active"
     _clean(page)
 
 
@@ -194,7 +240,7 @@ def test_regions_table_search_and_sort(page, live_server, user_factory, places):
 
     page.locator("#regions-table-search").fill("asia")
     assert _names(page, "regions-table") == ["Asia Pacific"]
-    assert _foot(page) == "Showing 1 of 3 regions 2 active"
+    assert _foot(page) == "Showing 1 of 3 regions · 2 active"
     page.locator("#regions-table-search").fill("")
     page.locator('[data-status-for] button[data-status="retired"]').click()
     assert _names(page, "regions-table") == ["Old region"]
@@ -240,7 +286,7 @@ def test_a_line_says_when_nothing_matches(page, live_server, user_factory, place
     expect(page.locator(ROWS)).to_have_count(0)
     expect(note).to_be_visible()
     expect(note).to_have_text("No locations match.")
-    assert _foot(page) == "Showing 0 of 4 locations 2 active"
+    assert _foot(page) == "Showing 0 of 4 locations · 2 active"
     page.locator("#locations-table-search").fill("")
     expect(note).to_be_hidden()
     page.select_option("#locations-table-region", str(places["old"].id))  # OLD has no locations
@@ -586,7 +632,7 @@ def test_business_lines_search_filter_and_edit(page, live_server, user_factory, 
     page.locator("#business-lines-table-search").fill("")
     page.locator('[data-status-for] button[data-status="retired"]').click()
     assert _names(page, "business-lines-table") == ["Legacy"]
-    assert _foot(page) == "Showing 1 of 3 business lines 2 active"
+    assert _foot(page) == "Showing 1 of 3 business lines · 2 active"
     page.locator('[data-status-for] button[data-status="all"]').click()
     page.get_by_role("link", name="Edit Data").click()
     assert _is_modal(page, "edit-dialog")

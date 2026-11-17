@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import icon %}
-{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_foot, row_actions, list_dialog, dialog_field, described_by, list_tabs %}
+{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_pager, row_actions, list_dialog, dialog_field, described_by, list_tabs %}
 {% macro region_fields(prefix, values, errors) -%}
 <div class="field-pair">
   {% set code_help = 'A short name such as EMEA, at most 20 characters.' %}
@@ -53,11 +53,11 @@
     <div class="section-table list-table">
       <table id="regions-table">
         <thead><tr>
-          {{ sort_header('Code', 'code', default=True) }}
+          {{ sort_header('Code', 'code', default=True, type='text') }}
           {{ sort_header('Name', 'name') }}
-          {{ sort_header('Locations', 'locations', 'num') }}
-          {{ sort_header('Teams', 'teams', 'num') }}
-          {{ sort_header('People', 'people', 'num') }}
+          {{ sort_header('Locations', 'locations', 'num', type='number') }}
+          {{ sort_header('Teams', 'teams', 'num', type='number') }}
+          {{ sort_header('People', 'people', 'num', type='number') }}
           {{ sort_header('Status', 'status') }}
           <th scope="col"><span class="sr-only">Actions</span></th>
         </tr></thead>
@@ -82,7 +82,7 @@
       </table>
       {{ no_match('No regions match.') }}
     </div>
-    {{ table_foot('regions', regions|length, regions|rejectattr('retired')|list|length) }}
+    {{ table_pager('regions-table', 'regions', 'region', regions|length, regions|rejectattr('retired')|list|length) }}
     {% else %}
     <p class="empty-note">No regions yet. Add the first one.</p>
     {% endif %}

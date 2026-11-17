@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import icon %}
-{% from "lists/_table.html" import status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_foot, row_actions, list_dialog, dialog_field, list_tabs %}
+{% from "lists/_table.html" import status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_pager, row_actions, list_dialog, dialog_field, list_tabs %}
 {% macro line_fields(prefix, values, errors) -%}
 {% call dialog_field('Name', 'Unique, at most 100 characters.', prefix ~ '-name', errors.get('name', [])) %}
 <input id="{{ prefix }}-name" name="name" value="{{ values.get('name', '') }}" maxlength="100" required autocomplete="off" aria-describedby="{{ prefix }}-name-{{ 'error' if errors.get('name') else 'help' }}"{% if errors.get('name') %} aria-invalid="true"{% endif %}>
@@ -48,7 +48,7 @@
       <table id="business-lines-table">
         <thead><tr>
           {{ sort_header('Name', 'name', default=True) }}
-          {{ sort_header('Trackers', 'trackers', 'num') }}
+          {{ sort_header('Trackers', 'trackers', 'num', type='number') }}
           {{ sort_header('Status', 'status') }}
           <th scope="col"><span class="sr-only">Actions</span></th>
         </tr></thead>
@@ -68,7 +68,7 @@
       </table>
       {{ no_match('No business lines match.') }}
     </div>
-    {{ table_foot('business lines', lines|length, lines|rejectattr('retired')|list|length) }}
+    {{ table_pager('business-lines-table', 'business lines', 'business line', lines|length, lines|rejectattr('retired')|list|length) }}
     {% else %}
     <p class="empty-note">No business lines yet. Add the first one.</p>
     {% endif %}

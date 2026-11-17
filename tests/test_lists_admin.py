@@ -529,7 +529,7 @@ def test_regions_table_lists_counts_and_status(client, logged_in_admin, region_f
     assert re.findall(r'<th [^>]*data-sort-default[^>]*><button [^>]*data-sort="(\w+)"', page) == ["code"]
     assert '<p class="list-no-match" data-no-match hidden>No regions match.</p>' in page
     text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split())
-    assert "Showing 2 of 2 regions" in text and "1 active" in text
+    assert "Showing 2 of 2 regions \u00b7 1 active" in text
 
 
 def test_regions_table_says_when_there_are_none(client, logged_in_admin):
@@ -837,7 +837,7 @@ def test_locations_table_shows_code_region_country_flag_teams(
     assert re.findall(r'<th [^>]*data-sort-default[^>]*><button [^>]*data-sort="(\w+)"', page) == ["region"]
     assert '<p class="list-no-match" data-no-match hidden>No locations match.</p>' in page
     text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split())
-    assert "Showing 1 of 1 locations" in text and "1 active" in text
+    assert "Showing 1 of 1 location \u00b7 1 active" in text in text
 
 
 def test_locations_are_ordered_by_region_then_city_and_filtered_by_region(
@@ -867,7 +867,7 @@ def test_locations_are_ordered_by_region_then_city_and_filtered_by_region(
         f'<option value="{old.id}">OLD — Old region (retired)</option>',
     ]
     text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split())
-    assert "Showing 4 of 4 locations" in text and "3 active" in text
+    assert "Showing 4 of 4 locations \u00b7 3 active" in text
 
 
 def test_location_without_code_or_country_shows_fallbacks(
@@ -1325,7 +1325,7 @@ def test_business_lines_page_has_the_table_layout(client, logged_in_admin, busin
     assert ">Add business line</a>" in page
     assert 'data-search-for="business-lines-table"' in page and 'data-status-for="business-lines-table"' in page
     assert 'id="business-lines-table"' in page and 'aria-label="Show business lines by status"' in page
-    assert "No business lines match." in page and "Showing <span data-shown>3</span> of" in page
+    assert "No business lines match." in page and "data-pager-count" in page
     for key in ("name", "trackers", "status"):
         assert f'data-sort="{key}"' in page
     assert "<details" not in page
