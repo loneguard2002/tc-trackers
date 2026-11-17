@@ -70,7 +70,7 @@
   }
 
   // Rows that scroll sideways fade the edge that has more items behind it (styles in tracker.css).
-  Array.prototype.forEach.call(document.querySelectorAll(".tabs, .subnav, .week-strip"), function (row) {
+  Array.prototype.forEach.call(document.querySelectorAll(".tabs, .subnav, .week-strip, .tracker-cards"), function (row) {
     function syncEdges() {
       var hidden = row.scrollWidth - row.clientWidth - row.scrollLeft;
       row.classList.toggle("more-before", row.scrollLeft > 1);

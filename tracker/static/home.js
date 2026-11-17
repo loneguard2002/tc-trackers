@@ -64,6 +64,9 @@
     var shown = arrange(cards);
     arrange(rows);
     cards.hidden = state.layout !== "cards" || shown === 0;
+    // The card row starts again from the left, and its faded edges follow what is left to scroll (tracker.js).
+    cards.scrollLeft = 0;
+    cards.dispatchEvent(new Event("scroll"));
     list.hidden = state.layout !== "list" || shown === 0;
     if (empty) empty.hidden = shown !== 0;
     tools.querySelectorAll("[data-filter]").forEach(function (chip) {
