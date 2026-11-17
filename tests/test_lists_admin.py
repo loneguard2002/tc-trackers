@@ -1479,3 +1479,28 @@ def test_region_used_by_a_team_cannot_be_deleted(client, logged_in_admin, db, re
     assert response.status_code == 400 and REGION_IN_USE in text_of(response)
     assert db.get(Region, world.id) is not None
     assert "teams" in REGION_IN_USE
+
+
+def test_a_posted_view_keeps_only_the_keys_the_list_understands(
+    client, logged_in_admin, db, region_factory, location_factory
+):
+    region = region_factory("EMEA", "Europe")
+    location = location_factory(region, "London", "GB", code="LON")
+    view = "?sort=-name&page=2&q=lon&next=http://evil.example&size=50&region=3&filter=retired"
+    response = post(client, f"/admin/locations/{location.id}", {"action": "retire", "view": view})
+    assert response.status_code == 302
+    target = response.headers["Location"]
+    assert target.startswith("/admin/locations?")
+    assert target.endswith(f"#location-{location.id}")
+    assert "evil" not in target and "next=" not in target
+    for part in ("sort=-name", "page=2", "q=lon", "size=50", "region=3", "filter=retired"):
+        assert part in target
+
+
+@pytest.mark.parametrize("view", ["http://evil.example/x", "//evil.example", "?next=http://evil.example", "", "?%"])
+def test_a_posted_view_never_sends_the_reader_elsewhere(client, logged_in_admin, db, region_factory, view):
+    region = region_factory("EMEA", "Europe")
+    response = post(client, f"/admin/regions/{region.id}", {"action": "retire", "view": view})
+    assert response.status_code == 302
+    target = response.headers["Location"]
+    assert target.startswith("/admin/regions") and "evil" not in target

@@ -1055,3 +1055,64 @@ def test_rows_are_cards_on_a_phone(page, live_server, user_factory, places):
     assert len(messages) == 1 and "Delete the location" in messages[0]
     expect(unused).to_have_count(1)
     _clean(page)
+
+
+# --- Row actions keep the view ---------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def thirty(region_factory, location_factory):
+    emea = region_factory("EMEA", "Europe, Middle East and Africa")
+    return [location_factory(emea, f"City {n:02d}", "GB", code=f"X{n:02d}") for n in range(30)]
+
+
+def _query(page):
+    return page.evaluate("Object.fromEntries(new URLSearchParams(location.search))")
+
+
+def test_retiring_a_row_on_page_two_keeps_the_view_and_shows_the_row(page, live_server, user_factory, thirty):
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+    page.get_by_role("button", name="Name", exact=True).click()
+    page.get_by_role("button", name="Name", exact=True).click()
+    page.locator("[data-pager-next]").click()
+    assert _query(page) == {"sort": "-name", "page": "2"}
+    row = page.locator(f"#location-{thirty[2].id}")
+    row.locator('button[title="Retire"]').click()
+    page.wait_for_load_state("networkidle")
+
+    assert _query(page) == {"sort": "-name", "page": "2"}
+    expect(row).to_be_visible()
+    expect(row).to_have_class(re.compile("is-retired"))
+    _clean(page)
+
+
+def test_saving_in_the_edit_dialog_on_page_two_keeps_the_view(page, live_server, user_factory, thirty):
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+    page.get_by_role("button", name="Name", exact=True).click()
+    page.get_by_role("button", name="Name", exact=True).click()
+    page.locator("[data-pager-next]").click()
+    row = page.locator(f"#location-{thirty[1].id}")
+    row.locator("a.row-edit").click()
+    page.fill("#edit-code", "ZZA")  # the codes of the fixture are not valid ones
+    page.fill("#edit-city", "City 01 renamed")
+    page.locator("#edit-dialog").get_by_role("button", name="Save").click()
+    page.wait_for_load_state("networkidle")
+
+    assert _query(page) == {"sort": "-name", "page": "2"}
+    expect(row).to_be_visible()
+    expect(row).to_contain_text("City 01 renamed")
+    _clean(page)
+
+
+def test_a_row_named_by_the_address_hash_opens_its_page_unless_a_filter_hides_it(
+    page, live_server, user_factory, thirty
+):
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/locations?sort=-name#location-{thirty[0].id}")
+    expect(page.locator(f"#location-{thirty[0].id}")).to_be_visible()
+    assert _query(page) == {"sort": "-name", "page": "2"}
+    assert _foot(page).startswith("Showing 26\u201330 of 30")
+
+    page.goto(f"{live_server}/admin/locations?q=zzz#location-{thirty[0].id}")
+    expect(page.locator(ROWS)).to_have_count(0)
+    assert _query(page) == {"q": "zzz"}
+    _clean(page)

@@ -460,6 +460,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
    scrolls; tracker.js underlines the link of the section in view and outlines that section (.is-current). A linked
    section lands clear of both bars. */
 :root { --subnav-height: 42px; --sticky-top: var(--topbar-height); }
+/* Sticky table headings must not cover a control reached with Shift+Tab (WCAG 2.4.11). */
+html { scroll-padding-top: calc(var(--sticky-top) + 3rem); }
 /* Where a table's heading row sticks: under the top bar, and under the sub-navigation too on a page that has one. */
 main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-height)); }
 .subnav { position: sticky; top: var(--topbar-height); z-index: 20; display: flex; align-items: center; gap: 24px; height: var(--subnav-height); margin: -24px 0 20px; border-bottom: 1px solid var(--border); background: var(--bg); box-shadow: -8px 0 0 var(--bg), 8px 0 0 var(--bg); overflow-x: auto; scrollbar-width: none; }
@@ -846,6 +848,10 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
   :is(.register, .card-rows) td[data-label]::before { content: attr(data-label) " "; color: var(--muted); }
   :is(.register, .card-rows) .cell-actions { width: auto; margin-left: auto; }
   :is(.register.section-table, .card-rows) :is(thead, td.hide-narrow) { display: none; }
+  /* The picker's first cell is a checkbox: it sits before the tracker's name, not on a line of its own. */
+  .team-pick-table .card-rows td.pick-cell { flex: 0 0 auto; padding-right: 6px; }
+  .team-pick-table .card-rows td.pick-cell + td { flex: 1 1 calc(100% - 2.5rem); min-width: 0; }  /* the next cell wraps below */
+  .team-pick-table .card-rows td.pick-cell + td::before { content: none; }  /* the name needs no "Tracker" label */
   .list-table table.card-rows, .team-panel .list-table table.card-rows { min-width: 0; }
   .team-panel .list-table .card-rows .cell-actions { width: auto; white-space: normal; }  /* beats the table's 1% / nowrap actions column */
   .entry-filters, .risk-filters, .quick-add-row, .field-stack { padding-left: 16px; padding-right: 16px; }
@@ -1253,7 +1259,6 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
 .list-dialog-note { margin: 6px 0 0; }
 .list-no-match { margin: 0; padding: 20px; color: var(--muted); font-size: .875rem; text-align: center; }
 .code-input { text-transform: uppercase; }  /* the server upper-cases a location code; show it so as it is typed */
-.list-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin: 0; padding: 10px 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; }
 
 /* The Add and Edit dialogs. Opened by lists.js they are modal, centred over a dimmed page. Without JavaScript the
    server renders one open, which is not modal: it then sits in the page above the table as a raised card. */
@@ -1290,7 +1295,7 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
 .delete-summary .is-none { color: var(--muted); }
 .field.has-error :where(input, select, textarea) { border-color: var(--danger); }
 @media (max-width: 720px) {
-  .list-tools, .list-foot { padding-left: 16px; padding-right: 16px; }
+  .list-tools { padding-left: 16px; padding-right: 16px; }
   .list-search, .list-region { flex: 1 1 100%; max-width: none; }
   .list-status { margin-left: 0; }  /* on a line of its own below the search, so it starts at the left */
   .list-dialog-head { padding-left: 16px; }

@@ -2,7 +2,7 @@
 {# The Reset password dialog of the Users list and a person's Access page. A link marked data-reset-password opens it
    (users.js) with the person's name and the form's action filled in. Without
    JavaScript the button is a link to the person's Reset password page instead. #}
-<dialog id="reset-dialog" class="list-dialog" aria-labelledby="reset-dialog-title">
+<dialog id="reset-dialog" class="list-dialog" data-keeps-view aria-labelledby="reset-dialog-title">
   <form method="post">
     {{ csrf_field(csrf_token()) }}
     <header class="list-dialog-head">
