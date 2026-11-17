@@ -241,3 +241,31 @@ def test_team_trackers_footer_counts_active(page, live_server, team_factory, use
     expect(count).to_have_text("Showing 1 of 3 trackers · 2 active")
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
+
+
+def test_team_tables_keep_their_own_keys(page, live_server, team_factory, user_factory, add_member, tracker_factory):
+    team = team_factory(name="Windows")
+    add_member(team, user_factory(full_name="Ann Member"), "viewer")
+    add_member(team, user_factory(full_name="Bob Member"), "viewer")
+    tracker_factory(name="Patching", team_id=team.id)
+    tracker_factory(name="Old audit", team_id=team.id, status="archived")
+    base = f"/admin/teams/{team.id}"
+
+    def query():
+        return page.evaluate("Object.fromEntries(new URLSearchParams(location.search))")
+
+    # The tabs are separate pages, but a key written for one table must survive another table's changes.
+    _open(page, live_server, user_factory(is_admin=True), f"{base}?people-q=ann")
+    page.locator("#people-table-search").fill("bob")
+    assert query() == {"people-q": "bob"}
+    expect(page.locator("#people-table tr[data-route]:visible")).to_have_count(1)
+
+    page.goto(f"{live_server}{base}?tab=trackers&people-q=ann&q=keep")
+    page.locator("button[data-status=archived]").click()
+    assert query() == {"tab": "trackers", "people-q": "ann", "q": "keep", "trackers-filter": "archived"}
+    page.reload()
+    expect(page.locator("button[data-status=archived]")).to_have_attribute("aria-pressed", "true")
+    expect(page.locator("#trackers-table tbody tr:visible")).to_have_count(1)
+    page.locator("#trackers-table-search").fill("old")
+    assert query()["trackers-q"] == "old" and query()["q"] == "keep"
+    _clean(page)
