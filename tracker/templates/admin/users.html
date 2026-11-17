@@ -95,7 +95,7 @@
         </select></div>
       <div class="user-filter-buttons">
         <button class="button primary button-small" type="submit">Apply</button>
-        {% if filtered %}<a class="button button-small" href="{{ url_for('admin.users') }}">{{ icon('close') }}Clear</a>{% endif %}
+        {% if filtered %}<a class="button button-small" href="{{ url_for('admin.users') }}">Clear filters</a>{% endif %}
       </div>
     </form>
     {# The total leaves deleted people out, so under the Deleted filter the line counts them on their own. #}

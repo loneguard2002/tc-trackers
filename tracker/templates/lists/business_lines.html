@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import icon %}
-{% from "lists/_table.html" import status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_pager, row_actions, list_dialog, dialog_field, list_tabs %}
+{% from "lists/_table.html" import status_badge, count_pill, search_box, status_filters, clear_filters, sort_header, no_match, table_pager, row_actions, list_dialog, dialog_field, list_tabs %}
 {% macro line_fields(prefix, values, errors) -%}
 {% call dialog_field('Name', 'Unique, at most 100 characters.', prefix ~ '-name', errors.get('name', [])) %}
 <input id="{{ prefix }}-name" name="name" value="{{ values.get('name', '') }}" maxlength="100" required autocomplete="off" aria-describedby="{{ prefix }}-name-{{ 'error' if errors.get('name') else 'help' }}"{% if errors.get('name') %} aria-invalid="true"{% endif %}>
@@ -43,6 +43,7 @@
     <div class="list-tools">
       {{ search_box('business-lines-table', 'Search business lines') }}
       {{ status_filters('business-lines-table', 'business lines') }}
+      {{ clear_filters('business-lines-table') }}
     </div>
     <div class="section-table list-table">
       <table id="business-lines-table">
@@ -66,7 +67,7 @@
         {% endfor %}
         </tbody>
       </table>
-      {{ no_match('No business lines match.') }}
+      {{ no_match('No business lines match.', 'business-lines-table') }}
     </div>
     {{ table_pager('business-lines-table', 'business lines', 'business line', lines|length, lines|rejectattr('retired')|list|length) }}
     {% else %}

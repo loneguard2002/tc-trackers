@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import icon %}
-{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_pager, row_actions, list_dialog, dialog_field, described_by, list_tabs %}
+{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, clear_filters, sort_header, no_match, table_pager, row_actions, list_dialog, dialog_field, described_by, list_tabs %}
 {% macro region_fields(prefix, values, errors) -%}
 <div class="field-pair">
   {% set code_help = 'A short name such as EMEA, at most 20 characters.' %}
@@ -49,6 +49,7 @@
     <div class="list-tools">
       {{ search_box('regions-table', 'Search regions') }}
       {{ status_filters('regions-table', 'regions') }}
+      {{ clear_filters('regions-table') }}
     </div>
     <div class="section-table list-table">
       <table id="regions-table">
@@ -80,7 +81,7 @@
         {% endfor %}
         </tbody>
       </table>
-      {{ no_match('No regions match.') }}
+      {{ no_match('No regions match.', 'regions-table') }}
     </div>
     {{ table_pager('regions-table', 'regions', 'region', regions|length, regions|rejectattr('retired')|list|length) }}
     {% else %}

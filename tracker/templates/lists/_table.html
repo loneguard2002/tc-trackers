@@ -50,9 +50,17 @@
 <th scope="col"{% if class_name %} class="{{ class_name }}"{% endif %}{% if default %} data-sort-default{% endif %} data-sort-type="{{ type }}"><button type="button" class="sort-button" data-sort="{{ key }}" hidden>{{ label }}{{ icon('sort') }}</button><span data-sort-label>{{ label }}</span></th>
 {%- endmacro %}
 
-{# The line inside the table's frame that lists.js shows when the search and filters leave no rows. #}
-{% macro no_match(text) -%}
-<p class="list-no-match" data-no-match hidden>{{ text }}</p>
+{# Clear filters for the table ``target_id``: hidden until lists.js finds a search, a status button other than the first
+   (All) or a region in use; a click resets those three (the sort and the rows per page stay) and returns to page 1.
+   Without JavaScript it stays hidden. #}
+{% macro clear_filters(target_id) -%}
+<button type="button" class="button button-small" data-clear-for="{{ target_id }}" hidden>Clear filters</button>
+{%- endmacro %}
+
+{# The line inside the table's frame that lists.js shows when the search and filters leave no rows. Give ``target_id``
+   (the table's id) to put the Clear filters button in the line. #}
+{% macro no_match(text, target_id=None) -%}
+<p class="list-no-match" data-no-match hidden>{{ text }}{% if target_id %} {{ clear_filters(target_id) }}{% endif %}</p>
 {%- endmacro %}
 
 {# The one footer under a table (``table_id``): on the left the count in [data-pager-count], "Showing 3 of 3

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import icon %}
-{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, sort_header, no_match, table_pager, row_actions, list_dialog, dialog_field, described_by, list_tabs %}
+{% from "lists/_table.html" import code_badge, status_badge, count_pill, search_box, status_filters, clear_filters, sort_header, no_match, table_pager, row_actions, list_dialog, dialog_field, described_by, list_tabs %}
 {% macro region_label(r) -%}
 {{ r.code }} — {{ r.name }}{% if r.retired %} (retired){% endif %}
 {%- endmacro %}
@@ -86,6 +86,7 @@
         {% for r in regions %}<option value="{{ r.id }}"{% if chosen_region == r.id|string %} selected{% endif %}>{{ region_label(r) }}</option>{% endfor %}
       </select>
       {{ status_filters('locations-table', 'locations') }}
+      {{ clear_filters('locations-table') }}
     </div>
     <div class="section-table list-table">
       <table id="locations-table">
@@ -119,7 +120,7 @@
         {% endfor %}
         </tbody>
       </table>
-      {{ no_match('No locations match.') }}
+      {{ no_match('No locations match.', 'locations-table') }}
     </div>
     {{ table_pager('locations-table', 'locations', 'location', locations|length, locations|rejectattr('retired')|list|length) }}
     {% else %}

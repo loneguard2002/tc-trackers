@@ -790,7 +790,7 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 /* The Trackers tab: + Add trackers at the end of the tools row, then the picker, a light-blue panel holding its own
    search, table, pager and buttons; and "+ EMEA", the region a move adds. */
 .list-tools-action { margin-left: auto; }
-.list-status:not([hidden]) + .list-tools-action { margin-left: 0; }
+.list-status:not([hidden]) ~ .list-tools-action { margin-left: 0; }
 .team-pick { display: grid; gap: 12px; margin: 16px 20px; padding: 16px 18px; border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--primary) 7%, var(--surface)); }
 .team-pick-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
 .team-pick-head h3 { margin: 0; font-size: 1rem; }
