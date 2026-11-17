@@ -73,6 +73,10 @@ def test_the_download_needs_the_import_permission(client, logged_in_user):
 def test_the_import_page_links_the_template_and_guides(client, logged_in_admin):
     page = client.get("/import").get_data(as_text=True)
     assert 'href="/import/template"' in page and "What the workbook needs" in page
+    # The button carries the download icon beside its words, like the other download buttons.
+    link = page[page.index('href="/import/template"') :]
+    link = link[: link.index("</a>")]
+    assert 'class="icon"' in link and link.endswith("Download the template")
     response = client.get("/import/template")
     assert response.status_code == 200
     assert response.headers["Content-Disposition"].startswith("attachment; filename=import-template.xlsx")
