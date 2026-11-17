@@ -63,10 +63,11 @@
       <a class="button button-small" href="{{ url_for('entries.entries_csv', tracker_id=tracker.id, week=week_arg, group=selected_group) }}">{{ icon('download') }}Download CSV</a>
     </header>
     <div class="entry-filters">
-      <nav class="chips" aria-label="{{ label }}">
-        <a class="chip" href="{{ url_for('entries.list_entries', tracker_id=tracker.id, week=week_arg) }}"{% if selected_group is none %} aria-current="true"{% endif %}>All {{ label|plural|lower }}<span class="chip-count">{{ chip_counts.values()|sum }}</span></a>
+      <nav class="chips" aria-labelledby="chips-label">
+        <span class="chip-label" id="chips-label">{{ unit[:1]|upper ~ unit[1:] }} recorded by {{ label|lower }}</span>
+        <a class="chip" href="{{ url_for('entries.list_entries', tracker_id=tracker.id, week=week_arg) }}"{% if selected_group is none %} aria-current="true"{% endif %}>All {{ label|plural|lower }}<span class="chip-count">{{ chip_counts.values()|sum|num }}</span></a>
         {% for grp in group_list if not grp.retired or chip_counts.get(grp.id) %}
-        <a class="chip" href="{{ url_for('entries.list_entries', tracker_id=tracker.id, week=week_arg, group=grp.id) }}"{% if grp.id == selected_group %} aria-current="true"{% endif %}>{{ grp.name }}<span class="chip-count">{{ chip_counts.get(grp.id, 0) }}</span></a>
+        <a class="chip" href="{{ url_for('entries.list_entries', tracker_id=tracker.id, week=week_arg, group=grp.id) }}"{% if grp.id == selected_group %} aria-current="true"{% endif %}>{{ grp.name }}<span class="chip-count">{{ chip_counts.get(grp.id, 0)|num }}</span></a>
         {% endfor %}
       </nav>
       <form class="entry-week" method="get" action="{{ url_for('entries.list_entries', tracker_id=tracker.id) }}">
@@ -100,7 +101,7 @@
         </summary>
         <div class="week-block-body">
           <table class="entry-table">
-            <thead class="sr-only"><tr><th scope="col">Date</th><th scope="col">{{ label }}</th><th scope="col">Quantity</th><th scope="col">Note</th><th scope="col">Actions</th></tr></thead>
+            <thead><tr><th scope="col">Date</th><th scope="col">{{ label }}</th><th scope="col" class="num">Quantity</th><th scope="col">Note</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
             {% for e in items %}
             {% set where = groups[e.group_id].name if e.group_id in groups else e.group_id %}

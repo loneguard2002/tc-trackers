@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from conftest import browser_sign_in
 from playwright.sync_api import expect
+from sqlalchemy import select
 from test_report_page_browser import RECORDER
 
 from tracker.engine.weeks import week_ending_for
@@ -94,6 +95,25 @@ def test_quick_add_names_the_week_and_records(page, live_server, seeded):
     page.keyboard.type("6")
     page.keyboard.press("Enter")
     expect(page.get_by_text("Recorded 6 for LD5")).to_be_visible()
+    assert_clean(page)
+
+
+def test_entry_rows_are_one_line_and_cards_on_a_phone(page, live_server, seeded, db):
+    entry = db.scalars(select(CompletionEntry).where(CompletionEntry.note == "alpha")).one()
+    entry.note = "Late delivery from the supplier, floor three"
+    db.commit()
+    page.set_viewport_size({"width": 1280, "height": 900})
+    open_page(page, live_server, seeded, "entries")
+    row = page.locator(".entry-table tr", has_text="Late delivery")
+    edit, delete = row.locator("a.tool-button").bounding_box(), row.locator("button.tool-button").bounding_box()
+    assert abs(edit["y"] - delete["y"]) < 2 and delete["x"] > edit["x"]  # side by side
+    expect(page.locator(".entry-table thead th", has_text="Quantity").first).to_be_visible()
+    page.set_viewport_size({"width": 390, "height": 844})
+    expect(page.locator(".entry-table thead").first).to_be_hidden()
+    note = row.locator("td.entry-note").bounding_box()
+    assert note["width"] > 150  # the note wraps by word, not one letter per line
+    where, quantity = row.locator("td").nth(1).bounding_box(), row.locator("td.num").bounding_box()
+    assert abs(where["y"] - quantity["y"]) < 4  # location and quantity share the card's first line
     assert_clean(page)
 
 

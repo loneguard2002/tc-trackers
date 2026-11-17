@@ -111,10 +111,10 @@ def _render_list(tracker: Tracker, form=None, errors: list[str] | None = None, r
         )
     }
     targets = dict(db.execute(select(Week.week_ending, Week.target).where(Week.tracker_id == tracker.id)).all())
-    # Location chips count the entries in the chosen week, across every location.
+    # Location chips total the quantity recorded in the chosen week, across every location.
     chip_counts = dict(
         db.execute(
-            select(CompletionEntry.group_id, func.count())
+            select(CompletionEntry.group_id, func.sum(CompletionEntry.quantity))
             .where(*_entry_filters(tracker, week, None))
             .group_by(CompletionEntry.group_id)
         ).all()
