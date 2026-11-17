@@ -912,7 +912,14 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .entry-table td:nth-child(2) { width: 14rem; }
 .entry-table .num { width: 5rem; font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
 .entry-note { color: var(--muted); overflow-wrap: anywhere; }
-.entry-delete { display: flex; justify-content: flex-end; margin: 0; }
+.entry-table thead th { padding: 8px 12px 6px; color: var(--muted); font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-align: left; text-transform: uppercase; }
+.entry-table thead th:first-child { padding-left: 0; }
+.entry-table thead th:last-child { padding-right: 0; }
+.entry-table thead th.num { text-align: right; }
+/* Edit and Delete side by side; the in-row question takes the line when it opens. */
+.entry-table .cell-actions > a, .entry-delete { display: inline-flex; vertical-align: middle; margin: 0; }
+.entry-delete:has(.inline-confirm:not([hidden])) { display: flex; justify-content: flex-end; }
+.chip-label { align-self: center; margin-right: 4px; color: var(--muted); font-size: .8125rem; }
 .inline-confirm { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; font-size: .8125rem; font-weight: 600; }
 @container (max-width: 680px) {
   .week-block > summary { grid-template-columns: minmax(0, 1fr) auto; }
@@ -920,6 +927,17 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
   .week-block-bar { grid-column: 1 / -1; grid-row: 3; }
   .week-block-body { padding-left: 16px; padding-right: 16px; }
   .entry-date { width: auto; }
+  /* Each entry becomes a two-line card: location and quantity, then date and note, with Edit and Delete beside. */
+  .entry-table thead { display: none; }
+  .entry-table, .entry-table tbody { display: block; }
+  .entry-table tr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "where where qty act" "date note note act"; align-items: center; gap: 2px 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+  .entry-table :is(td, td:first-child, td:last-child, td:nth-child(2), .num) { display: block; width: auto; padding: 0; border: 0; }
+  .entry-table td:nth-child(1) { grid-area: date; font-size: .8125rem; }
+  .entry-table td:nth-child(2) { grid-area: where; font-weight: 600; }
+  .entry-table td:nth-child(3) { grid-area: qty; }
+  .entry-table td:nth-child(4) { grid-area: note; font-size: .8125rem; overflow-wrap: break-word; }
+  .entry-table td:nth-child(5) { grid-area: act; }
+  .chip-label { flex-basis: 100%; }
 }
 
 /* Risks: a coloured stripe and labelled RAG on each row, with the impact and latest update under the description. */

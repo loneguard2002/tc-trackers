@@ -171,8 +171,13 @@ def test_entries_location_chips_count_and_filter(client, db, tracker_factory, us
     post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-14", "5", note="at A"))
     post(client, entry_url(tracker, "/new"), entry_form(other, "2026-10-14", "3", note="at B"))
     html = client.get(entry_url(tracker)).get_data(as_text=True)
-    assert 'aria-current="true">All locations<span class="chip-count">2</span>' in html
-    assert 'Site B<span class="chip-count">1</span>' in html
+    # The chips count devices, not entries, and say so.
+    assert 'aria-current="true">All locations<span class="chip-count">8</span>' in html
+    assert 'Site B<span class="chip-count">3</span>' in html
+    assert '<span class="chip-label" id="chips-label">Devices recorded by location</span>' in html
+    # The columns are named on screen, not only for screen readers.
+    assert '<thead class="sr-only">' not in html
+    assert '<th scope="col">Date</th><th scope="col">Location</th><th scope="col" class="num">Quantity</th>' in html
     html = client.get(entry_url(tracker) + f"?group={other.id}").get_data(as_text=True)
     assert "at B" in html and "at A" not in html
     assert "<strong>3</strong> recorded at Site B" in html
