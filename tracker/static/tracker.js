@@ -69,6 +69,18 @@
     activeTab.parentNode.scrollLeft = activeTab.offsetLeft - activeTab.parentNode.offsetLeft - 16;
   }
 
+  // Rows that scroll sideways fade the edge that has more items behind it (styles in tracker.css).
+  Array.prototype.forEach.call(document.querySelectorAll(".tabs, .subnav, .week-strip"), function (row) {
+    function syncEdges() {
+      var hidden = row.scrollWidth - row.clientWidth - row.scrollLeft;
+      row.classList.toggle("more-before", row.scrollLeft > 1);
+      row.classList.toggle("more-after", hidden > 1);
+    }
+    row.addEventListener("scroll", syncEdges, { passive: true });
+    window.addEventListener("resize", syncEdges);
+    syncEdges();
+  });
+
   var themeButton = document.querySelector("[data-theme-toggle]");
   var themeLabel = document.querySelector("[data-theme-label]");
   function syncThemeLabel() {
