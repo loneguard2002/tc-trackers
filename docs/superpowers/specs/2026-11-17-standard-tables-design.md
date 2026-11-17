@@ -69,7 +69,7 @@ own access lists) gets sorting, the count line and the phone cards, but no searc
 
 | Table | Search | Chips (with counts) | Default sort | "N active" |
 |---|---|---|---|---|
-| Lists: Locations, Regions, Business lines | yes (as now) | All / Active / Retired (as now) | name | yes |
+| Lists: Locations, Regions, Business lines | yes (as now) | All / Active / Retired (as now) | Locations: region (owner's choice, 17 Nov); Regions, Business lines: name | yes |
 | Users | yes (as now) | as now | name | yes |
 | Team page: people, teams below, trackers | yes (as now) | as now | as now | trackers: active |
 | Tracker → Locations tab | name | All / Active / Retired | sort order set by the owner | yes |
