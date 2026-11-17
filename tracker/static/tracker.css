@@ -460,8 +460,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
    scrolls; tracker.js underlines the link of the section in view and outlines that section (.is-current). A linked
    section lands clear of both bars. */
 :root { --subnav-height: 42px; --sticky-top: var(--topbar-height); }
-/* Sticky table headings must not cover a control reached with Shift+Tab (WCAG 2.4.11). */
-html { scroll-padding-top: calc(var(--sticky-top) + 3rem); }
+/* Sticky table headings must not cover a control reached with Shift+Tab (WCAG 2.4.11). Only on pages with such
+   headings: the section links of the other pages land by their own scroll-margin. */
+html:has(:is(.list-table, .user-table) thead th) { scroll-padding-top: calc(var(--sticky-top) + 3rem); }
 /* Where a table's heading row sticks: under the top bar, and under the sub-navigation too on a page that has one. */
 main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-height)); }
 .subnav { position: sticky; top: var(--topbar-height); z-index: 20; display: flex; align-items: center; gap: 24px; height: var(--subnav-height); margin: -24px 0 20px; border-bottom: 1px solid var(--border); background: var(--bg); box-shadow: -8px 0 0 var(--bg), 8px 0 0 var(--bg); overflow-x: auto; scrollbar-width: none; }
