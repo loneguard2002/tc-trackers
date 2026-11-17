@@ -16,12 +16,15 @@
   // several separated by spaces, as in "direct inherited"), data-region (Locations) and data-sort-<key>. A row shows
   // when it contains the typed text (a plain substring, never a pattern), is in the chosen region, and holds the
   // chosen status token ("all" matches every row). Each status button counts the rows the search and region filter
-  // leave for its token; the footer counts the rows shown, all rows, and all active rows (whatever is shown, as the
-  // total is). A line inside the table's frame says so when no row is shown.
+  // leave for its token. A line inside the table's frame says so when no row is shown.
   //
   // A table with a [data-pager-for="<id>"] block is also paged: 25 rows to start (or 50, 100), taken in the order the
-  // rows are in after sorting. A change of search, filter or sort returns to page 1. "Shown" is then the rows on
-  // the page, and the pager says which of the matching rows they are.
+  // rows are in after sorting. A change of search, filter or sort returns to page 1. The footer's [data-pager-count]
+  // reads "Showing 1\u201325 of 30 locations \u00b7 28 active" when the matches fill more than one page and "Showing 3 of 30
+  // locations \u00b7 28 active" otherwise (the active part only on a table that says so, and counting every row with the
+  // "active" status, whatever the search and filters); its [data-pager-controls] show only while more than 25 rows
+  // match. A pager without [data-pager-count] (the older kind, still on the Team page) is shown whole and keeps its own
+  // range, total and noun spans.
   function setUpTable(table) {
     var id = table.id;
     var body = table.tBodies[0];
@@ -35,12 +38,13 @@
     var buttons = statusGroup ? statusGroup.querySelectorAll("button[data-status]") : [];
     var regionFilter = document.querySelector('select[data-region-filter="' + id + '"]');
     var panel = table.closest(".list-panel");
-    var foot = panel ? panel.querySelector(".list-foot") : null;
     // The line sits inside the table's own frame, so that two tables in one panel (the team page's picker) never share one.
     var frame = table.closest(".list-table") || panel;
     var noMatch = frame ? frame.querySelector("[data-no-match]") : null;
     var pager = document.querySelector('[data-pager-for="' + id + '"]');
     var sizeSelect = pager ? pager.querySelector("[data-pager-size]") : null;
+    var countText = pager ? pager.querySelector("[data-pager-count]") : null;
+    var controls = pager ? pager.querySelector("[data-pager-controls]") : null;
     var status = "all";
     var pageNumber = 1;
     var pageSize = 25;
@@ -129,6 +133,15 @@
         var count = button.querySelector("[data-count]");
         if (count) count.textContent = String(counts[button.getAttribute("data-status")] || 0);
       });
+      if (countText) {
+        var many = matching.length > pageSize;
+        var noun = countText.getAttribute(items.length === 1 ? "data-noun-one" : "data-noun-many");
+        var copy = "Showing " + (many ? (first + 1) + "\u2013" + (first + shown) + " of " + matching.length
+          : matching.length + " of " + items.length) + " " + (many ? countText.getAttribute("data-noun-many") : noun);
+        if (countText.hasAttribute("data-has-active")) copy += " \u00b7 " + active + " active";
+        countText.textContent = copy;
+        if (controls) controls.hidden = matching.length <= 25;
+      }
       if (pager) {
         var range = pager.querySelector("[data-pager-range]");
         var total = pager.querySelector("[data-pager-total]");
@@ -146,12 +159,6 @@
         var numbers = pager.querySelector("[data-pager-pages]");
         if (numbers) showPages(pages, numbers);
       }
-      if (!foot) return;
-      var parts = { "[data-shown]": shown, "[data-total]": items.length, "[data-active]": active };
-      Object.keys(parts).forEach(function (selector) {
-        var target = foot.querySelector(selector);
-        if (target) target.textContent = String(parts[selector]);
-      });
     }
 
     // A change of search, filter or sort starts again at the first page.
@@ -161,7 +168,7 @@
     }
 
     if (pager) {
-      pager.hidden = false;
+      if (!countText) pager.hidden = false;
       var previous = pager.querySelector("[data-pager-prev]");
       var next = pager.querySelector("[data-pager-next]");
       if (sizeSelect) {
@@ -193,12 +200,19 @@
         });
       });
     }
-    if (foot) foot.setAttribute("aria-live", "polite");
 
-    // A header's sort button orders the rows by its data-sort-<key>: numbers as numbers, text in the reader's
-    // language ignoring case; a second click reverses the order. Rows that compare equal keep the server's order.
-    // The rows arrive in the order of the column marked data-sort-default, so that column starts "ascending" and its
-    // first click reverses it.
+    // A header's sort button orders the rows by its data-sort-<key>, read as the heading's data-sort-type says: "text"
+    // (the default) in the reader's language ignoring case, with numbers inside the text in natural order (LD5 before
+    // LD10); "number"; or "date" as ISO YYYY-MM-DD, which compares as text. A second click reverses the order. Rows
+    // with no value come last in both directions, and rows that compare equal keep the server's order. The rows
+    // arrive in the order of the column marked data-sort-default, so that column starts "ascending" and its first
+    // click reverses it.
+    function compareValues(type, first, second) {
+      if (type === "number") return Number(first) - Number(second);
+      if (type === "date") return first < second ? -1 : first > second ? 1 : 0;
+      return first.localeCompare(second, undefined, { sensitivity: "base", numeric: true });
+    }
+
     var headers = Array.prototype.filter.call(table.querySelectorAll("thead th"), function (header) {
       return Boolean(header.querySelector("button.sort-button[data-sort]"));
     });
@@ -210,17 +224,22 @@
       if (label) label.hidden = true;
       button.addEventListener("click", function () {
         var key = "data-sort-" + button.getAttribute("data-sort");
+        var type = header.getAttribute("data-sort-type") || "text";
         var direction = header.getAttribute("aria-sort") === "ascending" ? "descending" : "ascending";
         var sign = direction === "ascending" ? 1 : -1;
-        var numeric = items.every(function (item) {
-          return /^-?\d+(\.\d+)?$/.test(item.row.getAttribute(key) || "");
-        });
+        // A value that is empty, or not a number in a number column, counts as empty.
+        function value(item) {
+          var text = (item.row.getAttribute(key) || "").trim();
+          return type === "number" && isNaN(Number(text)) ? "" : text;
+        }
         var sorted = items.slice().sort(function (a, b) {
-          var first = a.row.getAttribute(key) || "";
-          var second = b.row.getAttribute(key) || "";
-          var order = numeric ? Number(first) - Number(second)
-            : first.localeCompare(second, undefined, { sensitivity: "base", numeric: true });
-          return order * sign || a.index - b.index;
+          var first = value(a);
+          var second = value(b);
+          if (first === "" || second === "") {
+            if (first !== second) return first === "" ? 1 : -1;
+            return a.index - b.index;
+          }
+          return compareValues(type, first, second) * sign || a.index - b.index;
         });
         headers.forEach(function (other) { other.setAttribute("aria-sort", "none"); });
         header.setAttribute("aria-sort", direction);
