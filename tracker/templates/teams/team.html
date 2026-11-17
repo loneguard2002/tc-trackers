@@ -115,7 +115,7 @@
         {{ clear_filters('people-table') }}
       </div>
       <div class="section-table list-table">
-        <table id="people-table" data-state-prefix="people-">
+        <table id="people-table" class="card-rows" data-state-prefix="people-">
           <thead><tr>
             {{ sort_header('Person', 'person', default=True) }}
             {{ sort_header('Route', 'route') }}
@@ -187,7 +187,7 @@
         {{ search_box('below-table', 'Search teams below') }}
       </div>
       <div class="section-table list-table">
-        <table id="below-table" data-state-prefix="below-">
+        <table id="below-table" class="card-rows" data-state-prefix="below-">
           <thead><tr>
             {{ sort_header('Team', 'team', default=True) }}
             {{ sort_header('Place', 'place') }}
@@ -234,7 +234,7 @@
       {% if picking %}{% include "teams/_tracker_picker.html" %}{% endif %}
       {% if trackers %}
       <div class="section-table list-table">
-        <table id="trackers-table" data-state-prefix="trackers-">
+        <table id="trackers-table" class="card-rows" data-state-prefix="trackers-">
           <thead><tr>
             {{ sort_header('Tracker', 'tracker', default=True) }}
             {{ sort_header('Business line', 'line') }}

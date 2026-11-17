@@ -52,7 +52,7 @@
       {{ clear_filters('regions-table') }}
     </div>
     <div class="section-table list-table">
-      <table id="regions-table">
+      <table id="regions-table" class="card-rows">
         <thead><tr>
           {{ sort_header('Code', 'code', default=True, type='text') }}
           {{ sort_header('Name', 'name') }}

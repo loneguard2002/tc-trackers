@@ -46,7 +46,7 @@
       {{ clear_filters('business-lines-table') }}
     </div>
     <div class="section-table list-table">
-      <table id="business-lines-table">
+      <table id="business-lines-table" class="card-rows">
         <thead><tr>
           {{ sort_header('Name', 'name', default=True) }}
           {{ sort_header('Trackers', 'trackers', 'num', type='number') }}

@@ -1011,3 +1011,47 @@ def test_region_and_other_keys_and_hash_are_kept(page, live_server, user_factory
     page.locator("#locations-table-region").select_option("")
     assert _query(page) == {"x": "1", "q": "lon"}
     _clean(page)
+
+
+# --- Headings that stay visible, and cards on a phone ----------------------------------------------------------------
+
+
+def test_headings_stay_visible_while_scrolling(page, live_server, user_factory, region_factory, location_factory):
+    emea = region_factory("EMEA", "Europe, Middle East and Africa")
+    for n in range(40):
+        location_factory(emea, f"City {n:02d}", "GB")
+    page.set_viewport_size({"width": 1280, "height": 700})
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations?size=50")
+
+    page.evaluate("window.scrollBy(0, 1200)")
+    page.wait_for_timeout(200)
+    heading = page.locator('th:has(button[data-sort="name"])')
+    expect(heading).to_be_visible()
+    topbar_bottom = page.evaluate("document.querySelector('.topbar').getBoundingClientRect().bottom")
+    heading_top = heading.evaluate("el => el.getBoundingClientRect().top")
+    assert abs(heading_top - topbar_bottom) <= 2
+    _clean(page)
+
+
+def test_rows_are_cards_on_a_phone(page, live_server, user_factory, places):
+    page.set_viewport_size({"width": 390, "height": 844})
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+
+    row = page.locator(f"#location-{places['lon'].id}")
+    assert row.evaluate("el => getComputedStyle(el).display") != "table-row"
+    expect(row.locator(".list-region-cell")).to_have_attribute("data-label", "Region")
+    expect(row.locator(".cell-actions")).not_to_have_attribute("data-label", re.compile(".*"))
+    assert page.evaluate("document.documentElement.scrollWidth") <= 390
+
+    messages = []
+
+    def dismiss(dialog):
+        messages.append(dialog.message)
+        dialog.dismiss()
+
+    page.on("dialog", dismiss)  # the delete question is the browser's own; the card must still ask it
+    unused = page.locator(f"#location-{places['tyo'].id}")  # London has teams, so only Tokyo can be deleted
+    unused.get_by_role("button", name=re.compile("^Delete")).click()
+    assert len(messages) == 1 and "Delete the location" in messages[0]
+    expect(unused).to_have_count(1)
+    _clean(page)

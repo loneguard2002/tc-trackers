@@ -459,7 +459,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 /* Links to the sections of a long page, under the tabs. The row stays pinned below the fixed top bar while the page
    scrolls; tracker.js underlines the link of the section in view and outlines that section (.is-current). A linked
    section lands clear of both bars. */
-:root { --subnav-height: 42px; }
+:root { --subnav-height: 42px; --sticky-top: var(--topbar-height); }
+/* Where a table's heading row sticks: under the top bar, and under the sub-navigation too on a page that has one. */
+main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-height)); }
 .subnav { position: sticky; top: var(--topbar-height); z-index: 20; display: flex; align-items: center; gap: 24px; height: var(--subnav-height); margin: -24px 0 20px; border-bottom: 1px solid var(--border); background: var(--bg); box-shadow: -8px 0 0 var(--bg), 8px 0 0 var(--bg); overflow-x: auto; scrollbar-width: none; }
 .subnav::-webkit-scrollbar { display: none; }
 .subnav a { flex: none; color: var(--muted); font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: color .15s; }
@@ -835,14 +837,16 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
   .settings-section-head.has-action { flex-wrap: wrap; }
   .user-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 16px; padding-right: 16px; }
   .user-filter-buttons { grid-column: 1 / -1; }
-  .register :is(table, tbody, tfoot) { display: block; }
-  .register tr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
-  .register tr:last-child { border-bottom: 0; }
-  .register.section-table :is(td, td:first-child, td:last-child) { display: block; padding: 0; border: 0; }
-  .register td:first-child { flex: 1 1 100%; }
-  .register td[data-label]::before { content: attr(data-label) " "; color: var(--muted); }
-  .register .cell-actions { width: auto; margin-left: auto; }
-  .register.section-table :is(thead, td.hide-narrow) { display: none; }
+  /* One card per row, in Risks (.register) and in every table marked .card-rows; the cell labels come from data-label. */
+  :is(.register, .card-rows) :is(table, tbody, tfoot) { display: block; }
+  :is(.register, .card-rows) tr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  :is(.register, .card-rows) tr:last-child { border-bottom: 0; }
+  :is(.register.section-table, .card-rows) :is(td, td:first-child, td:last-child) { display: block; padding: 0; border: 0; }
+  :is(.register, .card-rows) td:first-child { flex: 1 1 100%; }
+  :is(.register, .card-rows) td[data-label]::before { content: attr(data-label) " "; color: var(--muted); }
+  :is(.register, .card-rows) .cell-actions { width: auto; margin-left: auto; }
+  :is(.register.section-table, .card-rows) :is(thead, td.hide-narrow) { display: none; }
+  .list-table table.card-rows, .team-panel .list-table table.card-rows { min-width: 0; }
   .entry-filters, .risk-filters, .quick-add-row, .field-stack { padding-left: 16px; padding-right: 16px; }
   .key-values div { grid-template-columns: 1fr; gap: 2px; padding: 10px 16px; }
   .segmented { display: flex; }
@@ -1201,7 +1205,7 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
   .list-page > .tabs .tab { padding: 10px 7px; font-size: 13px; }
   .list-page > .tabs .tab-count { min-width: 20px; margin-left: 2px; padding: 0 5px; }
 }
-.list-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); overflow: hidden; }
+.list-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); overflow: clip; }  /* clip rounds the corners without becoming a scroll container, which would stop the table headings sticking */
 .list-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
 .list-tools:not(:has(> :not([hidden]))) { display: none; }
 .list-search { max-width: 320px; }
@@ -1209,9 +1213,16 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .list-region { width: auto; min-width: 0; max-width: 18rem; padding: 7px 10px; font-size: .9rem; }
 .list-status .chip { min-height: 32px; padding: 3px 10px; }
 .list-table table { min-width: 640px; }
+/* Table headings stay under the top bar while the page scrolls. Sticky fails inside a scroll container, so above 720px
+   the table's wrapper clips (its tables fit from there) instead of scrolling; on a phone the rows are cards. */
+:is(.list-table, .user-table) thead th { position: sticky; top: var(--sticky-top); z-index: 2; background: var(--surface); }
+@media (min-width: 721px) {
+  .section-table:has(.card-rows) { overflow-x: clip; }
+  .section-table.is-wide:has(.card-rows) { overflow-x: auto; }  /* set by lists.js when the table does not fit */
+}
 .list-table th { vertical-align: middle; }
 .list-table th.num { text-align: right; }
-.list-name { min-width: 12rem; font-weight: 600; }
+.list-name { min-width: 9rem; font-weight: 600; }
 .list-table tr.is-retired .list-name { font-weight: 400; }
 .sort-button { display: inline-flex; align-items: center; gap: 4px; margin: -4px -6px; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
 .sort-button:hover { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
@@ -1233,7 +1244,7 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
 .list-table .row-edit .icon { width: 14px; height: 14px; margin-right: 5px; }
 /* .row-tool-slot (a .tool-button.is-disabled span) takes Delete's place when the entry is in use; its title and
    screen-reader text say why. */
-.list-region-cell { min-width: 14rem; }
+.list-region-cell { min-width: 10rem; }  /* narrow enough for Locations to fit a 1280px window beside the sidebar, so its headings can stick */
 .country-cell { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .country-flag, .country-flag-preview { flex: none; border-radius: 2px; box-shadow: 0 0 0 1px var(--border); object-fit: cover; }
 .country-pick { display: flex; align-items: center; gap: 10px; }

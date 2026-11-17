@@ -102,7 +102,7 @@
     {% if filtered %}<p class="section-foot-note user-count">{% if filters.status == 'deleted' %}Showing {{ users|length }} deleted {{ 'person' if users|length == 1 else 'people' }}.{% else %}Showing {{ users|length }} of {{ total }} people.{% endif %}</p>{% endif %}
     {% if users %}
     <div class="section-table register">
-      <table class="table user-table" id="people-table" data-sortable>
+      <table class="table user-table card-rows" id="people-table" data-sortable>
         <thead><tr>{{ sort_header('Name', 'name') }}{{ sort_header('Status', 'status') }}{{ sort_header('Admin', 'admin') }}{{ sort_header('Sign-in', 'sign-in') }}
           {{ sort_header('Teams', 'teams', 'hide-narrow') }}
           {{ sort_header('Permission sets', 'sets', 'hide-narrow hide-mid') }}<th scope="col"><span class="sr-only">Actions</span></th></tr></thead>

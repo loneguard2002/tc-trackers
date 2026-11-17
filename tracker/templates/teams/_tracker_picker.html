@@ -16,7 +16,7 @@
   <p class="team-pick-note">A tracker moves here from its current team. It keeps its regions{% if pick_region %} and gains <strong>{{ pick_region }}</strong>, this team's region, when it does not have it, so people who reach it by region keep their access{% endif %}.</p>
   <form id="pick-form" method="get" action="{{ url_for('teams.move_trackers', team_id=team.id) }}">
     <div class="section-table list-table team-pick-table">
-      <table id="pick-table" data-state-prefix="pick-">
+      <table id="pick-table" class="card-rows" data-state-prefix="pick-">
         <thead><tr>
           <th scope="col" class="pick-cell"><span class="sr-only">Choose</span></th>
           {{ sort_header('Tracker', 'tracker', default=True) }}
