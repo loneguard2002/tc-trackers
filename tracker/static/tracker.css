@@ -1,14 +1,18 @@
-/* Colour and layout tokens follow the Everton dashboard shell: navy top bar, soft canvas sidebar, light and dark themes. */
+/* Colour and layout tokens follow the Everton dashboard shell: navy top bar, soft canvas sidebar, light and dark themes.
+   Boxes, fields and shadows follow docs/design-rules.md rule 3: box edges at least 1.5:1 against the page, field
+   borders at least 3:1; light mode lifts cards with a faint shadow, dark mode with lighter surfaces (page, card, raised). */
 :root {
   color-scheme: light;
-  --bg: #e8eef7; --surface: #fff; --text: #14213d; --muted: #4f5d75; --border: #dde4ee;
-  --primary: #1260d0; --primary-text: #fff; --success: #087553; --warning: #9a5b00; --danger: #b8283f; --info: #1260d0;
+  --bg: #dfe6f1; --surface: #fff; --raised: #fff; --text: #14213d; --muted: #4f5d75; --border: #b4c1d3; --field-border: #7d8ca2;
+  --primary: #1260d0; --primary-text: #fff; --success: #087553; --warning: #925600; --danger: #b8283f; --info: #1260d0;
+  --card-shadow: 0 1px 2px rgba(7, 26, 61, .08), 0 2px 8px rgba(7, 26, 61, .06);
   --topbar-bg: #071a3d; --focus-ring: #1260d0; --focus-ring-on-dark: #9cc2ff;
   --radius: 10px; --topbar-height: 68px; --sidebar-width: 248px;
 }
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0f1115; --surface: #171a20; --text: #eceef2; --muted: #b0b6c1; --border: #2a2f38;
+  --bg: #0f1115; --surface: #1d222a; --raised: #252b35; --text: #eceef2; --muted: #b0b6c1; --border: #3b4350; --field-border: #737e90;
+  --card-shadow: none;
   --primary: #6ea6ff; --primary-text: #0f1115; --success: #3ccf98; --warning: #f2a93b; --danger: #f27387; --info: #6ea6ff;
   --focus-ring: #6ea6ff;
 }
@@ -45,7 +49,7 @@ h2 { font-size: 1.15rem; margin: 0 0 .5rem; }
 .app-shell-public .main-content { width: 100%; margin-left: 0; }
 .page-footer { margin-top: 32px; color: var(--muted); font-size: .8rem; }
 
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--card-shadow); padding: 16px; margin-bottom: 16px; }
 
 table { width: 100%; border-collapse: collapse; background: var(--surface); }
 th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
@@ -56,7 +60,7 @@ th { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-sp
 .button.danger { border-color: var(--danger); color: var(--danger); }
 
 label { display: block; margin-bottom: 4px; font-weight: 600; }
-input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; }
+input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--field-border); border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .form-row { margin-bottom: 12px; }
 .form-error { color: var(--danger); }
@@ -101,7 +105,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 
 /* Authentication and administration */
 .auth-card { max-width: 26rem; margin: 3rem auto; }
-.auth-panel { max-width: 400px; margin: 6vh auto 0; padding: 32px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: 0 10px 30px rgba(7, 26, 61, .08); }
+.auth-panel { max-width: 400px; margin: 6vh auto 0; padding: 32px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised); box-shadow: var(--card-shadow); }
 .auth-head { margin-bottom: 20px; text-align: center; }
 .auth-head h1 { margin: 12px 0 4px; font-size: 1.5rem; }
 .auth-head p { margin: 0; color: var(--muted); font-size: .875rem; }
@@ -133,7 +137,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .bar-track { fill: color-mix(in srgb, var(--text) 10%, transparent); }
 .bar-extra { fill: color-mix(in srgb, var(--primary) 35%, transparent); }
 .bar-fill { fill: var(--primary); }
-.stat-band { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.stat-band { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); }
 .stat { display: grid; gap: 2px; align-content: start; min-width: 0; padding: 14px 18px; }
 .stat + .stat { border-left: 1px solid var(--border); }
 .stat-label { color: var(--muted); font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
@@ -161,7 +165,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .report-status .rag-dot { width: 10px; height: 10px; }
 .report-status-word { color: var(--tone-text); }
 .report-chart { width: 100%; height: auto; display: block; }
-.report-panel { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.report-panel { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); }
 .report-panel .chart-host { margin: 0; border: 0; }
 .report-panel-chart { padding: 6px; }
 .report-panel-head { padding: 14px 18px; border-bottom: 1px solid var(--border); }
@@ -205,7 +209,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .report-week-downloads { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 /* The PDF and PNG previews (report-view.js): the report on a white sheet in the light colours, as wide as the PDF's
    A4 page inside its 14 mm margins, or as the 1100px PNG. */
-.report-live.is-paper { color-scheme: light; --bg: #fff; --surface: #fff; --text: #14213d; --muted: #5d6b83; --border: #dde4ee;
+.report-live.is-paper { color-scheme: light; --bg: #fff; --surface: #fff; --raised: #fff; --text: #14213d; --muted: #5d6b83; --border: #b4c1d3; --card-shadow: none;
   --primary: #1260d0; --primary-text: #fff; --success: #087553; --warning: #9a5b00; --danger: #b8283f; --info: #1260d0;
   margin-inline: auto; border-radius: 4px; background: #fff; color: var(--text); box-shadow: 0 10px 30px -12px rgba(7, 26, 61, .45); }
 .report-live.is-pdf { max-width: 210mm; padding: 14mm; }
@@ -231,7 +235,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .toggle button { min-height: 32px; padding: 4px 12px; border: 0; background: var(--surface); color: var(--muted); font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; }
 .toggle button[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary); }
 .tracker-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 16px; }
-.tracker-card { --tone: color-mix(in srgb, var(--muted) 55%, var(--surface)); --tone-text: var(--muted); position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.tracker-card { --tone: color-mix(in srgb, var(--muted) 55%, var(--surface)); --tone-text: var(--muted); position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); }
 .tracker-card::before, .tracker-row-status::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--tone); }
 .tracker-card-red, .tracker-row-red { --tone: var(--danger); --tone-text: var(--danger); }
 .tracker-card-amber, .tracker-row-amber { --tone: var(--warning); --tone-text: var(--warning); }
@@ -298,7 +302,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tracker-card-links .icon { width: 16px; height: 16px; }
 .tracker-card-links .tracker-card-update { margin-left: auto; }
 .tracker-card-links a:hover { text-decoration: underline; }
-.tracker-list { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.tracker-list { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); }
 .tracker-list table { min-width: 860px; }
 .tracker-list td { vertical-align: middle; }
 .tracker-list tr:last-child td { border-bottom: 0; }
@@ -457,7 +461,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
    compact control on the right. The container query follows the sidebar, which changes the width without a resize. */
 .settings { max-width: 1280px; container-type: inline-size; }
 .page-lede { max-width: 880px; margin: 0 0 20px; color: var(--muted); }
-.settings-section { margin-bottom: 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.settings-section { margin-bottom: 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); }
 @container (min-width: 960px) {
   .settings > form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
   .settings > form > .settings-section { margin-bottom: 0; }
@@ -482,7 +486,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .input-affix { display: flex; }
 .input-affix input { border-radius: var(--radius) 0 0 var(--radius); }
 .input-affix input { flex: 1; min-width: 0; }
-.input-affix span { display: flex; align-items: center; white-space: nowrap; padding: 0 12px; border: 1px solid var(--border); border-left: 0; border-radius: 0 var(--radius) var(--radius) 0; background: var(--bg); color: var(--muted); font-size: .875rem; }
+.input-affix span { display: flex; align-items: center; white-space: nowrap; padding: 0 12px; border: 1px solid var(--field-border); border-left: 0; border-radius: 0 var(--radius) var(--radius) 0; background: var(--bg); color: var(--muted); font-size: .875rem; }
 
 .switch { position: relative; display: inline-flex; vertical-align: middle; }
 .switch input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
@@ -634,7 +638,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .access-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .access-actions .icon { width: 16px; height: 16px; margin: -2px 6px -2px -2px; vertical-align: middle; }
 .access-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.access-tile { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); text-decoration: none; }
+.access-tile { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); color: var(--text); text-decoration: none; }
 .access-tile:hover { border-color: var(--primary); }
 .access-tile-label { color: var(--muted); font-size: .8125rem; font-weight: 600; }
 .access-tile-count { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
@@ -837,7 +841,8 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 }
 
 /* Interactive report charts (report-charts.js); swatch colours match tracker/report/charts.py PALETTE. */
-.chart-host { width: 100%; height: 340px; margin: 12px 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+/* Charts sit inside report panels, so they take no frame of their own (design rule 3: no box inside a box). */
+.chart-host { width: 100%; height: 340px; margin: 12px 0; border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .report-charts .chart-host { height: 280px; margin: 0; }
 .chart-tooltip { font-size: 13px; line-height: 1.45; }
 .chart-tooltip-title { margin-bottom: 4px; font-weight: 700; }
@@ -1028,7 +1033,7 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .timeline-label { font-size: 10px; font-weight: 600; }
 .timeline-label.is-today { fill: var(--text); } .timeline-label.is-target { fill: var(--danger); }
 .timeline-ends { display: flex; justify-content: space-between; margin: 4px 0 0; color: var(--muted); font-size: .75rem; }
-.stepper { display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.stepper { display: inline-flex; align-items: stretch; border: 1px solid var(--field-border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .stepper input { width: 4.2rem; border: 0; border-radius: 0; text-align: center; }
 .stepper-button { width: 36px; border: 0; background: color-mix(in srgb, var(--text) 5%, var(--surface)); color: var(--text); font: inherit; font-size: 1.1rem; font-weight: 600; cursor: pointer; }
 .stepper-button:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); }
@@ -1100,7 +1105,7 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .perm-head .page-lede { margin-bottom: 0; }
 .perm-head .button { display: inline-flex; flex: none; align-items: center; gap: 8px; font-weight: 600; }
 .perm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 20px; align-items: start; max-width: 1280px; margin-bottom: 20px; }
-.perm-card { display: flex; flex-direction: column; min-width: 0; scroll-margin-top: calc(var(--topbar-height) + 16px); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); transition: border-color .15s, box-shadow .15s; }
+.perm-card { display: flex; flex-direction: column; min-width: 0; scroll-margin-top: calc(var(--topbar-height) + 16px); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); transition: border-color .15s, box-shadow .15s; }
 .perm-card.is-changed { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent); }
 .perm-card-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 14px; border-bottom: 1px solid var(--border); }
 .perm-card-icon { display: grid; flex: none; place-items: center; width: 38px; height: 38px; border-radius: 9px; background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary); }
@@ -1182,7 +1187,7 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
   .list-page > .tabs .tab { padding: 10px 7px; font-size: 13px; }
   .list-page > .tabs .tab-count { min-width: 20px; margin-left: 2px; padding: 0 5px; }
 }
-.list-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.list-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); overflow: hidden; }
 .list-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
 .list-tools:not(:has(> :not([hidden]))) { display: none; }
 .list-search { max-width: 320px; }
@@ -1226,7 +1231,7 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
 
 /* The Add and Edit dialogs. Opened by lists.js they are modal, centred over a dimmed page. Without JavaScript the
    server renders one open, which is not modal: it then sits in the page above the table as a raised card. */
-.list-dialog { width: min(560px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: 0 18px 48px -12px color-mix(in srgb, var(--topbar-bg) 45%, transparent); }
+.list-dialog { width: min(560px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--raised); color: var(--text); box-shadow: 0 18px 48px -12px color-mix(in srgb, var(--topbar-bg) 45%, transparent); }
 /* Dim the background (docs/design-rules.md): 70% navy leaves the page behind at about 2.5:1 in both themes. */
 .list-dialog::backdrop { background: color-mix(in srgb, var(--topbar-bg) 70%, transparent); }
 .list-dialog:not(:modal) { position: relative; z-index: 1; width: 100%; max-width: 560px; max-height: none; margin: 0 auto 20px; }
