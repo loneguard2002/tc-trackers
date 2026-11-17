@@ -86,25 +86,38 @@ def test_home_toolbar_fits_a_phone_screen(page, live_server, db, tracker_factory
     assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
 
 
+def card_row(page):
+    """The card row, the cards' boxes, and how much of each card shows inside the row (1 = all of it)."""
+    row = page.locator("[data-home-cards]")
+    cards = row.locator("[data-card]")
+    boxes = [cards.nth(k).bounding_box() for k in range(cards.count())]
+    view = row.bounding_box()
+    right = view["x"] + view["width"]
+    shown = [max(0.0, min(box["x"] + box["width"], right) - box["x"]) / box["width"] for box in boxes]
+    return row, boxes, shown
+
+
 def test_cards_scroll_sideways_with_a_third_of_the_next_showing(page, live_server, tracker_factory, user_factory):
     for k in range(5):
         tracker_factory(name=f"Tracker {k + 1}", unit_label="Thin Clients")
     page.add_init_script(RECORDER)
-    page.set_viewport_size({"width": 1835, "height": 1000})
+    page.set_viewport_size({"width": 1500, "height": 1000})
     browser_sign_in(page, live_server, user_factory(is_admin=True))
     page.goto(live_server + "/")
-    row = page.locator("[data-home-cards]")
-    cards = row.locator("[data-card]")
-    expect(cards).to_have_count(5)
-    boxes = [cards.nth(k).bounding_box() for k in range(5)]
+    expect(page.locator("[data-home-cards] [data-card]")).to_have_count(5)
+    row, boxes, shown = card_row(page)
     assert len({round(box["y"]) for box in boxes}) == 1  # one row
-    assert min(box["width"] for box in boxes) >= 480
-    view = row.bounding_box()
+    assert all(480 <= box["width"] <= 560 for box in boxes)
     # Whole cards, then about a third of the next one.
-    right = view["x"] + view["width"]
-    shown = [max(0.0, min(box["x"] + box["width"], right) - box["x"]) / box["width"] for box in boxes]
     partial = [part for part in shown if 0 < part < 0.99]
     assert len(partial) == 1 and 0.25 <= partial[0] <= 0.4
+    # On a wider window the cards stop growing at 560px, so more of the next one shows.
+    page.set_viewport_size({"width": 1835, "height": 1000})
+    page.wait_for_function("document.querySelector('[data-card]').getBoundingClientRect().width > 555")
+    row, boxes, shown = card_row(page)
+    assert all(box["width"] <= 560.5 for box in boxes)
+    partial = [part for part in shown if 0 < part < 0.99]
+    assert len(partial) == 1 and partial[0] > 0.4
     expect(row).to_have_class(re.compile(r"\bmore-after\b"))
     expect(row).not_to_have_class(re.compile(r"\bmore-before\b"))
     # Nothing on a card is cut off with an ellipsis.
