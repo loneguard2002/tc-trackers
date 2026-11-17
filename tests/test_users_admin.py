@@ -585,7 +585,12 @@ def test_users_filters_ignore_bad_values(client, filter_people):
 def test_empty_filtered_list_says_so(client, filter_people):
     body = text_of(client.get("/admin/users?q=nobody"))
     assert "No one matches these filters." in body and "Showing 0 of 5 people." in body
-    assert 'role="search"' in body and ">Clear<" in body
+    assert 'role="search"' in body and ">Clear filters<" in body
+
+
+def test_users_clear_filters_link(client, filter_people):
+    assert 'href="/admin/users">Clear filters' in text_of(client.get("/admin/users?status=disabled"))
+    assert "Clear filters" not in text_of(client.get("/admin/users"))
 
 
 def test_awaiting_approval_ignores_filters(client, user_manager, user_factory):

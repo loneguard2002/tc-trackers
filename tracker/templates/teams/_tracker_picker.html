@@ -36,7 +36,7 @@
         {% endfor %}
         </tbody>
       </table>
-      {{ no_match('No trackers match the search.') }}
+      {{ no_match('No trackers match the search.', 'pick-table') }}
     </div>
     {{ table_pager('pick-table', 'trackers', 'tracker', pick|length) }}
     <div class="team-pick-foot">

@@ -527,7 +527,8 @@ def test_regions_table_lists_counts_and_status(client, logged_in_admin, region_f
     # The server's order is by code; lists.js marks that column sorted (no sort control without JavaScript).
     assert "aria-sort" not in page
     assert re.findall(r'<th [^>]*data-sort-default[^>]*><button [^>]*data-sort="(\w+)"', page) == ["code"]
-    assert '<p class="list-no-match" data-no-match hidden>No regions match.</p>' in page
+    assert '<p class="list-no-match" data-no-match hidden>No regions match. ' in page
+    assert 'data-clear-for="regions-table" hidden>Clear filters</button></p>' in page
     text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split())
     assert "Showing 2 of 2 regions \u00b7 1 active" in text
 
@@ -835,7 +836,8 @@ def test_locations_table_shows_code_region_country_flag_teams(
     # The server's order is by region; lists.js marks that column sorted (no sort control without JavaScript).
     assert "aria-sort" not in page
     assert re.findall(r'<th [^>]*data-sort-default[^>]*><button [^>]*data-sort="(\w+)"', page) == ["region"]
-    assert '<p class="list-no-match" data-no-match hidden>No locations match.</p>' in page
+    assert '<p class="list-no-match" data-no-match hidden>No locations match. ' in page
+    assert 'data-clear-for="locations-table" hidden>Clear filters</button></p>' in page
     text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split())
     assert "Showing 1 of 1 location \u00b7 1 active" in text
 

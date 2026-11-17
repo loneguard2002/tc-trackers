@@ -200,6 +200,37 @@ def test_status_and_region_filters_combine(page, live_server, user_factory, plac
     _clean(page)
 
 
+def test_clear_filters_resets_search_chip_and_region(page, live_server, user_factory, places):
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+
+    beside = page.locator(".list-tools [data-clear-for]")
+    in_line = page.locator("[data-no-match] [data-clear-for]")
+    expect(beside).to_be_hidden()
+    page.locator('th button[data-sort="name"]').click()
+    page.locator('th button[data-sort="name"]').click()  # descending
+    assert _names(page) == ["Tokyo", "Singapore", "London", "Geneva"]
+    page.select_option("#locations-table-region", str(places["apac"].id))
+    page.locator('[data-status-for] button[data-status="retired"]').click()
+    page.locator("#locations-table-search").fill("zzz")
+    expect(page.locator(ROWS)).to_have_count(0)
+    expect(beside).to_be_visible()
+    expect(in_line).to_be_visible()
+    assert "q=zzz" in page.url and "filter=retired" in page.url and "region=" in page.url
+
+    in_line.click()
+    expect(page.locator("#locations-table-search")).to_have_value("")
+    expect(page.locator('[data-status-for] button[data-status="all"]')).to_have_attribute("aria-pressed", "true")
+    expect(page.locator("#locations-table-region")).to_have_value("")
+    assert _names(page) == ["Tokyo", "Singapore", "London", "Geneva"]  # every row, sort unchanged
+    expect(page.locator('th:has(button[data-sort="name"])')).to_have_attribute("aria-sort", "descending")
+    expect(beside).to_be_hidden()
+    expect(page.locator("#locations-table-search")).to_be_focused()
+    for key in ("q=", "filter=", "region=", "page="):
+        assert key not in page.url
+    assert "sort=-name" in page.url
+    _clean(page)
+
+
 def test_sorting_toggles_and_sets_aria_sort(page, live_server, user_factory, places, team_factory):
     for n in range(9):  # Singapore 10 teams, London 2: numbers sort as numbers, not as text
         team_factory(f"Asia team {n}", location_id=places["sin"].id)
@@ -285,7 +316,7 @@ def test_a_line_says_when_nothing_matches(page, live_server, user_factory, place
     page.locator("#locations-table-search").fill("zzz")
     expect(page.locator(ROWS)).to_have_count(0)
     expect(note).to_be_visible()
-    expect(note).to_have_text("No locations match.")
+    expect(note).to_have_text("No locations match. Clear filters")
     assert _foot(page) == "Showing 0 of 4 locations · 2 active"
     page.locator("#locations-table-search").fill("")
     expect(note).to_be_hidden()
@@ -296,7 +327,7 @@ def test_a_line_says_when_nothing_matches(page, live_server, user_factory, place
 
     page.goto(f"{live_server}/admin/regions")
     page.locator("#regions-table-search").fill("zzz")
-    expect(page.locator("[data-no-match]")).to_have_text("No regions match.")
+    expect(page.locator("[data-no-match]")).to_have_text("No regions match. Clear filters")
     expect(page.locator("[data-no-match]")).to_be_visible()
     _clean(page)
 

@@ -140,6 +140,8 @@
         if (show) shown += 1;
       });
       if (noMatch) noMatch.hidden = matching.length !== 0;
+      var inUse = filtersInUse();
+      each(clearButtons, function (button) { button.hidden = !inUse; });
       each(buttons, function (button) {
         var count = button.querySelector("[data-count]");
         if (count) count.textContent = String(counts[button.getAttribute("data-status")] || 0);
@@ -163,6 +165,15 @@
       }
     }
 
+    // The Clear filters buttons (beside the chips and in the no-match line) show while a search, a status button other
+    // than the first (All) or a region is in use.
+    var clearButtons = document.querySelectorAll('[data-clear-for="' + id + '"]');
+
+    function filtersInUse() {
+      return Boolean((input && input.value.trim() !== "") || (regionFilter && regionFilter.value !== "")
+        || (buttons.length && status !== buttons[0].getAttribute("data-status")));
+    }
+
     // A change of search, filter, region, sort or size starts again at the first page.
     function restart() {
       pageNumber = 1;
@@ -183,6 +194,22 @@
       if (previous) previous.addEventListener("click", function () { pageNumber -= 1; focusCurrent = true; refresh(); writeState(); });
       if (next) next.addEventListener("click", function () { pageNumber += 1; focusCurrent = true; refresh(); writeState(); });
     }
+
+    // Clear filters empties the search, picks the first status button (All) and the first region (All regions), and
+    // starts again at page 1. The sort and the rows per page stay. The button then hides, so the focus moves to the
+    // search box (when the table has one) rather than staying on it.
+    each(clearButtons, function (button) {
+      button.addEventListener("click", function () {
+        if (input) input.value = "";
+        if (regionFilter) regionFilter.value = "";
+        if (buttons.length) {
+          status = buttons[0].getAttribute("data-status");
+          each(buttons, function (other) { other.setAttribute("aria-pressed", other === buttons[0] ? "true" : "false"); });
+        }
+        restart();
+        if (input) input.focus();
+      });
+    });
 
     if (search && input) {
       search.hidden = false;

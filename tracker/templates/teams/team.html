@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, field, icon, people_count, title_crumb %}
-{% from "lists/_table.html" import code_badge, search_box, status_filters, sort_header, no_match, table_pager %}
+{% from "lists/_table.html" import code_badge, search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
 {% from "teams/_tracker_regions.html" import regions_after %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
@@ -112,6 +112,7 @@
       <div class="list-tools">
         {{ search_box('people-table', 'Search people') }}
         {{ status_filters('people-table', 'people', (('all', 'All'), ('direct', 'Direct'), ('inherited', 'From teams above')), {'all': active_people, 'direct': direct_count, 'inherited': inherited_count}) }}
+        {{ clear_filters('people-table') }}
       </div>
       <div class="section-table list-table">
         <table id="people-table" data-state-prefix="people-">
@@ -153,7 +154,7 @@
           {% endfor %}
           </tbody>
         </table>
-      {{ no_match('No people match the search.') }}
+      {{ no_match('No people match the search.', 'people-table') }}
       </div>
       {{ table_pager('people-table', 'people', 'person', people|length) }}
       {% else %}
@@ -210,7 +211,7 @@
           {% endfor %}
           </tbody>
         </table>
-      {{ no_match('No teams match the search.') }}
+      {{ no_match('No teams match the search.', 'below-table') }}
       </div>
       {{ table_pager('below-table', 'teams below', 'team below', below|length) }}
       {% else %}
@@ -226,6 +227,7 @@
         {% if trackers %}
         {{ search_box('trackers-table', 'Search trackers') }}
         {{ status_filters('trackers-table', 'trackers', (('all', 'All'), ('active', 'Active'), ('archived', 'Archived')), {'all': trackers|length, 'active': active_trackers, 'archived': trackers|length - active_trackers}) }}
+        {{ clear_filters('trackers-table') }}
         {% endif %}
         <a class="button list-tools-action" href="{{ url_for('teams.view', team_id=team.id, tab='trackers', add=1) }}"{% if picking %} aria-current="true"{% endif %}>{{ icon('plus') }}Add trackers</a>
       </div>
@@ -259,7 +261,7 @@
           {% endfor %}
           </tbody>
         </table>
-      {{ no_match('No trackers match the search.') }}
+      {{ no_match('No trackers match the search.', 'trackers-table') }}
       </div>
       {{ table_pager('trackers-table', 'trackers', 'tracker', trackers|length, active=active_trackers) }}
       {% else %}
