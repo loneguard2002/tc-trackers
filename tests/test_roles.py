@@ -36,12 +36,12 @@ def test_viewer_cannot_reach_editor_route(client, logged_in_user, tracker_factor
 def test_editor_reaches_editor_route(client, logged_in_user, tracker_factory, grant):
     t = tracker_factory()
     grant(logged_in_user, t, "editor")
-    assert client.get(f"/trackers/{t.id}/entries/new").status_code == 200
+    assert client.get(f"/trackers/{t.id}/entries").status_code == 200
 
 
 def test_admin_is_owner_everywhere(client, logged_in_admin, tracker_factory, db):
     t = tracker_factory()
-    assert client.get(f"/trackers/{t.id}/entries/new").status_code == 200
+    assert client.get(f"/trackers/{t.id}/entries").status_code == 200
     assert user_role(db, logged_in_admin, t.id) == "owner"
 
 

@@ -280,7 +280,7 @@ def test_home_card_for_an_editor_has_record_and_update_links(client, logged_in_u
     grant(logged_in_user, tracker, "editor")
     html = client.get("/").get_data(as_text=True)
     assert '<span class="role-tag">Editor</span>' in html
-    assert f'href="/trackers/{tracker.id}/entries/new"' in html
+    assert f'href="/trackers/{tracker.id}/entries"' in html
     assert (
         re.search(rf'href="/trackers/{tracker.id}/inputs\?week=\d{{4}}-\d\d-\d\d"', html) and "Write the update" in html
     )
@@ -290,7 +290,7 @@ def test_home_card_for_a_viewer_has_no_record_link(client, logged_in_user, track
     tracker = tracker_factory(name="Read only")
     grant(logged_in_user, tracker, "viewer")
     html = client.get("/").get_data(as_text=True)
-    assert f'href="/trackers/{tracker.id}/entries/new"' not in html and "Write the update" not in html
+    assert f'href="/trackers/{tracker.id}/entries"' not in html and "Write the update" not in html
     assert '<span class="role-tag">Viewer</span>' in html
 
 

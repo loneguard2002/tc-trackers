@@ -879,6 +879,15 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .quick-add-row .field-grow { flex: 1 1 240px; }
 .quick-add-row .field-help { margin: 4px 0 0; }
 .quick-add-actions { padding-top: 24px; }
+/* The last Record's result under the form, and its row in the list, highlighted while it fades. */
+.quick-add-errors { padding: 16px 20px 0; }
+.quick-add-errors .form-alert { margin: 0; }
+.quick-add-result { margin: 0; padding: 0 20px 16px; color: var(--success); font-size: .875rem; font-weight: 600; }
+.entry-table tr.is-new td { background: color-mix(in srgb, var(--success) 12%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+  .entry-table tr.is-new td { animation: entry-new 3s ease-out 1s forwards; }
+}
+@keyframes entry-new { to { background: transparent; } }
 .entry-filters, .risk-filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
 .entry-week { display: flex; align-items: center; gap: 8px; margin: 0; }
 .entry-week select { width: auto; min-width: 13rem; padding: 6px 10px; font-size: .875rem; }

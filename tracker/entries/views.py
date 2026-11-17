@@ -7,7 +7,7 @@ import io
 from datetime import date, datetime, timezone
 from typing import NamedTuple
 
-from flask import Response, abort, flash, g, redirect, render_template, request, url_for
+from flask import Response, abort, flash, g, redirect, render_template, request, session, url_for
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
@@ -64,14 +64,31 @@ def _entry_filters(tracker: Tracker, week: date | None, group_id: int | None) ->
     return conditions
 
 
+# The quick-add form's last Record on this browser: {"tracker", "group_id", "entry_date", "entry", "message"}.
+QUICK_ADD_KEY = "quick_add"
+
+
 @bp.get("/trackers/<int:tracker_id>/entries")
 @require_tracker_role("editor")
 def list_entries(tracker_id: int):
-    tracker, db = g.tracker, get_session()
+    tracker = g.tracker
+    recorded = session.get(QUICK_ADD_KEY)
+    if recorded and recorded.get("tracker") == tracker.id:
+        session.pop(QUICK_ADD_KEY)  # shown once; the next visit starts fresh
+    else:
+        recorded = None
+    return _render_list(tracker, recorded=recorded)
+
+
+def _render_list(tracker: Tracker, form=None, errors: list[str] | None = None, recorded=None, status: int = 200):
+    """The Entries page. ``form`` and ``errors`` refill a refused quick-add; ``recorded`` keeps the location and date
+    of the last Record and names the entry it added."""
+    db = get_session()
     today = date.today()
     current = in_progress_week(today, tracker.week_ending_weekday)
-    week = parse_date(request.args.get("week"))
-    group_id = parse_id(request.args.get("group"))
+    # A refused Record comes back with the list filtered as it was when the form was sent.
+    week = parse_date(request.args.get("week") or request.form.get("filter_week"))
+    group_id = parse_id(request.args.get("group") or request.form.get("filter_group"))
     conditions = _entry_filters(tracker, week, group_id)
     # One row beyond the limit tells the page whether older entries were left out.
     entries = db.scalars(
@@ -106,8 +123,15 @@ def list_entries(tracker_id: int):
     weeks = [w for w in week_endings(tracker.first_week_ending, tracker.last_week_ending) if w <= (current or today)]
     if week is not None and week not in weeks:
         weeks.append(week)
+    if form is None:
+        form = {"group_id": str(group_id) if group_id is not None else "", "entry_date": today.isoformat()}
+        if recorded:
+            form = {"group_id": str(recorded["group_id"]), "entry_date": recorded["entry_date"]}
     return render_template(
         "entries/list.html",
+        form=form,
+        errors=errors or [],
+        recorded=recorded,
         by_week=by_week,
         totals=totals,
         targets=targets,
@@ -124,7 +148,7 @@ def list_entries(tracker_id: int):
         capped=capped,
         list_limit=LIST_LIMIT,
         **_page(tracker, "Entries"),
-    )
+    ), status
 
 
 def _csv_cell(value) -> str:
@@ -205,34 +229,20 @@ def _read_entry_form(db, tracker: Tracker, form, own_group_id: int | None = None
     return EntryInput(group, entry_date, week_ending, quantity), errors
 
 
-def _render_new(tracker: Tracker, groups: list[Group], form, errors: list[str], status: int = 200):
-    return (
-        render_template(
-            "entries/new.html",
-            groups=groups,
-            form=form,
-            errors=errors,
-            today=date.today(),
-            **_page(tracker, "New entry"),
-        ),
-        status,
-    )
-
-
 @bp.route("/trackers/<int:tracker_id>/entries/new", methods=["GET", "POST"])
 @require_tracker_role("editor")
 def new_entry(tracker_id: int):
+    """Records one completion from the Entries page's form. The address once had a page of its own; it now opens the
+    Entries page, where the form is."""
     tracker, db = g.tracker, get_session()
-    groups = [grp for grp in _ordered_groups(db, tracker) if not grp.retired]
     if request.method == "GET":
-        form = {"group_id": request.args.get("group", ""), "entry_date": date.today().isoformat(), "quantity": ""}
-        return _render_new(tracker, groups, form, [])
-    refused = _refuse_if_archived(tracker, "entries.new_entry")
+        return redirect(url_for("entries.list_entries", tracker_id=tracker.id))
+    refused = _refuse_if_archived(tracker, "entries.list_entries")
     if refused:
         return refused
     submitted, errors = _read_entry_form(db, tracker, request.form)
     if errors:
-        return _render_new(tracker, groups, request.form, errors, status=400)
+        return _render_list(tracker, form=request.form, errors=errors, status=400)
     group, quantity = submitted.group, submitted.quantity
     entry = CompletionEntry(
         tracker_id=tracker.id,
@@ -254,10 +264,24 @@ def new_entry(tracker_id: int):
         {"group_id": group.id, "entry_date": entry.entry_date.isoformat(), "quantity": quantity},
     )
     db.commit()
-    flash(f"Recorded {quantity} for {group.name} on {format_date(entry.entry_date)}.", "success")
-    if request.form.get("return_to") == "list":
-        return redirect(url_for("entries.list_entries", tracker_id=tracker.id))
-    return redirect(url_for("entries.new_entry", tracker_id=tracker.id, group=group.id))
+    session[QUICK_ADD_KEY] = {
+        "tracker": tracker.id,
+        "group_id": group.id,
+        "entry_date": entry.entry_date.isoformat(),
+        "entry": entry.id,
+        "message": f"Recorded {quantity} for {group.name} on {format_date(entry.entry_date)}.",
+    }
+    # Back to the list as it was filtered, with the form ready for the next entry.
+    filter_week = parse_date(request.form.get("filter_week"))
+    filter_group = parse_id(request.form.get("filter_group"))
+    return redirect(
+        url_for(
+            "entries.list_entries",
+            tracker_id=tracker.id,
+            week=filter_week.isoformat() if filter_week else None,
+            group=filter_group,
+        )
+    )
 
 
 def _render_edit(tracker: Tracker, entry: CompletionEntry, groups: list[Group], form, errors: list[str], status=200):

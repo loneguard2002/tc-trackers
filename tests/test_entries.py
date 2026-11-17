@@ -58,8 +58,8 @@ def test_entry_dated_in_the_future_is_refused(client, db, tracker_factory, user_
     assert response.status_code == 400
     assert "The date cannot be after today" in response.get_data(as_text=True)
     assert db.scalars(select(CompletionEntry)).first() is None
-    form = client.get(entry_url(tracker, "/new")).get_data(as_text=True)
-    assert f'max="{date.today().isoformat()}"' in form
+    form = client.get(entry_url(tracker)).get_data(as_text=True)
+    assert f'max="{date.today().isoformat()}"' in form[form.index("data-quick-add") :]
 
 
 def test_entries_same_group_week_add_up(client, db, tracker_factory, user_factory, grant):
@@ -178,14 +178,74 @@ def test_entries_location_chips_count_and_filter(client, db, tracker_factory, us
     assert "<strong>3</strong> recorded at Site B" in html
 
 
-def test_quick_add_returns_to_the_entries_list(client, db, tracker_factory, user_factory, grant):
+def quick_add(html: str) -> str:
+    """The quick-add form of an Entries page."""
+    return html[html.index("data-quick-add") : html.index('id="section-entries"')]
+
+
+def test_the_old_full_form_address_opens_the_entries_page(client, db, tracker_factory, user_factory, grant):
     tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
-    html = client.get(entry_url(tracker)).get_data(as_text=True)
-    assert 'name="return_to" value="list"' in html and "data-quick-add" in html
-    response = post(client, entry_url(tracker, "/new"), {**entry_form(group), "return_to": "list"})
+    response = client.get(entry_url(tracker, f"/new?group={group.id}"))
     assert response.status_code == 302 and response.headers["Location"].endswith(entry_url(tracker))
-    response = post(client, entry_url(tracker, "/new"), entry_form(group))
-    assert response.headers["Location"].endswith(entry_url(tracker, f"/new?group={group.id}"))
+    html = client.get(entry_url(tracker)).get_data(as_text=True)
+    assert "Full form" not in html and 'name="return_to"' not in html
+
+
+def test_record_keeps_the_location_and_date_for_the_next_entry(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    other = Group(tracker_id=tracker.id, name="Site B", baseline=20)
+    db.add(other)
+    db.commit()
+    filters = {"filter_week": "2026-10-16", "filter_group": str(other.id)}
+    form = {**entry_form(other, "2026-10-14", "3", note="n"), **filters}
+    response = post(client, entry_url(tracker, "/new"), form)
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(entry_url(tracker, f"?week=2026-10-16&group={other.id}"))
+    entry = db.scalars(select(CompletionEntry)).one()
+    html = client.get(entry_url(tracker)).get_data(as_text=True)
+    form_html = quick_add(html)
+    assert re.search(rf'<option value="{other.id}"\s+selected>Site B</option>', form_html)
+    assert not re.search(rf'<option value="{group.id}"\s+selected>', form_html)
+    assert re.search(r'id="qa-date"[^>]*value="2026-10-14"', form_html)
+    assert re.search(r'id="qa-quantity"[^>]*autofocus', form_html)
+    assert 'id="qa-note" name="note" value=""' in form_html  # the note starts empty again
+    assert "Recorded 3 for Site B on 14 Oct 2026." in form_html
+    assert f'<tr class="is-new" data-entry="{entry.id}">' in html
+    # The next visit starts fresh: today's date, no location, no result line, no highlight.
+    again = client.get(entry_url(tracker)).get_data(as_text=True)
+    assert "Recorded 3" not in again and "is-new" not in again and "autofocus" not in quick_add(again)
+    assert not re.search(r"<option value=\"\d+\"\s+selected>", quick_add(again))
+
+
+def test_the_last_record_belongs_to_its_own_tracker(client, db, tracker_factory, user_factory, grant):
+    tracker, user, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    second = tracker_factory(name="Second")
+    grant(user, second, "editor")
+    db.add(Group(tracker_id=second.id, name="Site Z", baseline=5))
+    db.commit()
+    post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-14", "4"))
+    assert "Recorded 4" not in client.get(entry_url(second)).get_data(as_text=True)
+    assert "Recorded 4 for Site A" in client.get(entry_url(tracker)).get_data(as_text=True)
+
+
+def test_record_ignores_filters_it_cannot_read(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    form = {**entry_form(group), "filter_week": "soon", "filter_group": "x"}
+    response = post(client, entry_url(tracker, "/new"), form)
+    assert response.status_code == 302 and response.headers["Location"].endswith(entry_url(tracker))
+
+
+def test_a_refused_entry_comes_back_on_the_entries_page(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    response = post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-14", "0", note="keep me"))
+    assert response.status_code == 400
+    html = response.get_data(as_text=True)
+    form_html = quick_add(html)
+    assert form_html.count("at least 1") == 1 and 'id="section-entries"' in html
+    assert re.search(rf'<option value="{group.id}"\s+selected>Site A</option>', form_html)
+    assert re.search(r'id="qa-date"[^>]*value="2026-10-14"', form_html)
+    assert re.search(r'id="qa-quantity"[^>]*value="0"', form_html)
+    assert 'value="keep me"' in form_html
 
 
 def test_entries_csv_follows_the_filters(client, db, tracker_factory, user_factory, grant):
