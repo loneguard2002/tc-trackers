@@ -241,7 +241,17 @@ def _register_cli(app: Flask) -> None:
         "--sequence", required=True, type=click.IntRange(min=0), help="SEQUENCE; raise it to update or cancel."
     )
     @click.option("--name", default=None, help="Use this text instead of the tracker's name.")
-    def calendar_test_invite(to: str, tracker_id: int, method: str, sequence: int, name: str | None) -> None:
+    @click.option("--first", "first", type=click.DateTime(["%Y-%m-%d"]), help="First week ending, YYYY-MM-DD.")
+    @click.option("--last", "last", type=click.DateTime(["%Y-%m-%d"]), help="Last week ending, YYYY-MM-DD.")
+    def calendar_test_invite(
+        to: str,
+        tracker_id: int,
+        method: str,
+        sequence: int,
+        name: str | None,
+        first: datetime | None,
+        last: datetime | None,
+    ) -> None:
         """Send one test calendar invitation, for checking how Outlook handles it; it changes no data.
 
         The same tracker always gives the same UID (it names no real person, so it never meets a real invitation):
@@ -261,11 +271,13 @@ def _register_cli(app: Flask) -> None:
             user_id=0,
             name=name or tracker.name,
             weekday=tracker.week_ending_weekday,
-            first=tracker.first_week_ending,
-            last=tracker.last_week_ending,
+            first=first.date() if first else tracker.first_week_ending,
+            last=last.date() if last else tracker.last_week_ending,
             tz=tracker.send_timezone,
             url=inputs_url(tracker.id),
         )
+        if series.last < series.first:
+            raise click.ClickException("--last must not be before --first.")
         msg = build_invite_email(series, organizer, to.strip(), method, sequence, datetime.now(timezone.utc))
         try:
             smtp.send_message(msg)

@@ -256,6 +256,8 @@ def build_invite_email(
         f'<p>{html.escape(lead)}</p><p><a href="{link}">Open the Weekly update page</a></p><p>{html.escape(note)}</p>',
         subtype="html",
     )
-    msg.add_alternative(calendar, subtype="calendar", charset="utf-8", params={"method": method})
+    # base64, so no hop needs 8BITMIME and the CRLF line endings arrive as written
+    msg.add_alternative(calendar, subtype="calendar", charset="utf-8", cte="base64", params={"method": method})
     msg.add_attachment(calendar.encode("utf-8"), maintype="application", subtype="ics", filename="invite.ics")
+    msg["Content-Class"] = "urn:content-classes:calendarmessage"  # set last: adding parts moves Content-* headers
     return msg
