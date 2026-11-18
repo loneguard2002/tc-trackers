@@ -174,21 +174,18 @@ def create():
     name = request.form.get("name", "").strip()
     description = request.form.get("description", "").strip()
     errors = [e for e in (name_error(db, PermissionSet, name, "permission set"), description_error(description)) if e]
-    to_index = request.form.get("return_to") == RETURN_TO_INDEX
 
     def refuse(messages: list[str]):
-        if to_index:
-            page = render_template(
-                "permsets/new.html",
-                form=request.form,
-                kept_permissions=request.form.getlist("permissions"),
-                kept_holders=request.form.getlist("holders"),
-                errors=messages,
-                page_title="New permission set",
-                current_page="permsets",
-            )
-            return page, 400
-        return _render_index(request.form, messages, 400)
+        page = render_template(
+            "permsets/new.html",
+            form=request.form,
+            kept_permissions=request.form.getlist("permissions"),
+            kept_holders=request.form.getlist("holders"),
+            errors=messages,
+            page_title="New permission set",
+            current_page="permsets",
+        )
+        return page, 400
 
     if errors:
         return refuse(errors)
