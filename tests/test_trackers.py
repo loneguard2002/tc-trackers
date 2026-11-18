@@ -247,7 +247,7 @@ def test_groups_page_shows_progress_totals_and_retired_in_the_one_table(client, 
     assert html.index("Site A") < html.index("Site B") < html.index("Old site")  # the owner's order, retired in place
     assert 'data-status="retired"' in html and 'data-status="active"' in html
     assert "rag-dot rag-dot-red" in html and "4 of 10" in html
-    assert '<th scope="row">All locations</th>' in html and "4 of 40" in html
+    assert '<th scope="row">All active locations</th>' in html and "4 of 40" in html
     assert "Retire once nothing remains" in html  # both active groups still have work left
     assert "Showing 3 of 3 locations · 2 active" in html
 

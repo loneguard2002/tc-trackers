@@ -464,7 +464,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 :root { --subnav-height: 42px; --sticky-top: var(--topbar-height); }
 /* Sticky table headings must not cover a control reached with Shift+Tab (WCAG 2.4.11). Only on pages with such
    headings: the section links of the other pages land by their own scroll-margin. */
-html:has(:is(.list-table, .user-table) thead th) { scroll-padding-top: calc(var(--sticky-top) + 3rem); }
+html:has(:is(.list-table, .user-table, .section-table[data-table-frame]) thead th) { scroll-padding-top: calc(var(--sticky-top) + 3rem); }
 /* Where a table's heading row sticks: under the top bar, and under the sub-navigation too on a page that has one. */
 main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-height)); }
 .subnav { position: sticky; top: var(--topbar-height); z-index: 20; display: flex; align-items: center; gap: 24px; height: var(--subnav-height); margin: -24px 0 20px; border-bottom: 1px solid var(--border); background: var(--bg); box-shadow: -8px 0 0 var(--bg), 8px 0 0 var(--bg); overflow-x: auto; scrollbar-width: none; }
@@ -848,7 +848,7 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
   :is(.register, .card-rows) tr:last-child { border-bottom: 0; }
   :is(.register.section-table, .card-rows) :is(td, td:first-child, td:last-child) { display: block; padding: 0; border: 0; }
   :is(.register, .card-rows) td:first-child { flex: 1 1 100%; }
-  :is(.register, .card-rows) td[data-label]::before { content: attr(data-label) " "; color: var(--muted); }
+  :is(.register, .card-rows) td[data-label]:not([data-label=""])::before { content: attr(data-label) " "; color: var(--muted); }
   :is(.register, .card-rows) .cell-actions { width: auto; margin-left: auto; }
   :is(.register.section-table, .card-rows) :is(thead, td.hide-narrow) { display: none; }
   /* The picker's first cell is a checkbox: it sits before the tracker's name, not on a line of its own. */
@@ -1251,10 +1251,12 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .list-table table { min-width: 640px; }
 /* Table headings stay under the top bar while the page scrolls. Sticky fails inside a scroll container, so above 720px
    the table's wrapper clips (its tables fit from there) instead of scrolling; on a phone the rows are cards. */
-:is(.list-table, .user-table) thead th { position: sticky; top: var(--sticky-top); z-index: 2; background: var(--surface); }
+:is(.list-table, .user-table, .section-table[data-table-frame]) thead th { position: sticky; top: var(--sticky-top); z-index: 2; background: var(--surface); }
+.set-panel .section-table[data-table-frame] thead th { position: static; }  /* the side panel scrolls on its own */
 @media (min-width: 721px) {
-  .section-table:has(.card-rows) { overflow-x: clip; }
-  .section-table.is-wide:has(.card-rows) { overflow-x: auto; }  /* set by lists.js when the table does not fit */
+  :is(.section-table:has(.card-rows), .section-table[data-table-frame]) { overflow-x: clip; }
+  :is(.section-table:has(.card-rows), .section-table[data-table-frame]).is-wide { overflow-x: auto; }  /* set by lists.js when the table does not fit */
+  .set-panel .section-table[data-table-frame] { overflow-x: auto; }
 }
 .list-table th { vertical-align: middle; }
 .list-table th.num { text-align: right; }
@@ -1396,8 +1398,6 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .set-panel .chips + .section-foot-note { border-top: 0; padding: 4px 16px 14px; }
 .set-panel .empty-note { padding: 14px 16px; }
 .panel-holders { margin: 0; padding: 0; list-style: none; }
-.panel-holders li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--border); }
-.panel-holders li:first-child { border-top: 0; }
 .panel-holders form { margin: 0; }
 .panel-holders .member-who { flex: 1 1 auto; }
 .set-panel .holder-add { padding: 14px 16px; border-top: 1px solid var(--border); }

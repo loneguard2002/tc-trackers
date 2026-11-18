@@ -174,13 +174,18 @@
       each(clearButtons, function (button) { button.hidden = !inUse; });
       each(buttons, function (button) {
         var count = button.querySelector("[data-count]");
-        if (count) count.textContent = String(counts[button.getAttribute("data-status")] || 0);
+        if (count) {
+          var number = counts[button.getAttribute("data-status")] || 0;
+          count.textContent = String(number);
+          // A count marked data-alert takes the alert tint while it is above 0.
+          if (count.hasAttribute("data-alert")) count.classList.toggle("is-alert", number > 0);
+        }
       });
       showMoveButtons(inUse || sortValue() !== "");
       if (countText) {
         var many = matching.length > pageSize;
         var noun = countText.getAttribute(countedTotal === 1 ? "data-noun-one" : "data-noun-many");
-        var copy = "Showing " + (many ? (first + 1) + "\u2013" + (first + shown) + " of " + matching.length
+        var copy = "Showing " + (many ? (first + 1) + "\u2013" + (first + shown) + " of " + countedMatching
           : countedMatching + " of " + countedTotal) + " " + (many ? countText.getAttribute("data-noun-many") : noun);
         if (countText.hasAttribute("data-has-active")) copy += " \u00b7 " + active + " active";
         countText.textContent = copy;
@@ -315,6 +320,8 @@
     // The table's wrapper clips rather than scrolls above 720px, so that the headings can stick. A table too wide for
     // its wrapper (a narrow window) would then lose its last columns, so the wrapper is marked is-wide and CSS lets it
     // scroll sideways again; its headings then scroll with the page.
+    // (A table in a fragment that is later replaced, the side panel's, leaves its resize and load listeners and its
+    // ResizeObserver behind; that is harmless at this scale.)
     var wrapper = table.closest(".section-table");
 
     function keepWideTableReachable() {

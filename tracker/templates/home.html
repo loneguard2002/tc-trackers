@@ -108,7 +108,7 @@
       <select id="home-sort" data-home-sort>
         {% for key, label in [('attention', 'Needs attention first'), ('name', 'Name'), ('target', 'Target date'), ('progress', 'Progress'), ('forecast', 'Forecast date'), ('risks', 'Red risks'), ('last', 'Last entry')] %}
         <option value="{{ key }}">{{ label }}</option>
-        <option value="-{{ key }}">{{ label }}, reversed</option>
+        <option value="-{{ key }}">{{ 'Needs attention last' if key == 'attention' else label ~ ', reversed' }}</option>
         {% endfor %}
       </select>
     </div>

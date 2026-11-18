@@ -7,6 +7,8 @@ from conftest import browser_sign_in
 from playwright.sync_api import expect
 from test_report_page_browser import RECORDER
 
+from tracker.models import TrackerRegion
+
 pytestmark = pytest.mark.browser
 
 
@@ -27,7 +29,12 @@ def test_the_tracker_access_list_searches_filters_sorts_and_keeps_its_actions(
     page, live_server, user_factory, tracker_factory, grant
 ):
     tracker = tracker_factory()
-    for name, role in (("Ann Editor", "editor"), ("Bob Viewer", "viewer"), ("Cy Owner", "owner"), ("Dee Viewer", "viewer")):
+    for name, role in (
+        ("Ann Editor", "editor"),
+        ("Bob Viewer", "viewer"),
+        ("Cy Owner", "owner"),
+        ("Dee Viewer", "viewer"),
+    ):
         grant(user_factory(full_name=name, email=f"{name.split()[0].lower()}@example.com"), tracker, role)
     page.add_init_script(RECORDER)
     browser_sign_in(page, live_server, user_factory(is_admin=True, full_name="Ada Admin"))
@@ -90,4 +97,32 @@ def test_a_persons_access_page_has_two_sortable_tables_with_their_own_keys(
     assert "trackers-sort=-tracker" in query and "permissions-sort=permission" in query
     page.reload()
     assert trackers.locator("tbody .cell-title").all_inner_texts() == ["Beta tracker", "Alpha tracker"]
+    _clean(page)
+
+
+def test_the_access_search_finds_a_person_by_route_words(
+    page, live_server, db, user_factory, tracker_factory, region_factory, region_grant, grant
+):
+    tracker = tracker_factory()
+    region = region_factory("EMEA")
+    db.add(TrackerRegion(tracker_id=tracker.id, region_id=region.id))
+    db.commit()
+    region_grant(region, user_factory(full_name="Reg Viewer", email="reg@example.com"), "viewer")
+    grant(user_factory(full_name="Dan Direct", email="dan@example.com"), tracker, "editor")
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, user_factory(is_admin=True, full_name="Ada Admin"))
+    page.goto(f"{live_server}/trackers/{tracker.id}/roles")
+    rows = page.locator("#access-table tbody tr:visible")
+    page.locator("#access-table-search").fill("region")
+    expect(rows).to_have_count(1)
+    expect(rows.first).to_contain_text("Reg Viewer")
+    page.locator("#access-table-search").fill("direct")
+    expect(rows).to_have_count(1)
+    expect(rows.first).to_contain_text("Dan Direct")
+    page.locator("#access-table-search").fill("administrator")
+    expect(rows).to_have_count(1)
+    expect(rows.first).to_contain_text("Ada Admin")
+    expect(page.locator("[data-no-match]")).to_be_hidden()
+    page.locator("#access-table-search").fill("zzz")
+    expect(page.locator("[data-no-match]")).to_contain_text("No one matches.")
     _clean(page)

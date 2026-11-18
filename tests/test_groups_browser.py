@@ -171,7 +171,7 @@ def test_a_row_action_returns_to_the_same_view(page, board):
 
 def test_the_totals_row_stays_put_while_the_table_is_filtered(page, board):
     total = page.locator("#groups-table tfoot tr")
-    expect(total).to_contain_text("All locations")
+    expect(total).to_contain_text("All active locations")
     before = total.inner_text()
     page.get_by_role("searchbox", name="Search locations").fill("dock")
     page.locator("#groups-table th").filter(has_text="Progress").locator(".sort-button").click()

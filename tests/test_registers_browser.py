@@ -253,5 +253,27 @@ def test_risk_form_preview_follows_the_fields(page, live_server, seeded):
 def test_locations_page_raises_no_policy_errors(page, live_server, seeded):
     open_page(page, live_server, seeded, "groups")
     expect(page.locator(".group-table tbody tr")).to_have_count(2)
-    expect(page.locator(".group-total")).to_contain_text("All locations")
+    expect(page.locator(".group-total")).to_contain_text("All active locations")
+    assert_clean(page)
+
+
+def test_the_past_target_count_is_tinted_while_above_zero(page, live_server, seeded):
+    open_page(page, live_server, seeded, "risks")
+    overdue = page.locator('[data-status="overdue"] .chip-count')
+    expect(overdue).to_have_class(re.compile(r"\bis-alert\b"))  # from the server, before the script runs
+    page.get_by_placeholder("Search risks").fill("supplier")  # no overdue risk matches this search
+    expect(overdue).to_have_text("0")
+    expect(overdue).not_to_have_class(re.compile(r"\bis-alert\b"))
+    page.get_by_placeholder("Search risks").fill("weekend")
+    expect(overdue).to_have_class(re.compile(r"\bis-alert\b"))
+    expect(page.locator('[data-status="red"] .chip-count')).not_to_have_class(re.compile(r"\bis-alert\b"))
+    assert_clean(page)
+
+
+def test_a_saved_view_of_the_closed_table_shows_it_open(page, live_server, seeded):
+    open_page(page, live_server, seeded, "risks")
+    expect(page.locator(".closed-block")).not_to_have_attribute("open", "")
+    page.goto(f"{live_server}/trackers/{seeded.tracker.id}/risks?closed-sort=-ref")
+    expect(page.locator(".closed-block")).to_have_attribute("open", "")
+    expect(page.locator("#closed-risks-table tbody tr:visible")).to_have_count(1)
     assert_clean(page)

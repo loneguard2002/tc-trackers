@@ -25,8 +25,9 @@
   });
   var state = { filter: "all", layout: "cards" };
   var DEFAULT_SORT = "attention";
-  // How each sort key reads its value: "text" and "date" compare as text, "number" as a number. A key's value is the
-  // card's data-<key>; an empty one comes last in both directions.
+  // How each sort key reads its value: "number" as a number, "text" as text. Target, forecast and last are ISO dates
+  // (YYYY-MM-DD), which compare correctly as text; there is no separate "date" kind. A key's value is the card's
+  // data-<key>; an empty one comes last in both directions.
   var KINDS = { attention: "number", name: "text", target: "text", progress: "number", forecast: "text", risks: "number", last: "text" };
 
   try {
@@ -60,8 +61,13 @@
     return sort.value.charAt(0) === "-" ? sort.value.slice(1) : sort.value;
   }
 
+  // Natural order in the reader's language, ignoring case ("Tracker 5" before "Tracker 10"), as the Lists tables do.
+  function naturally(a, b) {
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+  }
+
   function byName(a, b) {
-    return a.dataset.name.localeCompare(b.dataset.name);
+    return naturally(a.dataset.name, b.dataset.name);
   }
 
   function compare(a, b) {
@@ -72,7 +78,7 @@
       if (first !== second) return first === "" ? 1 : -1;
       return byName(a, b);
     }
-    var result = KINDS[key] === "number" ? Number(first) - Number(second) : (key === "name" ? first.localeCompare(second) : (first < second ? -1 : first > second ? 1 : 0));
+    var result = KINDS[key] === "number" ? Number(first) - Number(second) : (key === "name" ? naturally(first, second) : (first < second ? -1 : first > second ? 1 : 0));
     return (sort.value.charAt(0) === "-" ? -result : result) || byName(a, b);
   }
 
@@ -179,6 +185,7 @@
       state.filter = "all";
       [lineSelect, regionSelect].forEach(function (select) { if (select) select.value = "all"; });
       render();
+      if (searchInput) searchInput.focus();  // the button hides now, so the focus moves to the search box
     });
   }
   // The filters start at All on every visit, even when the browser restores a previous choice; the address then says
@@ -192,7 +199,9 @@
     select.value = "all";
     select.addEventListener("change", render);
   });
-  if (TESTS.hasOwnProperty(params.get("filter") || "")) state.filter = params.get("filter");
+  // A chip the page does not render (Status disagrees with forecast, when none does) is not a filter to apply.
+  var wanted = params.get("filter") || "";
+  if (TESTS.hasOwnProperty(wanted) && tools.querySelector('[data-filter="' + wanted + '"]')) state.filter = wanted;
   if (lineSelect && hasOption(lineSelect, params.get("line") || "")) lineSelect.value = params.get("line");
   if (regionSelect && hasOption(regionSelect, params.get("region") || "")) regionSelect.value = params.get("region");
   sort.value = hasOption(sort, params.get("sort") || "") ? params.get("sort") : DEFAULT_SORT;
