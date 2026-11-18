@@ -29,7 +29,7 @@ from .formatting import register_filters
 from .importer import bp as importer_bp
 from .lists import bp as lists_bp
 from .mail import bp as mail_bp
-from .models import User
+from .models import Tracker, User
 from .permsets import bp as permsets_bp
 from .report import bp as report_bp
 from .teams import bp as teams_bp
@@ -232,6 +232,46 @@ def _register_cli(app: Flask) -> None:
             if once:
                 return
             time.sleep(interval)
+
+    @app.cli.command("calendar-test-invite")
+    @click.option("--to", "to", required=True, help="Email address that receives the invitation.")
+    @click.option("--tracker", "tracker_id", required=True, type=int, help="Tracker whose reminder series to send.")
+    @click.option("--method", required=True, type=click.Choice(["REQUEST", "CANCEL"]))
+    @click.option(
+        "--sequence", required=True, type=click.IntRange(min=0), help="SEQUENCE; raise it to update or cancel."
+    )
+    @click.option("--name", default=None, help="Use this text instead of the tracker's name.")
+    def calendar_test_invite(to: str, tracker_id: int, method: str, sequence: int, name: str | None) -> None:
+        """Send one test calendar invitation, for checking how Outlook handles it; it changes no data.
+
+        The same tracker always gives the same UID (it names no real person, so it never meets a real invitation):
+        send REQUEST, then REQUEST with a higher SEQUENCE and another --name, then CANCEL.
+        """
+        from .calendar_invites.ics import Series, build_invite_email, inputs_url
+        from .mail import smtp
+
+        tracker = get_session().get(Tracker, tracker_id)
+        if tracker is None:
+            raise click.ClickException(f"No tracker with the id {tracker_id} exists.")
+        organizer = smtp.get_smtp_config()["from_"]
+        if not organizer:
+            raise click.ClickException("Set the sender address on the SMTP settings page first.")
+        series = Series(
+            tracker_id=tracker.id,
+            user_id=0,
+            name=name or tracker.name,
+            weekday=tracker.week_ending_weekday,
+            first=tracker.first_week_ending,
+            last=tracker.last_week_ending,
+            tz=tracker.send_timezone,
+            url=inputs_url(tracker.id),
+        )
+        msg = build_invite_email(series, organizer, to.strip(), method, sequence, datetime.now(timezone.utc))
+        try:
+            smtp.send_message(msg)
+        except smtp.MailError as exc:
+            raise click.ClickException(f"The invitation was not sent: {exc}") from exc
+        click.echo(f"Sent {method} (SEQUENCE {sequence}, UID {series.uid}) to {to.strip()}.")
 
     @app.cli.command("build-import-template")
     @click.option("--path", default=None, help="Where to write it; defaults to the stored template the page serves.")
