@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field, field %}
+{% block content %}
+<h1>New permission set</h1>
+<p class="page-lede"><a href="{{ url_for('permsets.index') }}">Permission sets</a> › New</p>
+<div class="settings settings-narrow">
+  {% if errors %}
+  <div class="form-alert" role="alert">
+    <strong>Please correct the following:</strong>
+    <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  <form method="post" action="{{ url_for('permsets.create') }}">
+    {{ csrf_field(csrf_token()) }}
+    <input type="hidden" name="return_to" value="index">
+    {% for name in kept_permissions %}<input type="hidden" name="permissions" value="{{ name }}">{% endfor %}
+    {% for value in kept_holders %}<input type="hidden" name="holders" value="{{ value }}">{% endfor %}
+    <div class="field-stack">
+      {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
+      <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
+      {% endcall %}
+      {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
+      <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
+      {% endcall %}
+    </div>
+    <div class="settings-section-foot">
+      <button class="button primary" type="submit">Create</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

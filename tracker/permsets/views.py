@@ -22,6 +22,7 @@ from . import bp
 
 ALREADY_HOLDS_MESSAGE = "That team or person already holds this set."
 CHOOSE_HOLDER_MESSAGE = "Choose a team or an active person from the list."
+RETURN_TO_INDEX = "index"
 
 
 def _set_or_404(set_id: int) -> PermissionSet:
@@ -32,7 +33,31 @@ def _set_or_404(set_id: int) -> PermissionSet:
 
 
 def _to_set(permission_set: PermissionSet):
+    """Back to the set's own page, or to the Permission sets screen with the set open when the form asks for it."""
+    if request.form.get("return_to") == RETURN_TO_INDEX:
+        return redirect(url_for("permsets.index", set=permission_set.id))
     return redirect(url_for("permsets.view", set_id=permission_set.id))
+
+
+def _resolve_holder(raw: str) -> tuple[Team | None, User | None]:
+    """The team or active person a ``team:<id>`` / ``user:<id>`` value names; ``(None, None)`` for anything else."""
+    db = get_session()
+    kind, _, raw_id = raw.partition(":")
+    holder_id = parse_id(raw_id)
+    team = user = None
+    if kind == "team" and holder_id:
+        team = db.get(Team, holder_id)
+    elif kind == "user" and holder_id:
+        user = db.get(User, holder_id)
+        if user is not None and user.status != "active":
+            user = None
+    return team, user
+
+
+def _all_people() -> list[User]:
+    return list(
+        get_session().scalars(select(User).where(User.status == "active").order_by(func.lower(User.full_name), User.id))
+    )
 
 
 def _permissions_of(set_ids: list[int]) -> dict[int, list[str]]:
@@ -77,6 +102,8 @@ def _render_index(form, errors: list[str], status: int):
         sets=sets,
         held=_permissions_of(set_ids),
         holder_counts=_holder_counts(set_ids),
+        team_choices=sorted(team_labels(load_team_rows(db)).items(), key=lambda item: item[1].lower()),
+        people=[(user.id, user.full_name, user.email) for user in _all_people()],
         admin_count=db.scalar(
             select(func.count()).select_from(User).where(User.is_admin.is_(True), User.status == "active")
         ),
@@ -94,6 +121,20 @@ def _render_index(form, errors: list[str], status: int):
 @admin_required
 def index():
     return _render_index({}, [], 200)
+
+
+@bp.get("/new")
+@admin_required
+def new():
+    return render_template(
+        "permsets/new.html",
+        form={},
+        kept_permissions=[],
+        kept_holders=[],
+        errors=[],
+        page_title="New permission set",
+        current_page="permsets",
+    )
 
 
 @bp.post("/grid")
@@ -133,8 +174,24 @@ def create():
     name = request.form.get("name", "").strip()
     description = request.form.get("description", "").strip()
     errors = [e for e in (name_error(db, PermissionSet, name, "permission set"), description_error(description)) if e]
+    to_index = request.form.get("return_to") == RETURN_TO_INDEX
+
+    def refuse(messages: list[str]):
+        if to_index:
+            page = render_template(
+                "permsets/new.html",
+                form=request.form,
+                kept_permissions=request.form.getlist("permissions"),
+                kept_holders=request.form.getlist("holders"),
+                errors=messages,
+                page_title="New permission set",
+                current_page="permsets",
+            )
+            return page, 400
+        return _render_index(request.form, messages, 400)
+
     if errors:
-        return _render_index(request.form, errors, 400)
+        return refuse(errors)
     permission_set = PermissionSet(name=name, description=description)
     db.add(permission_set)
     try:
@@ -148,12 +205,45 @@ def create():
             entity_id=permission_set.id,
             detail={"name": name},
         )
+        granted = sorted({n for n in request.form.getlist("permissions") if n in PERMISSIONS})
+        if granted:
+            db.add_all(PermissionSetPermission(set_id=permission_set.id, permission=n) for n in granted)
+            record(
+                db,
+                user_id=current_user().id,
+                tracker_id=None,
+                action="permission_set_permissions_changed",
+                entity="permission_set",
+                entity_id=permission_set.id,
+                detail={"set": name, **change([], granted)},
+            )
+        _add_holders(permission_set, request.form.getlist("holders"))
         db.commit()
     except IntegrityError:
         db.rollback()
-        return _render_index(request.form, [name_taken("permission set")], 400)
+        return refuse([name_taken("permission set")])
     flash(f"Created the permission set {name}.", "success")
     return _to_set(permission_set)
+
+
+def _add_holders(permission_set: PermissionSet, values: list[str]) -> None:
+    """Add each valid, new holder named in ``values``; unknown, inactive and repeated ones are skipped silently."""
+    db = get_session()
+    labels = team_labels(load_team_rows(db))
+    seen: set[tuple[str, int]] = set()
+    for raw in values:
+        team, user = _resolve_holder(raw)
+        key = ("team", team.id) if team else ("user", user.id) if user else None
+        if key is None or key in seen:
+            continue
+        seen.add(key)
+        team_path = labels.get(team.id, team.name) if team else None
+        db.add(
+            PermissionSetHolder(
+                set_id=permission_set.id, team_id=team.id if team else None, user_id=user.id if user else None
+            )
+        )
+        _record_holder(permission_set, "permission_set_holder_added", team_path, user.id if user else None)
 
 
 # --- A set's page ---------------------------------------------------------------------------------------------------
@@ -180,22 +270,40 @@ def _holders(permission_set: PermissionSet):
     )
 
 
-def _render_set(permission_set: PermissionSet, errors: list[str], status: int, form=None):
-    db = get_session()
-    holders = _holders(permission_set)
+def _free_choices(holders):
+    """The teams and active people not yet in ``holders``, for the Add holder select."""
     held_teams = {h.team_id for h, _path, _user in holders if h.team_id}
     held_users = {h.user_id for h, _path, _user in holders if h.user_id}
     team_choices = sorted(
-        ((team_id, label) for team_id, label in team_labels(load_team_rows(db)).items() if team_id not in held_teams),
+        (
+            (team_id, label)
+            for team_id, label in team_labels(load_team_rows(get_session())).items()
+            if team_id not in held_teams
+        ),
         key=lambda item: item[1].lower(),
     )
-    people = [
-        user
-        for user in db.scalars(
-            select(User).where(User.status == "active").order_by(func.lower(User.full_name), User.id)
-        )
-        if user.id not in held_users
-    ]
+    return team_choices, [user for user in _all_people() if user.id not in held_users]
+
+
+@bp.get("/<int:set_id>/panel")
+@admin_required
+def panel(set_id: int):
+    permission_set = _set_or_404(set_id)
+    holders = _holders(permission_set)
+    team_choices, people = _free_choices(holders)
+    return render_template(
+        "permsets/_panel.html",
+        permission_set=permission_set,
+        permissions=[(name, PERMISSIONS[name][0]) for name in _permissions_of([permission_set.id])[permission_set.id]],
+        holders=holders,
+        team_choices=team_choices,
+        people=people,
+    )
+
+
+def _render_set(permission_set: PermissionSet, errors: list[str], status: int, form=None):
+    holders = _holders(permission_set)
+    team_choices, people = _free_choices(holders)
     page = render_template(
         "permsets/set.html",
         permission_set=permission_set,
@@ -316,15 +424,7 @@ def delete_set(set_id: int):
 def add_holder(set_id: int):
     permission_set = _set_or_404(set_id)
     db = get_session()
-    kind, _, raw_id = request.form.get("holder", "").partition(":")
-    holder_id = parse_id(raw_id)
-    team = user = None
-    if kind == "team" and holder_id:
-        team = db.get(Team, holder_id)
-    elif kind == "user" and holder_id:
-        user = db.get(User, holder_id)
-        if user is not None and user.status != "active":
-            user = None
+    team, user = _resolve_holder(request.form.get("holder", ""))
     if team is None and user is None:
         return _render_set(permission_set, [CHOOSE_HOLDER_MESSAGE], 400)
     column, value = (PermissionSetHolder.team_id, team.id) if team else (PermissionSetHolder.user_id, user.id)
