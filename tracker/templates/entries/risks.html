@@ -1,27 +1,31 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, icon, rag_dot, rag_tone, tool_link %}
+{% from "lists/_table.html" import search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
 {% set group_name = tracker.group_label or 'Group' %}
 {% set active = tracker.status == 'active' %}
 {% block head_extra %}
-  <script src="{{ url_for('static', filename='risks.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% macro risk_row(r) -%}
 {% set tone = rag_tone(r.rag) %}
 {% set late = r.id in overdue %}
 {% set where = group_names.get(r.group_id) %}
-<tr class="risk-row risk-row-{{ tone }}" data-risk data-rag="{{ tone }}" data-overdue="{{ 'true' if late else 'false' }}"
+<tr class="risk-row risk-row-{{ tone }}" data-status="{{ tone }}{{ ' overdue' if late }}"
+  data-sort-rag="{{ {'red': 0, 'amber': 1, 'green': 2}.get(tone, 3) }}" data-sort-ref="{{ r.ref }}" data-sort-risk="{{ r.description or '' }}"
+  data-sort-where="{{ where or '' }}" data-sort-owner="{{ r.owner_role or '' }}" data-sort-status="{{ r.status }}"
+  data-sort-target="{{ r.target_date.isoformat() if r.target_date else '' }}"
   data-search="{{ [r.ref, r.description or '', r.impact or '', where or '', r.owner_role or '', r.latest_update or '']|join(' ')|lower }}">
-  <td class="risk-rag"><span class="rag-pill">{{ rag_dot(r.rag) }}{{ r.rag or 'Not set' }}</span></td>
-  <td class="risk-ref">{{ r.ref }}</td>
-  <td class="risk-text">
+  <td class="risk-rag" data-label=""><span class="rag-pill">{{ rag_dot(r.rag) }}{{ r.rag or 'Not set' }}</span></td>
+  <td class="risk-ref" data-label="">{{ r.ref }}</td>
+  <td class="risk-text" data-label="">
     <span class="risk-desc">{{ r.description or 'No description' }}</span>
     {% if r.impact %}<span class="risk-impact">{{ r.impact }}</span>{% endif %}
     {% if r.latest_update %}<span class="risk-update"><strong>Latest:</strong> {{ r.latest_update }}</span>{% endif %}
   </td>
   <td data-label="{{ group_name }}:">{% if where %}{{ where }}{% else %}<span class="muted">All</span>{% endif %}</td>
   <td data-label="Owner:">{{ r.owner_role or '–' }}</td>
-  <td><span class="status-pill status-{{ r.status|lower|replace(' ', '-') }}">{{ r.status }}</span></td>
-  <td class="risk-due">
+  <td data-label=""><span class="status-pill status-{{ r.status|lower|replace(' ', '-') }}">{{ r.status }}</span></td>
+  <td class="risk-due" data-label="">
     {%- if r.target_date %}{{ format_date(r.target_date) }}
       {%- if r.status != 'Closed' %}{% set days = (r.target_date - today).days %}
       <small class="{{ 'tone-danger' if days < 0 else ('tone-warning' if days <= 14 else 'muted') }}">
@@ -38,9 +42,17 @@
   </div></td>
 </tr>
 {%- endmacro %}
-{% macro head() -%}
-<thead><tr><th scope="col">RAG</th><th scope="col">Ref</th><th scope="col">Risk</th><th scope="col">{{ group_name }}</th><th scope="col">Owner</th>
-  <th scope="col">Status</th><th scope="col">Target date</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+{% macro head(rag_default=False) -%}
+<thead><tr>
+  {{ sort_header('RAG', 'rag', default=rag_default, type='number') }}
+  {{ sort_header('Ref', 'ref') }}
+  {{ sort_header('Risk', 'risk') }}
+  {{ sort_header(group_name, 'where') }}
+  {{ sort_header('Owner', 'owner') }}
+  {{ sort_header('Status', 'status') }}
+  {{ sort_header('Target date', 'target', type='date') }}
+  <th scope="col"><span class="sr-only">Actions</span></th>
+</tr></thead>
 {%- endmacro %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
@@ -55,39 +67,37 @@
       {% if active %}<a class="button primary button-small" href="{{ url_for('entries.new_risk', tracker_id=tracker.id) }}">{{ icon('plus') }}Add a risk</a>{% endif %}
     </header>
     {% if risks %}
-    <div class="risk-filters" data-risk-tools hidden>
-      <div class="chips" role="group" aria-label="Show risks">
-        <button class="chip" type="button" data-filter="all" aria-pressed="true">All open<span class="chip-count">{{ counts.open }}</span></button>
-        {% for rag in ('Red', 'Amber', 'Green') %}
-        <button class="chip" type="button" data-filter="{{ rag_tone(rag) }}" aria-pressed="false">{{ rag_dot(rag) }}{{ rag }}<span class="chip-count">{{ counts[rag] }}</span></button>
-        {% endfor %}
-        <button class="chip" type="button" data-filter="none" aria-pressed="false">{{ rag_dot(none) }}Not rated<span class="chip-count">{{ counts.none }}</span></button>
-        <button class="chip" type="button" data-filter="overdue" aria-pressed="false">Past target date<span class="chip-count{{ ' is-alert' if counts.overdue }}">{{ counts.overdue }}</span></button>
-      </div>
-      <label class="search-field">{{ icon('search') }}<span class="sr-only">Search risks</span>
-        <input type="search" placeholder="Search risks, owners, {{ group_name|plural|lower }}" data-risk-search></label>
+    <div class="list-tools">
+      {{ search_box('risks-table', 'Search risks and owners') }}
+      {{ status_filters('risks-table', 'risks', (
+        ('all', 'All open'), ('red', rag_dot('Red') ~ 'Red'), ('amber', rag_dot('Amber') ~ 'Amber'), ('green', rag_dot('Green') ~ 'Green'),
+        ('none', rag_dot(none) ~ 'Not rated'), ('overdue', 'Past target date')),
+        {'all': counts.open, 'red': counts.Red, 'amber': counts.Amber, 'green': counts.Green, 'none': counts.none, 'overdue': counts.overdue}) }}
+      {{ clear_filters('risks-table') }}
     </div>
-    <div class="section-table register risk-table">
-      <table class="table">
-        {{ head() }}
-        <tbody data-risk-rows>
+    <div class="section-table register risk-table" data-table-frame>
+      <table id="risks-table" class="table" data-sortable>
+        {{ head(true) }}
+        <tbody>
         {% for r in risks %}{{ risk_row(r) }}{% endfor %}
         </tbody>
       </table>
+      {{ no_match('No risks match this filter.', 'risks-table') }}
     </div>
-    <p class="empty-note" data-risk-empty hidden>No risks match this filter.</p>
+    {{ table_pager('risks-table', 'risks', 'risk', risks|length) }}
     {% else %}
     <p class="empty-note">No open risks.{% if active %} Add one when something could stop the work finishing on time.{% endif %}</p>
     {% endif %}
     {% if closed %}
     <details class="closed-block">
       <summary>Closed risks ({{ closed|length }})</summary>
-      <div class="section-table register risk-table">
-        <table class="table">
+      <div class="section-table register risk-table" data-table-frame>
+        <table id="closed-risks-table" class="table" data-sortable data-state-prefix="closed-">
           {{ head() }}
           <tbody>{% for r in closed %}{{ risk_row(r) }}{% endfor %}</tbody>
         </table>
       </div>
+      {{ table_pager('closed-risks-table', 'closed risks', 'closed risk', closed|length) }}
     </details>
     {% endif %}
   </section>

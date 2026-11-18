@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 from types import SimpleNamespace
 
@@ -152,17 +153,64 @@ def test_week_choice_submits_by_itself(page, live_server, seeded):
 
 def test_risk_chips_and_search_filter_the_register(page, live_server, seeded):
     open_page(page, live_server, seeded, "risks")
-    rows = page.locator("[data-risk-rows] tr:visible")
+    rows = page.locator("#risks-table tbody tr:visible")
     expect(rows).to_have_count(2)
+    expect(page.locator("#risks-table-search")).to_be_visible()
     page.get_by_role("button", name="Past target date").click()
     expect(rows).to_have_count(1)
     expect(rows.first).to_contain_text("Weekend access")
+    expect(page).to_have_url(re.compile(r"\?filter=overdue$"))
     page.get_by_role("button", name="All open").click()
     page.get_by_placeholder("Search risks").fill("supplier")
     expect(rows).to_have_count(1)
+    # The chip counts follow the search.
+    expect(page.get_by_role("button", name="Red")).to_contain_text("1")
+    expect(page.get_by_role("button", name="Amber")).to_contain_text("0")
     page.get_by_placeholder("Search risks").fill("nothing like this")
     expect(page.get_by_text("No risks match this filter.")).to_be_visible()
+    page.locator("[data-no-match] [data-clear-for]").click()
+    expect(rows).to_have_count(2)
     expect(page.locator(".closed-block summary")).to_have_text("Closed risks (1)")
+    assert_clean(page)
+
+
+def test_risk_register_sorts_worst_first_and_by_column(page, live_server, seeded):
+    open_page(page, live_server, seeded, "risks")
+    refs = page.locator("#risks-table tbody tr:visible .risk-ref")
+    expect(refs).to_have_text(["R1", "R2"])  # Red before Amber
+    expect(page.locator("#risks-table th[data-sort-default]")).to_have_attribute("aria-sort", "ascending")
+    page.locator("#risks-table th", has_text="Ref").get_by_role("button").click()
+    page.locator("#risks-table th", has_text="Ref").get_by_role("button").click()
+    expect(refs).to_have_text(["R2", "R1"])
+    expect(page).to_have_url(re.compile(r"\?sort=-ref$"))
+    page.locator("#risks-table th", has_text="Target date").get_by_role("button").click()
+    expect(refs).to_have_text(["R2", "R1"])  # the risk with no date comes last
+    page.reload()
+    expect(page.locator("#risks-table th", has_text="Target date")).to_have_attribute("aria-sort", "ascending")
+    assert_clean(page)
+
+
+def test_risk_register_pages_and_keeps_closed_risks_apart(page, live_server, seeded, db):
+    for number in range(4, 34):
+        db.add(Risk(tracker_id=seeded.tracker.id, ref=f"R{number}", description=f"Extra {number}", status="Open"))
+    db.commit()
+    open_page(page, live_server, seeded, "risks")
+    expect(page.locator("#risks-table tbody tr:visible")).to_have_count(25)
+    expect(page.locator("[data-pager-for='risks-table'] [data-pager-count]")).to_have_text(
+        "Showing 1\u201325 of 32 risks"
+    )
+    page.locator("[data-pager-for='risks-table'] [data-pager-next]").click()
+    expect(page.locator("#risks-table tbody tr:visible")).to_have_count(7)
+    expect(page).to_have_url(re.compile(r"\?page=2$"))
+    # The closed risks keep their own table and their own address keys.
+    page.locator(".closed-block summary").click()
+    expect(page.locator("#closed-risks-table tbody tr:visible")).to_have_count(1)
+    expect(page.locator("[data-pager-for='closed-risks-table'] [data-pager-count]")).to_have_text(
+        "Showing 1 of 1 closed risk"
+    )
+    page.locator("#closed-risks-table th", has_text="Ref").get_by_role("button").click()
+    page.locator("#closed-risks-table th", has_text="Ref").get_by_role("button").click()
+    expect(page).to_have_url(re.compile(r"\?page=2&closed-sort=-ref$"))
     assert_clean(page)
 
 
@@ -176,7 +224,7 @@ def test_risk_delete_asks_first(page, live_server, seeded):
 
     page.once("dialog", lambda dialog: answer(dialog, False))
     page.get_by_role("button", name="Delete risk R1").click()
-    expect(page.locator("[data-risk-rows] tr")).to_have_count(2)
+    expect(page.locator("#risks-table tbody tr")).to_have_count(2)
     page.once("dialog", lambda dialog: answer(dialog, True))
     page.get_by_role("button", name="Delete risk R1").click()
     expect(page.get_by_text("Risk R1 deleted.")).to_be_visible()
