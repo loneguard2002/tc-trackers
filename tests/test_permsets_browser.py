@@ -295,3 +295,222 @@ def test_a_refused_save_does_not_silence_the_warning(page, live_server, user_fac
     )
     page.evaluate("document.getElementById('permission-cards-form').requestSubmit()")
     assert page.evaluate(UNLOAD_WARNS) is True
+
+
+# The card menus, the rename and delete pop-ups and the holders side panel.
+def open_page(page, live_server, user_factory, query=""):
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(f"{live_server}/admin/permission-sets{query}")
+
+
+def clean(page):
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+def card_of(page, name):
+    return page.locator("article[data-set-card]", has=page.get_by_role("heading", name=name, exact=True))
+
+
+def test_the_card_menu_opens_with_three_items_and_closes_on_escape(page, live_server, user_factory, give_set):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    open_page(page, live_server, user_factory)
+    expect(page.locator(".perm-card-builtin .perm-more")).to_have_count(0)
+    more = card_of(page, "PMO").get_by_role("button", name="More for PMO")
+    expect(more).to_have_attribute("aria-expanded", "false")
+    more.click()
+    expect(more).to_have_attribute("aria-expanded", "true")
+    items = page.get_by_role("menuitem")
+    expect(items).to_have_text(["Rename or edit description", "Holders and details", "Delete…"])
+    expect(items.first).to_be_focused()
+    page.keyboard.press("ArrowDown")
+    expect(items.nth(1)).to_be_focused()
+    page.keyboard.press("ArrowUp")
+    page.keyboard.press("ArrowUp")
+    expect(items.nth(2)).to_be_focused()
+    page.keyboard.press("Escape")
+    expect(page.get_by_role("menu")).to_have_count(0)
+    expect(more).to_be_focused()
+    more.click()
+    page.get_by_role("heading", name="Permission sets").click()
+    expect(page.get_by_role("menu")).to_have_count(0)
+    clean(page)
+
+
+def test_rename_saves_the_new_name_and_description(page, live_server, user_factory, give_set):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    open_page(page, live_server, user_factory)
+    card_of(page, "PMO").get_by_role("button", name="More for PMO").click()
+    page.get_by_role("menuitem", name="Rename or edit description").click()
+    dialog = page.get_by_role("dialog", name="Rename or edit description")
+    expect(dialog.get_by_label("Name")).to_have_value("PMO")
+    dialog.get_by_label("Name").fill("   ")
+    dialog.get_by_role("button", name="Save").click()
+    expect(dialog.get_by_text("Enter a permission set name.")).to_be_visible()
+    dialog.get_by_label("Name").fill("Delivery office")
+    dialog.get_by_label("Description").fill("Runs delivery")
+    dialog.get_by_role("button", name="Save").click()
+    expect(page.get_by_text("Saved the permission set details.")).to_be_visible()
+    card = card_of(page, "Delivery office")
+    expect(card.get_by_text("Runs delivery")).to_be_visible()
+    expect(page.get_by_role("dialog", name="Rename or edit description")).to_have_count(0)
+    expect(page.locator("dialog.perm-drawer")).to_be_visible()  # the redirect reopens the set's panel
+    page.goto(f"{live_server}/admin/activity")
+    expect(page.get_by_text("Delivery office").first).to_be_visible()
+    clean(page)
+
+
+def test_delete_shows_who_loses_what_and_removes_the_card(page, live_server, user_factory, team_factory, give_set):
+    team = team_factory()
+    give_set(["view_activity", "manage_users"], team=team, name="PMO")
+    give_set(["view_activity"], user=user_factory(), name="Keep")
+    open_page(page, live_server, user_factory)
+    card = card_of(page, "PMO")
+    card.get_by_label("Create trackers for PMO").check()  # unsaved: not part of what is lost
+    card.get_by_role("button", name="More for PMO").click()
+    page.get_by_role("menuitem", name="Delete…").click()
+    dialog = page.get_by_role("dialog", name="Delete PMO?")
+    expect(dialog).to_contain_text("This cannot be undone.")
+    expect(dialog).to_contain_text("Held by 1 team. They lose:")
+    expect(dialog.get_by_role("listitem")).to_have_text(["Manage users", "View activity"])
+    expect(dialog).to_contain_text("The activity log records the deletion and each holder removed.")
+    dialog.get_by_role("button", name="Cancel").click()
+    expect(card).to_be_visible()
+    card.get_by_role("button", name="More for PMO").click()
+    page.get_by_role("menuitem", name="Delete…").click()
+    page.on("dialog", lambda d: d.accept())  # leaving with the unsaved tick warns; go ahead
+    dialog.get_by_role("button", name="Delete set").click()
+    expect(page.get_by_text("Deleted the permission set")).to_be_visible()
+    expect(card_of(page, "PMO")).to_have_count(0)
+    expect(card_of(page, "Keep")).to_have_count(1)
+    clean(page)
+
+
+def test_delete_of_a_set_nobody_holds_says_so(page, live_server, db, user_factory):
+    from tracker.models import PermissionSet
+
+    db.add(PermissionSet(name="Empty"))
+    db.commit()
+    open_page(page, live_server, user_factory)
+    card_of(page, "Empty").get_by_role("button", name="More for Empty").click()
+    page.get_by_role("menuitem", name="Delete…").click()
+    expect(page.get_by_role("dialog")).to_contain_text("Nobody holds this set, so nobody loses anything.")
+    clean(page)
+
+
+def holders_set(give_set, user_factory, team_factory):
+    team = team_factory(name="Delivery")
+    person = user_factory(full_name="Priya Shah")
+    permission_set = give_set(["view_activity", "manage_users"], team=team, name="PMO")
+    return permission_set, person
+
+
+@pytest.mark.parametrize("how", ["link", "menu"])
+def test_holders_and_details_opens_the_side_panel(page, live_server, user_factory, team_factory, give_set, how):
+    holders_set(give_set, user_factory, team_factory)
+    open_page(page, live_server, user_factory)
+    card = card_of(page, "PMO")
+    if how == "link":
+        card.get_by_role("link", name="Holders and details").click()
+    else:
+        card.get_by_role("button", name="More for PMO").click()
+        page.get_by_role("menuitem", name="Holders and details").click()
+    panel = page.locator("dialog.perm-drawer")
+    expect(panel).to_be_visible()
+    expect(panel.get_by_role("heading", name="PMO", exact=True)).to_be_visible()
+    expect(panel.get_by_role("button", name="Remove")).to_have_count(1)
+    expect(panel.locator(".panel-holders")).to_contain_text("Delivery")
+    expect(panel.locator(".chips")).to_contain_text("View activity")
+    expect(panel.locator(".chips")).to_contain_text("Manage users")
+    assert "set=" in page.url
+    clean(page)
+
+
+def test_the_panel_remove_and_add_holder_come_back_with_the_panel_open(
+    page, live_server, user_factory, team_factory, give_set
+):
+    _, person = holders_set(give_set, user_factory, team_factory)
+    open_page(page, live_server, user_factory)
+    page.on("dialog", lambda d: d.accept())
+    card_of(page, "PMO").get_by_role("link", name="Holders and details").click()
+    panel = page.locator("dialog.perm-drawer")
+    panel.get_by_role("button", name="Remove").click()
+    expect(panel).to_be_visible()
+    expect(panel).to_contain_text("Nobody holds this set yet.")
+    panel.get_by_label("Add a holder").select_option(label=f"{person.full_name} ({person.email})")
+    panel.get_by_role("button", name="Add holder").click()
+    expect(panel).to_be_visible()
+    expect(panel.locator(".panel-holders")).to_contain_text("Priya Shah")
+    expect(card_of(page, "PMO")).to_contain_text("Held by 1 person")
+    clean(page)
+
+
+def test_the_panel_menu_renames_and_deletes(page, live_server, user_factory, team_factory, give_set):
+    holders_set(give_set, user_factory, team_factory)
+    open_page(page, live_server, user_factory)
+    card_of(page, "PMO").get_by_role("link", name="Holders and details").click()
+    panel = page.locator("dialog.perm-drawer")
+    panel.get_by_role("button", name="More for PMO").click()
+    expect(panel.get_by_role("menuitem")).to_have_text(["Rename or edit description", "Delete…"])
+    panel.get_by_role("menuitem", name="Rename or edit description").click()
+    dialog = page.get_by_role("dialog", name="Rename or edit description")
+    dialog.get_by_label("Name").fill("Delivery office")
+    dialog.get_by_role("button", name="Save").click()
+    expect(panel).to_be_visible()  # the redirect reopens it
+    expect(panel.get_by_role("heading", name="Delivery office", exact=True)).to_be_visible()
+    panel.get_by_role("button", name="More for Delivery office").click()
+    panel.get_by_role("menuitem", name="Delete…").click()
+    page.get_by_role("dialog", name="Delete Delivery office?").get_by_role("button", name="Delete set").click()
+    expect(page.locator("dialog[open]")).to_have_count(0)
+    expect(page.locator("article[data-set-card]")).to_have_count(0)
+    expect(page).not_to_have_url(re.compile(r"set="))
+    clean(page)
+
+
+def test_escape_the_backdrop_and_the_cross_close_the_panel(page, live_server, user_factory, team_factory, give_set):
+    holders_set(give_set, user_factory, team_factory)
+    open_page(page, live_server, user_factory)
+    link = card_of(page, "PMO").get_by_role("link", name="Holders and details")
+    panel = page.locator("dialog.perm-drawer")
+    for close in ("escape", "backdrop", "cross"):
+        link.click()
+        expect(panel).to_be_visible()
+        assert "set=" in page.url
+        if close == "escape":
+            page.keyboard.press("Escape")
+        elif close == "backdrop":
+            page.mouse.click(40, 400)
+        else:
+            panel.get_by_role("button", name="Close").click()
+        expect(panel).to_be_hidden()
+        expect(page).not_to_have_url(re.compile(r"set="))
+        expect(link).to_be_focused()
+    clean(page)
+
+
+@pytest.mark.parametrize("query", ["?set=999999", "?set=abc", "?set=", "?set=1e1", "?set=-1"])
+def test_a_bad_set_in_the_address_opens_nothing(page, live_server, user_factory, give_set, query):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    open_page(page, live_server, user_factory, query)
+    expect(page.locator("article[data-set-card]")).to_have_count(1)
+    expect(page.locator("dialog[open]")).to_have_count(0)
+    clean(page)
+
+
+def test_the_address_opens_the_panel_on_load(page, live_server, user_factory, give_set):
+    permission_set = give_set(["view_activity"], user=user_factory(), name="PMO")
+    open_page(page, live_server, user_factory, f"?set={permission_set.id}")
+    expect(page.locator("dialog.perm-drawer")).to_be_visible()
+    clean(page)
+
+
+def test_a_failed_load_offers_the_sets_own_page(page, live_server, user_factory, give_set):
+    permission_set = give_set(["view_activity"], user=user_factory(), name="PMO")
+    page.route("**/panel", lambda route: route.abort())
+    open_page(page, live_server, user_factory)
+    card_of(page, "PMO").get_by_role("link", name="Holders and details").click()
+    panel = page.locator("dialog.perm-drawer")
+    expect(panel).to_contain_text("The holders could not be loaded.")
+    link = panel.get_by_role("link", name="Open the set's own page")
+    expect(link).to_have_attribute("href", f"/admin/permission-sets/{permission_set.id}")
