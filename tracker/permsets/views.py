@@ -93,7 +93,7 @@ def _holder_counts(set_ids: list[int]) -> dict[int, tuple[int, int]]:
 # --- The cards ------------------------------------------------------------------------------------------------------
 
 
-def _render_index(form, errors: list[str], status: int):
+def _render_index():
     db = get_session()
     sets = db.scalars(select(PermissionSet).order_by(func.lower(PermissionSet.name), PermissionSet.id)).all()
     set_ids = [s.id for s in sets]
@@ -109,18 +109,16 @@ def _render_index(form, errors: list[str], status: int):
         ),
         permissions=PERMISSIONS,
         groups=PERMISSION_GROUPS,
-        form=form,
-        errors=errors,
         page_title="Permission sets",
         current_page="permsets",
     )
-    return page, status
+    return page
 
 
 @bp.get("")
 @admin_required
 def index():
-    return _render_index({}, [], 200)
+    return _render_index()
 
 
 @bp.get("/new")
@@ -131,6 +129,7 @@ def new():
         form={},
         kept_permissions=[],
         kept_holders=[],
+        return_to=None,
         errors=[],
         page_title="New permission set",
         current_page="permsets",
@@ -181,6 +180,7 @@ def create():
             form=request.form,
             kept_permissions=request.form.getlist("permissions"),
             kept_holders=request.form.getlist("holders"),
+            return_to=request.form.get("return_to"),
             errors=messages,
             page_title="New permission set",
             current_page="permsets",

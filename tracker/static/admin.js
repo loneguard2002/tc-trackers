@@ -101,8 +101,9 @@
   }
 
   // [data-permission-cards] holds article[data-set-card] cards whose tick boxes belong to one save form. Each change
-  // marks a card whose boxes differ from the saved state (defaultChecked, so ticks a
-  // browser restores after a reload or Back count as unsaved) with .is-changed and its [data-changed] badge, and sets [data-dirty-note] to how many sets have unsaved changes.
+  // marks a card whose boxes differ from the saved state (defaultChecked, so ticks a browser restores after a reload or
+  // Back count as unsaved) with .is-changed and its [data-changed] badge, and sets [data-dirty-note] to how many sets
+  // have unsaved changes.
   each(document.querySelectorAll("[data-permission-cards]"), function (grid) {
     var cards = grid.querySelectorAll("article[data-set-card]");
     var note = document.querySelector("[data-dirty-note]");

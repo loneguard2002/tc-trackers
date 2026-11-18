@@ -16,12 +16,6 @@
     <a class="button primary" href="{{ url_for('permsets.new') }}" data-new-set>{{ icon('plus') }}New permission set</a>
   </div>
 </div>
-{% if errors %}
-<div class="form-alert" role="alert">
-  <strong>Please correct the following:</strong>
-  <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
-</div>
-{% endif %}
 {% set total = permissions|length %}
 {% if sets %}
 <form id="permission-cards-form" method="post" action="{{ url_for('permsets.save_grid') }}">
@@ -218,5 +212,5 @@
     </footer>
   </form>
 </dialog>
-<dialog class="perm-drawer" id="set-panel" aria-label="Holders and details"></dialog>
+<dialog class="perm-drawer" id="set-panel"></dialog>
 {% endblock %}

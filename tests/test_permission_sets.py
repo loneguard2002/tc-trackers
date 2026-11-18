@@ -427,7 +427,7 @@ def test_new_page_renders_the_form(client, logged_in_admin):
     page = text_of(response)
     assert response.status_code == 200
     assert 'name="name"' in page and 'name="description"' in page and "Create" in page
-    assert 'name="return_to" value="index"' in page
+    assert "return_to" not in page  # the plain page returns to the set's own page
 
 
 def test_index_passes_team_choices_and_people(client, logged_in_admin, db, user_factory, team_factory):
@@ -496,3 +496,17 @@ def test_rename_add_and_remove_with_return_to_index_redirect_to_the_set(client, 
     assert plain.headers["Location"].endswith(base)
     deleted = post(client, f"{base}/delete", {"return_to": "index"})
     assert deleted.headers["Location"].endswith("/admin/permission-sets")
+
+
+def test_the_plain_new_page_creates_and_returns_to_the_sets_own_page(client, logged_in_admin, db):
+    page = text_of(client.get("/admin/permission-sets/new"))
+    assert "return_to" not in page
+    response = post(client, "/admin/permission-sets", {"name": "Plain"})
+    created = db.scalar(select(PermissionSet).where(PermissionSet.name == "Plain"))
+    assert response.headers["Location"].endswith(f"/admin/permission-sets/{created.id}")
+
+
+def test_a_refused_create_from_the_pop_up_keeps_its_return_to(client, logged_in_admin, db):
+    make_set(db, "Taken", [])
+    page = text_of(post(client, "/admin/permission-sets", {"name": "taken", "return_to": "index"}))
+    assert 'name="return_to" value="index"' in page
