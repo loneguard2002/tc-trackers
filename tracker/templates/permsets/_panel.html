@@ -1,0 +1,53 @@
+{% from "macros.html" import csrf_field, icon %}
+<div class="set-panel" data-panel-set="{{ permission_set.id }}">
+  <h2 class="set-panel-title">{{ permission_set.name }}</h2>
+  {% if permission_set.description %}<p class="set-panel-note">{{ permission_set.description }}</p>{% endif %}
+  <section aria-labelledby="panel-permissions-{{ permission_set.id }}">
+    <h3 id="panel-permissions-{{ permission_set.id }}">Permissions</h3>
+    {% if permissions %}
+    <ul class="chips">{% for name, label in permissions %}<li class="chip">{{ label }}</li>{% endfor %}</ul>
+    {% else %}
+    <p class="empty-note">This set grants no permissions yet.</p>
+    {% endif %}
+  </section>
+  <section aria-labelledby="panel-holders-{{ permission_set.id }}">
+    <h3 id="panel-holders-{{ permission_set.id }}">Holders</h3>
+    {% if holders %}
+    <ul class="panel-holders">
+      {% for h, path, u in holders %}
+      <li>
+        {% if path %}<span class="cell-title">{{ path }}</span>{% else %}<span class="member-who"><span class="member-name">{{ u.full_name }}</span><span class="member-email">{{ u.email }}</span></span>{% endif %}
+        <form method="post" action="{{ url_for('permsets.remove_holder', set_id=permission_set.id, holder_id=h.id) }}"
+          data-confirm="Remove {{ path or u.full_name }} as a holder of {{ permission_set.name }}? They lose the permissions it grants.">
+          {{ csrf_field(csrf_token()) }}
+          <input type="hidden" name="return_to" value="index">
+          <button class="button button-small button-quiet" type="submit">Remove</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-note">Nobody holds this set yet.</p>
+    {% endif %}
+    {% if team_choices or people %}
+    <form class="holder-add" method="post" action="{{ url_for('permsets.add_holder', set_id=permission_set.id) }}">
+      {{ csrf_field(csrf_token()) }}
+      <input type="hidden" name="return_to" value="index">
+      <div>
+        <label for="panel-holder-{{ permission_set.id }}">Add a holder</label>
+        <select id="panel-holder-{{ permission_set.id }}" name="holder" required>
+          {% if team_choices %}<optgroup label="Teams">
+            {% for id, label in team_choices %}<option value="team:{{ id }}">{{ label }}</option>{% endfor %}
+          </optgroup>{% endif %}
+          {% if people %}<optgroup label="People">
+            {% for u in people %}<option value="user:{{ u.id }}">{{ u.full_name }} ({{ u.email }})</option>{% endfor %}
+          </optgroup>{% endif %}
+        </select>
+      </div>
+      <button class="button" type="submit">{{ icon('plus') }}Add holder</button>
+    </form>
+    {% else %}
+    <p class="section-foot-note">Every team and active person already holds this set.</p>
+    {% endif %}
+  </section>
+</div>

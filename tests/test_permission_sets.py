@@ -3,7 +3,7 @@
 import html
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from tests.conftest import post
 from tracker.auth.permissions import PERMISSION_GROUPS, PERMISSIONS, user_permissions
@@ -13,7 +13,9 @@ ENDPOINTS = [
     ("get", "/admin/permission-sets"),
     ("post", "/admin/permission-sets"),
     ("post", "/admin/permission-sets/grid"),
+    ("get", "/admin/permission-sets/new"),
     ("get", "/admin/permission-sets/{id}"),
+    ("get", "/admin/permission-sets/{id}/panel"),
     ("post", "/admin/permission-sets/{id}/rename"),
     ("post", "/admin/permission-sets/{id}/delete"),
     ("post", "/admin/permission-sets/{id}/holders"),
@@ -335,3 +337,163 @@ def test_tick_boxes_are_described_by_the_permission_help(client, logged_in_admin
     page = text_of(client.get("/admin/permission-sets"))
     assert f'aria-describedby="help-{s.id}-view_activity"' in page
     assert f'id="help-{s.id}-view_activity"' in page
+
+
+# --- The redesigned page: create with permissions and holders, return to the page, /new and the panel -----------------
+
+
+def test_create_saves_permissions_and_holders_and_logs_each(client, logged_in_admin, db, user_factory, team_factory):
+    team, person = team_factory(name="Top"), user_factory()
+    other = [name for name in PERMISSIONS if name != "view_activity"][0]
+    response = post(
+        client,
+        "/admin/permission-sets",
+        {
+            "name": "PMO",
+            "permissions": ["view_activity", other],
+            "holders": [f"team:{team.id}", f"user:{person.id}"],
+        },
+    )
+    assert response.status_code == 302
+    created = db.scalar(select(PermissionSet).where(PermissionSet.name == "PMO"))
+    assert stored(db, created) == sorted(["view_activity", other])
+    assert len(db.scalars(select(PermissionSetHolder).where(PermissionSetHolder.set_id == created.id)).all()) == 2
+    assert len(entries(db, "permission_set_created")) == 1
+    [changed] = entries(db, "permission_set_permissions_changed")
+    assert changed.entity_id == str(created.id) and changed.detail["set"] == "PMO"
+    added = entries(db, "permission_set_holder_added")
+    assert [e.target_user_id for e in added] == [None, person.id]
+
+
+def test_create_without_permissions_writes_no_permissions_entry(client, logged_in_admin, db):
+    post(client, "/admin/permission-sets", {"name": "Empty"})
+    assert entries(db, "permission_set_permissions_changed") == []
+
+
+def test_create_ignores_bad_permissions_and_holders(client, logged_in_admin, db, user_factory, team_factory):
+    team, person, gone = team_factory(), user_factory(), user_factory(status="disabled")
+    response = post(
+        client,
+        "/admin/permission-sets",
+        {
+            "name": "PMO",
+            "permissions": ["not_a_permission"],
+            "holders": [
+                f"team:{team.id}",
+                f"team:{team.id}",
+                f"user:{person.id}",
+                f"user:{gone.id}",
+                "team:9999",
+                "user:abc",
+                "nonsense",
+                "",
+            ],
+        },
+    )
+    assert response.status_code == 302
+    created = db.scalar(select(PermissionSet).where(PermissionSet.name == "PMO"))
+    assert stored(db, created) == []
+    assert entries(db, "permission_set_permissions_changed") == []
+    assert len(db.scalars(select(PermissionSetHolder).where(PermissionSetHolder.set_id == created.id)).all()) == 2
+    assert len(entries(db, "permission_set_holder_added")) == 2
+
+
+def test_create_return_to_index_redirects_to_the_page_with_the_set(client, logged_in_admin, db):
+    response = post(client, "/admin/permission-sets", {"name": "PMO", "return_to": "index"})
+    created = db.scalar(select(PermissionSet).where(PermissionSet.name == "PMO"))
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(f"/admin/permission-sets?set={created.id}")
+    other = post(client, "/admin/permission-sets", {"name": "Two", "return_to": "elsewhere"})
+    second = db.scalar(select(PermissionSet).where(PermissionSet.name == "Two"))
+    assert other.headers["Location"].endswith(f"/admin/permission-sets/{second.id}")
+
+
+def test_create_with_a_taken_name_and_return_to_index_shows_the_new_page_with_values(client, logged_in_admin, db):
+    make_set(db, "PMO", [])
+    response = post(
+        client,
+        "/admin/permission-sets",
+        {"name": " pmo ", "description": "Kept note", "permissions": ["view_activity"], "return_to": "index"},
+    )
+    page = text_of(response)
+    assert response.status_code == 400
+    assert "A permission set with that name already exists." in page
+    assert 'value=" pmo "' in page or 'value="pmo"' in page
+    assert "Kept note" in page
+    assert db.scalar(select(func.count()).select_from(PermissionSet)) == 1
+
+
+def test_new_page_renders_the_form(client, logged_in_admin):
+    response = client.get("/admin/permission-sets/new")
+    page = text_of(response)
+    assert response.status_code == 200
+    assert 'name="name"' in page and 'name="description"' in page and "Create" in page
+    assert 'name="return_to" value="index"' in page
+
+
+def test_index_passes_team_choices_and_people(client, logged_in_admin, db, user_factory, team_factory):
+    team = team_factory(name="Desk")
+    person = user_factory(full_name="Zed Active", email="zed@example.com")
+    user_factory(full_name="Gone Person", status="disabled")
+    page = text_of(client.get("/admin/permission-sets"))
+    assert str(team.id) is not None and page  # renders
+    from tracker.permsets import views
+
+    seen = {}
+    original = views.render_template
+
+    def spy(name, **context):
+        seen.update(context)
+        return original(name, **context)
+
+    views.render_template = spy
+    try:
+        client.get("/admin/permission-sets")
+    finally:
+        views.render_template = original
+    assert (team.id, "Desk") in [tuple(c) for c in seen["team_choices"]]
+    assert (person.id, "Zed Active", "zed@example.com") in [tuple(p) for p in seen["people"]]
+    assert "Gone Person" not in [p[1] for p in seen["people"]]
+
+
+def test_panel_lists_holders_with_remove_forms_and_permissions(client, logged_in_admin, db, user_factory, team_factory):
+    team, person, free = team_factory(name="Top"), user_factory(), user_factory(full_name="Free Person")
+    s = make_set(db, "PMO", ["view_activity"])
+    for value in (f"team:{team.id}", f"user:{person.id}"):
+        post(client, f"/admin/permission-sets/{s.id}/holders", {"holder": value})
+    response = client.get(f"/admin/permission-sets/{s.id}/panel")
+    page = text_of(response)
+    assert response.status_code == 200
+    assert "<html" not in page and f'data-panel-set="{s.id}"' in page
+    assert "Top" in page and person.email in page and "Read the Activity screen." not in page
+    assert "Free Person" in page and f'value="user:{free.id}"' in page
+    holders = db.scalars(select(PermissionSetHolder).where(PermissionSetHolder.set_id == s.id)).all()
+    for h in holders:
+        assert f"/admin/permission-sets/{s.id}/holders/{h.id}/delete" in page
+    assert page.count('name="return_to" value="index"') == len(holders) + 1
+    assert page.count('name="csrf_token"') == len(holders) + 1
+    assert f'value="team:{team.id}"' not in page
+
+
+def test_panel_404s_for_an_unknown_set(client, logged_in_admin):
+    assert client.get("/admin/permission-sets/9999/panel").status_code == 404
+
+
+def test_rename_add_and_remove_with_return_to_index_redirect_to_the_set(client, logged_in_admin, db, team_factory):
+    team = team_factory()
+    s = make_set(db, "PMO", [])
+    base = f"/admin/permission-sets/{s.id}"
+    target = f"/admin/permission-sets?set={s.id}"
+    renamed = post(client, f"{base}/rename", {"name": "PMO2", "return_to": "index"})
+    assert renamed.status_code == 302 and renamed.headers["Location"].endswith(target)
+    unchanged = post(client, f"{base}/rename", {"name": "PMO2", "return_to": "index"})
+    assert unchanged.headers["Location"].endswith(target)
+    added = post(client, f"{base}/holders", {"holder": f"team:{team.id}", "return_to": "index"})
+    assert added.status_code == 302 and added.headers["Location"].endswith(target)
+    holder = db.scalar(select(PermissionSetHolder).where(PermissionSetHolder.set_id == s.id))
+    removed = post(client, f"{base}/holders/{holder.id}/delete", {"return_to": "index"})
+    assert removed.status_code == 302 and removed.headers["Location"].endswith(target)
+    plain = post(client, f"{base}/holders", {"holder": f"team:{team.id}"})
+    assert plain.headers["Location"].endswith(base)
+    deleted = post(client, f"{base}/delete", {"return_to": "index"})
+    assert deleted.headers["Location"].endswith("/admin/permission-sets")
