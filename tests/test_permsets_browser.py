@@ -573,3 +573,18 @@ def test_an_expired_session_does_not_fill_the_panel_with_the_sign_in_page(page, 
     expect(panel.get_by_role("link", name="Open the set's own page")).to_have_attribute(
         "href", f"/admin/permission-sets/{permission_set.id}"
     )
+
+
+def test_a_click_on_empty_space_inside_the_panel_keeps_it_open(page, live_server, user_factory, team_factory, give_set):
+    holders_set(give_set, user_factory, team_factory)
+    open_page(page, live_server, user_factory)
+    card_of(page, "PMO").get_by_role("link", name="Holders and details").click()
+    panel = page.locator("dialog.perm-drawer")
+    expect(panel.get_by_role("button", name="Remove")).to_be_visible()
+    box = panel.bounding_box()
+    page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] - 40)
+    page.mouse.click(box["x"] + 0.5, box["y"] + box["height"] / 2)  # the left border
+    expect(panel).to_be_visible()
+    page.mouse.click(40, 400)
+    expect(panel).to_be_hidden()
+    clean(page)
