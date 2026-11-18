@@ -1,0 +1,12 @@
+{#- To the person, when their request is turned down. Never names who turned it down. -#}
+{% extends "mail/access/_layout.html" %}
+{% from "mail/access/_parts.html" import infosec_line %}
+{% block body %}
+<p style="margin: 0 0 14px;">Hi {{ name }},</p>
+<p style="margin: 0 0 14px;">Thank you for your interest in Progress Tracker. We are sorry, but your request for access, made on {{ asked }}, has not been approved this time, so you will not be able to sign in.</p>
+<p style="margin: 0 0 14px;">If you need access for your work, please ask your manager to contact the team who approve access. They will be happy to look at it again.</p>
+<p style="margin: 0 0 14px;">Kind regards,<br>The Progress Tracker team</p>
+{% endblock %}
+{% block footer %}
+{{ infosec_line("Did not ask for access to Progress Tracker? Tell the Infosec team:", infosec) }}
+{% endblock %}

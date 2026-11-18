@@ -4,7 +4,7 @@
 {% macro locked(key) %}{% if server_locked %}readonly{% else %}name="{{ key }}"{% endif %}{% endmacro %}
 {% block content %}
 <h1>Email settings</h1>
-<p class="page-lede">The mail server and the subject every tracker uses for its weekly report. Each tracker's recipients and message are set on its own Email tab.</p>
+<p class="page-lede">The mail server, the subject every tracker uses for its weekly report, and the emails about access requests. Each tracker's recipients and message are set on its own Email tab.</p>
 <div class="settings">
   <form method="post" action="{{ url_for('admin.smtp') }}">
     {{ csrf_field(csrf_token()) }}
@@ -69,6 +69,18 @@
       </details>
     </section>
 
+    <section class="settings-section" aria-labelledby="section-access">
+      <header class="settings-section-head">
+        <h2 id="section-access">Access requests</h2>
+        <p>When someone signs in with Microsoft for the first time, the people who manage users are emailed at once, and the person is emailed when they ask, are approved or are turned down.</p>
+      </header>
+      {% call setting('Infosec contact', 'Every access email ends with this address, for anyone who did not ask for access or does not recognise a request.', 'access_infosec_email') %}
+      <input id="access_infosec_email" name="access_infosec_email" type="email" value="{{ infosec }}" maxlength="254" required autocomplete="off" spellcheck="false" aria-describedby="access_infosec_email-help">
+      {% endcall %}
+      {% call setting('Remind approvers after (days)', 'Once a request has waited this many days, the people who manage users get one reminder a day listing every waiting request. 0 sends no reminder.', 'access_reminder_days') %}
+      <input id="access_reminder_days" name="access_reminder_days" inputmode="numeric" pattern="[0-9]*" value="{{ reminder_days }}" maxlength="2" required autocomplete="off" aria-describedby="access_reminder_days-help">
+      {% endcall %}
+    </section>
     <div class="settings-actions span-all">
       <button class="button primary" type="submit">Save</button>
     </div>

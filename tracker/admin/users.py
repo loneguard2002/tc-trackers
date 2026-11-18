@@ -32,6 +32,7 @@ from ..auth.roles import tracker_access_routes
 from ..db import get_session
 from ..ids import in_range, parse_id
 from ..listview import list_url
+from ..mail import access as access_mail
 from ..models import AuditLog, PermissionSet, PermissionSetHolder, Region, RegionGrant, Team, TeamMember, User
 from ..teams.tree import (
     ALREADY_MEMBER_MESSAGE,
@@ -140,21 +141,28 @@ def _actions(db, actor: User, user: User) -> dict[str, bool]:
     """The actions the actor may take on the user, so the row offers only those; none on a deleted person."""
     may_act = account_refusal(db, actor, user) is None
     actions = {
-        "approve": may_act and user.status == "pending",
+        "approve": may_act and user.status in ("pending", "declined"),
+        "decline": may_act and user.status == "pending",
         "enable": may_act and user.status == "disabled",
-        "disable": may_act and user.status != "disabled" and user.id != actor.id,
+        "disable": may_act and user.status not in ("disabled", "declined") and user.id != actor.id,
         "password": may_act and user.auth_source == "local",
         "switch": may_act
         and user.auth_source == "local"
         and user.status in ("active", "disabled")
         and current_app.config["SSO_ENABLED"],
         "set_admin": actor.is_admin and user.id != actor.id,
-        "delete": actor.is_admin and user.id != actor.id and user.status in ("disabled", "pending"),
+        "delete": actor.is_admin and user.id != actor.id and user.status in ("disabled", "pending", "declined"),
     }
     return dict.fromkeys(actions, False) if user.status == "deleted" else actions
 
 
-STATUS_FILTERS = {"active": "Active", "pending": "Awaiting approval", "disabled": "Disabled", "deleted": "Deleted"}
+STATUS_FILTERS = {
+    "active": "Active",
+    "pending": "Awaiting approval",
+    "declined": "Turned down",
+    "disabled": "Disabled",
+    "deleted": "Deleted",
+}
 ADMIN_FILTERS = {"yes": "Administrators", "no": "Not administrators"}
 # The keys of the Users view (lists.js writes sort, page and size to the address; the server filters are the others)
 # that a row action sends the reader back to.
@@ -237,6 +245,8 @@ def users():
         "admin/users.html",
         users=rows,
         pending=[user for user in everyone if user.status == "pending"],
+        declined=[user for user in everyone if user.status == "declined"],
+        declined_notes=_declined_notes(db, [user.id for user in everyone if user.status == "declined"]),
         total=len(everyone),
         active_count=sum(1 for user in rows if user.status == "active"),
         filters=filters,
@@ -316,7 +326,8 @@ def create_user():
 @bp.post("/users/<int:user_id>/approve")
 @permission_required("manage_users")
 def approve(user_id: int):
-    """Approve a pending user, optionally placing them in one team with a role (``manage_teams`` holders only).
+    """Approve a pending or turned-down user, optionally placing them in one team with a role (``manage_teams`` holders
+    only), and email them that they are approved.
 
     The person approved is never the actor (``account_refusal`` refuses one's own account), so the place cannot
     change the actor's own access and needs no self-promotion check. The person is locked as a delete locks them, so an
@@ -329,8 +340,9 @@ def approve(user_id: int):
     if refusal:
         return _refuse(refusal)
     _abort_if_deleted(user)
-    if user.status != "pending":
-        abort(400, description="Only a person awaiting approval can be approved.")
+    if user.status not in ("pending", "declined"):
+        abort(400, description="Only a person awaiting approval or turned down can be approved.")
+    was = user.status
     team, role, path = None, None, None
     if request.form.get("team_id", "").strip():
         if not has_permission(actor, "manage_teams"):
@@ -357,7 +369,7 @@ def approve(user_id: int):
         action="user_approved",
         entity="user",
         entity_id=user.id,
-        detail=change("pending", "active"),
+        detail=change(was, "active"),
         target_user_id=user.id,
     )
     if team is not None:
@@ -377,11 +389,67 @@ def approve(user_id: int):
     except IntegrityError:  # the team was deleted, or the person added to it, at the same moment
         db.rollback()
         abort(400, description="The team has changed since the page was opened. Please try again.")
+    if access_mail.approved(db, user, actor, path, role):
+        db.commit()
     if team is not None:
         flash(f"{user.full_name} is now active, as {role} in {team.name}.", "success")
     else:
         flash(f"{user.full_name} is now active.", "success")
     return redirect(url_for("admin.users"))
+
+
+@bp.post("/users/<int:user_id>/decline")
+@permission_required("manage_users")
+def decline(user_id: int):
+    """Turn down a person awaiting approval (design 2026-11-18) and email them. They keep their Microsoft link, so a
+    later sign-in shows that the request was not approved instead of asking again; Approve still lets them in."""
+    user = _get_user_or_404(user_id, lock=True)
+    db = get_session()
+    actor = current_user()
+    refusal = account_refusal(db, actor, user)
+    if refusal:
+        return _refuse(refusal)
+    _abort_if_deleted(user)
+    if user.status != "pending":
+        abort(400, description="Only a person awaiting approval can be turned down.")
+    user.status = "declined"
+    record(
+        db,
+        user_id=actor.id,
+        tracker_id=None,
+        action="user_declined",
+        entity="user",
+        entity_id=user.id,
+        detail=change("pending", "declined"),
+        target_user_id=user.id,
+    )
+    db.commit()
+    if access_mail.declined(db, user, actor):
+        db.commit()
+        flash(f"Turned down {user.full_name}. They have been emailed.", "success")
+    else:
+        flash(f"Turned down {user.full_name}.", "success")
+    return redirect(url_for("admin.users"))
+
+
+def _declined_notes(db, user_ids: list[int]) -> dict[int, dict]:
+    """For each turned-down person: when and by whom (the latest ``user_declined`` entry) and the latest sign-in tried
+    since (``sso_declined_attempt``)."""
+    notes: dict[int, dict] = {user_id: {"at": None, "by": None, "tried": None} for user_id in user_ids}
+    if not user_ids:
+        return notes
+    rows = db.execute(
+        select(AuditLog.target_user_id, AuditLog.action, AuditLog.at, User.full_name)
+        .outerjoin(User, User.id == AuditLog.user_id)
+        .where(AuditLog.target_user_id.in_(user_ids), AuditLog.action.in_(("user_declined", "sso_declined_attempt")))
+        .order_by(AuditLog.at, AuditLog.id)
+    )
+    for user_id, action, at, name in rows:
+        if action == "user_declined":
+            notes[user_id].update(at=at, by=name, tried=None)  # an attempt counts only after the latest turn-down
+        else:
+            notes[user_id]["tried"] = at
+    return notes
 
 
 @bp.post("/users/<int:user_id>/enable")

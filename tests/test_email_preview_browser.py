@@ -39,7 +39,7 @@ def drawn_pixels(page) -> int:
     return sum(1 for value in image.getdata() if value < 200)
 
 
-def test_preview_stays_drawn_when_the_week_changes(page, live_server, admin):
+def test_preview_stays_drawn_when_the_week_changes(page, live_server, admin):  # noqa: F811  (the imported fixture)
     page.set_viewport_size({"width": 1800, "height": 1100})  # wide: the preview sits in the sticky column
     page.goto(f"{live_server}/trackers/{admin.id}/mail")
     expect(page.frame_locator("[data-preview-frame]").locator(".mail-figures")).to_be_visible()

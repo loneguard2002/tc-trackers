@@ -58,6 +58,57 @@
         {% else %}
         <span class="muted">Only an administrator can approve this person.</span>
         {% endif %}
+        {% if actions[u.id].decline %}
+        {# Turning down can be undone (Approve, below), so it asks in the page without typing the email. #}
+        <form class="member-actions decline-form" method="post" action="{{ url_for('admin.decline', user_id=u.id) }}" data-inline-confirm
+          data-confirm="Turn down {{ u.full_name }}? They are emailed that their access was not approved.">
+          {{ csrf_field(csrf_token()) }}
+          <button class="button button-small danger" type="submit" data-ask>Turn down…</button>
+          <div class="confirm-box" data-confirm-box hidden>
+            <p><strong>Turn down {{ u.full_name }}?</strong> They get an email saying their access was not approved. If they sign in again they see that message, and nobody is emailed. You can still approve them later from Turned down, below.</p>
+            <div class="confirm-box-actions">
+              <button class="button danger" type="button" data-confirm-yes>Turn down</button>
+              <button class="button" type="button" data-confirm-no>Keep waiting</button>
+            </div>
+          </div>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if declined %}
+  <section class="settings-section declined-section" aria-labelledby="section-declined">
+    <header class="settings-section-head">
+      <h2 id="section-declined">Turned down <span class="count-pill">{{ declined|length }}</span></h2>
+      <p>They cannot sign in, and signing in again does not ask for access again. Approve someone here if the decision changes.</p>
+    </header>
+    <ul class="member-list">
+      {% for u in declined %}
+      {% set note = declined_notes[u.id] %}
+      <li class="member">
+        {{ person(u) }}
+        <span class="member-note">{% if note.at %}Turned down {{ note.at|fdate }}{% if note.by %} by {{ note.by }}{% endif %}{% endif %}{% if note.tried %} · tried to sign in again {{ note.tried|fdate }}{% endif %}</span>
+        {% if actions[u.id].approve %}
+        <form class="member-actions" method="post" action="{{ url_for('admin.approve', user_id=u.id) }}">
+          {{ csrf_field(csrf_token()) }}
+          {% if place_choices %}
+          <label class="sr-only" for="team-{{ u.id }}">Team for {{ u.full_name }}</label>
+          <select id="team-{{ u.id }}" name="team_id">
+            <option value="">No team</option>
+            {% for id, label in place_choices %}<option value="{{ id }}">{{ label }}</option>{% endfor %}
+          </select>
+          <label class="sr-only" for="team-role-{{ u.id }}">Role in the team for {{ u.full_name }}</label>
+          <select id="team-role-{{ u.id }}" name="team_role">
+            {% for r in roles %}<option value="{{ r }}">{{ r|title }}</option>{% endfor %}
+          </select>
+          {% endif %}
+          <button class="button button-small" type="submit">Approve</button>
+        </form>
+        {% endif %}
+        {% if actions[u.id].delete %}<a class="button button-small" href="{{ url_for('admin.delete', user_id=u.id) }}">Delete…</a>{% endif %}
       </li>
       {% endfor %}
     </ul>
@@ -113,7 +164,7 @@
         {% set can_do = actions[u.id] %}
         <tr data-status="{{ u.status }}" data-sort-name="{{ u.full_name }}" data-sort-status="{{ u.status }}" data-sort-admin="{{ 'Yes' if u.is_admin else 'No' }}" data-sort-sign-in="{{ sign_in_labels[u.auth_source] }}" data-sort-teams="{{ teams.get(u.id, [])|map('first')|join(', ') }}" data-sort-sets="{{ sets.get(u.id, [])|join(', ') }}">
           <td class="user-person"><div class="member-cell">{{ person(u) }}</div></td>
-          <td class="user-badge"><span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(u.status, 'muted') }}">{{ u.status|title }}</span></td>
+          <td class="user-badge"><span class="badge badge-{{ {'active': 'success', 'pending': 'warning', 'declined': 'danger'}.get(u.status, 'muted') }}">{{ 'Turned down' if u.status == 'declined' else u.status|title }}</span></td>
           <td class="user-badge">{% if u.is_admin %}<span class="admin-mark" title="Administrator">{{ icon('admin') }}<span class="sr-only">Administrator</span></span>{% else %}<span class="sr-only">Not an administrator</span>{% endif %}</td>
           <td class="user-badge"><span class="badge badge-muted" title="{{ sign_in_labels[u.auth_source] }}: {{ sign_in_meanings[u.auth_source] }}">{{ sign_in_labels[u.auth_source] }}</span></td>
           <td class="hide-narrow"><div class="chips">{% for path, role in teams.get(u.id, []) %}<span class="status-pill">{{ path }} · {{ role|title }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div></td>

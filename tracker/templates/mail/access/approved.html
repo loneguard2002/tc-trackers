@@ -1,0 +1,12 @@
+{#- To the person, when their access is approved. Never names who approved it. -#}
+{% extends "mail/access/_layout.html" %}
+{% from "mail/access/_parts.html" import button, infosec_line %}
+{% block body %}
+<p style="margin: 0 0 14px;">Hi {{ name }},</p>
+<p style="margin: 0;">The team has approved your access to Progress Tracker.{% if team %} You are in the team <strong>{{ team }}</strong> as {{ 'an' if role[:1] in 'aeiou' else 'a' }} {{ role }}, so you can open that team's trackers.{% endif %}</p>
+{{ button(app_url ~ "/", "Open Progress Tracker") }}
+<p style="margin: 0 0 14px; text-align: center; font-size: 14px; color: #4f5d75;">Sign in with Microsoft, as you did before.</p>
+{% endblock %}
+{% block footer %}
+{{ infosec_line("Did not ask for access to Progress Tracker? Tell the Infosec team:", infosec) }}
+{% endblock %}

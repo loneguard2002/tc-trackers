@@ -1,9 +1,24 @@
 {% extends "base.html" %}
+{% from "macros.html" import icon %}
 {% block content %}
-<section class="empty-state">
-  <span class="eyebrow">Awaiting approval</span>
-  <h1>Thank you{% if name %}, {{ name }}{% endif %}</h1>
-  <p>Your account has been created and is awaiting approval by an administrator. You will be able to sign in once it has been approved.</p>
-  <a class="button" href="{{ url_for('auth.login') }}">Back to sign in</a>
+{# After a first (or repeated) Microsoft sign-in while the request waits (design 2026-11-18). #}
+<section class="access-card" aria-labelledby="access-title">
+  {% include "_access_card.html" %}
+  <div class="access-card-body">
+    <div class="access-state">
+      <span class="access-mark access-mark-wait" aria-hidden="true">{{ icon('clock') }}</span>
+      <div>
+        <p class="access-eyebrow access-eyebrow-wait">Waiting for approval</p>
+        <h1 id="access-title">Thanks, {{ first_name }}. Your access request has been sent.</h1>
+      </div>
+    </div>
+    <p class="access-text">You signed in with Microsoft as <strong>{{ person.email }}</strong>. Before you can use Progress Tracker, someone who manages users needs to approve your access.</p>
+    <ol class="access-steps">
+      <li class="is-done"><span class="access-step-mark" aria-hidden="true">{{ icon('check') }}</span><span><strong>Signed in with Microsoft</strong><span class="access-step-note">{{ asked.strftime('%d %b %Y at %H:%M UTC') }}</span></span></li>
+      <li class="is-current"><span class="access-step-mark" aria-hidden="true">2</span><span><strong>Waiting for an approver</strong><span class="access-step-note">{% if emailed %}We have emailed the team who approve access.{% else %}The team who approve access will see it when they next open Progress Tracker.{% endif %}</span></span></li>
+      <li><span class="access-step-mark" aria-hidden="true">3</span><span><strong>{% if emailed %}You get an email when you are approved{% else %}You can sign in once you are approved{% endif %}</strong><span class="access-step-note">Then sign in with Microsoft again. You do not need to do anything else now.</span></span></li>
+    </ol>
+    <a class="button access-back" href="{{ url_for('auth.login') }}">Back to sign in</a>
+  </div>
 </section>
 {% endblock %}

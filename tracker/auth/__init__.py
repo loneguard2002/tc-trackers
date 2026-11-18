@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, current_app, redirect, render_template, request, session, url_for
+from datetime import timezone
+
+from flask import Blueprint, current_app, redirect, render_template, request, url_for
+from flask import session as browser_session  # ``session`` here is this package's own module, imported below
 
 from ..audit import record
 from ..db import get_session
@@ -135,7 +138,33 @@ def logout():
     return redirect(url_for("auth.login"))
 
 
+def _access_page(session_key: str, status: str, template: str, title: str):
+    """The page after a Microsoft sign-in that cannot go on: the request waits, or it was turned down. The callback
+    names the person in the session once; anything else goes back to the sign-in page."""
+    from ..mail import access  # here: the mail package imports views that need this blueprint's helpers
+
+    db = get_session()
+    user_id = browser_session.pop(session_key, None)
+    person = db.get(User, user_id) if isinstance(user_id, int) else None
+    if person is None or person.status != status:
+        return redirect(url_for("auth.login"))
+    return render_template(
+        template,
+        person=person,
+        first_name=access.first_name(person),
+        asked=person.created_at.astimezone(timezone.utc),
+        emailed=access.mail_configured(db),
+        infosec=access.infosec_email(db),
+        page_title=title,
+        bare_page=True,
+    )
+
+
 @bp.get("/auth/pending")
 def pending():
-    name = session.pop("pending_name", None)
-    return render_template("sso_pending.html", name=name, page_title="Awaiting approval")
+    return _access_page("pending_user_id", "pending", "sso_pending.html", "Access requested")
+
+
+@bp.get("/auth/declined")
+def declined():
+    return _access_page("declined_user_id", "declined", "sso_declined.html", "Access not approved")

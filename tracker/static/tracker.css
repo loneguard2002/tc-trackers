@@ -41,6 +41,8 @@ h2 { font-size: 1.15rem; margin: 0 0 .5rem; }
 .nav-link { display: flex; align-items: center; gap: 13px; width: 100%; min-height: 45px; padding: 0 13px; border: 0; border-radius: var(--radius); background: transparent; color: var(--muted); font: inherit; font-size: 16px; font-weight: 600; text-align: left; text-decoration: none; cursor: pointer; transition: background-color .15s, color .15s; }
 .nav-link:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
 .nav-link.active { color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); font-weight: 700; }
+/* Access requests waiting, beside Users for the people who approve them (design 2026-11-18). */
+.nav-count { margin-left: auto; min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--warning); color: var(--surface); font-size: .75rem; font-weight: 700; line-height: 1.5; text-align: center; }
 .sidebar-actions { display: grid; gap: 5px; margin-top: auto; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--text) 14%, var(--bg)); }
 .sidebar-actions form { margin: 0; }
 .app-version { align-self: flex-start; margin: 12px 12px 0; padding: 4px 7px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font: 700 12px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .03em; }
@@ -81,6 +83,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
   [data-sidebar="collapsed"] .sidebar { overflow: visible; }
   [data-sidebar="collapsed"] .nav-link { position: relative; justify-content: center; padding: 0; }
   [data-sidebar="collapsed"] .nav-link > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  [data-sidebar="collapsed"] .nav-link > .nav-count { top: 4px; right: 10px; width: auto; height: auto; min-width: 18px; padding: 0 5px; overflow: visible; clip: auto; }
   [data-sidebar="collapsed"] .nav-heading { height: 1px; margin: 12px 8px; overflow: hidden; background: color-mix(in srgb, var(--text) 14%, var(--bg)); font-size: 0; }
   [data-sidebar="collapsed"] .app-version { display: none; }
   [data-sidebar="collapsed"] .nav-link::after { content: attr(data-label); position: absolute; top: 50%; left: calc(100% + 10px); z-index: 1050; padding: 5px 9px; border-radius: 6px; background: var(--topbar-bg); color: #fff; font-size: 13px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transform: translateY(-50%); transition: opacity .12s; }
@@ -129,6 +132,35 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .ms-signin:hover { background: #f3f3f3; color: #5e5e5e; }
 .ms-signin svg { flex: none; }
 .ms-signin span { white-space: nowrap; }
+/* The pages after a Microsoft sign-in that cannot go on: access requested, or not approved (design 2026-11-18). */
+.access-card { width: min(540px, 100%); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--raised); box-shadow: var(--card-shadow); }
+.access-card-head { display: flex; align-items: center; gap: 14px; padding: 16px 28px; background: var(--topbar-bg); }
+.access-card-head .signin-logo img { width: 120px; }
+.access-card-body { display: grid; gap: 18px; padding: 28px 32px; }
+.access-state { display: flex; align-items: center; gap: 16px; }
+.access-state h1 { margin: 2px 0 0; font-size: 1.3rem; text-wrap: balance; }
+.access-mark { display: grid; flex: none; place-items: center; width: 52px; height: 52px; border: 2px solid; border-radius: 50%; }
+.access-mark .icon { width: 24px; height: 24px; }
+.access-mark-wait { border-color: color-mix(in srgb, var(--warning) 55%, var(--surface)); background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--warning); }
+.access-mark-no { border-color: color-mix(in srgb, var(--danger) 55%, var(--surface)); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--danger); }
+.access-eyebrow { margin: 0; font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.access-eyebrow-wait { color: var(--warning); }
+.access-eyebrow-no { color: var(--danger); }
+.access-text { margin: 0; color: var(--muted); line-height: 1.55; }
+.access-text strong { color: var(--text); }
+.access-steps { margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); list-style: none; }
+.access-steps li { display: flex; gap: 12px; padding: 12px 16px; }
+.access-steps li + li { border-top: 1px solid var(--border); }
+.access-steps li > span:last-child { display: grid; gap: 2px; font-size: .875rem; }
+.access-step-note { color: var(--muted); font-size: .8125rem; }
+.access-step-mark { display: grid; flex: none; place-items: center; width: 24px; height: 24px; box-sizing: border-box; border: 2px solid var(--border); border-radius: 50%; color: var(--muted); font-size: .75rem; font-weight: 700; }
+.access-step-mark .icon { width: 14px; height: 14px; }
+.access-steps .is-done .access-step-mark { border-color: transparent; background: color-mix(in srgb, var(--success) 16%, var(--surface)); color: var(--success); }
+.access-steps .is-current { background: color-mix(in srgb, var(--warning) 6%, var(--surface)); }
+.access-steps .is-current .access-step-mark { border-color: var(--warning); color: var(--warning); }
+.access-foot { margin: 0; padding-top: 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; }
+.access-back { justify-self: start; min-height: 44px; }
+@media (max-width: 560px) { .access-card-body { padding: 22px 20px; } .access-card-head { padding: 14px 20px; } }
 @media (max-width: 560px) {
   .signin { grid-template-columns: minmax(0, 1fr); }
   .signin-brand { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 18px 20px; }
@@ -591,6 +623,11 @@ main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-heigh
 .member-name { display: block; font-weight: 600; }
 .member-email { display: block; color: var(--muted); font-size: .8125rem; overflow-wrap: anywhere; }
 .member-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Access requests on the Users page (design 2026-11-18): the turn-down question opens under the row; a turned-down
+   person shows when and by whom. */
+.decline-form:has([data-confirm-box]:not([hidden])) { flex-basis: 100%; }
+.member-note { flex: 1 1 100%; order: 1; color: var(--muted); font-size: .8125rem; }
+.declined-section .settings-section-head h2 { display: flex; align-items: center; gap: 8px; }
 .member-actions form { display: flex; align-items: center; gap: 8px; margin: 0; }
 .member-actions select { width: auto; padding: 6px 10px; font-size: .875rem; }
 .empty-note { margin: 0; padding: 16px 20px; color: var(--muted); font-size: .875rem; }

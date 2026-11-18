@@ -38,7 +38,7 @@
       <h2 id="person-name">{{ person.full_name }}</h2>
       <p class="member-email">{{ person.email }}</p>
       <div class="access-badges">
-        <span class="badge badge-{{ {'active': 'success', 'pending': 'warning'}.get(person.status, 'muted') }}">{{ person.status|title }}</span>
+        <span class="badge badge-{{ {'active': 'success', 'pending': 'warning', 'declined': 'danger'}.get(person.status, 'muted') }}">{{ 'Turned down' if person.status == 'declined' else person.status|title }}</span>
         {% if person.is_admin %}<span class="badge badge-info">{{ icon('admin') }}<span aria-hidden="true">Admin</span><span class="sr-only">Administrator</span></span>{% endif %}
         <span class="badge badge-muted" title="{{ sign_in_labels[person.auth_source] }}: {{ sign_in_meanings[person.auth_source] }}">{{ sign_in_labels[person.auth_source] }}</span>
       </div>

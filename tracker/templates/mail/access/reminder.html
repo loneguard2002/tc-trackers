@@ -1,0 +1,16 @@
+{#- To the approvers, once a day while requests wait longer than the reminder setting. -#}
+{% extends "mail/access/_layout.html" %}
+{% from "mail/access/_parts.html" import button, infosec_line %}
+{% block body %}
+<p style="margin: 0 0 14px;">Hello,</p>
+<p style="margin: 0 0 14px;">{{ rows|length }} access request{{ ' is' if rows|length == 1 else 's are' }} still waiting after {{ days }} day{{ '' if days == 1 else 's' }}:</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 0 0 6px; font-size: 14px; line-height: 20px;">
+<tr><th align="left" style="padding: 6px 12px 6px 0; border-bottom: 1px solid #b4c1d3; color: #4f5d75;">Name</th><th align="left" style="padding: 6px 12px 6px 0; border-bottom: 1px solid #b4c1d3; color: #4f5d75;">Email</th><th align="left" style="padding: 6px 0; border-bottom: 1px solid #b4c1d3; color: #4f5d75;">Asked</th></tr>
+{% for person, asked in rows %}<tr><td style="padding: 6px 12px 6px 0; border-bottom: 1px solid #dfe6f1; font-weight: bold;">{{ person.full_name }}</td><td style="padding: 6px 12px 6px 0; border-bottom: 1px solid #dfe6f1;">{{ person.email }}</td><td style="padding: 6px 0; border-bottom: 1px solid #dfe6f1;">{{ asked }}</td></tr>
+{% endfor %}</table>
+{{ button(app_url ~ "/admin/users", "Review access requests") }}
+{% endblock %}
+{% block footer %}
+<p style="margin: 0;">You get this because you can manage users in Progress Tracker. The number of days is set in Email settings.</p>
+{{ infosec_line("Do not recognise a person or a request? Do not approve it, and tell the Infosec team:", infosec) }}
+{% endblock %}

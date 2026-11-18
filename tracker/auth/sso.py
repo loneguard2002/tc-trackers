@@ -46,13 +46,13 @@ def sso_start():
 
 
 def _resolve_user(db, subject: str, claims: dict, full_name: str):
-    """Return (user, refusal message). Matches by subject first, then links or creates by email."""
+    """Return (user, refusal message, created). Matches by subject first, then links or creates by email."""
     user = db.scalar(select(User).where(User.sso_subject == subject))
     if user is not None:
-        return user, None
+        return user, None, False
     email = (claims.get("email") or claims.get("preferred_username") or "").strip().lower()
     if not email:
-        return None, "Sign-in failed: no email address was returned by the identity provider."
+        return None, "Sign-in failed: no email address was returned by the identity provider.", False
     user = find_by_email(db, email)
     if user is None:
         user = User(
@@ -75,11 +75,11 @@ def _resolve_user(db, subject: str, claims: dict, full_name: str):
             target_user_id=user.id,
             detail={"email": email, "source": "sso", "status": "pending", "sso_subject": subject},
         )
-        return user, None
+        return user, None, True
     if user.auth_source != "sso":
-        return None, REFUSED_PASSWORD_ACCOUNT
+        return None, REFUSED_PASSWORD_ACCOUNT, False
     if user.sso_subject is not None:
-        return None, "Sign-in failed: this email address is linked to a different Microsoft account."
+        return None, "Sign-in failed: this email address is linked to a different Microsoft account.", False
     user.sso_subject = subject
     record(
         db,
@@ -91,7 +91,7 @@ def _resolve_user(db, subject: str, claims: dict, full_name: str):
         target_user_id=user.id,
         detail={"sso_subject": subject},
     )
-    return user, None
+    return user, None, False
 
 
 @bp.get("/auth/callback")
@@ -119,7 +119,7 @@ def sso_callback():
     full_name = claims.get("name") or email_hint
 
     db = get_session()
-    user, refusal = _resolve_user(db, subject, claims, full_name)
+    user, refusal, created = _resolve_user(db, subject, claims, full_name)
     if refusal:
         db.rollback()
         return _fail(refusal)
@@ -139,8 +139,21 @@ def sso_callback():
     db.commit()
 
     if user.status == "pending":
-        session["pending_name"] = full_name
+        if created:  # a first sign-in: tell the approvers and the person (design 2026-11-18)
+            from ..mail import access  # here: the mail package imports views that need this blueprint's helpers
+
+            access.request_received(db, user)
+            db.commit()
+        session["pending_user_id"] = user.id
         return redirect(url_for("auth.pending"))
+    if user.status == "declined":  # turned down: the message again, no new request and nobody emailed
+        record(
+            db, user_id=None, tracker_id=None, action="sso_declined_attempt", entity="user", entity_id=user.id,
+            target_user_id=user.id,
+        )  # fmt: skip
+        db.commit()
+        session["declined_user_id"] = user.id
+        return redirect(url_for("auth.declined"))
     if user.status != "active":
         return _fail("Your account is inactive. Contact your administrator.")
 
