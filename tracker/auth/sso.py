@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from flask import Blueprint, current_app, flash, redirect, request, session, url_for
+from itsdangerous import BadSignature, URLSafeTimedSerializer
 from sqlalchemy import select
 
 from ..audit import change, record
@@ -35,14 +36,51 @@ def _fail(message: str):
 
 
 REFUSED_PASSWORD_ACCOUNT = "This account signs in with a password. Ask an administrator for help."
+EXPIRED_MESSAGE = "Sign-in failed: the sign-in request has expired. Please try again."
+
+# Microsoft returns the person by posting a form (response_mode=form_post), so the one-time code never appears in an
+# address, a browser history or an access log. A browser sends no SameSite=Lax cookie, the session's included, with a
+# form posted from another site, so the sign-in in progress (MSAL's flow: state, nonce and the PKCE verifier) travels in
+# its own signed cookie instead: SameSite=None, Secure and HttpOnly, sent only to the callback, good for ten minutes and
+# removed by the callback whatever happens.
+FLOW_COOKIE = "pt_sso_flow"
+FLOW_MAX_AGE_SECONDS = 600
+
+
+def _flow_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(current_app.secret_key, salt="sso-flow")
+
+
+def _read_flow() -> dict | None:
+    raw = request.cookies.get(FLOW_COOKIE)
+    if not raw:
+        return None
+    try:
+        flow = _flow_serializer().loads(raw, max_age=FLOW_MAX_AGE_SECONDS)
+    except BadSignature:  # tampered, or older than FLOW_MAX_AGE_SECONDS (SignatureExpired)
+        return None
+    return flow if isinstance(flow, dict) else None
+
+
+def _forget_flow(response):
+    response.delete_cookie(FLOW_COOKIE, path=url_for("sso.sso_callback"), secure=True, httponly=True, samesite="None")
+    return response
 
 
 @bp.get("/auth/sso")
 def sso_start():
-    # The flow carries state, nonce and the PKCE verifier; it is single use and kept only in the session.
-    flow = _msal_app().initiate_auth_code_flow(scopes=[], redirect_uri=_redirect_uri())
-    session["sso_flow"] = flow
-    return redirect(flow["auth_uri"])
+    flow = _msal_app().initiate_auth_code_flow(scopes=[], redirect_uri=_redirect_uri(), response_mode="form_post")
+    response = redirect(flow["auth_uri"])
+    response.set_cookie(
+        FLOW_COOKIE,
+        _flow_serializer().dumps(flow),
+        max_age=FLOW_MAX_AGE_SECONDS,
+        path=url_for("sso.sso_callback"),
+        secure=True,
+        httponly=True,
+        samesite="None",
+    )
+    return response
 
 
 def _resolve_user(db, subject: str, claims: dict, full_name: str):
@@ -94,14 +132,18 @@ def _resolve_user(db, subject: str, claims: dict, full_name: str):
     return user, None, False
 
 
-@bp.get("/auth/callback")
+@bp.route("/auth/callback", methods=["GET", "POST"])
 def sso_callback():
-    flow = session.pop("sso_flow", None)
-    if not isinstance(flow, dict):
-        return _fail("Sign-in failed: the sign-in request has expired. Please try again.")
+    """Where Microsoft posts the sign-in result. It carries no CSRF token (auth/csrf.py exempts this endpoint): MSAL
+    checks the posted state against the flow cookie, which only this app can sign. A GET has no flow to finish."""
+    flow = _read_flow() if request.method == "POST" else None
+    response = _finish_sign_in(flow, request.form.to_dict()) if flow else _fail(EXPIRED_MESSAGE)
+    return _forget_flow(response)
 
+
+def _finish_sign_in(flow: dict, auth_response: dict):
     try:
-        result = _msal_app().acquire_token_by_auth_code_flow(flow, request.args.to_dict())
+        result = _msal_app().acquire_token_by_auth_code_flow(flow, auth_response)
     except ValueError:
         current_app.logger.warning("SSO state mismatch")
         return _fail("Sign-in failed: invalid state. Please try again.")

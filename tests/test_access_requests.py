@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from conftest import TENANT, post, sign_in
 from sqlalchemy import select
-from test_sso import FakeMsal, claims, location, start
+from test_sso import FakeMsal, callback, claims, location, start
 
 from tracker.mail import access, smtp
 from tracker.models import AppSetting, AuditLog, User
@@ -41,7 +41,7 @@ def test_first_sign_in_emails_the_approvers_and_the_person(sso_client, monkeypat
     admin = user_factory(is_admin=True, email="boss@example.com")
     user_factory(email="viewer@example.com")  # holds no manage_users: not an approver
     start(sso_client, monkeypatch, FakeMsal(claims(name="Sam Taylor", email="sam@example.com")))
-    response = sso_client.get("/auth/callback?code=c&state=s")
+    response = callback(sso_client)
     assert location(response).endswith("/auth/pending")
     to_team, to_person = outbox
     assert to_team["Subject"] == "Progress Tracker: Sam Taylor is asking for access"
@@ -63,7 +63,7 @@ def test_first_sign_in_emails_the_approvers_and_the_person(sso_client, monkeypat
 def test_emails_carry_the_logo_inline_for_outlook(sso_client, monkeypatch, db, user_factory, outbox, mail_on):
     user_factory(is_admin=True)
     start(sso_client, monkeypatch, FakeMsal(claims()))
-    sso_client.get("/auth/callback?code=c&state=s")
+    callback(sso_client)
     for msg in outbox:
         logo = [part for part in msg.walk() if part.get_content_type() == "image/jpeg"]
         assert [part["Content-ID"] for part in logo] == ["<tradition-logo>"]
@@ -76,7 +76,7 @@ def test_without_a_mail_server_nobody_is_emailed_and_the_page_says_so(
 ):
     user_factory(is_admin=True)
     start(sso_client, monkeypatch, FakeMsal(claims()))
-    sso_client.get("/auth/callback?code=c&state=s")
+    callback(sso_client)
     assert outbox == []
     page = sso_client.get("/auth/pending").get_data(as_text=True)
     assert "will see it when they next open Progress Tracker" in page
@@ -86,7 +86,7 @@ def test_a_waiting_person_signing_in_again_emails_nobody(sso_client, monkeypatch
     user_factory(is_admin=True)
     user_factory(auth_source="sso", password_hash=None, sso_subject=f"{TENANT}:oid-1", status="pending")
     start(sso_client, monkeypatch, FakeMsal(claims()))
-    assert location(sso_client.get("/auth/callback?code=c&state=s")).endswith("/auth/pending")
+    assert location(callback(sso_client)).endswith("/auth/pending")
     assert outbox == []
 
 
@@ -130,7 +130,7 @@ def test_a_turned_down_person_sees_the_message_and_nobody_is_emailed(sso_client,
     user_factory(is_admin=True)
     person = user_factory(auth_source="sso", password_hash=None, sso_subject=f"{TENANT}:oid-1", status="declined")
     start(sso_client, monkeypatch, FakeMsal(claims()))
-    assert location(sso_client.get("/auth/callback?code=c&state=s")).endswith("/auth/declined")
+    assert location(callback(sso_client)).endswith("/auth/declined")
     assert outbox == []
     assert [entry.target_user_id for entry in actions(db, "sso_declined_attempt")] == [person.id]
     with sso_client.session_transaction() as sess:
