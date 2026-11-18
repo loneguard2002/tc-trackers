@@ -62,7 +62,7 @@
     <header class="settings-section-head has-action">
       <div>
         <h2 id="section-register">Risks</h2>
-        <p>Open risks appear in the report's Top risks table, in the order shown here. Closed risks stay on record but drop off the report.</p>
+        <p>Open risks appear in the report's Top risks table, in RAG order, worst first. Closed risks stay on record but drop off the report.</p>
       </div>
       {% if active %}<a class="button primary button-small" href="{{ url_for('entries.new_risk', tracker_id=tracker.id) }}">{{ icon('plus') }}Add a risk</a>{% endif %}
     </header>
@@ -72,7 +72,7 @@
       {{ status_filters('risks-table', 'risks', (
         ('all', 'All open'), ('red', rag_dot('Red') ~ 'Red'), ('amber', rag_dot('Amber') ~ 'Amber'), ('green', rag_dot('Green') ~ 'Green'),
         ('none', rag_dot(none) ~ 'Not rated'), ('overdue', 'Past target date')),
-        {'all': counts.open, 'red': counts.Red, 'amber': counts.Amber, 'green': counts.Green, 'none': counts.none, 'overdue': counts.overdue}) }}
+        {'all': counts.open, 'red': counts.Red, 'amber': counts.Amber, 'green': counts.Green, 'none': counts.none, 'overdue': counts.overdue}, alerts=('overdue',)) }}
       {{ clear_filters('risks-table') }}
     </div>
     <div class="section-table register risk-table" data-table-frame>
@@ -89,7 +89,8 @@
     <p class="empty-note">No open risks.{% if active %} Add one when something could stop the work finishing on time.{% endif %}</p>
     {% endif %}
     {% if closed %}
-    <details class="closed-block">
+    {% set ns_closed = namespace(saved=false) %}{% for key in request.args %}{% if key.startswith('closed-') %}{% set ns_closed.saved = true %}{% endif %}{% endfor %}
+    <details class="closed-block"{% if ns_closed.saved %} open{% endif %}>
       <summary>Closed risks ({{ closed|length }})</summary>
       <div class="section-table register risk-table" data-table-frame>
         <table id="closed-risks-table" class="table" data-sortable data-state-prefix="closed-">

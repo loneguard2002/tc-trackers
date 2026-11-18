@@ -65,7 +65,7 @@
     <header class="settings-section-head has-action">
       <div>
         <h2 id="section-groups">{{ label|plural }}</h2>
-        <p>Each {{ label|lower }} has its own scope and status. They appear on the report in this order; retired {{ label|lower|plural }} drop off it.</p>
+        <p>Each {{ label|lower }} has its own scope and status. They appear on the report in the default order set here, whatever the table is sorted by; retired {{ label|lower|plural }} drop off it.</p>
       </div>
       {% if manage %}<a class="button primary button-small" href="{{ url_for('trackers.new_group', tracker_id=tracker.id) }}">{{ icon('plus') }}Add a {{ label|lower }}</a>{% endif %}
     </header>
@@ -92,7 +92,7 @@
         {% set ns.ready = ns.ready + group.ready_not_complete %}
         {% endfor %}
         <tfoot><tr class="group-total">
-          <th scope="row">All {{ label|lower|plural }}</th>
+          <th scope="row">All active {{ label|lower|plural }}</th>
           <td class="group-progress-cell">
             <span class="group-progress-line">{{ bar(ns.done, ns.scope, extra=ns.ready, label=ns.done ~ ' of ' ~ ns.scope ~ ' complete') }}
               <span class="group-pct">{{ (ns.done / ns.scope if ns.scope else none)|pct }}</span></span>

@@ -190,6 +190,7 @@ def test_search_filters_cards_and_list_with_footer_and_clear(page, live_server, 
     expect(page.get_by_role("searchbox")).to_have_value("")
     expect(page.locator("[data-filter=all]")).to_have_attribute("aria-pressed", "true")
     expect(clear).to_be_hidden()
+    expect(page.get_by_role("searchbox")).to_be_focused()  # the button hid, so the focus moved to the search box
     assert "q=" not in page.url and "filter=" not in page.url and "layout=list" in page.url
     clean(page)
 
@@ -198,12 +199,11 @@ def test_footer_uses_the_singular_and_counts_archived_only_when_shown(
     page, live_server, db, tracker_factory, user_factory
 ):
     tracker_factory(name="Only one")
-    old = tracker_factory(name="Old one", status="archived")
+    tracker_factory(name="Old one", status="archived")
     open_home(page, live_server, user_factory)
     expect(page.locator("[data-home-count]")).to_have_text("Showing 1 of 1 tracker")
     page.goto(live_server + "/?archived=1")
     expect(page.locator("[data-home-count]")).to_have_text("Showing 2 of 2 trackers")
-    assert old.name
 
 
 def test_heading_sort_and_the_sort_select_agree_and_cards_follow(page, live_server, tracker_factory, user_factory):
@@ -277,4 +277,25 @@ def test_layout_in_the_address_wins_over_the_remembered_one(page, live_server, t
     page.goto(live_server + "/?layout=cards")
     expect(page.locator("[data-layout=cards]")).to_have_attribute("aria-pressed", "true")
     expect(page.locator("[data-home-cards]")).to_be_visible()
+    clean(page)
+
+
+def test_a_filter_whose_chip_is_not_shown_is_ignored(page, live_server, tracker_factory, user_factory):
+    tracker_factory(name="Plain")  # nothing disagrees with its forecast, so that chip is not drawn
+    open_home(page, live_server, user_factory, "?filter=disagree")
+    expect(page.locator("[data-filter=disagree]")).to_have_count(0)
+    expect(page.locator("[data-filter=all]")).to_have_attribute("aria-pressed", "true")
+    expect(page.locator("[data-home-cards] [data-card]:visible")).to_have_count(1)
+    assert "filter=" not in page.url
+    clean(page)
+
+
+def test_names_sort_in_natural_order(page, live_server, tracker_factory, user_factory):
+    for name in ("Tracker 10", "Tracker 5", "Tracker 1"):
+        tracker_factory(name=name)
+    open_home(page, live_server, user_factory, "?sort=name")
+    assert names(page, "cards") == ["tracker 1", "tracker 5", "tracker 10"]
+    sort = page.locator("[data-home-sort]")
+    sort.select_option("-name")
+    assert names(page, "cards") == ["tracker 10", "tracker 5", "tracker 1"]
     clean(page)

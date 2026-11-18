@@ -32,7 +32,7 @@
     {% endfor %}
     </tbody>
   </table>
-  {{ no_match('No holders match this search.', table_id) }}
+  {{ no_match('No holders match.', table_id) }}
 </div>
 {{ table_pager(table_id, 'holders', 'holder', holders|length) }}
 {%- endmacro %}

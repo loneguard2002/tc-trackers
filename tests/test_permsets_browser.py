@@ -9,6 +9,8 @@ from conftest import browser_sign_in
 from playwright.sync_api import expect
 from test_report_page_browser import RECORDER
 
+from tracker.models import PermissionSetHolder
+
 pytestmark = pytest.mark.browser
 
 
@@ -1061,3 +1063,22 @@ def test_the_panels_holders_table_works_and_leaves_the_address_to_the_panel(
     assert page.url.split("?", 1)[1].startswith("set=")
     assert "q=" not in page.url and "filter=" not in page.url
     clean(page)
+
+
+def test_the_holders_heading_sticks_under_the_section_links(page, live_server, db, user_factory, give_set):
+    permission_set = give_set(["view_activity"], user=user_factory(), name="PMO")
+    for number in range(40):
+        db.add(PermissionSetHolder(set_id=permission_set.id, user_id=user_factory(full_name=f"Holder {number:02d}").id))
+    db.commit()
+    page.set_viewport_size({"width": 1440, "height": 800})
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(f"{live_server}/admin/permission-sets/{permission_set.id}")
+    expect(page.locator(".subnav")).to_be_visible()
+    page.evaluate("document.querySelector('#holders-table tbody').rows[22].scrollIntoView({block: 'center'})")
+    page.wait_for_timeout(300)
+    heading = page.evaluate("document.querySelector('#holders-table th').getBoundingClientRect().top")
+    links = page.evaluate("document.querySelector('.subnav').getBoundingClientRect().bottom")
+    assert abs(heading - links) <= 1.5, (heading, links)
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []

@@ -330,6 +330,7 @@ def test_home_has_a_search_box_sort_headings_and_a_footer(client, logged_in_admi
     values = re.findall(r'<option value="([^"]+)"', select)
     for key in heads + ["target"]:
         assert key in values and "-" + key in values
+    assert ">Needs attention last</option>" in select and "Needs attention first, reversed" not in select
     assert "data-home-count" in page and 'data-clear-for="home"' in page
     assert re.search(r"data-home-footer hidden", page)
 

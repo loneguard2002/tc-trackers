@@ -1215,6 +1215,49 @@ def test_table_headings_stick_under_the_section_links(page, live_server, tracker
     _clean(page)
 
 
+# 30 rows, 5 of them data-uncounted, with an All chip and a pager, built after load: footer and chip must agree.
+UNCOUNTED_TABLE = """
+() => {
+  var box = document.createElement("div");
+  box.innerHTML =
+    '<div class="chips" data-status-for="un-table" hidden>' +
+    '<button type="button" class="chip" data-status="all" aria-pressed="true">All ' +
+    '<span data-count></span></button></div>' +
+    '<div class="section-table list-table"><table id="un-table"><thead><tr><th scope="col">Name</th></tr></thead>' +
+    '<tbody></tbody></table></div>' +
+    '<div data-pager-for="un-table"><p data-pager-count data-noun-many="people" data-noun-one="person"></p>' +
+    '<nav data-pager-controls hidden><select data-pager-size><option value="25" selected>25</option></select>' +
+    '<button type="button" data-pager-prev>Previous</button><span data-pager-pages></span>' +
+    '<button type="button" data-pager-next>Next</button></nav></div>';
+  var body = box.querySelector("tbody");
+  for (var n = 0; n < 30; n += 1) {
+    var row = body.insertRow();
+    if (n >= 25) row.setAttribute("data-uncounted", "");
+    row.insertCell().textContent = "Row " + n;
+  }
+  document.querySelector("main").appendChild(box);
+  window.unTable = box.querySelector("table");
+}
+"""
+
+
+def test_the_paged_footer_leaves_uncounted_rows_out_of_its_total(
+    page, live_server, tracker_factory, user_factory, grant
+):
+    tracker = tracker_factory(name="Count tracker")
+    user = user_factory()
+    grant(user, tracker, "editor")
+    _open(page, live_server, user, f"/trackers/{tracker.id}/risks/new")
+    page.add_script_tag(url=f"{live_server}/static/lists.js")
+    page.evaluate(UNCOUNTED_TABLE)
+    page.evaluate("window.trackerLists.setUp(window.unTable)")
+    chip = page.locator('[data-status-for="un-table"] [data-count]').inner_text()
+    assert chip == "25"
+    foot = page.locator('[data-pager-for="un-table"] [data-pager-count]').inner_text()
+    assert foot == "Showing 1\u201325 of 25 people", foot
+    _clean(page)
+
+
 # --- data-no-address -------------------------------------------------------------------------------------------------
 
 NO_ADDRESS = """

@@ -36,7 +36,7 @@
         <tbody>
         {% for row in access %}
         {% set u = row.user %}
-        <tr data-status="{{ row.role }}" data-search="{{ (u.full_name ~ ' ' ~ u.email)|lower }}" data-sort-person="{{ u.full_name }}" data-sort-role="{{ ranks[row.role] }}">
+        <tr data-status="{{ row.role }}" data-search="{{ (u.full_name ~ ' ' ~ u.email ~ (' administrator' if row.admin else '') ~ (' direct' if row.direct_role and not row.admin else '') ~ ' ' ~ (row.teams|map(attribute='team_name')|join(' ')) ~ (' region ' ~ (row.regions|map(attribute='code')|join(' ')) if row.regions else '') ~ (' permission set ' ~ (row.view_all_sets|join(' ')) if row.view_all_sets else ''))|lower }}" data-sort-person="{{ u.full_name }}" data-sort-role="{{ ranks[row.role] }}">
           <td><div class="member-cell">{{ person(u) }}</div></td>
           <td data-label="Role:">{{ row.role|title }}</td>
           <td data-label="">
@@ -72,7 +72,7 @@
         {% endfor %}
         </tbody>
       </table>
-      {{ no_match('No one matches this search.', 'access-table') }}
+      {{ no_match('No one matches.', 'access-table') }}
     </div>
     {{ table_pager('access-table', 'people', 'person', access|length) }}
   </section>
