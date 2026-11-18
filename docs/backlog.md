@@ -40,3 +40,4 @@ Scope to settle in the spec:
 ## 4. Small interface changes
 
 - **Email page preview** (`mail/settings.html`, `.email-layout` and `.mail-frame .email-preview` in `tracker.css`): make the preview column about 20% wider than it is now, and make the preview as tall as the email template box beside it, so that both end at the same line instead of the preview stopping at a fixed 560px.
+- **Report email header** (`mail/email_body.html`, `mail/compose.py`): give the weekly report email the same header as the access emails (the Tradition logo attached inline beside "Progress Tracker" on the navy band), so every Progress Tracker email looks the same. Deferred on 18 Nov 2026 from the sign-in and approval work (`docs/superpowers/specs/2026-11-18-signin-and-approval-design.md`).
