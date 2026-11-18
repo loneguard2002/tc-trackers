@@ -132,6 +132,33 @@ def test_login_page_renders_without_session_user():
     assert response.status_code == 200
     assert b"csrf_token" in response.data
     assert b"Sign in with Microsoft" not in response.data
+    assert b"signin-divider" not in response.data  # no "or" without a second way in
+
+
+def _app_with_sso():
+    from tracker.app import create_app
+
+    return create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "DATABASE_URL": "postgresql+psycopg://localhost/unused",
+            "SSO_TENANT_ID": "11111111-2222-3333-4444-555555555555",
+            "SSO_CLIENT_ID": "client",
+            "SSO_CLIENT_SECRET": "secret",
+        }
+    )
+
+
+def test_login_page_puts_the_password_form_before_the_microsoft_button():
+    page = _app_with_sso().test_client().get("/login").get_data(as_text=True)
+    assert page.index('name="password"') < page.index("Sign in with Microsoft")
+    assert 'href="/auth/sso"' in page
+    for colour in ("#f25022", "#7fba00", "#00a4ef", "#ffb900"):  # Microsoft's four squares
+        assert colour in page
+    assert 'alt="Tradition"' in page and "img/tradition-logo.jpg" in page
+    assert 'class="topbar"' not in page and "page-footer" not in page  # the brand panel stands in for them
+    assert 'data-password-toggle="password"' in page
 
 
 def test_admin_pages_redirect_anonymous_to_login():

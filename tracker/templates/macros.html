@@ -1,4 +1,4 @@
-{# The eye button beside a password field (users.js shows it and swaps the field between hidden and shown). #}
+{# The eye button beside a password field (tracker.js shows it and swaps the field between hidden and shown). #}
 {% macro password_toggle(field_id) -%}
 <button class="password-toggle" type="button" data-password-toggle="{{ field_id }}" aria-pressed="false" hidden>{{ icon('eye', 'icon icon-show') }}{{ icon('eye-off', 'icon icon-hide') }}<span class="sr-only">Show password</span></button>
 {%- endmacro %}

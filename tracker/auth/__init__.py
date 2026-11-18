@@ -58,6 +58,7 @@ def _login_page(error: str | None = None, status: int = 200):
             sso_enabled=current_app.config["SSO_ENABLED"],
             next_url=safe_next_url(request.values.get("next")),
             page_title="Sign in",
+            bare_page=True,
         ),
         status,
     )

@@ -1,30 +1,45 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import csrf_field, password_toggle %}
 {% block content %}
-<section class="auth-panel" aria-labelledby="sign-in-title">
-  <header class="auth-head">
-    <span class="auth-mark" aria-hidden="true">PT</span>
-    <h1 id="sign-in-title">Sign in</h1>
-    <p>Sign in to Progress Tracker to view reports and record progress.</p>
-  </header>
-  {% if error %}<div class="form-alert" role="alert"><span class="form-error">{{ error }}</span></div>{% endif %}
-  {% if sso_enabled %}
-  <a class="button auth-sso" href="{{ url_for('sso.sso_start') }}">Sign in with Microsoft</a>
-  <p class="auth-divider"><span>or use a password</span></p>
-  {% endif %}
-  <form class="auth-form" method="post" action="{{ url_for('auth.login') }}">
-    {{ csrf_field(csrf_token()) }}
-    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
-    <div class="auth-field">
-      <label for="email">Email address</label>
-      <input id="email" name="email" type="email" autocomplete="username" maxlength="254" required autofocus>
-    </div>
-    <div class="auth-field">
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" maxlength="512" required>
-    </div>
-    <button class="button primary auth-submit" type="submit">Sign in</button>
-  </form>
-  <p class="auth-note">Accounts are created by an administrator. If you cannot sign in, contact your tracker administrator.</p>
+{# Design 2026-11-18 (docs/superpowers/specs/2026-11-18-signin-and-approval-design.md): the brand panel beside the form,
+   the password form first, then Microsoft's own sign-in button. #}
+<section class="signin" aria-labelledby="sign-in-title">
+  <div class="signin-brand">
+    <span class="signin-logo"><img src="{{ url_for('static', filename='img/tradition-logo.jpg') }}" width="219" height="41" alt="Tradition"></span>
+    <p class="signin-product">Progress Tracker</p>
+    <p class="signin-lede">Weekly progress, forecasts and risks for every tracker, in one place.</p>
+  </div>
+  <div class="signin-main">
+    <header class="signin-head">
+      <h1 id="sign-in-title">Sign in</h1>
+      <p>{% if sso_enabled %}Use the email and password an administrator gave you, or your work Microsoft account.{% else %}Use the email and password an administrator gave you.{% endif %}</p>
+    </header>
+    {% if error %}<div class="form-alert" role="alert"><span class="form-error">{{ error }}</span></div>{% endif %}
+    <form class="signin-form" method="post" action="{{ url_for('auth.login') }}">
+      {{ csrf_field(csrf_token()) }}
+      {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+      <div class="signin-field">
+        <label for="email">Email address</label>
+        <input id="email" name="email" type="email" autocomplete="username" maxlength="254" required autofocus>
+      </div>
+      <div class="signin-field">
+        <label for="password">Password</label>
+        <div class="password-field">
+          <input id="password" name="password" type="password" autocomplete="current-password" maxlength="512" required>
+          {{ password_toggle('password') }}
+        </div>
+      </div>
+      <button class="button primary signin-submit" type="submit">Sign in</button>
+    </form>
+    {% if sso_enabled %}
+    <p class="signin-divider"><span>or</span></p>
+    {# Microsoft's sign-in button, drawn to Microsoft's branding guidance: its four-square logo and its colours, the same
+       in light and dark mode, so it reads as the familiar button rather than one of ours. #}
+    <a class="ms-signin" href="{{ url_for('sso.sso_start') }}">
+      <svg width="21" height="21" viewBox="0 0 21 21" aria-hidden="true"><path fill="#f25022" d="M1 1h9v9H1z"/><path fill="#7fba00" d="M11 1h9v9h-9z"/><path fill="#00a4ef" d="M1 11h9v9H1z"/><path fill="#ffb900" d="M11 11h9v9h-9z"/></svg>
+      <span>Sign in with Microsoft</span>
+    </a>
+    {% endif %}
+  </div>
 </section>
 {% endblock %}
