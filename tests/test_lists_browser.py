@@ -1196,6 +1196,8 @@ def test_set_up_works_on_a_table_added_later_and_only_once(page, live_server, us
     _clean(page)
 
 
+# A CSS-only check on a synthetic table: no real page has section links (.subnav) and a toolkit table yet, so the table
+# is built into the Risk form page after load. It proves --sticky-top keeps headings under the .subnav.
 def test_table_headings_stick_under_the_section_links(page, live_server, tracker_factory, user_factory, grant):
     tracker = tracker_factory(name="Sticky tracker")
     user = user_factory()
@@ -1209,6 +1211,5 @@ def test_table_headings_stick_under_the_section_links(page, live_server, tracker
     page.wait_for_timeout(300)
     heading = page.evaluate("document.querySelector('#late-table th').getBoundingClientRect().top")
     links = page.evaluate("document.querySelector('.subnav').getBoundingClientRect().bottom")
-    assert page.evaluate("document.querySelector('.subnav') !== null")
     assert abs(heading - links) <= 1.5, (heading, links)
     _clean(page)
