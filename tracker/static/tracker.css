@@ -857,7 +857,7 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
   .team-pick-table .card-rows td.pick-cell + td::before { content: none; }  /* the name needs no "Tracker" label */
   .list-table table.card-rows, .team-panel .list-table table.card-rows { min-width: 0; }
   .team-panel .list-table .card-rows .cell-actions { width: auto; white-space: normal; }  /* beats the table's 1% / nowrap actions column */
-  .entry-filters, .risk-filters, .quick-add-row, .field-stack { padding-left: 16px; padding-right: 16px; }
+  .entry-filters, .quick-add-row, .field-stack { padding-left: 16px; padding-right: 16px; }
   .key-values div { grid-template-columns: 1fr; gap: 2px; padding: 10px 16px; }
   .segmented { display: flex; }
   .segmented label { flex: 1; justify-content: center; gap: 5px; padding: 6px; font-size: .8125rem; white-space: nowrap; }
@@ -931,7 +931,7 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
   .entry-table tr.is-new td { animation: entry-new 3s ease-out 1s forwards; }
 }
 @keyframes entry-new { to { background: transparent; } }
-.entry-filters, .risk-filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.entry-filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
 .entry-week { display: flex; align-items: center; gap: 8px; margin: 0; }
 .entry-week select { width: auto; min-width: 13rem; padding: 6px 10px; font-size: .875rem; }
 .week-block + .week-block { border-top: 1px solid var(--border); }

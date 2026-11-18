@@ -294,13 +294,18 @@ def test_risk_register_matches_the_report_order(client, db, tracker_factory, use
     db.commit()
     html = client.get(f"/trackers/{tracker.id}/risks").get_data(as_text=True)
     register, closed = html.split("Closed risks (1)")
-    order = [ref for ref in ("R1", "R2", "R3", "R4") if f'risk-ref">{ref}<' in register]
+    order = [ref for ref in ("R1", "R2", "R3", "R4") if f'risk-ref" data-label="">{ref}<' in register]
     assert sorted(order, key=register.index) == ["R3", "R2", "R1", "R4"]
-    assert 'risk-ref">R5<' in closed and 'risk-ref">R5<' not in register
-    assert 'data-overdue="true"' in register and "days overdue" in register
-    red_chip = html[html.index('data-filter="red"') :]
-    assert '</span>Red<span class="chip-count">2</span>' in red_chip[: red_chip.index("</button>")]
-    assert '<span class="chip-count is-alert">1</span>' in html
+    assert 'risk-ref" data-label="">R5<' in closed and 'risk-ref" data-label="">R5<' not in register
+    assert "days overdue" in register
+    red_chip = html[html.index('data-status="red"') :]
+    assert 'Red <span class="chip-count" data-count>2</span>' in red_chip[: red_chip.index("</button>")]
+    assert 'data-status="overdue"' in html and "Past target date" in html
+    assert 'data-status="red overdue"' in register and 'data-sort-rag="0"' in register
+    assert 'data-sort-rag="3"' in register and 'id="risks-table"' in register
+    assert 'id="closed-risks-table"' in closed and 'data-state-prefix="closed-"' in closed
+    assert "Showing 4 of 4 risks" in register
+    assert "risks.js" not in html and "data-risk-rows" not in html
     assert "tabulator" not in html
 
 

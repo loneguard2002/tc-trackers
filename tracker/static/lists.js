@@ -58,8 +58,9 @@
     var buttons = statusGroup ? statusGroup.querySelectorAll("button[data-status]") : [];
     var regionFilter = document.querySelector('select[data-region-filter="' + id + '"]');
     var panel = table.closest(".list-panel");
+    // A table outside a .list-table (the Risks register) marks its wrapper data-table-frame to hold the line.
     // The line sits inside the table's own frame, so that two tables in one panel (the team page's picker) never share one.
-    var frame = table.closest(".list-table") || panel;
+    var frame = table.closest(".list-table, [data-table-frame]") || panel;
     var noMatch = frame ? frame.querySelector("[data-no-match]") : null;
     var pager = document.querySelector('[data-pager-for="' + id + '"]');
     var sizeSelect = pager ? pager.querySelector("[data-pager-size]") : null;
