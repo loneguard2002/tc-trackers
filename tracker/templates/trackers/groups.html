@@ -81,7 +81,8 @@
       <table id="groups-table" class="table card-rows" data-clear-sort>
         {{ head() }}
         <tbody>
-        {% for group in groups %}{{ group_row(group, group.id == current[0].id, group.id == current[-1].id) }}{% endfor %}
+        {% set first_id = current[0].id if current else none %}{% set last_id = current[-1].id if current else none %}
+        {% for group in groups %}{{ group_row(group, group.id == first_id, group.id == last_id) }}{% endfor %}
         </tbody>
         {% if current|length > 1 %}
         {% set ns = namespace(done=0, scope=0, ready=0) %}

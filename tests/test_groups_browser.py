@@ -42,7 +42,7 @@ def _moves(page):
 
 @pytest.fixture
 def board(page, live_server, tracker_factory, user_factory, db):
-    """Harbour (30 done, 25 ready... in owner order 1), Bridge, Castle (retired) and Dock, with progress to sort by."""
+    """Four locations in the owner's order: Harbour, Bridge, Castle (retired) and Dock, with progress to sort by."""
     tracker = tracker_factory(name="Rollout")
     rows = (
         ("Harbour", 40, 10, 5, date(2026, 12, 1), 1, False),
@@ -144,8 +144,8 @@ def test_order_buttons_show_only_in_the_owners_order(page, board):
     _clean(page)
 
 
-def test_moving_a_location_still_works_and_keeps_the_view(page, live_server, board, db):
-    page.locator("#groups-table-search").fill("")  # the search box exists
+def test_moving_a_location_still_works_in_the_owners_order(page, live_server, board, db):
+    expect(page.locator("#groups-table-search")).to_be_visible()
     page.get_by_role("button", name="Move down: Harbour").click()
     page.wait_for_load_state("networkidle")
     assert _names(page) == ["Bridge", "Harbour", "Castle", "Dock"]
@@ -186,4 +186,22 @@ def test_phone_shows_cards_without_sideways_scroll(page, board):
     assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
     expect(page.locator("#groups-table thead")).to_be_hidden()
     assert page.locator("#groups-table tbody tr").first.evaluate("el => getComputedStyle(el).display") == "flex"
+    _clean(page)
+
+
+def test_every_location_retired_still_lists_them_and_reinstates(page, live_server, tracker_factory, user_factory, db):
+    tracker = tracker_factory(name="Finished")
+    for order, name in enumerate(("Alpha", "Beta"), start=1):
+        db.add(Group(tracker_id=tracker.id, name=name, baseline=0, sort_order=order, retired=True))
+    db.commit()
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    response = page.goto(f"{live_server}/trackers/{tracker.id}/groups")
+    assert response.status == 200
+    assert _names(page) == ["Alpha", "Beta"]
+    assert _foot(page) == "Showing 2 of 2 locations \u00b7 0 active"
+    page.get_by_role("button", name="Reinstate: Alpha").click()
+    page.wait_for_load_state("networkidle")
+    assert _foot(page) == "Showing 2 of 2 locations \u00b7 1 active"
+    expect(page.get_by_role("button", name="Reinstate: Alpha")).to_have_count(0)
     _clean(page)
