@@ -83,12 +83,11 @@ def test_administrator_with_a_leftover_direct_role_has_no_controls(
     db.add(TrackerRole(user_id=admin.id, tracker_id=t.id, role="owner"))
     db.commit()
     page = html.unescape(client.get(f"/trackers/{t.id}/roles").get_data(as_text=True))
-    [row] = [r for r in re.findall(r"<tr data-route.*?</tr>", page, re.S) if "Ada Admin" in r]
-    assert 'data-route="admin"' in row
+    [row] = [r for r in re.findall(r"<tr data-status.*?</tr>", page, re.S) if "Ada Admin" in r]
+    assert 'data-status="owner"' in row and 'data-search="ada admin' in row
     assert "data-autosubmit" not in row and 'value="remove"' not in row and "Remove access" not in row
     assert "no effect for an administrator" in row
-    assert "Direct (0)" in page
-    assert "Administrators (2)" in page
+    assert re.search(r'data-status="owner"[^>]*>Owner <span class="chip-count" data-count>2</span>', page)
 
 
 def test_team_access_is_sorted_and_empty_without_a_team(db, tracker_factory, team_factory, add_member, user_factory):
@@ -352,8 +351,9 @@ def test_access_page_is_one_list(
     assert "Who can open this tracker" in body
     assert "Add people" not in body and "Access through teams" not in body
     html_body = page.get_data(as_text=True)
-    table = html_body.split("data-row-filter-target", 1)[1].split("</table>", 1)[0]
-    table_rows = re.findall(r"<tr data-route=.*?</tr>", table, re.S)
+    assert "data-row-filter" not in html_body
+    table = html_body.split('<table id="access-table"', 1)[1].split("</table>", 1)[0]
+    table_rows = re.findall(r"<tr data-status=.*?</tr>", table, re.S)
     names = re.findall(r'member-name">([^<]+)', table)
     assert len(table_rows) == len(names) == len(set(names))
     direct_row = next(r for r in table_rows if "Dina Direct" in r)
@@ -366,7 +366,9 @@ def test_access_page_is_one_list(
     assert "Remove access" in direct_row
     other_row = next(r for r in table_rows if "Pat Pmo" in r)
     assert "<select" not in other_row and "<button" not in other_row
-    assert 'data-route="direct team"' in table and 'data-route="set"' in table and 'data-route="admin"' in table
+    assert 'data-status="owner"' in team_row and 'data-status="editor"' in direct_row
+    assert 'data-sort-person="Dina Direct"' in direct_row and 'data-sort-role="2"' in direct_row
+    assert 'data-status="viewer"' in other_row
 
 
 def test_give_a_direct_role_form(
@@ -401,16 +403,15 @@ def _emea_tracker(db, tracker_factory, region_factory, user_factory, region_gran
     return tracker, region
 
 
-def test_access_list_shows_region_route_and_filter(
+def test_access_list_shows_region_route(
     client, logged_in_admin, db, tracker_factory, region_factory, user_factory, region_grant
 ):
     tracker, _region = _emea_tracker(db, tracker_factory, region_factory, user_factory, region_grant)
     page = client.get(f"/trackers/{tracker.id}/roles")
     body = text_of(page)
-    assert "Region EMEA" in body and "Regions (1)" in body
-    row = next(r for r in re.findall(r"<tr data-route=.*?</tr>", body, re.S) if "Reg Viewer" in r)
-    assert re.match(r'<tr data-route="[^"]*\bregion\b', row)
-    assert body.index("Teams (") < body.index("Regions (") < body.index("Permission sets (")
+    assert "Region EMEA" in body
+    row = next(r for r in re.findall(r"<tr data-status=.*?</tr>", body, re.S) if "Reg Viewer" in r)
+    assert "Region EMEA" in row
 
 
 def test_region_route_links_only_for_administrators(

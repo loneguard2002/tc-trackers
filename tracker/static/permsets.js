@@ -305,6 +305,10 @@
         if (html.indexOf("data-panel-set") === -1) throw new Error("not the panel");
         status.textContent = "";
         body.innerHTML = html;
+        // The holders table arrives after the page, so it is set up here (lists.js left it alone at load).
+        if (window.trackerLists) {
+          Array.prototype.forEach.call(body.querySelectorAll("table[data-sortable][id]"), window.trackerLists.setUp);
+        }
       })
       .catch(failed);
   }

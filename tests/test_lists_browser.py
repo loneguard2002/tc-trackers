@@ -1213,3 +1213,44 @@ def test_table_headings_stick_under_the_section_links(page, live_server, tracker
     links = page.evaluate("document.querySelector('.subnav').getBoundingClientRect().bottom")
     assert abs(heading - links) <= 1.5, (heading, links)
     _clean(page)
+
+
+# --- data-no-address -------------------------------------------------------------------------------------------------
+
+NO_ADDRESS = """
+new MutationObserver(function () {
+  var table = document.getElementById("locations-table");
+  if (table) table.setAttribute("data-no-address", "");
+}).observe(document, { childList: true, subtree: true });
+"""
+
+
+def test_a_table_marked_no_address_neither_reads_nor_writes_the_address(
+    page, live_server, user_factory, region_factory, location_factory
+):
+    emea = region_factory("EMEA", "Europe, Middle East and Africa")
+    location_factory(emea, "London", "GB", code="LON", retired=True)
+    location_factory(emea, "Geneva", "CH", code="GVA")
+    location_factory(emea, "Paris", "FR", code="PAR")
+    page.add_init_script(NO_ADDRESS)
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations?q=lon&filter=retired&sort=-name&size=50")
+    url = page.url
+    expect(page.locator("#locations-table[data-table-ready]")).to_have_count(1)
+    # Nothing is restored from the address: every row shows, the box is empty and "All" is pressed.
+    expect(page.locator(ROWS)).to_have_count(3)
+    expect(page.locator("#locations-table-search")).to_have_value("")
+    expect(page.locator('[data-status-for] button[data-status="all"]')).to_have_attribute("aria-pressed", "true")
+
+    # Everything else works, and the address stays as it was.
+    page.locator("#locations-table-search").fill("par")
+    expect(page.locator(ROWS)).to_have_count(1)
+    assert _foot(page).startswith("Showing 1 of 3 locations")
+    page.locator("#locations-table-search").fill("")
+    page.locator('[data-status-for] button[data-status="retired"]').click()
+    expect(page.locator(ROWS)).to_have_count(1)
+    page.locator('[data-status-for] button[data-status="all"]').click()
+    page.locator('#locations-table button[data-sort="name"]').click()
+    page.locator('#locations-table button[data-sort="name"]').click()
+    assert _names(page) == ["Paris", "London", "Geneva"]
+    assert page.url == url
+    _clean(page)

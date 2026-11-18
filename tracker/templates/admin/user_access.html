@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, icon, title_crumb %}
+{% from "lists/_table.html" import sort_header, table_pager %}
 {% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='users.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% macro action(endpoint, text, icon_name, extra=None, confirm=None) -%}
@@ -83,15 +85,16 @@
 
 {% call card('trackers', 'Trackers', trackers|length, 'The ticked route decides the role.' if trackers else '') %}
   {% if trackers %}
-  <div class="section-table register">
-    <table class="table access-table">
-      <thead><tr><th scope="col">Tracker</th><th scope="col">Role</th><th scope="col">Through</th></tr></thead>
+  {# Two small tables: sorting, the count line and phone cards only. Each has its own key prefix in the address. #}
+  <div class="section-table register" data-table-frame>
+    <table id="access-trackers-table" class="table access-table" data-sortable data-state-prefix="trackers-">
+      <thead><tr>{{ sort_header('Tracker', 'tracker') }}{{ sort_header('Role', 'role', type='number') }}<th scope="col">Through</th></tr></thead>
       <tbody>
       {% for a in trackers %}
-      <tr>
+      <tr data-sort-tracker="{{ a.tracker.name }}" data-sort-role="{{ {'viewer': 1, 'editor': 2, 'owner': 3}.get(a.role, 0) }}">
         <td><span class="cell-title">{{ a.tracker.name }}</span>{% if a.tracker.status == 'archived' %} <span class="badge badge-muted">Archived</span>{% endif %}</td>
-        <td>{{ a.role|title }}</td>
-        <td><div class="chips">
+        <td data-label="Role:">{{ a.role|title }}</td>
+        <td data-label=""><div class="chips">
           {%- set marked = namespace(done=false) %}
           {%- for route in a.routes %}
           {%- set decides = not marked.done and route.role == a.role %}{% if decides %}{% set marked.done = true %}{% endif %}
@@ -103,6 +106,7 @@
       </tbody>
     </table>
   </div>
+  {{ table_pager('access-trackers-table', 'trackers', 'tracker', trackers|length) }}
   {% elif active and not limited %}
   <p class="empty-note">This person cannot open any tracker.</p>
   {% endif %}
@@ -116,19 +120,20 @@
     <ul class="access-list">{% for name in sources %}<li class="status-pill">{{ permission_labels[name] }}</li>{% endfor %}</ul>
   </div>
   {% elif sources %}
-  <div class="section-table register">
-    <table class="table access-table">
-      <thead><tr><th scope="col">Permission</th><th scope="col">Comes from</th></tr></thead>
+  <div class="section-table register" data-table-frame>
+    <table id="access-permissions-table" class="table access-table" data-sortable data-state-prefix="permissions-">
+      <thead><tr>{{ sort_header('Permission', 'permission') }}<th scope="col">Comes from</th></tr></thead>
       <tbody>
       {% for name, found in sources.items() %}
-      <tr>
+      <tr data-sort-permission="{{ permission_labels[name] }}">
         <td><span class="cell-title">{{ permission_labels[name] }}</span></td>
-        <td><div class="chips">{% for source in found %}<span class="status-pill">{{ source }}</span>{% endfor %}</div></td>
+        <td data-label=""><div class="chips">{% for source in found %}<span class="status-pill">{{ source }}</span>{% endfor %}</div></td>
       </tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
+  {{ table_pager('access-permissions-table', 'permissions', 'permission', sources|length) }}
   {% else %}
   <p class="empty-note">This person holds no permissions.</p>
   {% endif %}

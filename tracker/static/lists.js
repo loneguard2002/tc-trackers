@@ -37,6 +37,10 @@
   // window.trackerLists.setUp(table) sets up one table, for a table put on the page after load (the side panel's
   // holders); a table already set up is left alone, so a second call does nothing.
   //
+  // A table marked data-no-address (on the table itself) never reads from nor writes to the address: nothing is restored
+  // from the query or the hash, no key is written, and its row forms carry no view field; it behaves in every other way
+  // like any table. The permission sets side panel uses it, because ?set=<id> already owns the address there.
+  //
   // A row marked data-uncounted is listed but left out of every count: the status buttons, and the footer's "of N"
   // and its matching figure, so that "All N" and "Showing N of N" agree.
   //
@@ -73,6 +77,7 @@
     var pageSize = 25;
     var prefix = table.getAttribute("data-state-prefix") || "";
     var clearsSort = table.hasAttribute("data-clear-sort");
+    var noAddress = table.hasAttribute("data-no-address");
     var settingUp = true;  // until the first refresh, so that a page from the address is checked, not clamped
 
     each(buttons, function (button) {
@@ -389,6 +394,7 @@
     }
 
     function readState() {
+      if (noAddress) return;
       var params = new URLSearchParams(window.location.search);
       var text = params.get(key("q"));
       if (input && text) input.value = text;
@@ -420,6 +426,7 @@
 
     // Rebuilds this table's keys in the address from the state, leaving every other key and the hash as they are.
     function writeState() {
+      if (noAddress) return;
       var params = new URLSearchParams(window.location.search);
       function put(name, value, isDefault) {
         if (isDefault) params.delete(key(name));
@@ -444,6 +451,7 @@
     // filter form and its Clear filters link (data-keeps-sort) carry the sort and the rows per page, which the form's
     // own fields do not hold. Dialogs marked data-keeps-view belong to the table that has no state prefix.
     function keepViewInForms(query, params) {
+      if (noAddress) return;
       var forms = Array.prototype.slice.call(body.querySelectorAll("form"));
       if (!prefix) {
         each(document.querySelectorAll("dialog[data-keeps-view] form"), function (form) { forms.push(form); });
@@ -491,7 +499,7 @@
       try {
         target = document.getElementById(decodeURIComponent(window.location.hash.replace(/^#/, "")));
       } catch (error) { /* a hash that is not a valid address component names no row */ }
-      if (!target || target.parentNode !== body || !pager) return null;
+      if (noAddress || !target || target.parentNode !== body || !pager) return null;
       var position = 0;
       var found = Array.prototype.some.call(body.rows, function (row) {
         if (!inSearchAndRegion(row) || !(status === "all" || tokens(row).indexOf(status) !== -1)) return false;

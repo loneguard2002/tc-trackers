@@ -1,0 +1,38 @@
+{% from "macros.html" import csrf_field %}
+{% from "lists/_table.html" import search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
+{# A permission set's holders as a standard table (Holder, Kind, Remove): the set's own page and the side panel render
+   the same one. ``holders`` is the view's (holder, team path or None, user or None) list. The panel's table (``panel``)
+   keeps its keys out of the address (data-no-address), because ?set=<id> already owns it, and its Remove forms return to
+   the panel (return_to=index). #}
+{% macro holders_table(permission_set, holders, table_id, panel=False) -%}
+{% set people = holders|selectattr('1', 'none')|list|length %}
+<div class="list-tools">
+  {{ search_box(table_id, 'Search holders') }}
+  {{ status_filters(table_id, 'holders', (('all', 'All'), ('people', 'People'), ('teams', 'Teams')), {'all': holders|length, 'people': people, 'teams': holders|length - people}) }}
+  {{ clear_filters(table_id) }}
+</div>
+<div class="section-table{{ '' if panel else ' register' }}" data-table-frame>
+  <table id="{{ table_id }}" class="table{{ ' panel-holders' if panel }}" data-sortable{% if panel %} data-state-prefix="panel-" data-no-address{% endif %}>
+    <thead><tr>{{ sort_header('Holder', 'name') }}<th scope="col">Kind</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+    {% for h, path, u in holders %}
+    <tr data-status="{{ 'teams' if path else 'people' }}" data-search="{{ ((path or (u.full_name ~ ' ' ~ u.email)))|lower }}" data-sort-name="{{ path or u.full_name }}">
+      <td>{% if path %}<span class="cell-title">{{ path }}</span>{% else %}<div class="member-cell">
+        <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
+        <span class="member-who"><span class="member-name">{{ u.full_name }}</span><span class="member-email">{{ u.email }}</span></span>
+      </div>{% endif %}</td>
+      <td data-label="Kind:">{% if path %}Team{% else %}Person{% endif %}</td>
+      <td class="cell-actions"><form method="post" action="{{ url_for('permsets.remove_holder', set_id=permission_set.id, holder_id=h.id) }}"
+        data-confirm="Remove {{ path or u.full_name }} as a holder of {{ permission_set.name }}? They lose the permissions it grants.">
+        {{ csrf_field(csrf_token()) }}
+        {% if panel %}<input type="hidden" name="return_to" value="index">{% endif %}
+        <button class="button button-small button-quiet" type="submit">Remove</button>
+      </form></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {{ no_match('No holders match this search.', table_id) }}
+</div>
+{{ table_pager(table_id, 'holders', 'holder', holders|length) }}
+{%- endmacro %}
