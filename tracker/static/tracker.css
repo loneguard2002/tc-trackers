@@ -107,14 +107,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 /* Sign-in (design 2026-11-18): no top bar; the navy brand panel with the logo beside the form, stacked on a phone. */
 .app-shell-bare { min-height: 100vh; padding-top: 0; }
 .app-shell-bare .main-content { display: grid; align-content: center; justify-items: center; gap: 16px; padding-block: 32px; }
-.app-shell-bare .flash { width: min(760px, 100%); margin: 0; }
-.signin { display: grid; grid-template-columns: 280px minmax(0, 1fr); width: min(760px, 100%); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--raised); box-shadow: var(--card-shadow); }
-.signin-brand { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 36px 28px; background: var(--topbar-bg); color: #c3cfe2; }
+.app-shell-bare .flash { width: min(520px, 100%); margin: 0; }
+.signin { display: grid; grid-template-columns: 220px minmax(0, 1fr); width: min(520px, 100%); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--raised); box-shadow: var(--card-shadow); }
+.signin-brand { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 32px 22px; background: var(--topbar-bg); color: #c3cfe2; }
 .signin-logo { display: block; padding: 6px 8px; border-radius: 6px; background: #fff; line-height: 0; }
 .signin-logo img { width: 150px; height: auto; }
 .signin-product { margin: 0; color: #fff; font-size: 1.125rem; font-weight: 700; }
 .signin-lede { margin: 0; font-size: .875rem; line-height: 1.55; }
-.signin-main { display: grid; gap: 16px; align-content: start; min-width: 0; padding: 36px 40px 32px; }
+.signin-main { display: grid; gap: 16px; align-content: start; min-width: 0; padding: 32px 28px; }
 .signin-head h1 { margin: 0; font-size: 1.25rem; }
 .signin-head p { margin: 4px 0 0; color: var(--muted); font-size: .875rem; }
 .signin-main .form-alert { margin: 0; }
@@ -128,7 +128,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .ms-signin { display: flex; align-items: center; justify-content: center; gap: 12px; height: 41px; padding: 0 12px; border: 1px solid #8c8c8c; background: #fff; color: #5e5e5e; font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif; font-size: 15px; font-weight: 600; text-decoration: none; }
 .ms-signin:hover { background: #f3f3f3; color: #5e5e5e; }
 .ms-signin svg { flex: none; }
-@media (max-width: 640px) {
+.ms-signin span { white-space: nowrap; }
+@media (max-width: 560px) {
   .signin { grid-template-columns: minmax(0, 1fr); }
   .signin-brand { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 18px 20px; }
   .signin-lede { flex-basis: 100%; }
