@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+import threading
 from datetime import date, timedelta
+from types import SimpleNamespace
 
 import pytest
 from conftest import browser_sign_in
@@ -11,6 +13,7 @@ from playwright.sync_api import expect
 from test_report_page_browser import RECORDER
 
 from tracker.engine.weeks import week_ending_for
+from tracker.mail import sending
 from tracker.models import CompletionEntry, Group, Recipient
 
 pytestmark = pytest.mark.browser
@@ -124,3 +127,69 @@ def test_send_to_everyone_asks_in_the_page(page, live_server, admin):
     box.get_by_role("button", name="Cancel").click()
     expect(box).to_be_hidden()
     assert_clean(page)
+
+
+@pytest.fixture
+def slow_sends(monkeypatch):
+    """Both sends wait until ``release`` is set, so the page can be seen while it waits; ``calls`` counts the posts."""
+    state = SimpleNamespace(release=threading.Event(), calls=[])
+
+    def slow(name, answer):
+        def send(*args):
+            state.calls.append(name)
+            state.release.wait(10)
+            return answer
+
+        return send
+
+    monkeypatch.setattr(sending, "send_report", slow("report", SimpleNamespace(status="sent")))
+    monkeypatch.setattr(sending, "send_test", slow("test", None))
+    yield state
+    state.release.set()
+
+
+# Playwright reads nothing in a page whose form post is still waiting for its answer, so the page reports its form's
+# buttons as console messages instead, on every change: "[x]" marks a disabled button.
+WATCH_BUTTONS = """form => new MutationObserver(() => console.log(Array.from(form.querySelectorAll("button"),
+    button => (button.disabled ? "[x] " : "[ ] ") + button.textContent.trim()).join(" | ")))
+  .observe(form, {attributes: true, childList: true, subtree: true, characterData: true})"""
+
+
+def test_send_now_says_sending_and_sends_once(page, live_server, admin, slow_sends):
+    page.goto(f"{live_server}/trackers/{admin.id}/mail")
+    form = page.locator("#sending form.send-all")
+    form.evaluate(WATCH_BUTTONS)
+    page.get_by_role("button", name="Send to 1 recipient…").click()
+    sending_now = "[x] Send to 1 recipient… | [x] Sending… | [x] Cancel"
+    with page.expect_console_message(lambda message: message.text == sending_now):
+        form.get_by_role("button", name="Send now").dblclick()
+    slow_sends.release.set()
+    expect(page.locator(".flash-success")).to_have_text(re.compile(r"The report for the week ending .* was sent\.$"))
+    expect(page.get_by_role("button", name="Send to 1 recipient…")).to_be_enabled()
+    assert slow_sends.calls == ["report"]
+    assert_clean(page)
+
+
+def test_send_a_test_says_sending_and_sends_once(page, live_server, admin, slow_sends):
+    page.goto(f"{live_server}/trackers/{admin.id}/mail")
+    form = page.locator("#sending .send-row form").first
+    form.evaluate(WATCH_BUTTONS)
+    with page.expect_console_message(lambda message: message.text == "[x] Sending…"):
+        form.get_by_role("button", name="Send a test to me").dblclick()
+    slow_sends.release.set()
+    expect(page.get_by_text("A test email was sent to")).to_be_visible()
+    assert slow_sends.calls == ["test"]
+    assert_clean(page)
+
+
+def test_a_page_back_from_the_cache_can_send_again(page, live_server, admin, slow_sends):
+    page.goto(f"{live_server}/trackers/{admin.id}/mail")
+    form = page.locator("#sending .send-row form").first
+    form.evaluate(WATCH_BUTTONS)
+    # The page cannot be reached while its post waits, so it plays the back-forward cache's pageshow itself.
+    page.evaluate("""addEventListener("submit", () => setTimeout(() =>
+        dispatchEvent(new PageTransitionEvent("pageshow", {persisted: true}))))""")
+    with page.expect_console_message(lambda message: message.text.startswith("[ ] Send a test to me")):
+        form.get_by_role("button", name="Send a test to me").click()
+    slow_sends.release.set()
+    expect(page.get_by_text("A test email was sent to")).to_be_visible()
