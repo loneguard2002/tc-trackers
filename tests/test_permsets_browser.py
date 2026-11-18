@@ -205,12 +205,24 @@ def test_the_arrows_step_the_row_and_disable_at_the_ends(page, live_server, user
     assert page.evaluate("window.__errors") == []
 
 
-def test_the_new_button_goes_to_the_create_page_and_no_dashed_card_remains(page, live_server, user_factory):
+def test_the_new_link_keeps_its_address_and_no_dashed_card_remains(page, live_server, user_factory):
     browser_sign_in(page, live_server, user_factory(is_admin=True))
     page.goto(f"{live_server}/admin/permission-sets")
     expect(page.locator(".perm-card-new")).to_have_count(0)
-    page.get_by_role("link", name="New permission set").click()
-    expect(page).to_have_url(f"{live_server}/admin/permission-sets/new")
+    expect(page.get_by_role("link", name="New permission set")).to_have_attribute("href", "/admin/permission-sets/new")
+
+
+def test_without_javascript_the_new_link_goes_to_the_create_page(browser, live_server, user_factory):
+    context = browser.new_context(java_script_enabled=False)
+    try:
+        page = context.new_page()
+        browser_sign_in(page, live_server, user_factory(is_admin=True))
+        page.goto(f"{live_server}/admin/permission-sets")
+        page.get_by_role("link", name="New permission set").click()
+        expect(page).to_have_url(f"{live_server}/admin/permission-sets/new")
+        expect(page.locator("#new-set-dialog")).to_be_hidden()
+    finally:
+        context.close()
 
 
 def test_the_save_bar_shows_only_with_changes(page, live_server, user_factory, give_set):
@@ -587,4 +599,273 @@ def test_a_click_on_empty_space_inside_the_panel_keeps_it_open(page, live_server
     expect(panel).to_be_visible()
     page.mouse.click(40, 400)
     expect(panel).to_be_hidden()
+    clean(page)
+
+
+# --- New permission set in four steps ---------------------------------------------------------------------------
+
+
+def open_new(page, live_server, user_factory):
+    open_page(page, live_server, user_factory)
+    page.get_by_role("link", name="New permission set").click()
+    dialog = page.locator("#new-set-dialog")
+    expect(dialog).to_be_visible()
+    return dialog
+
+
+def progress(dialog):
+    return dialog.locator(".wizard-steps").evaluate("e => e.style.getPropertyValue('--progress')")
+
+
+def step_name(dialog, name="Details"):
+    dialog.get_by_label("Name", exact=True).fill(name)
+
+
+def test_new_opens_the_pop_up_at_step_one(page, live_server, user_factory, give_set):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    dialog = open_new(page, live_server, user_factory)
+    expect(page).to_have_url(f"{live_server}/admin/permission-sets")
+    expect(dialog.get_by_role("heading", name="New permission set")).to_be_visible()
+    expect(dialog.get_by_label("Name", exact=True)).to_be_focused()
+    expect(dialog.locator("[data-step-dot][aria-current=step]")).to_have_text("1Details")
+    expect(dialog.get_by_role("button", name="Back")).to_be_hidden()
+    expect(dialog.get_by_role("button", name="Next")).to_be_visible()
+    clean(page)
+
+
+@pytest.mark.parametrize(
+    ("typed", "message"),
+    [
+        ("", "Give the set a name."),
+        ("   ", "Give the set a name."),
+        ("  pmo ", "A permission set with this name already exists."),
+    ],
+)
+def test_step_one_refuses_an_empty_or_taken_name(page, live_server, user_factory, give_set, typed, message):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    dialog = open_new(page, live_server, user_factory)
+    dialog.get_by_label("Name", exact=True).fill(typed)
+    dialog.get_by_role("button", name="Next").click()
+    expect(dialog.get_by_text(message)).to_be_visible()
+    expect(dialog.locator("[data-step='1']")).to_be_visible()
+    expect(dialog.get_by_label("Name", exact=True)).to_be_focused()
+    step_name(dialog, "Fresh")
+    dialog.get_by_role("button", name="Next").click()
+    expect(dialog.locator("[data-step='2']")).to_be_visible()
+    clean(page)
+
+
+def test_the_step_bar_fills_a_third_per_step_with_ticks_that_go_back(page, live_server, user_factory):
+    dialog = open_new(page, live_server, user_factory)
+    assert progress(dialog) == "0"
+    step_name(dialog, "Auditors")
+    dialog.get_by_role("button", name="Next").click()
+    assert progress(dialog) == str(1 / 3)
+    expect(dialog.locator("[data-step-dot='1']")).to_have_text("\u2713Details")
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_role("button", name="Skip for now").click()
+    assert progress(dialog) == "1"
+    expect(dialog.locator("[data-step='4']")).to_be_visible()
+    dialog.locator("[data-step-dot='2']").click()
+    expect(dialog.locator("[data-step='2']")).to_be_visible()
+    assert progress(dialog) == str(1 / 3)
+    expect(dialog.locator("[data-step-dot='1']")).to_have_text("\u2713Details")
+    dialog.locator("[data-step-dot='1']").focus()
+    page.keyboard.press("Enter")
+    expect(dialog.locator("[data-step='1']")).to_be_visible()
+    assert progress(dialog) == "0"
+    clean(page)
+
+
+def test_step_two_counts_the_ticks_and_warns_about_users_with_teams(page, live_server, user_factory):
+    dialog = open_new(page, live_server, user_factory)
+    step_name(dialog)
+    dialog.get_by_role("button", name="Next").click()
+    expect(dialog.get_by_text("0 of 8 ticked")).to_be_visible()
+    expect(dialog.get_by_text("Holding both Manage users and Manage teams")).to_be_hidden()
+    dialog.locator("#new-perm-manage_users").check()
+    expect(dialog.get_by_text("1 of 8 ticked")).to_be_visible()
+    expect(dialog.get_by_text("Holding both Manage users and Manage teams")).to_be_hidden()
+    dialog.locator("#new-perm-manage_teams").check()
+    expect(dialog.get_by_text("2 of 8 ticked")).to_be_visible()
+    expect(dialog.get_by_text("Holding both Manage users and Manage teams")).to_be_visible()
+    dialog.locator("#new-perm-manage_teams").uncheck()
+    expect(dialog.get_by_text("Holding both Manage users and Manage teams")).to_be_hidden()
+    clean(page)
+
+
+def holders_world(user_factory, team_factory):
+    parent = team_factory(name="Operations")
+    team_factory(name="Delivery", parent=parent)
+    user_factory(full_name="Priya Shah", email="priya.shah@example.com")
+    user_factory(full_name="Sam Patel", email="sam.patel@example.com")
+
+
+def to_step_three(dialog):
+    step_name(dialog)
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_role("button", name="Next").click()
+
+
+def test_step_three_searches_teams_and_people_and_shows_chips(page, live_server, user_factory, team_factory):
+    holders_world(user_factory, team_factory)
+    dialog = open_new(page, live_server, user_factory)
+    to_step_three(dialog)
+    holders = dialog.locator(".wizard-holders li:visible")
+    expect(dialog.get_by_role("button", name="Skip for now")).to_be_visible()
+    expect(dialog.get_by_role("button", name="Next")).to_be_hidden()
+    expect(dialog.get_by_text("Delivery")).to_be_visible()
+    expect(dialog.get_by_text("priya.shah@example.com")).to_be_visible()
+    dialog.get_by_label("Search teams and people").fill("priya")
+    expect(holders).to_have_count(1)
+    holders.get_by_label("Priya Shah").check()
+    dialog.get_by_label("Search teams and people").fill("deliv")
+    expect(holders).to_have_count(1)
+    dialog.get_by_label("Search teams and people").fill("")
+    dialog.get_by_label("Delivery").check()
+    picked = dialog.locator("[data-holder-picked]")
+    expect(picked.get_by_role("button")).to_have_count(2)
+    expect(dialog.get_by_role("button", name="Skip for now")).to_be_hidden()
+    expect(dialog.get_by_role("button", name="Next")).to_be_visible()
+    picked.get_by_role("button", name="Remove Priya Shah").click()
+    expect(picked.get_by_role("button")).to_have_count(1)
+    expect(dialog.get_by_label("Priya Shah")).not_to_be_checked()
+    clean(page)
+
+
+def test_the_review_shows_three_blocks_and_edit_goes_back(page, live_server, user_factory, team_factory):
+    holders_world(user_factory, team_factory)
+    dialog = open_new(page, live_server, user_factory)
+    dialog.get_by_label("Name", exact=True).fill("Auditors")
+    dialog.get_by_role("button", name="Next").click()
+    dialog.locator("#new-perm-manage_users").check()
+    dialog.locator("#new-perm-view_activity").check()
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_label("Sam Patel").check()
+    dialog.get_by_label("Delivery").check()
+    dialog.get_by_role("button", name="Next").click()
+    review = dialog.locator("[data-step='4']")
+    expect(review.get_by_role("heading", name="Set")).to_be_visible()
+    expect(review.locator(".review-name")).to_have_text("Auditors")
+    expect(review.get_by_text("No description.")).to_be_visible()
+    expect(review.get_by_role("heading", name="Permissions")).to_be_visible()
+    expect(review.get_by_text("2 of 8")).to_be_visible()
+    expect(review.locator(".review-group li")).to_have_text(["Manage users", "View activity"])
+    expect(review.locator(".review-left")).to_contain_text("Not included: ")
+    expect(review.locator(".review-left")).not_to_contain_text("Manage users")
+    expect(review.get_by_role("heading", name="Holders")).to_be_visible()
+    expect(review.locator(".review-chips li")).to_have_count(2)
+    expect(review.locator(".review-chips")).to_contain_text("Sam Patel")
+    expect(review.locator(".review-chips")).to_contain_text("Delivery")
+    expect(review.locator(".review-chips")).to_contain_text("team")
+    expect(review.get_by_text("Nothing is saved until you press Create permission set.")).to_be_visible()
+    review.get_by_role("button", name="Edit").nth(1).click()
+    expect(dialog.locator("[data-step='2']")).to_be_visible()
+    dialog.locator("#new-perm-manage_users").uncheck()
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_role("button", name="Next").click()
+    expect(review.locator(".review-group li")).to_have_text(["View activity"])
+    review.get_by_role("button", name="Edit").nth(0).click()
+    expect(dialog.locator("[data-step='1']")).to_be_visible()
+    expect(review).to_be_hidden()
+    clean(page)
+
+
+def test_create_saves_the_set_and_opens_its_panel(page, live_server, user_factory, team_factory):
+    holders_world(user_factory, team_factory)
+    dialog = open_new(page, live_server, user_factory)
+    dialog.get_by_label("Name", exact=True).fill("Auditors")
+    dialog.get_by_label("Description").fill("Read only people")
+    dialog.get_by_role("button", name="Next").click()
+    dialog.locator("#new-perm-manage_users").check()
+    dialog.locator("#new-perm-view_activity").check()
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_label("Priya Shah").check()
+    dialog.get_by_label("Delivery").check()
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_role("button", name="Create permission set").click()
+    panel = page.locator("dialog.perm-drawer")
+    expect(panel).to_be_visible()
+    expect(panel.get_by_role("heading", name="Auditors", exact=True)).to_be_visible()
+    expect(panel.locator(".panel-holders")).to_contain_text("Delivery")
+    expect(panel.locator(".panel-holders")).to_contain_text("Priya Shah")
+    expect(panel.locator(".chips")).to_contain_text("Manage users")
+    assert "set=" in page.url
+    panel.get_by_role("button", name="Close").click()
+    card = card_of(page, "Auditors")
+    expect(card.get_by_label("Manage users for Auditors")).to_be_checked()
+    expect(card.get_by_label("View activity for Auditors")).to_be_checked()
+    expect(card.get_by_label("Manage teams for Auditors")).not_to_be_checked()
+    expect(card).to_contain_text("Read only people")
+    clean(page)
+
+
+def test_the_pop_up_resets_each_time_and_closing_discards_the_draft(page, live_server, user_factory, give_set):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    dialog = open_new(page, live_server, user_factory)
+    step_name(dialog, "Draft")
+    dialog.get_by_role("button", name="Next").click()
+    dialog.locator("#new-perm-manage_users").check()
+    page.keyboard.press("Escape")
+    expect(dialog).to_be_hidden()
+    expect(page.get_by_role("link", name="New permission set")).to_be_focused()
+    page.get_by_role("link", name="New permission set").click()
+    expect(dialog.locator("[data-step='1']")).to_be_visible()
+    expect(dialog.get_by_label("Name", exact=True)).to_have_value("")
+    assert progress(dialog) == "0"
+    step_name(dialog, "Again")
+    dialog.get_by_role("button", name="Next").click()
+    expect(dialog.locator("#new-perm-manage_users")).not_to_be_checked()
+    expect(dialog.get_by_text("0 of 8 ticked")).to_be_visible()
+    dialog.get_by_role("button", name="Cancel").click()
+    expect(dialog).to_be_hidden()
+    clean(page)
+
+
+def test_enter_in_the_name_goes_next_and_never_creates(page, live_server, user_factory):
+    dialog = open_new(page, live_server, user_factory)
+    step_name(dialog, "Quiet")
+    page.keyboard.press("Enter")
+    expect(dialog.locator("[data-step='2']")).to_be_visible()
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_label("Search teams and people").focus()
+    page.keyboard.press("Enter")
+    expect(dialog.locator("[data-step='3']")).to_be_visible()
+    assert page.url == f"{live_server}/admin/permission-sets"
+    clean(page)
+
+
+def test_create_with_unsaved_ticks_still_warns_on_leaving(page, live_server, user_factory, give_set):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    dialog = open_new(page, live_server, user_factory)
+    page.locator("[data-set-card] input[value=manage_users]").first.evaluate(
+        "box => { box.checked = true; box.dispatchEvent(new Event('change', {bubbles: true})); }"
+    )
+    step_name(dialog, "Late")
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_role("button", name="Skip for now").click()
+    kinds = []
+
+    def stay(prompt):
+        kinds.append(prompt.type)
+        prompt.dismiss()
+
+    page.on("dialog", stay)
+    dialog.get_by_role("button", name="Create permission set").click()
+    page.wait_for_timeout(500)
+    assert kinds == ["beforeunload"]
+    expect(dialog).to_be_visible()
+
+
+def test_the_pop_up_fits_a_phone(page, live_server, user_factory, team_factory):
+    holders_world(user_factory, team_factory)
+    page.set_viewport_size({"width": 390, "height": 844})
+    dialog = open_new(page, live_server, user_factory)
+    to_step_three(dialog)
+    dialog.get_by_role("button", name="Skip for now").click()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    box = dialog.bounding_box()
+    assert box["x"] >= 0
+    assert box["x"] + box["width"] <= 390
     clean(page)

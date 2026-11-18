@@ -328,3 +328,243 @@
     });
   }
 })();
+
+// New permission set in four steps: a pop-up holding a real form. Next, Back and the step bar only move between the
+// steps; Create submits the form once. The server checks everything again. The link in the head keeps its address, so
+// without JavaScript it opens the plain create page.
+(function () {
+  "use strict";
+
+  var dialog = document.getElementById("new-set-dialog");
+  var opener = document.querySelector("[data-new-set]");
+  if (!dialog || !opener) return;
+
+  var CAPTIONS = ["", "Step 1 of 4: name it", "Step 2 of 4: tick its permissions", "Step 3 of 4: choose who holds it",
+    "Step 4 of 4: check and create"];
+  var form = dialog.querySelector("form");
+  var name = document.getElementById("new-set-name");
+  var description = document.getElementById("new-set-description");
+  var nameError = dialog.querySelector("[data-name-error]");
+  var perms = dialog.querySelector("[data-wizard-perms]");
+  var count = dialog.querySelector("[data-wizard-count]");
+  var warning = dialog.querySelector("[data-wizard-warning]");
+  var list = dialog.querySelector("[data-holder-list]");
+  var none = dialog.querySelector("[data-holder-none]");
+  var picked = dialog.querySelector("[data-holder-picked]");
+  var search = dialog.querySelector("[data-holder-search]");
+  var back = dialog.querySelector("[data-wizard-back]");
+  var next = dialog.querySelector("[data-wizard-next]");
+  var skip = dialog.querySelector("[data-wizard-skip]");
+  var create = dialog.querySelector("[data-wizard-create]");
+  var steps = dialog.querySelector(".wizard-steps");
+  var dots = dialog.querySelectorAll("[data-step-dot]");
+  var sections = dialog.querySelectorAll("[data-step]");
+  var review = dialog.querySelector("[data-review]");
+  var boxes = perms.querySelectorAll("input");
+  var step = 1;
+
+  function each(items, fn) { Array.prototype.forEach.call(items, fn); }
+  function element(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  function labelOf(box) { return box.closest(".perm-row").querySelector(".perm-row-label").textContent.trim(); }
+  function ticked() { return Array.prototype.filter.call(boxes, function (box) { return box.checked; }); }
+  function holderBoxes() { return list.querySelectorAll("input:checked"); }
+  function holderName(box) { return box.parentNode.querySelector(".wizard-holder-name").textContent; }
+  function isTeam(box) { return box.value.indexOf("team:") === 0; }
+
+  // Step 2: the count and the warning.
+  function refreshPerms() {
+    var on = ticked().map(function (box) { return box.value; });
+    count.textContent = on.length + " of " + boxes.length + " ticked";
+    warning.hidden = !(on.indexOf("manage_users") >= 0 && on.indexOf("manage_teams") >= 0);
+  }
+  perms.addEventListener("change", refreshPerms);
+
+  // Step 3: search filters the list; the picked ones show as chips above it, each removes its pick.
+  function refreshPicked() {
+    picked.textContent = "";
+    each(holderBoxes(), function (box) {
+      var chip = element("button", "chip", holderName(box) + " ✕");
+      chip.type = "button";
+      chip.setAttribute("aria-label", "Remove " + holderName(box));
+      chip.addEventListener("click", function () { box.checked = false; refreshPicked(); search.focus(); });
+      picked.appendChild(chip);
+    });
+    skip.hidden = step !== 3 || picked.children.length > 0;
+    next.hidden = step === 4 || (step === 3 && picked.children.length === 0);
+  }
+  function filter() {
+    var query = search.value.trim().toLowerCase();
+    var shown = 0;
+    each(list.children, function (item) {
+      item.hidden = !!query && item.getAttribute("data-text").indexOf(query) < 0;
+      if (!item.hidden) shown += 1;
+    });
+    none.hidden = shown > 0;
+  }
+  list.addEventListener("change", refreshPicked);
+  search.addEventListener("input", filter);
+
+  // Step 4: the three blocks, built from the draft. Text goes in with textContent, never as markup.
+  function block(title, to, extra) {
+    var section = element("section", "review-block");
+    var head = element("div", "review-head");
+    head.appendChild(element("h3", "", title));
+    if (extra) head.appendChild(element("span", "chip-count", extra));
+    var edit = element("button", "button button-small", "Edit");
+    edit.type = "button";
+    edit.setAttribute("aria-label", "Edit " + title.toLowerCase());
+    edit.addEventListener("click", function () { go(to); });
+    head.appendChild(edit);
+    section.appendChild(head);
+    return section;
+  }
+  function renderReview() {
+    review.textContent = "";
+    var set = block("Set", 1);
+    set.appendChild(element("div", "review-name", name.value.trim()));
+    var text = description.value.trim();
+    set.appendChild(element("p", "review-desc" + (text ? "" : " is-none"), text || "No description."));
+    review.appendChild(set);
+
+    var on = ticked();
+    var granted = block("Permissions", 2, on.length + " of " + boxes.length);
+    if (on.length) {
+      var groups = element("div", "review-groups");
+      var current = null;
+      each(perms.children, function (node) {
+        if (node.classList.contains("perm-group")) {
+          current = element("div", "review-group");
+          current.appendChild(element("h4", "", node.textContent));
+          current.appendChild(element("ul"));
+          current.hidden = true;
+          groups.appendChild(current);
+        } else if (current && node.querySelector("input") && node.querySelector("input").checked) {
+          current.querySelector("ul").appendChild(element("li", "", labelOf(node.querySelector("input"))));
+          current.hidden = false;
+        }
+      });
+      granted.appendChild(groups);
+      var left = Array.prototype.filter.call(boxes, function (box) { return !box.checked; }).map(labelOf);
+      if (left.length) granted.appendChild(element("p", "review-left", "Not included: " + left.join(", ")));
+    } else {
+      granted.appendChild(element("p", "review-empty", "None ticked. Holders gain nothing until you tick some, here or later on the card."));
+    }
+    if (!warning.hidden) {
+      var note = element("p", "perm-card-warning");
+      note.appendChild(warning.querySelector(".icon").cloneNode(true));
+      note.appendChild(element("span", "", warning.querySelector("span").textContent));
+      granted.appendChild(note);
+    }
+    review.appendChild(granted);
+
+    var who = holderBoxes();
+    var held = block("Holders", 3, String(who.length));
+    if (who.length) {
+      var chips = element("ul", "review-chips");
+      each(who, function (box) {
+        var chip = element("li", "", holderName(box));
+        if (isTeam(box)) chip.appendChild(element("small", "", "team"));
+        chips.appendChild(chip);
+      });
+      held.appendChild(chips);
+    } else {
+      held.appendChild(element("p", "review-empty", "Nobody yet. You can choose holders later on the set's panel."));
+    }
+    review.appendChild(held);
+    review.appendChild(element("p", "review-final", "Nothing is saved until you press Create permission set."));
+  }
+
+  function nameProblem() {
+    var value = name.value.trim();
+    if (!value) return "Give the set a name.";
+    var taken = Array.prototype.some.call(document.querySelectorAll("[data-set-card] h2"), function (heading) {
+      return heading.textContent.trim().toLowerCase() === value.toLowerCase();
+    });
+    return taken ? "A permission set with this name already exists." : "";
+  }
+
+  function go(to) {
+    step = to;
+    each(sections, function (section) { section.hidden = Number(section.getAttribute("data-step")) !== step; });
+    steps.style.setProperty("--progress", String((step - 1) / 3));
+    each(dots, function (dot) {
+      var n = Number(dot.getAttribute("data-step-dot"));
+      var done = n < step;
+      if (n === step) dot.setAttribute("aria-current", "step"); else dot.removeAttribute("aria-current");
+      dot.classList.toggle("is-done", done);
+      dot.querySelector("span").textContent = done ? "✓" : String(n);
+      // A finished step can be opened again by a click or Enter on it.
+      if (done) {
+        dot.setAttribute("tabindex", "0");
+        dot.setAttribute("role", "button");
+        dot.setAttribute("aria-label", "Back to step " + n + ", " + dot.textContent.replace(/^✓/, ""));
+      } else {
+        dot.removeAttribute("tabindex");
+        dot.removeAttribute("role");
+        dot.removeAttribute("aria-label");
+      }
+    });
+    dialog.querySelector("[data-step-caption]").textContent = CAPTIONS[step];
+    back.hidden = step === 1;
+    create.hidden = step !== 4;
+    refreshPicked();
+    if (step === 4) renderReview();
+    var focus = { 1: name, 2: boxes[0], 3: search, 4: create }[step];
+    if (focus) focus.focus();
+  }
+
+  function forward() {
+    if (step === 1) {
+      var problem = nameProblem();
+      nameError.textContent = problem;
+      nameError.hidden = !problem;
+      if (problem) name.setAttribute("aria-invalid", "true"); else name.removeAttribute("aria-invalid");
+      if (problem) { name.focus(); return; }
+    }
+    go(step + 1);
+  }
+  next.addEventListener("click", forward);
+  back.addEventListener("click", function () { go(step - 1); });
+  skip.addEventListener("click", function () { go(4); });
+  each(dots, function (dot) {
+    function open() { if (dot.classList.contains("is-done")) go(Number(dot.getAttribute("data-step-dot"))); }
+    dot.addEventListener("click", open);
+    dot.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); }
+    });
+  });
+  // Enter in the name goes to the next step. Only Create, on the last step, submits the form.
+  form.addEventListener("submit", function (event) {
+    if (step === 4) return;
+    event.preventDefault();
+    if (step === 1 && document.activeElement === name) forward();
+  });
+
+  // Each opening starts from step 1 with an empty draft; closing in any way discards it.
+  function reset() {
+    form.reset();
+    nameError.hidden = true;
+    name.removeAttribute("aria-invalid");
+    filter();
+    refreshPerms();
+    go(1);
+  }
+  opener.addEventListener("click", function (event) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button) return;
+    event.preventDefault();
+    reset();
+    dialog.showModal();
+    name.focus();
+  });
+  each(dialog.querySelectorAll("[data-close]"), function (button) {
+    button.addEventListener("click", function () { dialog.close(); });
+  });
+  dialog.addEventListener("close", function () {
+    if (document.body.contains(opener)) opener.focus();
+  });
+})();

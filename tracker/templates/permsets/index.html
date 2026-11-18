@@ -13,7 +13,7 @@
   <div class="perm-head-tools">
     <button class="button perm-scroll" type="button" data-scroll="-1" aria-label="Previous cards" title="Previous cards" hidden>{{ icon('chevron-left') }}</button>
     <button class="button perm-scroll" type="button" data-scroll="1" aria-label="Next cards" title="Next cards" hidden>{{ icon('chevron-right') }}</button>
-    <a class="button primary" href="{{ url_for('permsets.new') }}">{{ icon('plus') }}New permission set</a>
+    <a class="button primary" href="{{ url_for('permsets.new') }}" data-new-set>{{ icon('plus') }}New permission set</a>
   </div>
 </div>
 {% if errors %}
@@ -144,6 +144,77 @@
     <footer class="list-dialog-foot">
       <button class="button" type="button" data-close>Cancel</button>
       <button class="button danger-solid" type="submit">Delete set</button>
+    </footer>
+  </form>
+</dialog>
+<dialog class="list-dialog wizard" id="new-set-dialog" aria-labelledby="new-set-title">
+  <form method="post" action="{{ url_for('permsets.create') }}" data-wizard novalidate>
+    {{ csrf_field(csrf_token()) }}
+    <input type="hidden" name="return_to" value="index">
+    <header class="list-dialog-head">
+      <div><h2 id="new-set-title">New permission set</h2><p class="list-dialog-sub" data-step-caption>Step 1 of 4: name it</p></div>
+      <button class="tool-button" type="button" data-close title="Close" aria-label="Close">✕</button>
+    </header>
+    <ol class="wizard-steps" aria-label="Steps">
+      <li data-step-dot="1" aria-current="step"><span>1</span>Details</li>
+      <li data-step-dot="2"><span>2</span>Permissions</li>
+      <li data-step-dot="3"><span>3</span>Holders</li>
+      <li data-step-dot="4"><span>4</span>Review</li>
+    </ol>
+    <div class="list-dialog-body wizard-body">
+      <section data-step="1" aria-label="Details">
+        <div class="field">
+          <label for="new-set-name">Name</label>
+          <input id="new-set-name" name="name" maxlength="100" autocomplete="off" required aria-describedby="new-set-name-help new-set-name-error">
+          <p class="field-help" id="new-set-name-help">Unique, at most 100 characters.</p>
+          <p class="field-error" id="new-set-name-error" data-name-error hidden></p>
+        </div>
+        <div class="field">
+          <label for="new-set-description">Description</label>
+          <textarea id="new-set-description" name="description" rows="2" maxlength="500" aria-describedby="new-set-description-help"></textarea>
+          <p class="field-help" id="new-set-description-help">Optional, at most 500 characters. Shown on the card.</p>
+        </div>
+      </section>
+      <section data-step="2" aria-label="Permissions" hidden>
+        <p class="wizard-lede">Tick what anyone holding this set may do. <strong data-wizard-count aria-live="polite">0 of {{ permissions|length }} ticked</strong></p>
+        <div class="wizard-perms" data-wizard-perms>
+          {% for group_name, names in groups %}
+          <h3 class="perm-group">{{ group_name }}</h3>
+          {% for name in names %}{% set label, description = permissions[name] %}
+          <label class="perm-row" for="new-perm-{{ name }}">
+            <span class="perm-row-text"><span class="perm-row-label">{{ label }}</span><span class="perm-row-help" id="new-help-{{ name }}">{{ description }}</span></span>
+            <input type="checkbox" id="new-perm-{{ name }}" name="permissions" value="{{ name }}" aria-describedby="new-help-{{ name }}">
+          </label>
+          {% endfor %}
+          {% endfor %}
+        </div>
+        <p class="perm-card-warning" data-wizard-warning hidden>{{ icon('warning') }}<span>Holding both Manage users and Manage teams gives reach close to an administrator's.</span></p>
+      </section>
+      <section data-step="3" aria-label="Holders" hidden>
+        <p class="wizard-lede">Who should hold it? Everyone in a team gets it. You can also do this later on the set's own panel.</p>
+        <div class="search-field wizard-search"><input type="search" placeholder="Search teams and people" data-holder-search aria-label="Search teams and people" autocomplete="off"></div>
+        <div class="wizard-picked" data-holder-picked aria-live="polite"></div>
+        <ul class="wizard-holders" data-holder-list>
+          {% for id, path in team_choices %}
+          <li data-kind="team" data-text="{{ path|lower }} team"><label><input type="checkbox" name="holders" value="team:{{ id }}"><span class="wizard-holder-name">{{ path }}</span><span class="muted">Team</span></label></li>
+          {% endfor %}
+          {% for id, full_name, email in people %}
+          <li data-kind="person" data-text="{{ (full_name ~ ' ' ~ email)|lower }}"><label><input type="checkbox" name="holders" value="user:{{ id }}"><span class="wizard-holder-name">{{ full_name }}</span><span class="muted">{{ email }}</span></label></li>
+          {% endfor %}
+        </ul>
+        <p class="empty-note" data-holder-none hidden>No team or person matches.</p>
+      </section>
+      <section data-step="4" aria-label="Review" hidden>
+        <div class="review" data-review></div>
+      </section>
+    </div>
+    <footer class="list-dialog-foot wizard-foot">
+      <button class="button" type="button" data-close>Cancel</button>
+      <span class="wizard-spacer"></span>
+      <button class="button" type="button" data-wizard-back hidden>Back</button>
+      <button class="button" type="button" data-wizard-skip hidden>Skip for now</button>
+      <button class="button primary" type="button" data-wizard-next>Next</button>
+      <button class="button primary" type="submit" data-wizard-create hidden>Create permission set</button>
     </footer>
   </form>
 </dialog>
