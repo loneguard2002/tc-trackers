@@ -139,11 +139,17 @@ def test_tracker_access_filters_and_gives_a_role(
     zed = user_factory(full_name="Zed Zebra")
     _open(page, live_server, user_factory(is_admin=True), f"/trackers/{t.id}/roles")
 
-    page.get_by_role("button", name="Teams (").click()
+    # The role chips replaced the route chips; the team route is still found by searching its name.
+    chips = page.locator("[data-status-for] .chip")
+    chips.filter(has_text="Viewer").click()
     expect(page.get_by_role("row", name="Dina Direct")).to_be_hidden()
     expect(page.get_by_role("row", name="Tara Team")).to_be_visible()
-    page.get_by_role("button", name="All (").click()
+    chips.filter(has_text="All").click()
     expect(page.get_by_role("row", name="Dina Direct")).to_be_visible()
+    page.locator("#access-table-search").fill("windows")
+    expect(page.get_by_role("row", name="Tara Team")).to_be_visible()
+    expect(page.get_by_role("row", name="Dina Direct")).to_be_hidden()
+    page.locator("#access-table-search").fill("")
 
     page.locator("input[data-select-filter=user_id]").fill("zebra")
     assert "Zed Zebra" in page.eval_on_selector("#user_id", "s => s.selectedOptions[0].text")
