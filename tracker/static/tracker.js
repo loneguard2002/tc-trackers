@@ -110,6 +110,34 @@
     if (message && !window.confirm(message)) event.preventDefault();
   });
 
+  // A button marked data-busy (the email sends, which cannot be recalled) posts its form once. When the post goes
+  // ahead, the form's buttons are disabled and that button shows its data-busy text until the answer arrives, so a
+  // double click cannot send twice. Listening on the window sees the submit after the data-confirm question, so a
+  // send the person cancelled does not count. A page restored from the back-forward cache starts clean.
+  var sending = [];
+
+  function startSending(form, button) {
+    var enabled = Array.prototype.filter.call(form.querySelectorAll("button"), function (each) {
+      return !each.disabled;
+    });
+    sending.push({ button: button, label: Array.prototype.slice.call(button.childNodes), enabled: enabled });
+    enabled.forEach(function (each) { each.disabled = true; });
+    button.textContent = button.getAttribute("data-busy");
+  }
+
+  window.addEventListener("submit", function (event) {
+    var button = event.submitter;
+    if (button && button.hasAttribute("data-busy") && !event.defaultPrevented) startSending(event.target, button);
+  });
+  window.addEventListener("pageshow", function () {
+    sending.forEach(function (sent) {
+      sent.button.textContent = "";
+      sent.label.forEach(function (node) { sent.button.appendChild(node); });
+      sent.enabled.forEach(function (each) { each.disabled = false; });
+    });
+    sending = [];
+  });
+
   // Forms marked data-inline-confirm ask in the page instead: the [data-ask] button reveals [data-confirm-box], whose
   // [data-confirm-yes] submits and [data-confirm-no] (or Escape) puts the button back. form.submit() skips the submit
   // event, so the data-confirm dialog kept as the no-script fallback does not ask a second time. When the form has a
@@ -143,7 +171,11 @@
       box.hidden = false;
       box.querySelector("[data-confirm-no]").focus();
     });
-    box.querySelector("[data-confirm-yes]").addEventListener("click", function () { form.submit(); });
+    var yes = box.querySelector("[data-confirm-yes]");
+    yes.addEventListener("click", function () {
+      if (yes.hasAttribute("data-busy")) startSending(form, yes);
+      form.submit();
+    });
     box.querySelector("[data-confirm-no]").addEventListener("click", function () {
       close();
       ask.focus();
