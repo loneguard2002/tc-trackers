@@ -264,3 +264,34 @@ def test_the_cards_stack_on_a_phone(page, live_server, user_factory, give_set):
     )
     assert len(set(xs)) == 1
     expect(page.get_by_role("button", name="Next cards")).to_be_hidden()
+
+
+@pytest.mark.parametrize("width", [800, 720, 1000])
+def test_the_pinned_head_stays_inside_the_page_at_middle_widths(page, live_server, user_factory, give_set, width):
+    three_sets(give_set, user_factory)
+    page.set_viewport_size({"width": width, "height": 900})
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(f"{live_server}/admin/permission-sets")
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    assert page.evaluate("document.querySelector('.perm-head').getBoundingClientRect().right <= window.innerWidth")
+
+
+def test_discard_moves_the_focus_to_a_restored_tick(page, live_server, user_factory, give_set):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(f"{live_server}/admin/permission-sets")
+    page.get_by_label("Manage users for PMO").check()
+    page.get_by_role("button", name="Discard").click()
+    expect(page.get_by_label("Manage users for PMO")).to_be_focused()
+
+
+def test_a_refused_save_does_not_silence_the_warning(page, live_server, user_factory, give_set):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(f"{live_server}/admin/permission-sets")
+    page.get_by_label("Manage users for PMO").check()
+    page.evaluate(
+        "document.getElementById('permission-cards-form').addEventListener('submit', e => e.preventDefault())"
+    )
+    page.evaluate("document.getElementById('permission-cards-form').requestSubmit()")
+    assert page.evaluate(UNLOAD_WARNS) is True
