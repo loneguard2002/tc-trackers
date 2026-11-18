@@ -515,7 +515,7 @@ main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-heigh
 .switch input:checked + .switch-track::after { transform: translateX(18px); }
 .switch input:focus-visible + .switch-track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
-.settings-actions { position: sticky; bottom: 12px; z-index: 5; display: flex; justify-content: flex-end; gap: 8px; margin: 0 0 20px; padding: 12px 20px; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 72%, transparent); box-shadow: 0 6px 20px rgba(7, 26, 61, .1); -webkit-backdrop-filter: saturate(180%) blur(16px); backdrop-filter: saturate(180%) blur(16px); }
+.settings-actions { position: sticky; bottom: 12px; z-index: 5; display: flex; justify-content: flex-end; gap: 8px; margin: 0 0 20px; padding: 12px 20px; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 72%, transparent); box-shadow: 0 6px 20px rgba(7, 26, 61, .1); -webkit-backdrop-filter: saturate(180%) blur(12px); backdrop-filter: saturate(180%) blur(12px); }
 /* Save bars are frosted glass: the page shows through, blurred. Without backdrop-filter they stay nearly solid. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .settings-actions { background: color-mix(in srgb, var(--surface) 96%, transparent); } }
 .settings-actions .button { font-weight: 600; }
