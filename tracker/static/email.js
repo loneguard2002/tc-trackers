@@ -34,7 +34,7 @@
     });
   }
 
-  function refresh() {
+  function refresh(initial) {
     var unknown = [];
     [subject.value, body.value].forEach(function (text) {
       text.replace(PLACEHOLDER, function (match, name) {
@@ -55,6 +55,10 @@
     // The subject is plain text: control characters collapse to spaces, as they do when it is sent.
     var heading = fill(subject.value, false).replace(/[\x00-\x1f\x7f]+/g, " ").trim();
     preview.querySelector("[data-preview-subject]").textContent = "Subject: " + heading;
+    // On load the server's frame already shows the saved template. Rebuilding it while it was still loading (the
+    // usual case with the page's files cached, as after a week change) left it blank for good in Chrome and Edge,
+    // so it is rebuilt then only when the browser has restored an edit to the template.
+    if (initial && subject.value === subject.defaultValue && body.value === body.defaultValue) return;
     var frame = preview.querySelector("[data-preview-frame]");
     // The frame follows the page's security policy, which blocks inline styles; the server drops them too.
     var shown = fill(body.value, true).replace(/\sstyle=("[^"]*"|'[^']*')/g, "");
@@ -80,6 +84,6 @@
     });
   });
 
-  form.addEventListener("input", refresh);
-  refresh();
+  form.addEventListener("input", function () { refresh(false); });
+  refresh(true);
 })();
