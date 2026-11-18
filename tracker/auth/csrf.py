@@ -11,6 +11,9 @@ from urllib.parse import urlsplit
 from flask import Flask, abort, request, session
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+# Endpoints that take a POST without the app's token. Microsoft posts the sign-in result to the SSO callback
+# (response_mode=form_post); there MSAL checks the posted state against the signed flow cookie instead (auth/sso.py).
+CSRF_EXEMPT_ENDPOINTS = frozenset({"sso.sso_callback"})
 
 
 class LoginThrottle:
@@ -73,7 +76,7 @@ def install_csrf(app: Flask) -> None:
 
     @app.before_request
     def check_csrf():
-        if request.method in UNSAFE_METHODS:
+        if request.method in UNSAFE_METHODS and request.endpoint not in CSRF_EXEMPT_ENDPOINTS:
             candidate = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
             if not valid_csrf(candidate):
                 abort(400, description="The form has expired or is invalid. Please reload the page and try again.")

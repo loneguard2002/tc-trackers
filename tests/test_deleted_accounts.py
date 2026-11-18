@@ -3,7 +3,7 @@
 from sqlalchemy import select
 
 from tests.conftest import TEST_PASSWORD, post
-from tests.test_sso import FakeMsal, claims, start
+from tests.test_sso import FakeMsal, callback, claims, start
 from tracker.models import User
 
 
@@ -27,7 +27,7 @@ def test_password_sign_in_finds_the_live_account_beside_a_deleted_one(client, us
 def test_microsoft_sign_in_ignores_a_deleted_account_with_the_same_email(sso_client, monkeypatch, db, user_factory):
     deleted = user_factory(auth_source="sso", password_hash=None, email="person@example.com", status="deleted")
     start(sso_client, monkeypatch, FakeMsal(claims()))
-    sso_client.get("/auth/callback?code=c&state=s")
+    callback(sso_client)
     created = db.scalars(select(User).where(User.email == "person@example.com", User.status == "pending")).one()
     assert created.id != deleted.id and created.sso_subject is not None
 

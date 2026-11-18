@@ -7,7 +7,7 @@ from markupsafe import escape
 from sqlalchemy import select
 
 from tests.conftest import TEST_PASSWORD, post, sign_in
-from tests.test_sso import FakeMsal, claims, start
+from tests.test_sso import FakeMsal, callback, claims, start
 from tests.test_teams import entries
 from tracker.auth.accounts import (
     ELEVATED_MESSAGE,
@@ -123,7 +123,7 @@ def test_switch_then_microsoft_sign_in_links_and_keeps_access(
 
     person_client = sso_app.test_client()
     start(person_client, monkeypatch, FakeMsal(claims(email=person.email)))
-    person_client.get("/auth/callback?code=c&state=s")
+    callback(person_client)
     with person_client.session_transaction() as sess:
         assert sess["user_id"] == person.id
     db.expire_all()
