@@ -1116,3 +1116,99 @@ def test_a_row_named_by_the_address_hash_opens_its_page_unless_a_filter_hides_it
     expect(page.locator(ROWS)).to_have_count(0)
     assert _query(page) == {"q": "zzz"}
     _clean(page)
+
+
+# --- Toolkit follow-ups (PR 2) ---------------------------------------------------------------------------------------
+
+# A toolkit table of 60 rows built after the page loaded, with its search box, for window.trackerLists.setUp.
+LATE_TABLE = """
+() => {
+  var host = document.querySelector("main");
+  var box = document.createElement("div");
+  box.innerHTML =
+    '<div class="search-field list-search" data-search-for="late-table" hidden>' +
+    '<input id="late-table-search" type="search" aria-label="Search late" data-search-input></div>' +
+    '<div class="section-table list-table"><table id="late-table" class="card-rows"><thead><tr>' +
+    '<th scope="col" data-sort-type="text">' +
+    '<button type="button" class="sort-button" data-sort="name" hidden>Name</button>' +
+    '<span data-sort-label>Name</span></th></tr></thead><tbody></tbody></table></div>';
+  var body = box.querySelector("tbody");
+  for (var n = 0; n < 60; n += 1) {
+    var row = body.insertRow();
+    row.setAttribute("data-search", "row " + n);
+    row.setAttribute("data-sort-name", "Row " + (60 - n));
+    row.insertCell().textContent = "Row " + n;
+  }
+  host.appendChild(box);
+  window.lateTable = box.querySelector("table");
+}
+"""
+
+
+def test_footer_is_a_plain_div_and_the_nav_wraps_only_the_paging_controls(
+    page, live_server, user_factory, region_factory, location_factory
+):
+    emea = region_factory("EMEA", "Europe, Middle East and Africa")
+    for number in range(30):
+        location_factory(emea, f"City {number:02d}", "GB", code=f"X{number:02d}")
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+    pager = page.locator('[data-pager-for="locations-table"]')
+    assert pager.evaluate("el => el.tagName") == "DIV"
+    nav = page.get_by_role("navigation", name="Pages of locations")
+    expect(nav).to_have_count(1)
+    assert nav.locator("[data-pager-count]").count() == 0
+    assert nav.locator("[data-pager-next]").count() == 1
+    page.locator("#locations-table-search").fill("City 01")
+    expect(page.get_by_role("navigation", name="Pages of locations")).to_have_count(0)  # one page: no landmark
+    expect(page.locator("[data-pager-count]")).to_be_visible()
+    _clean(page)
+
+
+def test_footer_and_chips_count_people_who_are_not_active_the_same_way(
+    page, live_server, user_factory, team_factory, add_member
+):
+    team = team_factory(name="Windows")
+    add_member(team, user_factory(full_name="Dan Direct"), "viewer")
+    add_member(team, user_factory(full_name="Dora Disabled", status="disabled"), "viewer")
+    add_member(team, user_factory(full_name="Eve Editor"), "editor")
+    _open(page, live_server, user_factory(is_admin=True), f"/admin/teams/{team.id}")
+    expect(_chip(page, "all")).to_have_text("2")
+    assert _foot(page).startswith("Showing 2 of 2 people")
+    page.locator("#people-table-search").fill("dora")
+    expect(_chip(page, "all")).to_have_text("0")
+    assert _foot(page).startswith("Showing 0 of 2 people")
+    _clean(page)
+
+
+def test_set_up_works_on_a_table_added_later_and_only_once(page, live_server, user_factory):
+    _open(page, live_server, user_factory(is_admin=True), "/admin/locations")
+    assert page.evaluate("typeof window.trackerLists.setUp") == "function"
+    page.evaluate(LATE_TABLE)
+    page.evaluate("window.trackerLists.setUp(window.lateTable)")
+    page.evaluate("window.trackerLists.setUp(window.lateTable)")  # the second call does nothing
+    header = page.locator("#late-table th")
+    expect(page.locator("#late-table .sort-button")).to_be_visible()
+    page.locator("#late-table .sort-button").click()
+    assert header.get_attribute("aria-sort") == "ascending"  # two sets of handlers would have flipped it back
+    expect(page.locator("#late-table tbody tr").first).to_have_text("Row 59")
+    page.locator("#late-table-search").fill("row 7")
+    expect(page.locator("#late-table tbody tr:visible")).to_have_count(1)
+    _clean(page)
+
+
+def test_table_headings_stick_under_the_section_links(page, live_server, tracker_factory, user_factory, grant):
+    tracker = tracker_factory(name="Sticky tracker")
+    user = user_factory()
+    grant(user, tracker, "editor")
+    _open(page, live_server, user, f"/trackers/{tracker.id}/risks/new")
+    page.add_script_tag(url=f"{live_server}/static/lists.js")  # this page does not load the toolkit yet
+    page.evaluate(LATE_TABLE)
+    page.evaluate("window.trackerLists.setUp(window.lateTable)")
+    page.set_viewport_size({"width": 1440, "height": 800})
+    page.evaluate("document.getElementById('late-table').rows[30].scrollIntoView({block: 'center'})")
+    page.wait_for_timeout(300)
+    heading = page.evaluate("document.querySelector('#late-table th').getBoundingClientRect().top")
+    links = page.evaluate("document.querySelector('.subnav').getBoundingClientRect().bottom")
+    assert page.evaluate("document.querySelector('.subnav') !== null")
+    assert abs(heading - links) <= 1.5, (heading, links)
+    _clean(page)

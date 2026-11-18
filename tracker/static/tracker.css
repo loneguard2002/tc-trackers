@@ -1026,7 +1026,7 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
   :is(.risk-table, .group-table) tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
   :is(.risk-table, .group-table) tbody tr:last-child { border-bottom: 0; }
   .section-table:is(.risk-table, .group-table) :is(td, th, td:first-child, td:last-child) { display: block; padding: 0; border: 0; background: none; }
-  :is(.risk-table, .group-table) td[data-label]::before { content: attr(data-label) " "; color: var(--muted); }
+  :is(.risk-table, .group-table) td[data-label]:not([data-label=""])::before { content: attr(data-label) " "; color: var(--muted); }
   :is(.risk-table, .group-table) .cell-actions { width: auto; margin-left: auto; }
   .risk-table tr.risk-row { box-shadow: inset 4px 0 0 var(--tone); }
   .risk-table tr.risk-row td:first-child { box-shadow: none; }
@@ -1034,7 +1034,7 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
   .risk-table td[data-label] { order: 2; }
   .risk-table .risk-due small { display: inline; margin-left: 6px; }
   .group-table td.group-progress-cell { order: 1; flex: 1 1 100%; }
-  .group-table td[data-label] { order: 2; }
+  .group-table td[data-label]:not([data-label=""]) { order: 2; }
   .group-table td.group-comment { order: 3; flex: 1 1 100%; max-width: none; }
   .group-table td.group-comment:empty, .group-table .group-total :is(th, td):empty { display: none; }
   .group-table tr.group-total { border-top: 2px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
@@ -1286,6 +1286,7 @@ a.count-pill:hover { background: color-mix(in srgb, var(--primary) 20%, transpar
 .country-pick { display: flex; align-items: center; gap: 10px; }
 .country-pick select { flex: 1 1 auto; min-width: 0; }
 .list-dialog-note { margin: 6px 0 0; }
+.list-move-note { margin: 0; padding: 10px 20px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: .8125rem; }
 .list-no-match { margin: 0; padding: 20px; color: var(--muted); font-size: .875rem; text-align: center; }
 .code-input { text-transform: uppercase; }  /* the server upper-cases a location code; show it so as it is typed */
 

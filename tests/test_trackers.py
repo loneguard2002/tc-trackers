@@ -236,18 +236,43 @@ def test_groups_page_is_a_table_with_row_actions(client, logged_in_admin, db, tr
     assert 'name="baseline"' not in html  # editing has its own page
 
 
-def test_groups_page_shows_progress_totals_and_retired_apart(client, logged_in_admin, db, tracker_factory):
+def test_groups_page_shows_progress_totals_and_retired_in_the_one_table(client, logged_in_admin, db, tracker_factory):
     tracker = tracker_factory()
-    first = make_group(db, tracker, baseline=10, rag="Red", ready_not_complete=2)
-    make_group(db, tracker, name="Site B", baseline=30)
-    make_group(db, tracker, name="Old site", baseline=0, retired=True)
+    first = make_group(db, tracker, baseline=10, rag="Red", ready_not_complete=2, sort_order=1)
+    make_group(db, tracker, name="Site B", baseline=30, sort_order=2)
+    make_group(db, tracker, name="Old site", baseline=0, retired=True, sort_order=3)
     add_entry(db, tracker, first, date(2026, 9, 1), 4, date(2026, 9, 4))
     html = client.get(f"/trackers/{tracker.id}/groups").get_data(as_text=True)
-    current, retired = html.split("Retired locations (1)")
-    assert "rag-dot rag-dot-red" in current and "4 of 10" in current
-    assert '<th scope="row">All locations</th>' in current and "4 of 40" in current
-    assert "Old site" in retired and "Old site" not in current
-    assert "Retire once nothing remains" in current  # both active groups still have work left
+    assert html.count("<table") == 1 and "Retired locations (" not in html
+    assert html.index("Site A") < html.index("Site B") < html.index("Old site")  # the owner's order, retired in place
+    assert 'data-status="retired"' in html and 'data-status="active"' in html
+    assert "rag-dot rag-dot-red" in html and "4 of 10" in html
+    assert '<th scope="row">All locations</th>' in html and "4 of 40" in html
+    assert "Retire once nothing remains" in html  # both active groups still have work left
+    assert "Showing 3 of 3 locations · 2 active" in html
+
+
+def test_groups_page_controls_stay_hidden_without_javascript(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    make_group(db, tracker, sort_order=1)
+    make_group(db, tracker, name="Site B", sort_order=2)
+    html = client.get(f"/trackers/{tracker.id}/groups").get_data(as_text=True)
+    assert 'data-search-for="groups-table"' in html and 'data-search-for="groups-table" hidden' in html
+    assert 'data-status-for="groups-table" hidden' in html
+    assert 'data-show-when-reordered="groups-table" hidden' in html  # the note
+    assert html.count("data-hide-when-reordered") == 4  # Up and Down on both rows, shown without JavaScript
+    assert 'class="sort-button" data-sort="name" hidden' in html
+
+
+def test_a_group_action_returns_to_the_view_it_came_from(client, logged_in_admin, db, tracker_factory):
+    tracker = tracker_factory()
+    group = make_group(db, tracker, baseline=0)
+    url = f"/trackers/{tracker.id}/groups"
+    view = "?filter=active&q=site&sort=-progress&page=2&size=50&evil=1"
+    response = post(client, url, {"action": "retire", "group_id": group.id, "view": view})
+    assert response.headers["Location"] == f"{url}?filter=active&q=site&sort=-progress&page=2&size=50"
+    response = post(client, url, {"action": "unretire", "group_id": group.id})
+    assert response.headers["Location"] == url
 
 
 def test_move_skips_retired_groups(client, logged_in_admin, db, tracker_factory):

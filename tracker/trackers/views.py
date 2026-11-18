@@ -48,6 +48,7 @@ from ..lists.catalogue import (
     tracker_labels,
     tracker_region_ids,
 )
+from ..listview import list_url
 from ..models import (
     CompletionEntry,
     Group,
@@ -724,6 +725,10 @@ def settings(tracker_id: int):
 # --- Groups --------------------------------------------------------------------------------------------------
 
 
+# The keys of the Locations table's view (lists.js writes them to the address) a row action sends the reader back to.
+GROUP_VIEW_KEYS = ("q", "filter", "sort", "page", "size")
+
+
 def _ordered_groups(db, tracker: Tracker) -> list[Group]:
     return list(db.scalars(select(Group).where(Group.tracker_id == tracker.id).order_by(Group.sort_order, Group.id)))
 
@@ -771,7 +776,7 @@ def groups(tracker_id: int):
         error = _handle_group_action(db, tracker)
         if error:
             flash(error, "danger")
-        return redirect(url_for("trackers.groups", tracker_id=tracker.id))
+        return redirect(list_url("trackers.groups", GROUP_VIEW_KEYS, tracker_id=tracker.id))
     deployed = _deployed_by_group(db, tracker)
     return render_template(
         "trackers/groups.html",

@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% from "macros.html" import bar, csrf_field, icon, rag_dot, tool_link %}
+{% from "lists/_table.html" import search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
 {% set label = tracker.group_label or 'Group' %}
 {% set manage = is_owner and tracker.status == 'active' %}
-{% macro group_action(group, action, icon_name, text, disabled=False, confirm=None, danger=False, why=None) -%}
-<form method="post" action="{{ url_for('trackers.groups', tracker_id=tracker.id) }}"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
+{# ``order_only`` marks the form (Up and Down) for lists.js to hide while a sort, search or filter shows the rows out of
+   the owner's order. #}
+{% macro group_action(group, action, icon_name, text, disabled=False, confirm=None, danger=False, why=None, order_only=False) -%}
+<form method="post" action="{{ url_for('trackers.groups', tracker_id=tracker.id) }}"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}{% if order_only %} data-hide-when-reordered{% endif %}>
   {{ csrf_field(csrf_token()) }}<input type="hidden" name="group_id" value="{{ group.id }}"><input type="hidden" name="action" value="{{ action }}">
   <button class="tool-button{{ ' is-danger' if danger }}" type="submit" title="{{ why or text }}" aria-label="{{ text }}: {{ group.name }}{{ ' (' ~ why ~ ')' if why and disabled }}"{{ ' disabled' if disabled }}>{{ icon(icon_name) }}</button>
 </form>
@@ -11,12 +14,12 @@
 {% macro group_row(group, first=False, last=False) -%}
 {% set done = group.starting_completed + deployed.get(group.id, 0) %}
 {% set remaining = group.baseline - done %}
-<tr{% if group.retired %} class="is-retired"{% endif %}>
-  <td class="group-name">
+<tr{% if group.retired %} class="is-retired"{% endif %} data-status="{{ 'retired' if group.retired else 'active' }}" data-search="{{ group.name|lower }}" data-sort-name="{{ group.name }}" data-sort-progress="{{ (done / group.baseline)|round(4) if group.baseline else '' }}" data-sort-remaining="{{ remaining }}" data-sort-ready="{{ group.ready_not_complete }}" data-sort-planned="{{ group.planned_completion.isoformat() if group.planned_completion else '' }}">
+  <td class="group-name" data-label="">
     <span class="group-name-line">{{ rag_dot(group.rag) }}<a class="cell-title" href="{{ url_for('trackers.edit_group', tracker_id=tracker.id, group_id=group.id) }}">{{ group.name }}</a></span>
     <span class="sr-only">Status: {{ group.rag or 'not set' }}.</span>
   </td>
-  <td class="group-progress-cell">
+  <td class="group-progress-cell" data-label="">
     <span class="group-progress-line">{{ bar(done, group.baseline, extra=group.ready_not_complete, label=done ~ ' of ' ~ group.baseline ~ ' complete') }}
       <span class="group-pct">{{ (done / group.baseline if group.baseline else none)|pct }}</span></span>
     <span class="cell-sub">{{ done|num }} of {{ group.baseline|num }}</span>
@@ -24,11 +27,11 @@
   <td class="num" data-label="Remaining:">{{ remaining|num }}</td>
   <td class="num" data-label="Ready:">{% if group.ready_not_complete %}{{ group.ready_not_complete|num }}{% else %}<span class="muted">–</span>{% endif %}</td>
   <td data-label="Planned:">{% if group.planned_completion %}{{ group.planned_completion.strftime('%d %b %Y') }}{% else %}<span class="muted">Not set</span>{% endif %}</td>
-  <td class="group-comment">{{ group.comment }}</td>
+  <td class="group-comment" data-label="">{{ group.comment }}</td>
   <td class="cell-actions"><div class="row-tools">
     {% if manage and not group.retired %}
-    {{ group_action(group, 'up', 'arrow-up', 'Move up', disabled=first) }}
-    {{ group_action(group, 'down', 'arrow-down', 'Move down', disabled=last) }}
+    {{ group_action(group, 'up', 'arrow-up', 'Move up', disabled=first, order_only=True) }}
+    {{ group_action(group, 'down', 'arrow-down', 'Move down', disabled=last, order_only=True) }}
     {% endif %}
     {{ tool_link(url_for('trackers.edit_group', tracker_id=tracker.id, group_id=group.id), 'edit', 'Edit ' ~ group.name) }}
     {% if manage %}
@@ -47,14 +50,16 @@
 </tr>
 {%- endmacro %}
 {% macro head() -%}
-<thead><tr><th scope="col">{{ label }}</th><th scope="col">Progress</th><th scope="col" class="num">Remaining</th><th scope="col" class="num">Ready</th>
-  <th scope="col">Planned completion</th><th scope="col">Comment</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+<thead><tr>{{ sort_header(label, 'name') }}{{ sort_header('Progress', 'progress', type='number') }}{{ sort_header('Remaining', 'remaining', 'num', type='number') }}{{ sort_header('Ready', 'ready', 'num', type='number') }}
+  {{ sort_header('Planned completion', 'planned', type='date') }}<th scope="col">Comment</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
 {%- endmacro %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
 {% set current = groups|rejectattr('retired')|list %}
-{% set retired = groups|selectattr('retired')|list %}
 <div class="settings">
   <section class="settings-section" aria-labelledby="section-groups">
     <header class="settings-section-head has-action">
@@ -64,12 +69,19 @@
       </div>
       {% if manage %}<a class="button primary button-small" href="{{ url_for('trackers.new_group', tracker_id=tracker.id) }}">{{ icon('plus') }}Add a {{ label|lower }}</a>{% endif %}
     </header>
-    {% if current %}
-    <div class="section-table register group-table">
-      <table class="table">
+    {% if groups %}
+    {% set noun = label|lower|plural %}
+    <div class="list-tools">
+      {{ search_box('groups-table', 'Search ' ~ noun) }}
+      {{ status_filters('groups-table', noun, counts={'all': groups|length, 'active': current|length, 'retired': groups|length - current|length}) }}
+      {{ clear_filters('groups-table') }}
+    </div>
+    {% if manage %}<p class="list-move-note" data-show-when-reordered="groups-table" hidden>Clear the sort and filters to change the order.</p>{% endif %}
+    <div class="section-table register group-table list-table">
+      <table id="groups-table" class="table card-rows" data-clear-sort>
         {{ head() }}
         <tbody>
-        {% for group in current %}{{ group_row(group, loop.first, loop.last) }}{% endfor %}
+        {% for group in groups %}{{ group_row(group, group.id == current[0].id, group.id == current[-1].id) }}{% endfor %}
         </tbody>
         {% if current|length > 1 %}
         {% set ns = namespace(done=0, scope=0, ready=0) %}
@@ -91,22 +103,11 @@
         </tr></tfoot>
         {% endif %}
       </table>
+      {{ no_match('No ' ~ noun ~ ' match.', 'groups-table') }}
     </div>
-    {% elif not retired %}
-    <p class="empty-note">No {{ label|plural|lower }} have been added yet.</p>
+    {{ table_pager('groups-table', noun, label|lower, groups|length, current|length) }}
     {% else %}
-    <p class="empty-note">Every {{ label|lower }} is retired.</p>
-    {% endif %}
-    {% if retired %}
-    <details class="closed-block">
-      <summary>Retired {{ label|lower|plural }} ({{ retired|length }})</summary>
-      <div class="section-table register group-table">
-        <table class="table">
-          {{ head() }}
-          <tbody>{% for group in retired %}{{ group_row(group) }}{% endfor %}</tbody>
-        </table>
-      </div>
-    </details>
+    <p class="empty-note">No {{ label|plural|lower }} have been added yet.</p>
     {% endif %}
     {% if groups %}<p class="section-foot-note">Retire a {{ label|lower }} once its remaining figure is zero. Only {{ label|lower|plural }} with no completions recorded can be deleted.</p>{% endif %}
   </section>

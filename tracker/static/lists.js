@@ -33,10 +33,22 @@
   // server form, whose keys are left alone); every other key and the hash stay as they are. A value that does not
   // fit (an unknown filter or sort, a size other than 25, 50 or 100, a page that is not a positive whole number or
   // lies beyond the last) is ignored and is gone from the address after the next change.
+  //
+  // window.trackerLists.setUp(table) sets up one table, for a table put on the page after load (the side panel's
+  // holders); a table already set up is left alone, so a second call does nothing.
+  //
+  // A row marked data-uncounted is listed but left out of every count: the status buttons, and the footer's "of N"
+  // and its matching figure, so that "All N" and "Showing N of N" agree.
+  //
+  // A table whose rows the server orders and moves (the Locations tab's Up and Down) marks those buttons
+  // data-hide-when-reordered: lists.js hides them while a sort, a search or a status button other than the first is in
+  // use, and shows the element marked data-show-when-reordered="<table id>" (the note saying why) in their place. The
+  // table can also carry data-clear-sort, which makes Clear filters clear the sort as well and show while one is in use.
   function setUpTable(table) {
     var id = table.id;
     var body = table.tBodies[0];
-    if (!body) return;
+    if (!body || table.hasAttribute("data-table-ready")) return;
+    table.setAttribute("data-table-ready", "");
     var items = Array.prototype.map.call(body.rows, function (row, index) {
       return { row: row, index: index };
     });
@@ -59,6 +71,7 @@
     var pageNumber = 1;
     var pageSize = 25;
     var prefix = table.getAttribute("data-state-prefix") || "";
+    var clearsSort = table.hasAttribute("data-clear-sort");
     var settingUp = true;  // until the first refresh, so that a page from the address is checked, not clamped
 
     each(buttons, function (button) {
@@ -120,10 +133,14 @@
       var counts = { all: 0 };
       var matching = [];
       var active = 0;
+      var countedMatching = 0;
+      var countedTotal = 0;
       Array.prototype.forEach.call(body.rows, function (row) {
         var rowTokens = tokens(row);
         var found = inSearchAndRegion(row);
-        if (found && !row.hasAttribute("data-uncounted")) {  // listed but not counted: a person who is not active
+        var counted = !row.hasAttribute("data-uncounted");  // listed but not counted: a person who is not active
+        if (counted) countedTotal += 1;
+        if (found && counted) {
           counts.all += 1;
           rowTokens.forEach(function (token) { counts[token] = (counts[token] || 0) + 1; });
         }
@@ -131,6 +148,7 @@
         if (found && (status === "all" || rowTokens.indexOf(status) !== -1)) {
           row.matchIndex = matching.length;
           matching.push(row);
+          if (counted) countedMatching += 1;
         }
         if (rowTokens.indexOf("active") !== -1) active += 1;
       });
@@ -152,11 +170,12 @@
         var count = button.querySelector("[data-count]");
         if (count) count.textContent = String(counts[button.getAttribute("data-status")] || 0);
       });
+      showMoveButtons(inUse || sortValue() !== "");
       if (countText) {
         var many = matching.length > pageSize;
-        var noun = countText.getAttribute(items.length === 1 ? "data-noun-one" : "data-noun-many");
+        var noun = countText.getAttribute(countedTotal === 1 ? "data-noun-one" : "data-noun-many");
         var copy = "Showing " + (many ? (first + 1) + "\u2013" + (first + shown) + " of " + matching.length
-          : matching.length + " of " + items.length) + " " + (many ? countText.getAttribute("data-noun-many") : noun);
+          : countedMatching + " of " + countedTotal) + " " + (many ? countText.getAttribute("data-noun-many") : noun);
         if (countText.hasAttribute("data-has-active")) copy += " \u00b7 " + active + " active";
         countText.textContent = copy;
         if (controls) controls.hidden = matching.length <= 25;
@@ -178,7 +197,15 @@
 
     function filtersInUse() {
       return Boolean((input && input.value.trim() !== "") || (regionFilter && regionFilter.value !== "")
-        || status !== defaultStatus);
+        || status !== defaultStatus || (clearsSort && sortValue() !== ""));
+    }
+
+    // The buttons that move a row in the server's own order make sense only in that order.
+    function showMoveButtons(reordered) {
+      each(table.querySelectorAll("[data-hide-when-reordered]"), function (element) { element.hidden = reordered; });
+      each(document.querySelectorAll('[data-show-when-reordered="' + id + '"]'), function (element) {
+        element.hidden = !reordered;
+      });
     }
 
     // A change of search, filter, region, sort or size starts again at the first page.
@@ -209,6 +236,7 @@
       button.addEventListener("click", function () {
         if (input) input.value = "";
         if (regionFilter) regionFilter.value = "";
+        if (clearsSort) resetSort();
         if (buttons.length) {
           status = buttons[0].getAttribute("data-status");
           each(buttons, function (other) { other.setAttribute("aria-pressed", other === buttons[0] ? "true" : "false"); });
@@ -329,6 +357,14 @@
         restart();
       });
     });
+
+    // Back to the server's order: the rows as they arrived, and the column marked data-sort-default (if any) ascending.
+    function resetSort() {
+      headers.forEach(function (header) {
+        header.setAttribute("aria-sort", header.hasAttribute("data-sort-default") ? "ascending" : "none");
+      });
+      items.forEach(function (item) { body.appendChild(item.row); });
+    }
 
     // --- The view in the address ---
     function key(name) {
@@ -482,6 +518,7 @@
   }
 
   each(document.querySelectorAll(".list-table table[id], table[data-sortable][id]"), setUpTable);
+  window.trackerLists = { setUp: setUpTable };
 
   // --- Dialogs ------------------------------------------------------------------------------------------------------
 
