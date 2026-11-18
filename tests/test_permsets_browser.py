@@ -434,8 +434,8 @@ def test_holders_and_details_opens_the_side_panel(page, live_server, user_factor
     expect(panel.get_by_role("heading", name="PMO", exact=True)).to_be_visible()
     expect(panel.get_by_role("button", name="Remove")).to_have_count(1)
     expect(panel.locator(".panel-holders")).to_contain_text("Delivery")
-    expect(panel.locator(".chips")).to_contain_text("View activity")
-    expect(panel.locator(".chips")).to_contain_text("Manage users")
+    expect(panel.locator("ul.chips")).to_contain_text("View activity")
+    expect(panel.locator("ul.chips")).to_contain_text("Manage users")
     assert "set=" in page.url
     clean(page)
 
@@ -790,7 +790,7 @@ def test_create_saves_the_set_and_opens_its_panel(page, live_server, user_factor
     expect(panel.get_by_role("heading", name="Auditors", exact=True)).to_be_visible()
     expect(panel.locator(".panel-holders")).to_contain_text("Delivery")
     expect(panel.locator(".panel-holders")).to_contain_text("Priya Shah")
-    expect(panel.locator(".chips")).to_contain_text("Manage users")
+    expect(panel.locator("ul.chips")).to_contain_text("Manage users")
     assert "set=" in page.url
     panel.get_by_role("button", name="Close").click()
     card = card_of(page, "Auditors")
@@ -970,4 +970,94 @@ def test_the_panel_is_named_after_its_set_and_announces_only_a_status(
     card_of(page, "PMO").get_by_role("link", name="Holders and details").click()
     expect(page.get_by_role("dialog", name="PMO", exact=True)).to_be_visible()
     expect(page.locator("dialog.perm-drawer [role=status]")).to_have_count(1)
-    expect(page.locator("dialog.perm-drawer [aria-live]")).to_have_count(0)
+    expect(page.locator("dialog.perm-drawer [aria-live]:not([data-pager-count])")).to_have_count(0)
+
+
+# --- The holders table (the set's own page and the side panel) -------------------------------------------------------
+
+
+def three_holders(db, give_set, user_factory, team_factory):
+    """PMO held by the team Delivery and the people Priya Shah and Anna Weber."""
+    from tracker.models import PermissionSetHolder
+
+    team = team_factory(name="Delivery")
+    permission_set = give_set(["view_activity"], team=team, name="PMO")
+    for name in ("Priya Shah", "Anna Weber"):
+        db.add(PermissionSetHolder(set_id=permission_set.id, user_id=user_factory(full_name=name).id))
+    db.commit()
+    return permission_set
+
+
+def chip_counts(scope):
+    return [" ".join(t.split()) for t in scope.locator("[data-status-for] .chip").all_inner_texts()]
+
+
+def test_the_sets_own_page_holders_table_searches_filters_sorts_and_keeps_the_address(
+    page, live_server, user_factory, team_factory, give_set, db
+):
+    permission_set = three_holders(db, give_set, user_factory, team_factory)
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(f"{live_server}/admin/permission-sets/{permission_set.id}")
+    table = page.locator("#holders-table")
+    rows = table.locator("tbody tr:visible")
+    expect(rows).to_have_count(3)
+    assert chip_counts(page) == ["All 3", "People 2", "Teams 1"]
+    assert " ".join(page.locator("[data-pager-count]").inner_text().split()) == "Showing 3 of 3 holders"
+
+    page.locator("#holders-table-search").fill("priya")
+    expect(rows).to_have_count(1)
+    assert chip_counts(page) == ["All 1", "People 1", "Teams 0"]
+    assert "q=priya" in page.url
+    page.get_by_role("button", name="Clear filters").first.click()
+    expect(rows).to_have_count(3)
+
+    page.locator('[data-status-for] button[data-status="teams"]').click()
+    expect(rows).to_have_count(1)
+    expect(rows.first).to_contain_text("Delivery")
+    assert "filter=teams" in page.url
+    page.locator('[data-status-for] button[data-status="all"]').click()
+
+    table.locator('button[data-sort="name"]').click()
+    assert table.locator("tbody tr:visible .cell-title, tbody tr:visible .member-name").all_inner_texts() == [
+        "Anna Weber",
+        "Delivery",
+        "Priya Shah",
+    ]
+    assert "sort=name" in page.url
+    clean(page)
+
+
+def test_the_panels_holders_table_works_and_leaves_the_address_to_the_panel(
+    page, live_server, user_factory, team_factory, give_set, db
+):
+    three_holders(db, give_set, user_factory, team_factory)
+    open_page(page, live_server, user_factory)
+    page.on("dialog", lambda d: d.accept())
+    card_of(page, "PMO").get_by_role("link", name="Holders and details").click()
+    panel = page.locator("dialog.perm-drawer")
+    table = panel.locator("table.panel-holders")
+    rows = table.locator("tbody tr:visible")
+    expect(rows).to_have_count(3)
+    expect(panel.locator("[data-search-for]")).to_be_visible()  # set up after the fragment arrived
+    assert chip_counts(panel) == ["All 3", "People 2", "Teams 1"]
+    panel_url = page.url
+    assert page.url.split("?", 1)[1].startswith("set=")
+
+    panel.get_by_role("searchbox").fill("priya")
+    expect(rows).to_have_count(1)
+    panel.locator('[data-status-for] button[data-status="people"]').click()
+    expect(rows).to_have_count(1)
+    table.locator('button[data-sort="name"]').click()
+    assert page.url == panel_url  # no q, filter or sort in the address; ?set= still owns the panel
+
+    # A Remove still posts, returns to ?set=<id> and the new table is set up too.
+    panel.get_by_role("searchbox").fill("")
+    panel.locator('[data-status-for] button[data-status="all"]').click()
+    panel.locator("tbody tr", has_text="Priya Shah").get_by_role("button", name="Remove").click()
+    expect(panel).to_be_visible()
+    expect(table.locator("tbody tr")).to_have_count(2)
+    assert chip_counts(panel) == ["All 2", "People 1", "Teams 1"]
+    assert page.url.split("?", 1)[1].startswith("set=")
+    assert "q=" not in page.url and "filter=" not in page.url
+    clean(page)

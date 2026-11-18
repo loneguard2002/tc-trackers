@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field %}
+{% from "lists/_table.html" import search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
 {% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% macro person(u) -%}
@@ -21,29 +23,23 @@
         <div><dt>Owner</dt><dd>Also changes settings and manages the weekly email.</dd></div>
       </dl>
     </header>
-    {% set direct_count = access|selectattr('direct_role')|rejectattr('admin')|list|length %}
-    {% set teams_count = access|selectattr('teams')|list|length %}
-    {% set regions_count = access|selectattr('regions')|list|length %}
-    {% set sets_count = access|selectattr('view_all_sets')|list|length %}
-    {% set admin_count = access|selectattr('admin')|list|length %}
-    <div class="row-filter" role="group" aria-label="Show people" data-row-filter="access" hidden>
-      <button class="button button-small" type="button" data-show="all" aria-pressed="true">All ({{ access|length }})</button>
-      <button class="button button-small" type="button" data-show="direct" aria-pressed="false">Direct ({{ direct_count }})</button>
-      <button class="button button-small" type="button" data-show="team" aria-pressed="false">Teams ({{ teams_count }})</button>
-      <button class="button button-small" type="button" data-show="region" aria-pressed="false">Regions ({{ regions_count }})</button>
-      <button class="button button-small" type="button" data-show="set" aria-pressed="false">Permission sets ({{ sets_count }})</button>
-      <button class="button button-small" type="button" data-show="admin" aria-pressed="false">Administrators ({{ admin_count }})</button>
+    {% set role_counts = {'all': access|length, 'owner': access|selectattr('role', 'equalto', 'owner')|list|length, 'editor': access|selectattr('role', 'equalto', 'editor')|list|length, 'viewer': access|selectattr('role', 'equalto', 'viewer')|list|length} %}
+    {% set ranks = {'viewer': 1, 'editor': 2, 'owner': 3} %}
+    <div class="list-tools">
+      {{ search_box('access-table', 'Search people') }}
+      {{ status_filters('access-table', 'people', (('all', 'All'), ('owner', 'Owner'), ('editor', 'Editor'), ('viewer', 'Viewer')), role_counts) }}
+      {{ clear_filters('access-table') }}
     </div>
-    <div class="section-table register">
-      <table class="table" data-row-filter-target="access">
-        <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Routes</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+    <div class="section-table register" data-table-frame>
+      <table id="access-table" class="table" data-sortable>
+        <thead><tr>{{ sort_header('Person', 'person', default=True) }}{{ sort_header('Role', 'role', type='number') }}<th scope="col">Routes</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
         <tbody>
         {% for row in access %}
         {% set u = row.user %}
-        <tr data-route="{{ (('direct ' if row.direct_role and not row.admin) ~ ('team ' if row.teams) ~ ('region ' if row.regions) ~ ('set ' if row.view_all_sets) ~ ('admin' if row.admin))|trim }}">
+        <tr data-status="{{ row.role }}" data-search="{{ (u.full_name ~ ' ' ~ u.email)|lower }}" data-sort-person="{{ u.full_name }}" data-sort-role="{{ ranks[row.role] }}">
           <td><div class="member-cell">{{ person(u) }}</div></td>
-          <td>{{ row.role|title }}</td>
-          <td>
+          <td data-label="Role:">{{ row.role|title }}</td>
+          <td data-label="">
             <ul class="route-list">
               {% if row.admin %}<li>Administrator</li>{% endif %}
               {% if row.direct_role and row.admin %}<li class="muted">Direct role: {{ row.direct_role|title }} (no effect for an administrator)</li>{% endif %}
@@ -76,7 +72,9 @@
         {% endfor %}
         </tbody>
       </table>
+      {{ no_match('No one matches this search.', 'access-table') }}
     </div>
+    {{ table_pager('access-table', 'people', 'person', access|length) }}
   </section>
 
   <section class="settings-section" id="section-give" aria-labelledby="section-give-heading">

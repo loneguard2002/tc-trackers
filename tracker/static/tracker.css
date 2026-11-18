@@ -788,8 +788,6 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
   .team-add-panel, .pager { padding-left: 16px; padding-right: 16px; }
 }
 #tab-people > .settings-section, #tab-below > .settings-section, #tab-trackers > .settings-section { margin-top: 20px; }
-.row-filter { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
-.row-filter .button[aria-pressed="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary); }
 .role-note { color: var(--muted); font-size: .8125rem; }
 .select-filter { display: block; width: 100%; margin: 0 0 6px; padding: 7px 10px; font-size: .9rem; }
 .move-changes { margin: 0; padding: 12px 20px 14px 38px; }

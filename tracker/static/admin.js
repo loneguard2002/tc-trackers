@@ -27,24 +27,6 @@
     });
   });
 
-  // [data-row-filter="<id>"] holds button[data-show]; a click shows the rows of table[data-row-filter-target="<id>"]
-  // whose space-separated data-route contains the value ("all" shows every row).
-  each(document.querySelectorAll("[data-row-filter]"), function (group) {
-    var id = group.getAttribute("data-row-filter");
-    var buttons = group.querySelectorAll("button[data-show]");
-    group.hidden = false;
-    each(buttons, function (button) {
-      button.addEventListener("click", function () {
-        var show = button.getAttribute("data-show");
-        each(buttons, function (other) { other.setAttribute("aria-pressed", other === button ? "true" : "false"); });
-        each(document.querySelectorAll('table[data-row-filter-target="' + id + '"] tr[data-route]'), function (row) {
-          var routes = (row.getAttribute("data-route") || "").split(" ");
-          row.hidden = show !== "all" && routes.indexOf(show) === -1;
-        });
-      });
-    });
-  });
-
   // input[data-select-filter="<select id>"] hides the options of that select whose text does not contain the typed
   // text, and selects the first option still shown.
   each(document.querySelectorAll("input[data-select-filter]"), function (input) {

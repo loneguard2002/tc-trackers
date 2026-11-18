@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, field, icon %}
+{% from "permsets/_holders.html" import holders_table %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
 <h1>{{ permission_set.name }}</h1>
 <p class="page-lede"><a href="{{ url_for('permsets.index') }}">Permission sets</a> › {{ permission_set.name }}</p>
@@ -48,27 +52,7 @@
       <p>Everyone in a team that holds this set, and each person who holds it directly, has its permissions. A team passes the set to its own members only, not to the teams below it.</p>
     </header>
     {% if holders %}
-    <div class="section-table register">
-      <table class="table">
-        <thead><tr><th scope="col">Holder</th><th scope="col">Kind</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
-        <tbody>
-        {% for h, path, u in holders %}
-        <tr>
-          <td>{% if path %}<span class="cell-title">{{ path }}</span>{% else %}<div class="member-cell">
-            <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
-            <span class="member-who"><span class="member-name">{{ u.full_name }}</span><span class="member-email">{{ u.email }}</span></span>
-          </div>{% endif %}</td>
-          <td>{% if path %}Team{% else %}Person{% endif %}</td>
-          <td class="cell-actions"><form method="post" action="{{ url_for('permsets.remove_holder', set_id=permission_set.id, holder_id=h.id) }}"
-            data-confirm="Remove {{ path or u.full_name }} as a holder of {{ permission_set.name }}? They lose the permissions it grants.">
-            {{ csrf_field(csrf_token()) }}
-            <button class="button button-small button-quiet" type="submit">Remove</button>
-          </form></td>
-        </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
+    {{ holders_table(permission_set, holders, 'holders-table') }}
     {% else %}
     <p class="empty-note">Nobody holds this set yet.</p>
     {% endif %}

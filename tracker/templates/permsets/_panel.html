@@ -1,4 +1,5 @@
 {% from "macros.html" import csrf_field, icon %}
+{% from "permsets/_holders.html" import holders_table %}
 <div class="set-panel" data-panel-set="{{ permission_set.id }}">
   <h2 class="set-panel-title">{{ permission_set.name }}</h2>
   {% if permission_set.description %}<p class="set-panel-note">{{ permission_set.description }}</p>{% endif %}
@@ -14,19 +15,7 @@
   <section aria-labelledby="panel-holders-{{ permission_set.id }}">
     <h3 id="panel-holders-{{ permission_set.id }}">Holders</h3>
     {% if holders %}
-    <ul class="panel-holders">
-      {% for h, path, u in holders %}
-      <li>
-        {% if path %}<span class="cell-title">{{ path }}</span>{% else %}<span class="member-who"><span class="member-name">{{ u.full_name }}</span><span class="member-email">{{ u.email }}</span></span>{% endif %}
-        <form method="post" action="{{ url_for('permsets.remove_holder', set_id=permission_set.id, holder_id=h.id) }}"
-          data-confirm="Remove {{ path or u.full_name }} as a holder of {{ permission_set.name }}? They lose the permissions it grants.">
-          {{ csrf_field(csrf_token()) }}
-          <input type="hidden" name="return_to" value="index">
-          <button class="button button-small button-quiet" type="submit">Remove</button>
-        </form>
-      </li>
-      {% endfor %}
-    </ul>
+    {{ holders_table(permission_set, holders, 'panel-holders-table', panel=True) }}
     {% else %}
     <p class="empty-note">Nobody holds this set yet.</p>
     {% endif %}
