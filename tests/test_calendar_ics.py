@@ -250,3 +250,17 @@ def test_a_long_name_with_other_characters_survives_in_the_subject():
 def test_unknown_method_is_refused():
     with pytest.raises(ValueError):
         calendar(method="PUBLISH")
+
+
+def test_the_calendar_part_has_a_transfer_encoding_that_survives_a_hop_without_8bitmime():
+    for name in ("Weekly returns", "Évaluation — résumé"):
+        msg = build_invite_email(make_series(name=name), ORGANIZER, ATTENDEE, "REQUEST", 0, NOW)
+        part = next(p for p in msg.walk() if p.get_content_type() == "text/calendar")
+        assert part["Content-Transfer-Encoding"] in ("base64", "quoted-printable")
+        assert msg.as_bytes().isascii()
+        assert part.get_content().replace("\r\n", "\n") == calendar(make_series(name=name)).replace("\r\n", "\n")
+
+
+def test_the_email_is_marked_as_a_calendar_message():
+    msg = build_invite_email(make_series(), ORGANIZER, ATTENDEE, "REQUEST", 0, NOW)
+    assert msg["Content-Class"] == "urn:content-classes:calendarmessage"
