@@ -2,6 +2,7 @@
 {% from "macros.html" import csrf_field, field, icon, people_count %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='permsets.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% block content %}
 <div class="perm-head">
@@ -9,7 +10,11 @@
     <h1>Permission sets</h1>
     <p class="page-lede">A permission set is a named group of permissions. Anyone who holds a set, directly or through a team, gets all its permissions. Manage users and Manage teams together give almost administrator-level access, so give that pair with care.</p>
   </div>
-  <a class="button primary" href="#new-set">{{ icon('plus') }}New permission set</a>
+  <div class="perm-head-tools">
+    <button class="button perm-scroll" type="button" data-scroll="-1" aria-label="Previous cards" title="Previous cards" hidden>{{ icon('chevron-left') }}</button>
+    <button class="button perm-scroll" type="button" data-scroll="1" aria-label="Next cards" title="Next cards" hidden>{{ icon('chevron-right') }}</button>
+    <a class="button primary" href="{{ url_for('permsets.new') }}">{{ icon('plus') }}New permission set</a>
+  </div>
 </div>
 {% if errors %}
 <div class="form-alert" role="alert">
@@ -32,7 +37,6 @@
         <div class="perm-card-name"><h2 id="card-admins">Administrators</h2><span class="perm-card-badge">Built in</span></div>
         <p>Every permission, always. Only administrators change this screen.</p>
       </div>
-      <span class="perm-card-count">{{ total }}/{{ total }}</span>
     </header>
     <div class="perm-card-body">
       {% for group_name, names in groups %}
@@ -59,7 +63,6 @@
         <div class="perm-card-name"><h2 id="card-{{ s.id }}">{{ s.name }}</h2><span class="perm-card-badge perm-card-changed" data-changed hidden>Changed</span></div>
         {% if s.description %}<p>{{ s.description }}</p>{% else %}<p class="perm-card-none">No description.</p>{% endif %}
       </div>
-      <span class="perm-card-count" data-count>{{ granted|length }}/{{ total }}</span>
     </header>
     <div class="perm-card-body">
       {% for group_name, names in groups %}
@@ -82,32 +85,11 @@
     </footer>
   </article>
   {% endfor %}
-
-  <section class="perm-card perm-card-new" id="new-set" aria-labelledby="section-new-set">
-    <header class="perm-card-head">
-      <span class="perm-card-icon">{{ icon('plus') }}</span>
-      <div class="perm-card-title">
-        <h2 id="section-new-set">New permission set</h2>
-        <p>Create it here, tick its permissions on its card, then choose who holds it.</p>
-      </div>
-    </header>
-    <form method="post" action="{{ url_for('permsets.create') }}">
-      {{ csrf_field(csrf_token()) }}
-      <div class="field-stack">
-        {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
-        <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
-        {% endcall %}
-        {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
-        <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
-        {% endcall %}
-      </div>
-      <button class="button" type="submit">{{ icon('plus') }}Create permission set</button>
-    </form>
-  </section>
 </div>
 {% if sets %}
-<div class="settings-actions perm-save">
-  <span class="perm-save-lock">{{ icon('lock') }}Administrators always hold every permission.</span>
+<div class="settings-actions perm-save" data-save-bar role="region" aria-label="Unsaved changes">
+  <span class="perm-save-count" data-save-count aria-live="polite"></span>
+  <button class="button" type="button" data-discard hidden>Discard</button>
   <span class="settings-actions-note" data-dirty-note>Saving applies every card at once.</span>
   <button class="button primary" type="submit" form="permission-cards-form">Save permissions</button>
 </div>

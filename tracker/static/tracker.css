@@ -1126,12 +1126,22 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .mail-attachment .icon { width: 14px; height: 14px; flex: none; }
 .button:disabled { opacity: .5; cursor: not-allowed; }
 
-/* Permission sets: one card per set after the locked Administrators card, in a grid that wraps; the dashed card at the
-   end creates a set. The tick boxes belong to one form (form="permission-cards-form"), so one save covers every card;
-   admin.js keeps the counts, "Changed" marks and the save note current. Below, the add-holder form on a set's page. */
-.perm-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; margin-bottom: 20px; }
-.perm-head .page-lede { margin-bottom: 0; }
-.perm-head .button { display: inline-flex; flex: none; align-items: center; gap: 8px; font-weight: 600; }
+/* Permission sets: the locked Administrators card, then one card per set, in a grid that wraps (one sideways row wider
+   than 700px). The tick boxes belong to one form (form="permission-cards-form"), so one save covers every card; admin.js
+   keeps the "Changed" marks and the save note current and permsets.js the row arrows and the save bar. Below, the add-holder form on a set's page. */
+/* The head stays pinned under the top bar, frosted like the save bar. */
+.perm-head { position: sticky; top: var(--topbar-height); z-index: 15; display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 12px 20px; margin: 0 calc(-1 * clamp(22px, 3vw, 46px)) 16px; padding: 14px clamp(22px, 3vw, 46px); border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 78%, transparent); -webkit-backdrop-filter: saturate(180%) blur(12px); backdrop-filter: saturate(180%) blur(12px); }
+.perm-head > div:first-child { flex: 1 1 auto; min-width: 0; }
+.perm-head h1 { margin-bottom: 4px; }
+.perm-head .page-lede { max-width: 62rem; margin-bottom: 0; font-size: .875rem; }
+.perm-head-tools { display: flex; flex: none; align-items: center; gap: 8px; }
+.perm-head .button { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 8px; height: 40px; font-weight: 600; }
+.perm-head .perm-scroll { width: 40px; min-width: 40px; padding: 0; gap: 0; }
+.perm-scroll[hidden] { display: none; }
+.perm-scroll .icon { display: block; width: 18px; height: 18px; }
+.perm-scroll:disabled { opacity: .4; cursor: default; }
+@media (max-width: 900px) { .perm-head { flex-wrap: wrap; } }
+@media (max-width: 700px) { .perm-head { position: static; margin: 0 0 16px; padding: 0; border-bottom: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; } .perm-head-tools .perm-scroll { display: none; } }
 .perm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 20px; align-items: start; max-width: 1280px; margin-bottom: 20px; }
 /* Cards side by side share their rows (subgrid): header, permissions, warning and footer each take the height of the
    tallest card in that row, so the same permission sits at the same height in every card and reads straight across. */
@@ -1142,7 +1152,15 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
   .perm-card > .perm-card-body { grid-row: 2; }
   .perm-card > .perm-card-warning { grid-row: 3; align-self: start; }
   .perm-card > .perm-card-foot { grid-row: 4; }
-  .perm-card-new > form { grid-row: 2 / span 3; align-self: start; }
+}
+/* Wider than 700px the cards sit in one row that scrolls sideways: about a third of the next card shows, the edge with
+   more cards behind it fades, and the row snaps to a card. The rows stay lined up through the subgrid above. */
+@media (min-width: 701px) {
+  .perm-cards { grid-template-columns: none; grid-auto-flow: column; grid-template-rows: repeat(4, auto); grid-auto-columns: clamp(340px, calc((100% - 40px) / 2.32), 460px); column-gap: 20px; max-width: none; padding-bottom: 6px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: thin; }
+  .perm-cards > .perm-card { grid-row: 1 / span 4; scroll-snap-align: start; }
+  .perm-cards.more-after { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); }
+  .perm-cards.more-before { -webkit-mask-image: linear-gradient(to right, transparent, #000 56px); mask-image: linear-gradient(to right, transparent, #000 56px); }
+  .perm-cards.more-before.more-after { -webkit-mask-image: linear-gradient(to right, transparent, #000 56px, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(to right, transparent, #000 56px, #000 calc(100% - 56px), transparent); }
 }
 .perm-card { display: flex; flex-direction: column; min-width: 0; scroll-margin-top: calc(var(--topbar-height) + 16px); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); transition: border-color .15s, box-shadow .15s; }
 .perm-card.is-changed { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent); }
@@ -1158,7 +1176,6 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .perm-card-badge { padding: 1px 8px; border: 1px solid var(--muted); border-radius: 999px; color: var(--muted); font-size: .6875rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .perm-card-badge[hidden] { display: none; }
 .perm-card-changed { border-color: var(--primary); color: var(--primary); }
-.perm-card-count { flex: none; padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, transparent); font-size: .8125rem; font-weight: 700; }
 .perm-card-body { padding: 4px 0 8px; }
 .perm-group { margin: 12px 18px 4px; color: var(--muted); font-size: .6875rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .perm-row { display: flex; align-items: center; gap: 14px; min-height: 44px; margin: 0; padding: 7px 18px; border-top: 1px solid var(--border); font-weight: 400; }
@@ -1175,16 +1192,14 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .perm-card-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-top: auto; padding: 12px 18px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; }
 .perm-card-foot a { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; font-weight: 600; text-decoration: none; }
 .perm-card-foot a .icon { width: 15px; height: 15px; }
-.perm-card-new { border: 1.5px dashed color-mix(in srgb, var(--muted) 55%, var(--border)); background: color-mix(in srgb, var(--surface) 55%, transparent); }
-.perm-card-new .perm-card-head { border-bottom: 0; padding-bottom: 0; }
-.perm-card-new .perm-card-icon { border: 1.5px dashed var(--muted); background: transparent; color: var(--muted); }
-.perm-card-new form { display: grid; gap: 14px; padding: 14px 18px 18px; }
-.perm-card-new .field-stack { padding: 0; }
-.perm-card-new .button { display: inline-flex; align-items: center; justify-self: start; gap: 8px; font-weight: 600; }
 .perm-save { max-width: 1280px; box-sizing: border-box; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
-.perm-save-lock { display: inline-flex; align-items: center; gap: 7px; margin-right: auto; color: var(--muted); font-size: .8125rem; }
-.perm-save-lock .icon { width: 16px; height: 16px; }
-.perm-save .settings-actions-note { margin-right: 0; }
+.perm-save-count { margin-right: auto; font-weight: 600; }
+/* With JavaScript the bar slides up only while a tick differs from its saved state; without it the bar stays visible. */
+.perm-save.is-armed { transform: translateY(calc(100% + 28px)); opacity: 0; visibility: hidden; transition: transform .25s ease, opacity .2s ease, visibility 0s linear .25s; }
+.perm-save.is-armed.is-shown { transform: none; opacity: 1; visibility: visible; transition: transform .25s ease, opacity .2s ease; }
+.perm-save.is-armed .settings-actions-note { display: none; }
+.perm-save [hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .perm-save.is-armed, .perm-save.is-armed.is-shown { transition: none; } }
 .holder-add { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
 .holder-add select { padding: 7px 10px; font-size: .9rem; }
 

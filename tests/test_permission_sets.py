@@ -280,8 +280,8 @@ def test_index_shows_the_locked_administrators_card_then_a_card_per_set(client, 
     make_set(db, "Auditors", [])
     page = text_of(client.get("/admin/permission-sets"))
     assert page.index("Administrators") < page.index("Auditors") < page.index("PMO")
-    assert "Built in" in page and "8/8" in page and "Every permission, always." in page
-    assert "1/8" in page and "0/8" in page and "No description." in page
+    assert "Built in" in page and "8/8" not in page and "Every permission, always." in page
+    assert "1/8" not in page and "No description." in page
     assert 'aria-label="View activity for PMO"' in page and f'name="set-{pmo.id}"' in page
     assert "People and teams" in page and "Lists" in page and "Application" in page
     assert len(cards(page)) == 2 and "data-permission-cards" in page
@@ -312,18 +312,16 @@ def test_card_warns_only_where_a_set_grants_users_and_teams(client, logged_in_ad
     assert warning in both and warning not in one
 
 
-def test_no_sets_still_shows_administrators_and_new_set_cards(client, logged_in_admin):
+def test_no_sets_still_shows_administrators_and_links_to_the_create_page(client, logged_in_admin):
     page = text_of(client.get("/admin/permission-sets"))
-    assert "Administrators" in page and 'id="new-set"' in page and 'href="#new-set"' in page
-    assert "Save permissions" not in page
+    assert "Administrators" in page and 'id="new-set"' not in page and 'href="/admin/permission-sets/new"' in page
 
 
-def test_failed_create_keeps_the_typed_name_in_the_new_set_card(client, logged_in_admin, db):
+def test_failed_create_keeps_the_typed_name_on_the_create_page(client, logged_in_admin, db):
     make_set(db, "PMO", [])
     response = post(client, "/admin/permission-sets", {"name": "pmo", "description": "Again"})
     page = text_of(response)
-    assert response.status_code == 400 and 'id="new-set"' in page and 'value="pmo"' in page
-    assert len(cards(page)) == 1
+    assert response.status_code == 400 and 'value="pmo"' in page and "already" in page.lower()
 
 
 def test_set_page_links_to_its_card(client, logged_in_admin, db):
