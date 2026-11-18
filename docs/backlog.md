@@ -36,3 +36,7 @@ Scope to settle in the spec:
 
 - A password reset does not end the person's existing sessions (now that delegates can reset passwords).
 - NUL bytes in form input cause a 500 app-wide, including the sign-in page; reject them at request level.
+
+## 4. Small interface changes
+
+- **Email page preview** (`mail/settings.html`, `.email-layout` and `.mail-frame .email-preview` in `tracker.css`): make the preview column about 20% wider than it is now, and make the preview as tall as the email template box beside it, so that both end at the same line instead of the preview stopping at a fixed 560px.
