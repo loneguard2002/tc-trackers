@@ -266,7 +266,8 @@ def test_permission_sets_screen_warns_about_users_and_teams_together(client, log
 
 
 def cards(page: str) -> list[str]:
-    return page.split("data-set-card")[1:]
+    """Each set's card, without what follows the last one (the pop-ups)."""
+    return [card.split("</article>")[0] for card in page.split("data-set-card")[1:]]
 
 
 def test_permission_groups_cover_every_permission_once():
