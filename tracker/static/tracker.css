@@ -45,7 +45,7 @@ h2 { font-size: 1.15rem; margin: 0 0 .5rem; }
 .sidebar-actions form { margin: 0; }
 .app-version { align-self: flex-start; margin: 12px 12px 0; padding: 4px 7px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font: 700 12px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .03em; }
 .sidebar-backdrop { display: none; }
-.main-content { width: calc(100% - var(--sidebar-width)); min-width: 0; margin-left: var(--sidebar-width); padding: 34px clamp(22px, 3vw, 46px) 24px; }
+.main-content { width: calc(100% - var(--sidebar-width)); min-width: 0; margin-left: var(--sidebar-width); padding: 34px var(--page-gutter) 24px; --page-gutter: clamp(22px, 3vw, 46px); }
 .app-shell-public .main-content { width: 100%; margin-left: 0; }
 .page-footer { margin-top: 32px; color: var(--muted); font-size: .8rem; }
 
@@ -93,11 +93,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
   .sidebar.open { transform: none; box-shadow: 14px 0 34px rgba(0, 0, 0, .2); }
   .sidebar-backdrop { position: fixed; inset: var(--topbar-height) 0 0; z-index: 1020; background: color-mix(in srgb, var(--topbar-bg) 70%, transparent); }
   .sidebar-backdrop.open { display: block; }
-  .main-content { width: 100%; margin: 0; padding: 28px 22px 20px; }
+  .main-content { width: 100%; margin: 0; padding: 28px 22px 20px; --page-gutter: 22px; }
 }
 @media (max-width: 768px) {
   .user-label { display: none; }
-  .main-content { padding: 23px 16px 18px; }
+  .main-content { padding: 23px 16px 18px; --page-gutter: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
@@ -1130,7 +1130,7 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
    than 700px). The tick boxes belong to one form (form="permission-cards-form"), so one save covers every card; admin.js
    keeps the "Changed" marks and the save note current and permsets.js the row arrows and the save bar. Below, the add-holder form on a set's page. */
 /* The head stays pinned under the top bar, frosted like the save bar. */
-.perm-head { position: sticky; top: var(--topbar-height); z-index: 15; display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 12px 20px; margin: 0 calc(-1 * clamp(22px, 3vw, 46px)) 16px; padding: 14px clamp(22px, 3vw, 46px); border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 78%, transparent); -webkit-backdrop-filter: saturate(180%) blur(12px); backdrop-filter: saturate(180%) blur(12px); }
+.perm-head { position: sticky; top: var(--topbar-height); z-index: 15; display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 12px 20px; margin: 0 calc(-1 * var(--page-gutter)) 16px; padding: 14px var(--page-gutter); border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 78%, transparent); -webkit-backdrop-filter: saturate(180%) blur(12px); backdrop-filter: saturate(180%) blur(12px); }
 .perm-head > div:first-child { flex: 1 1 auto; min-width: 0; }
 .perm-head h1 { margin-bottom: 4px; }
 .perm-head .page-lede { max-width: 62rem; margin-bottom: 0; font-size: .875rem; }

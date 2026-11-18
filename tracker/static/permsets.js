@@ -65,16 +65,25 @@
     if (event.target.getAttribute && event.target.getAttribute("form") === "permission-cards-form") refresh();
   });
   discard.addEventListener("click", function () {
+    var first = changed()[0];
     changed().forEach(function (box) {
       box.checked = box.defaultChecked;
       box.dispatchEvent(new Event("change", { bubbles: true }));
     });
     refresh();
+    // The bar hides, so the focus moves to the first tick that was restored rather than falling to the page.
+    if (first) first.focus();
   });
-  // A submit is the way out that saves, so it does not warn.
+  // A submit that goes ahead is the way out that saves, so it does not warn. A page restored from the back-forward
+  // cache starts clean.
   var saving = false;
   var form = document.getElementById("permission-cards-form");
-  if (form) form.addEventListener("submit", function () { saving = true; });
+  // Listening on the window sees the event after every listener on the form, so a submit another script cancels counts
+  // as not going ahead.
+  window.addEventListener("submit", function (event) {
+    if (event.target === form) saving = !event.defaultPrevented;
+  });
+  window.addEventListener("pageshow", function () { saving = false; });
   window.addEventListener("beforeunload", function (event) {
     if (!saving && changed().length) {
       event.preventDefault();
