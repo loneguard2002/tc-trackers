@@ -56,7 +56,8 @@
   </article>
 
   {% for s in sets %}{% set granted = held[s.id] %}{% set teams, people = holder_counts[s.id] %}
-  <article class="perm-card" data-set-card aria-labelledby="card-{{ s.id }}">
+  <article class="perm-card" data-set-card data-set-id="{{ s.id }}" data-panel-url="{{ url_for('permsets.panel', set_id=s.id) }}"
+    data-rename-url="{{ url_for('permsets.rename', set_id=s.id) }}" data-delete-url="{{ url_for('permsets.delete_set', set_id=s.id) }}" aria-labelledby="card-{{ s.id }}">
     <header class="perm-card-head">
       <span class="perm-card-icon">{{ icon('key') }}</span>
       <div class="perm-card-title">
@@ -81,7 +82,7 @@
     {% endif %}
     <footer class="perm-card-foot">
       <span>{% if teams and people %}Held by {{ teams }} team{{ 's' if teams != 1 }} and {{ people_count(people) }}{% elif teams %}Held by {{ teams }} team{{ 's' if teams != 1 }}{% elif people %}Held by {{ people_count(people) }}{% else %}Nobody holds this set yet.{% endif %}</span>
-      <a href="{{ url_for('permsets.view', set_id=s.id) }}">Holders and details{{ icon('chevron-right') }}</a>
+      <a href="{{ url_for('permsets.view', set_id=s.id) }}" data-open-panel>Holders and details{{ icon('chevron-right') }}</a>
     </footer>
   </article>
   {% endfor %}
@@ -94,4 +95,57 @@
   <button class="button primary" type="submit" form="permission-cards-form">Save permissions</button>
 </div>
 {% endif %}
+{# Pieces the page script uses: each card's ⋯ menu, the rename and delete pop-ups, and the holders side panel. All of it
+   is inert without JavaScript (a closed dialog and a template draw nothing). #}
+<template id="perm-menu-template">
+  <button class="perm-more" type="button" aria-haspopup="menu" aria-expanded="false">{{ icon('more') }}</button>
+  <div class="perm-menu" role="menu" hidden>
+    <button type="button" role="menuitem" data-act="rename">{{ icon('edit') }}Rename or edit description</button>
+    <button type="button" role="menuitem" data-act="details">{{ icon('users') }}Holders and details</button>
+    <hr>
+    <button type="button" role="menuitem" class="is-danger" data-act="delete">{{ icon('trash') }}Delete…</button>
+  </div>
+</template>
+<dialog class="list-dialog" id="rename-set-dialog" aria-labelledby="rename-set-title">
+  <form method="post" action="" data-rename-form novalidate>
+    {{ csrf_field(csrf_token()) }}
+    <input type="hidden" name="return_to" value="index">
+    <header class="list-dialog-head">
+      <div><h2 id="rename-set-title">Rename or edit description</h2><p class="list-dialog-sub" data-dialog-sub></p></div>
+      <button class="tool-button" type="button" data-close title="Close" aria-label="Close">✕</button>
+    </header>
+    <div class="list-dialog-body">
+      <div class="field">
+        <label for="rename-set-name">Name</label>
+        <input id="rename-set-name" name="name" maxlength="100" autocomplete="off" required aria-describedby="rename-set-error">
+        <p class="field-error" id="rename-set-error" data-name-error hidden></p>
+      </div>
+      <div class="field">
+        <label for="rename-set-description">Description</label>
+        <textarea id="rename-set-description" name="description" rows="2" maxlength="500" aria-describedby="rename-set-help"></textarea>
+        <p class="field-help" id="rename-set-help">Optional, at most 500 characters.</p>
+      </div>
+    </div>
+    <footer class="list-dialog-foot">
+      <button class="button" type="button" data-close>Cancel</button>
+      <button class="button primary" type="submit">Save</button>
+    </footer>
+  </form>
+</dialog>
+<dialog class="list-dialog" id="delete-set-dialog" aria-labelledby="delete-set-title">
+  <form method="post" action="" data-delete-form>
+    {{ csrf_field(csrf_token()) }}
+    <input type="hidden" name="return_to" value="index">
+    <header class="list-dialog-head">
+      <div><h2 id="delete-set-title"></h2><p class="list-dialog-sub">This cannot be undone.</p></div>
+      <button class="tool-button" type="button" data-close title="Close" aria-label="Close">✕</button>
+    </header>
+    <div class="list-dialog-body" data-delete-body></div>
+    <footer class="list-dialog-foot">
+      <button class="button" type="button" data-close>Cancel</button>
+      <button class="button danger-solid" type="submit">Delete set</button>
+    </footer>
+  </form>
+</dialog>
+<dialog class="perm-drawer" id="set-panel" aria-label="Holders and details"></dialog>
 {% endblock %}
