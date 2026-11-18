@@ -104,21 +104,36 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 }
 
 /* Authentication and administration */
-.auth-card { max-width: 26rem; margin: 3rem auto; }
-.auth-panel { max-width: 400px; margin: 6vh auto 0; padding: 32px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised); box-shadow: var(--card-shadow); }
-.auth-head { margin-bottom: 20px; text-align: center; }
-.auth-head h1 { margin: 12px 0 4px; font-size: 1.5rem; }
-.auth-head p { margin: 0; color: var(--muted); font-size: .875rem; }
-.auth-mark { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--primary); color: var(--primary-text); font-weight: 800; letter-spacing: .02em; }
-.auth-form { display: grid; gap: 14px; }
-.auth-field label { margin-bottom: 5px; font-size: .875rem; }
-.auth-submit, .auth-sso { display: block; width: 100%; padding: 10px 14px; font-weight: 600; text-align: center; }
-.auth-submit { margin-top: 4px; }
-.auth-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--muted); font-size: .8125rem; }
-.auth-divider::before, .auth-divider::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
-.auth-note { margin: 20px 0 0; color: var(--muted); font-size: .8125rem; text-align: center; }
-.auth-panel .form-alert { margin-bottom: 16px; }
-@media (max-width: 480px) { .auth-panel { margin-top: 0; padding: 24px 20px; } }
+/* Sign-in (design 2026-11-18): no top bar; the navy brand panel with the logo beside the form, stacked on a phone. */
+.app-shell-bare { min-height: 100vh; padding-top: 0; }
+.app-shell-bare .main-content { display: grid; align-content: center; justify-items: center; gap: 16px; padding-block: 32px; }
+.app-shell-bare .flash { width: min(760px, 100%); margin: 0; }
+.signin { display: grid; grid-template-columns: 280px minmax(0, 1fr); width: min(760px, 100%); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--raised); box-shadow: var(--card-shadow); }
+.signin-brand { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 36px 28px; background: var(--topbar-bg); color: #c3cfe2; }
+.signin-logo { display: block; padding: 6px 8px; border-radius: 6px; background: #fff; line-height: 0; }
+.signin-logo img { width: 150px; height: auto; }
+.signin-product { margin: 0; color: #fff; font-size: 1.125rem; font-weight: 700; }
+.signin-lede { margin: 0; font-size: .875rem; line-height: 1.55; }
+.signin-main { display: grid; gap: 16px; align-content: start; min-width: 0; padding: 36px 40px 32px; }
+.signin-head h1 { margin: 0; font-size: 1.25rem; }
+.signin-head p { margin: 4px 0 0; color: var(--muted); font-size: .875rem; }
+.signin-main .form-alert { margin: 0; }
+.signin-form { display: grid; gap: 16px; }
+.signin-field label { margin-bottom: 6px; color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.signin-field input { min-height: 44px; }
+.signin-submit { width: 100%; min-height: 44px; font-weight: 600; }
+.signin-divider { display: flex; align-items: center; gap: 12px; margin: 0; color: var(--muted); font-size: .8125rem; }
+.signin-divider::before, .signin-divider::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+/* Microsoft's colours by its branding guidance, not our tokens: the white button reads as Microsoft's in both themes. */
+.ms-signin { display: flex; align-items: center; justify-content: center; gap: 12px; height: 41px; padding: 0 12px; border: 1px solid #8c8c8c; background: #fff; color: #5e5e5e; font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif; font-size: 15px; font-weight: 600; text-decoration: none; }
+.ms-signin:hover { background: #f3f3f3; color: #5e5e5e; }
+.ms-signin svg { flex: none; }
+@media (max-width: 640px) {
+  .signin { grid-template-columns: minmax(0, 1fr); }
+  .signin-brand { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 18px 20px; }
+  .signin-lede { flex-basis: 100%; }
+  .signin-main { padding: 24px 20px; }
+}
 .flash { padding: 0.6rem 0.9rem; border-radius: 6px; border: 1px solid currentColor; }
 .flash-danger { color: var(--danger); }
 .flash-success { color: var(--success); }

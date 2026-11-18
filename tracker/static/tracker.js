@@ -252,3 +252,22 @@
     });
   });
 })();
+
+// The eye button beside a password field (macro password_toggle; hidden until this runs) shows or hides what was typed.
+// Submitting the form hides it again, so the browser never offers to save a password from a plain text field.
+// users.js hides them all again when its reset dialog closes.
+(function () {
+  "use strict";
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-password-toggle]"), function (toggle) {
+    var field = document.getElementById(toggle.getAttribute("data-password-toggle"));
+    if (!field) return;
+    function show(shown) {
+      field.type = shown ? "text" : "password";
+      toggle.setAttribute("aria-pressed", shown ? "true" : "false");
+    }
+    toggle.hidden = false;
+    toggle.addEventListener("click", function () { show(toggle.getAttribute("aria-pressed") !== "true"); });
+    if (field.form) field.form.addEventListener("submit", function () { show(false); });
+  });
+})();

@@ -1,5 +1,5 @@
-// The Users list and the Reset password page. An eye button beside each password field shows or hides what was
-// typed (it stays hidden without JavaScript). Reset password opens #reset-dialog as a modal for the person in that row: the dialog's form posts
+// The Users list and the Reset password page. tracker.js wires the eye button beside each password field; closing the
+// reset dialog hides the passwords again here. Reset password opens #reset-dialog as a modal for the person in that row: the dialog's form posts
 // to the button's own link, and Set password waits until both fields hold the same password. Without JavaScript (or
 // without <dialog>) the button stays a link to the person's Reset password page. On a person's Access page, Delete
 // opens #delete-dialog the same way, and its Delete button waits until the typed email matches. Plain ES5 style, no
@@ -18,12 +18,6 @@
     Array.prototype.forEach.call(toggles, function (toggle) { showPassword(toggle, false); });
   }
 
-  Array.prototype.forEach.call(toggles, function (toggle) {
-    toggle.hidden = false;
-    toggle.addEventListener("click", function () {
-      showPassword(toggle, toggle.getAttribute("aria-pressed") !== "true");
-    });
-  });
 
   var dialog = document.getElementById("reset-dialog");
   if (!dialog || typeof dialog.showModal !== "function") return;
