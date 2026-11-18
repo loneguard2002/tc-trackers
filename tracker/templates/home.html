@@ -119,8 +119,6 @@
   </div>
 </div>
 
-<p class="spark-key home-key" aria-label="Chart key"><span><i class="key key-on"></i>Done, on or above target<i class="key key-low"></i>Done, below target<i class="key key-target"></i>Weekly target</span><span class="muted">Bars show the latest weeks.</span></p>
-
 <div class="tracker-cards" data-home-cards role="region" aria-label="Tracker cards" tabindex="0">
   {% for c in cards %}
   {% set t = c.tracker %}{% set h = c.headline %}{% set tone = rag_tone(c.status) %}
@@ -152,6 +150,7 @@
           {% for b in s.bars %}<rect class="spark-bar{{ ' is-low' if b.low }}" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.width }}" height="{{ b.height }}"/>{% endfor %}
           {% if s.target %}<path class="spark-target" d="{{ s.target }}" vector-effect="non-scaling-stroke"/>{% endif %}
         </svg>
+        <p class="spark-key card-key" aria-label="Chart key"><span><i class="key key-on"></i>Done, on or above target</span><span><i class="key key-low"></i>Done, below target</span><span><i class="key key-target"></i>Weekly target</span></p>
         {% else %}<p class="spark-empty">{{ 'Starts ' ~ (c.starts|fdate) ~ '.' if c.starts else 'No completed weeks yet, so there is no weekly chart.' }}</p>{% endif %}
       </div>
     </div>

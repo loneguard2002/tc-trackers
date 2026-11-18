@@ -187,14 +187,21 @@ def test_home_card_shows_the_target_when_there_is_no_forecast(client, logged_in_
     assert '<span class="fact-sub fact-line">Target 18 Dec 2026</span>' in card
 
 
-def test_home_shows_one_chart_key_for_the_page(client, logged_in_user, db, tracker_factory, grant):
+def test_home_shows_the_chart_key_under_each_chart(client, logged_in_user, db, tracker_factory, grant):
     tracker = tracker_factory(name="Charted")
     grant(logged_in_user, tracker, "viewer")
     group = make_group(db, tracker, baseline=40)
     add_entry(db, tracker, group, date(2026, 9, 3), 10, date(2026, 9, 4))
+    later = tracker_factory(name="Uncharted", first_week_ending=date(2099, 1, 2), last_week_ending=date(2099, 3, 27))
+    grant(logged_in_user, later, "viewer")
     html = client.get("/").get_data(as_text=True)
     assert 'class="spark"' in html and "Latest week" not in html
-    assert html.count('class="spark-key') == 1  # one chart key for the page, not one per card
+    assert html.count('class="spark-key') == 1  # only the card with a chart has a key
+    card = cards_by_name(html)["Charted"]
+    # The key sits under the chart and above the Forecast, This week and Red risks facts.
+    assert card.index('class="spark"') < card.index('class="spark-key card-key"') < card.index("tracker-card-facts")
+    assert "Done, below target" in card and "Weekly target" in card
+    assert "spark-key" not in cards_by_name(html)["Uncharted"]
 
 
 # --- F. Status and alerts -------------------------------------------------------------------------------------------
