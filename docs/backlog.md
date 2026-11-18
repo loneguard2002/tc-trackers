@@ -26,7 +26,6 @@ Scope to settle in the spec:
 
 - A retried email can show newer figures than the PDF stored with the first attempt.
 - Stored PDFs cannot be downloaded from the application.
-- A double click on manual send sends the report twice.
 - A Chromium failure during a manual send shows an error page instead of a message.
 - The Render starter plan may run short of memory while Chromium renders a PDF.
 - Package versions in `requirements.txt` are not pinned.
