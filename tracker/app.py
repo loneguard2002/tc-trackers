@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import click
 from flask import Flask, jsonify, render_template, request
 from jinja2 import StrictUndefined
+from sqlalchemy import func, select
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -66,6 +67,15 @@ def create_app(overrides: dict | None = None) -> Flask:
     @app.context_processor
     def permission_context():
         return {"can": lambda permission: has_permission(current_user(), permission)}
+
+    @app.context_processor
+    def access_request_context():
+        """The number of access requests waiting, for the count beside Users; asked only when the menu shows Users."""
+
+        def waiting_requests() -> int:
+            return get_session().scalar(select(func.count()).select_from(User).where(User.status == "pending")) or 0
+
+        return {"waiting_requests": waiting_requests}
 
     register_filters(app)
     if app.config.get("TESTING"):

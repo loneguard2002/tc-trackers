@@ -1,7 +1,7 @@
 {% from "macros.html" import icon %}
-{% macro nav_link(name, endpoint, label, icon_name) -%}
+{% macro nav_link(name, endpoint, label, icon_name, count=0, count_label='') -%}
 {% set active = current_page|default('') == name %}
-<a class="nav-link{{ ' active' if active }}" href="{{ url_for(endpoint) }}" data-label="{{ label }}"{% if active %} aria-current="page"{% endif %}>{{ icon(icon_name) }}<span>{{ label }}</span></a>
+<a class="nav-link{{ ' active' if active }}" href="{{ url_for(endpoint) }}" data-label="{{ label }}"{% if active %} aria-current="page"{% endif %}>{{ icon(icon_name) }}<span>{{ label }}</span>{% if count %}<span class="nav-count" title="{{ count_label }}">{{ count }}<span class="sr-only"> {{ count_label }}</span></span>{% endif %}</a>
 {%- endmacro %}
 <!doctype html>
 <html lang="en-GB" data-theme="light">
@@ -52,7 +52,7 @@
       {% set show_activity = can('view_activity') %}
       {% if show_users or show_permsets or show_teams or show_lists or show_smtp or show_activity %}
       <span class="nav-heading">Administration</span>
-      {% if show_users %}{{ nav_link('users', 'admin.users', 'Users', 'users') }}{% endif %}
+      {% if show_users %}{% set waiting = waiting_requests() %}{{ nav_link('users', 'admin.users', 'Users', 'users', waiting, 'waiting for approval') }}{% endif %}
       {% if show_permsets %}{{ nav_link('permsets', 'permsets.index', 'Permission sets', 'key') }}{% endif %}
       {% if show_teams %}{{ nav_link('teams', 'teams.index', 'Teams', 'teams') }}{% endif %}
       {% if show_lists %}{{ nav_link('lists', 'lists.regions', 'Regions & business lines', 'globe') }}{% endif %}

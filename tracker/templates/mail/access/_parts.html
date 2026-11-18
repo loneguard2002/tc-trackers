@@ -1,0 +1,20 @@
+{#- Pieces shared by the access emails. -#}
+{% macro font() %}font-family: 'Segoe UI', Arial, Helvetica, sans-serif;{% endmacro %}
+
+{#- A centred button Outlook draws: a table cell with the colour, holding the link. -#}
+{% macro button(href, label) -%}
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 16px auto;"><tr>
+<td align="center" bgcolor="#1260d0" style="background: #1260d0; border-radius: 6px;">
+<a href="{{ href }}" style="display: inline-block; padding: 12px 22px; {{ font() }} font-size: 15px; font-weight: bold; color: #ffffff; text-decoration: none;">{{ label }}</a>
+</td></tr></table>
+{%- endmacro %}
+
+{% macro infosec_line(text, infosec) -%}
+<p style="margin: 8px 0 0;">{{ text }} <a href="mailto:{{ infosec }}" style="color: #1260d0;">{{ infosec }}</a></p>
+{%- endmacro %}
+
+{% macro person_table(rows) -%}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 14px; font-size: 14px; line-height: 20px;">
+{% for label, value in rows %}<tr><td style="padding: 3px 18px 3px 0; color: #4f5d75;">{{ label }}</td><td style="padding: 3px 0; font-weight: bold;">{{ value }}</td></tr>
+{% endfor %}</table>
+{%- endmacro %}

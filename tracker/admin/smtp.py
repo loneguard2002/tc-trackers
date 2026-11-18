@@ -13,6 +13,7 @@ from sqlalchemy import select
 from ..audit import record
 from ..auth import current_user, permission_required
 from ..db import get_session
+from ..mail import access
 from ..mail.compose import BLOCK_PLACEHOLDERS, PLACEHOLDERS, REPORT_SUBJECT_KEY, report_subject, unknown_placeholders
 from ..models import AppSetting
 from . import bp
@@ -63,10 +64,25 @@ def smtp():
             subject = " ".join(request.form[REPORT_SUBJECT_KEY].split())
             if not subject or len(subject) > MAX_REPORT_SUBJECT:
                 abort(400, description=REPORT_SUBJECT_ERROR)
+        # Access requests (design 2026-11-18): kept as they are when left out of the form.
+        infosec_before, days_before = access.infosec_email(db), access.reminder_days(db)
+        infosec, days = infosec_before, days_before
+        if access.INFOSEC_KEY in request.form:
+            infosec, error = access.parse_infosec_email(request.form[access.INFOSEC_KEY])
+            if error:
+                abort(400, description=error)
+        if access.REMINDER_DAYS_KEY in request.form:
+            days, error = access.parse_reminder_days(request.form[access.REMINDER_DAYS_KEY])
+            if error:
+                abort(400, description=error)
         for key, value in submitted.items():
             db.merge(AppSetting(key=key, value=value))
         if subject != subject_before:
             db.merge(AppSetting(key=REPORT_SUBJECT_KEY, value=subject))
+        if infosec != infosec_before:
+            db.merge(AppSetting(key=access.INFOSEC_KEY, value=infosec))
+        if days != days_before:
+            db.merge(AppSetting(key=access.REMINDER_DAYS_KEY, value=str(days)))
         record(
             db,
             user_id=current_user().id,
@@ -78,6 +94,8 @@ def smtp():
                 "changed": sorted(
                     [k for k in SMTP_KEYS if before[k] != submitted[k]]
                     + ([REPORT_SUBJECT_KEY] if subject != subject_before else [])
+                    + ([access.INFOSEC_KEY] if infosec != infosec_before else [])
+                    + ([access.REMINDER_DAYS_KEY] if days != days_before else [])
                 )
             },
         )
@@ -88,6 +106,9 @@ def smtp():
         "admin/smtp.html",
         values=_smtp_values(db),
         report_subject=report_subject(db),
+        infosec=access.infosec_email(db),
+        reminder_days=access.reminder_days(db),
+        max_reminder_days=access.MAX_REMINDER_DAYS,
         unknown=unknown_placeholders(report_subject(db)),
         placeholders={name: text for name, text in PLACEHOLDERS.items() if name not in BLOCK_PLACEHOLDERS},
         modes=SMTP_AUTH_MODES,

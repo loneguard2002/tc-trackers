@@ -47,7 +47,7 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint("auth_source IN ('local', 'sso')", name="auth_source"),
-        CheckConstraint("status IN ('pending', 'active', 'disabled', 'deleted')", name="status"),
+        CheckConstraint("status IN ('pending', 'active', 'disabled', 'deleted', 'declined')", name="status"),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+{# A turned-down person who signs in with Microsoft again (design 2026-11-18): no new request, nobody emailed. #}
+<section class="access-card" aria-labelledby="access-title">
+  {% include "_access_card.html" %}
+  <div class="access-card-body">
+    <div class="access-state">
+      <span class="access-mark access-mark-no" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></span>
+      <div>
+        <p class="access-eyebrow access-eyebrow-no">Not approved</p>
+        <h1 id="access-title">Sorry, your access to Progress Tracker was not approved</h1>
+      </div>
+    </div>
+    <p class="access-text">You signed in with Microsoft as <strong>{{ person.email }}</strong>. We are sorry, but your request on {{ asked|fdate }} has not been approved this time, so you cannot sign in. Signing in again does not send a new request.</p>
+    <p class="access-text">If you need access for your work, please ask your manager to contact the team who approve access. They will be happy to look at it again.</p>
+    <p class="access-foot">Did not ask for access to Progress Tracker? Tell the Infosec team: <a href="mailto:{{ infosec }}">{{ infosec }}</a></p>
+    <a class="button access-back" href="{{ url_for('auth.login') }}">Back to sign in</a>
+  </div>
+</section>
+{% endblock %}

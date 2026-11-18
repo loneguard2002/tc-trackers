@@ -1,0 +1,14 @@
+{#- To the approvers, the moment someone signs in with Microsoft for the first time. -#}
+{% extends "mail/access/_layout.html" %}
+{% from "mail/access/_parts.html" import button, infosec_line, person_table %}
+{% block body %}
+<p style="margin: 0 0 14px;">Hello,</p>
+<p style="margin: 0 0 14px;"><strong>{{ person.full_name }}</strong> signed in with Microsoft for the first time and is waiting for approval.</p>
+{{ person_table([("Name", person.full_name), ("Email", person.email), ("Asked", asked)]) }}
+<p style="margin: 0;">They cannot see any tracker until someone approves them. You can also put them in a team as you approve.</p>
+{{ button(app_url ~ "/admin/users", "Review access requests") }}
+{% endblock %}
+{% block footer %}
+<p style="margin: 0;">You get this because you can manage users in Progress Tracker.{% if days %} If a request is still waiting after {{ days }} day{{ '' if days == 1 else 's' }}, the team gets one reminder a day listing all waiting requests.{% endif %}</p>
+{{ infosec_line("Do not recognise this person or the request? Do not approve it, and tell the Infosec team:", infosec) }}
+{% endblock %}

@@ -1,0 +1,11 @@
+{#- To the person, after their first Microsoft sign-in. -#}
+{% extends "mail/access/_layout.html" %}
+{% from "mail/access/_parts.html" import infosec_line %}
+{% block body %}
+<p style="margin: 0 0 14px;">Hi {{ name }},</p>
+<p style="margin: 0 0 14px;">You signed in to Progress Tracker with Microsoft on {{ asked }}. Your access now needs to be approved by the team who approve access, and we have let them know.</p>
+<p style="margin: 0 0 14px;">We will email you again as soon as you are approved. You do not need to do anything until then.</p>
+{% endblock %}
+{% block footer %}
+{{ infosec_line("Did not sign in yourself? Tell the Infosec team:", infosec) }}
+{% endblock %}

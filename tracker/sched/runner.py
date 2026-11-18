@@ -128,8 +128,8 @@ def _send_claimed(session, tracker_id: int, send_id: int, now: datetime) -> None
 
 
 def run_scheduler_cycle(session, now_utc: datetime) -> int:
-    """Send every due report once, send the due update reminders, then retry queued sends. Returns the number of
-    report sends attempted."""
+    """Send every due report once, send the due update reminders and the access request reminder, then retry queued
+    sends. Returns the number of report sends attempted."""
     try:
         prune_audit_log(session, now_utc)
     except Exception:
@@ -153,4 +153,11 @@ def run_scheduler_cycle(session, now_utc: datetime) -> int:
     except Exception:
         session.rollback()
         logger.exception("Sending update reminders failed")
+    from ..mail.access import send_due_reminder  # here, as above: the mail package loads its views on import
+
+    try:
+        send_due_reminder(session, now_utc)
+    except Exception:
+        session.rollback()
+        logger.exception("Sending the access request reminder failed")
     return attempted + sending.retry_queued(session, now_utc)
