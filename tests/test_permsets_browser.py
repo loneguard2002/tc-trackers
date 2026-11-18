@@ -243,6 +243,7 @@ def test_the_save_bar_shows_only_with_changes(page, live_server, user_factory, g
     expect(page.get_by_label("Create trackers for PMO")).not_to_be_checked()
     expect(bar).to_be_hidden()
     expect(page.locator("[data-dirty-note]")).to_have_text("No unsaved changes")
+    assert page.evaluate(UNLOAD_WARNS) is False
     box.check()
     expect(bar).to_be_visible()
     box.uncheck()
@@ -869,3 +870,104 @@ def test_the_pop_up_fits_a_phone(page, live_server, user_factory, team_factory):
     assert box["x"] >= 0
     assert box["x"] + box["width"] <= 390
     clean(page)
+
+
+SUBMIT_TWICE = """
+form => {
+  const went = [];
+  window.addEventListener("submit", e => went.push(!e.defaultPrevented));
+  form.requestSubmit();
+  form.requestSubmit();
+  return went;
+}
+"""
+
+
+def test_a_second_submit_of_create_is_ignored(page, live_server, user_factory, db):
+    from sqlalchemy import func, select
+
+    from tracker.models import PermissionSet
+
+    dialog = open_new(page, live_server, user_factory)
+    step_name(dialog, "Auditors")
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_role("button", name="Skip").click()
+    went = dialog.locator("form").evaluate(SUBMIT_TWICE)
+    assert went == [True, False]
+    expect(page.get_by_text("Created the permission set Auditors.")).to_be_visible()
+    expect(page.get_by_text("already exists")).to_have_count(0)
+    assert db.scalar(select(func.count()).select_from(PermissionSet).where(PermissionSet.name == "Auditors")) == 1
+    clean(page)
+
+
+def test_a_double_click_on_create_creates_one_set(page, live_server, user_factory, db):
+    from sqlalchemy import func, select
+
+    from tracker.models import PermissionSet
+
+    dialog = open_new(page, live_server, user_factory)
+    step_name(dialog, "Auditors")
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_role("button", name="Skip").click()
+    dialog.get_by_role("button", name="Create permission set").dblclick()
+    expect(page.get_by_text("Created the permission set Auditors.")).to_be_visible()
+    expect(page.get_by_text("already exists")).to_have_count(0)
+    assert db.scalar(select(func.count()).select_from(PermissionSet).where(PermissionSet.name == "Auditors")) == 1
+    clean(page)
+
+
+def test_a_second_submit_of_delete_is_ignored(page, live_server, user_factory, give_set):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    open_page(page, live_server, user_factory)
+    card_of(page, "PMO").get_by_role("button", name="More for PMO").click()
+    page.get_by_role("menuitem", name="Delete…").click()
+    dialog = page.get_by_role("dialog", name="Delete PMO?")
+    assert dialog.locator("form").evaluate(SUBMIT_TWICE) == [True, False]
+    expect(page.get_by_text("Deleted the permission set PMO.")).to_be_visible()
+    expect(page.get_by_text("Not found")).to_have_count(0)
+    clean(page)
+
+
+def test_a_second_submit_of_rename_is_ignored(page, live_server, user_factory, give_set):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    open_page(page, live_server, user_factory)
+    card_of(page, "PMO").get_by_role("button", name="More for PMO").click()
+    page.get_by_role("menuitem", name="Rename or edit description").click()
+    dialog = page.get_by_role("dialog", name="Rename or edit description")
+    dialog.get_by_label("Name").fill("Delivery office")
+    assert dialog.locator("form").evaluate(SUBMIT_TWICE) == [True, False]
+    expect(page.get_by_text("Saved the permission set details.")).to_be_visible()
+    expect(page.get_by_text("No changes")).to_have_count(0)
+    clean(page)
+
+
+def test_rename_refuses_a_name_another_set_has(page, live_server, user_factory, give_set):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    give_set(["view_activity"], user=user_factory(), name="Audit")
+    open_page(page, live_server, user_factory)
+    posts = []
+    page.on("request", lambda r: posts.append(r.url) if r.method == "POST" else None)
+    card_of(page, "PMO").get_by_role("button", name="More for PMO").click()
+    page.get_by_role("menuitem", name="Rename or edit description").click()
+    dialog = page.get_by_role("dialog", name="Rename or edit description")
+    dialog.get_by_label("Name").fill("audit")
+    dialog.get_by_role("button", name="Save").click()
+    expect(dialog.get_by_text("A permission set with this name already exists.")).to_be_visible()
+    assert posts == []
+    dialog.get_by_label("Name").fill("pmo")  # its own name, in another case, is fine
+    dialog.get_by_role("button", name="Save").click()
+    expect(page.get_by_text("Saved the permission set details.")).to_be_visible()
+    clean(page)
+
+
+def test_the_panel_is_named_after_its_set_and_announces_only_a_status(
+    page, live_server, user_factory, team_factory, give_set
+):
+    holders_set(give_set, user_factory, team_factory)
+    open_page(page, live_server, user_factory)
+    card_of(page, "PMO").get_by_role("link", name="Holders and details").click()
+    expect(page.get_by_role("dialog", name="PMO", exact=True)).to_be_visible()
+    expect(page.locator("dialog.perm-drawer [role=status]")).to_have_count(1)
+    expect(page.locator("dialog.perm-drawer [aria-live]")).to_have_count(0)

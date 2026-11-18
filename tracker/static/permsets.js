@@ -1,6 +1,6 @@
 // The Permission sets page: the ‹ › buttons that step the sideways row of cards, the faded edges, and the save bar that
-// shows only while a tick differs from what was saved. Loaded after admin.js, which keeps the per-card counts and
-// "Changed" marks. Everything here renders hidden or visible without JavaScript, so the page works without it.
+// shows only while a tick differs from what was saved. Loaded after admin.js, which keeps the "Changed" marks and the
+// unsaved note. Everything here renders hidden or visible without JavaScript, so the page works without it.
 // Plain ES5 style, no modules.
 (function () {
   "use strict";
@@ -179,10 +179,12 @@
   var renameName = document.getElementById("rename-set-name");
   var renameDescription = document.getElementById("rename-set-description");
   var renameError = renameDialog.querySelector("[data-name-error]");
+  var renaming = null;
   // The pop-ups give the focus back to the button that opened the menu when they close without saving.
   var returnFocus = null;
   function startRename(card, from) {
     returnFocus = from || null;
+    renaming = card;
     var form = renameDialog.querySelector("form");
     form.action = card.getAttribute("data-rename-url");
     renameDialog.querySelector("[data-dialog-sub]").textContent = setName(card);
@@ -194,9 +196,18 @@
     renameName.select();
   }
   renameDialog.querySelector("form").addEventListener("submit", function (event) {
-    if (renameName.value.trim()) return;
+    var value = renameName.value.trim();
+    var message = "";
+    if (!value) {
+      message = "Enter a permission set name.";
+    } else if (Array.prototype.some.call(cards, function (card) {
+      return card !== renaming && setName(card).toLowerCase() === value.toLowerCase();
+    })) {
+      message = "A permission set with this name already exists.";
+    }
+    if (!message) return;
     event.preventDefault();
-    renameError.textContent = "Enter a permission set name.";
+    renameError.textContent = message;
     renameError.hidden = false;
     renameName.setAttribute("aria-invalid", "true");
     renameName.focus();
@@ -249,7 +260,10 @@
     panel.textContent = "";
     var head = element("header", "drawer-head");
     var title = element("div", "perm-detail-title");
-    title.appendChild(element("h2", "", setName(card)));
+    var heading = element("h2", "", setName(card));
+    heading.id = "set-panel-title";
+    panel.setAttribute("aria-labelledby", heading.id);
+    title.appendChild(heading);
     if (setDescription(card)) title.appendChild(element("p", "", setDescription(card)));
     head.appendChild(title);
     addMenu(head, card, { rename: startRename, "delete": startDelete });
@@ -260,15 +274,19 @@
     cross.addEventListener("click", function () { panel.close(); });
     head.appendChild(cross);
     var body = element("div", "drawer-body");
-    body.setAttribute("aria-live", "polite");
+    // Only a short status is announced, not the whole fragment once it arrives.
+    var status = element("p", "sr-only", "Loading the holders…");
+    status.setAttribute("role", "status");
     body.appendChild(element("p", "empty-note", "Loading the holders…"));
     panel.appendChild(head);
+    panel.appendChild(status);
     panel.appendChild(body);
     if (!panel.open) panel.showModal();
     try { history.replaceState(null, "", location.pathname + "?set=" + encodeURIComponent(id)); } catch (e) { /* ignore */ }
 
     function failed() {
       if (panelCard !== card) return;
+      status.textContent = "The holders could not be loaded.";
       body.textContent = "";
       var note = element("p", "empty-note", "The holders could not be loaded. ");
       var link = element("a", "", "Open the set's own page");
@@ -285,6 +303,7 @@
       .then(function (html) {
         if (panelCard !== card) return;
         if (html.indexOf("data-panel-set") === -1) throw new Error("not the panel");
+        status.textContent = "";
         body.innerHTML = html;
       })
       .catch(failed);
@@ -566,5 +585,39 @@
   });
   dialog.addEventListener("close", function () {
     if (document.body.contains(opener)) opener.focus();
+  });
+})();
+
+// The three pop-up forms (New permission set, rename, delete) post once. A submit that goes ahead marks its form as
+// sending and disables its buttons, so a double click cannot post twice and show the answer to the second post. A page
+// restored from the back-forward cache starts clean.
+(function () {
+  "use strict";
+
+  var forms = document.querySelectorAll("#new-set-dialog form, #rename-set-dialog form, #delete-set-dialog form");
+  if (!forms.length) return;
+  var sending = [];
+
+  function setBusy(form, busy) {
+    Array.prototype.forEach.call(form.querySelectorAll("button[type=submit]"), function (button) {
+      button.disabled = busy;
+    });
+  }
+
+  // Listening on the window sees the event after every listener on the form, so a submit another script cancelled
+  // (a step still to finish, a name still to correct) does not count as sending.
+  window.addEventListener("submit", function (event) {
+    var form = event.target;
+    if (Array.prototype.indexOf.call(forms, form) < 0) return;
+    if (sending.indexOf(form) >= 0) {
+      event.preventDefault();
+    } else if (!event.defaultPrevented) {
+      sending.push(form);
+      setBusy(form, true);
+    }
+  });
+  window.addEventListener("pageshow", function () {
+    sending.forEach(function (form) { setBusy(form, false); });
+    sending = [];
   });
 })();

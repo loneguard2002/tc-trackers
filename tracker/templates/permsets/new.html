@@ -12,7 +12,7 @@
   {% endif %}
   <form method="post" action="{{ url_for('permsets.create') }}">
     {{ csrf_field(csrf_token()) }}
-    <input type="hidden" name="return_to" value="index">
+    {% if return_to %}<input type="hidden" name="return_to" value="{{ return_to }}">{% endif %}
     {% for name in kept_permissions %}<input type="hidden" name="permissions" value="{{ name }}">{% endfor %}
     {% for value in kept_holders %}<input type="hidden" name="holders" value="{{ value }}">{% endfor %}
     <div class="field-stack">
