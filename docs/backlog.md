@@ -36,3 +36,14 @@ Scope to settle in the spec:
 
 - A password reset does not end the person's existing sessions (now that delegates can reset passwords).
 - NUL bytes in form input cause a 500 app-wide, including the sign-in page; reject them at request level.
+
+## 4. Permission sets layout
+
+Requested 18 Nov 2026; a demo comes first.
+
+- **A fixed page head.** The title, the explanation and the New permission set button stay pinned under the top bar
+  while the cards scroll underneath, so the button is always in reach.
+- **Cards in one sideways row instead of the "New permission set" card.** The permission set cards sit in one row that
+  scrolls sideways (design rule 2: about a third of the next card shows, and the edge with more cards fades), with the
+  rows still lined up across the cards. The dashed "New permission set" card goes; the button in the fixed head opens
+  the same name-and-description form in a pop-up.
