@@ -145,3 +145,136 @@ def test_cards_stack_on_a_phone(page, live_server, tracker_factory, user_factory
     assert second["y"] >= first["y"] + first["height"]  # one under the other
     assert second["y"] - (first["y"] + first["height"]) <= 17  # the usual gap, no empty fade rows between
     assert first["width"] > 300
+
+
+def open_home(page, live_server, user_factory, query=""):
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(live_server + "/" + query)
+    expect(page.locator("[data-home-tools]")).to_be_visible()
+
+
+def names(page, container):
+    return page.locator(f"[data-home-{container}] [data-card]:visible").evaluate_all(
+        "els => els.map(el => el.dataset.name)"
+    )
+
+
+def clean(page):
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
+
+
+def test_search_filters_cards_and_list_with_footer_and_clear(page, live_server, db, tracker_factory, user_factory):
+    for name in ("Alpha rollout", "Beta rollout"):
+        tracker_factory(name=name)
+    red = tracker_factory(name="Gamma patching")
+    db.add(ReportInput(tracker_id=red.id, week_ending=date(2026, 9, 4), status="Red"))
+    db.commit()
+    open_home(page, live_server, user_factory)
+    footer = page.locator("[data-home-count]")
+    clear = page.locator("[data-clear-for=home]")
+    expect(footer).to_have_text("Showing 3 of 3 trackers")
+    expect(clear).to_be_hidden()
+    page.get_by_role("searchbox").fill("  ROLLOUT ")
+    expect(page.locator("[data-home-cards] [data-card]:visible")).to_have_count(2)
+    expect(footer).to_have_text("Showing 2 of 3 trackers")
+    assert "q=ROLLOUT" in page.url
+    page.locator("[data-layout=list]").click()
+    expect(page.locator("[data-home-list] [data-card]:visible")).to_have_count(2)
+    expect(footer).to_be_visible()
+    page.locator("[data-filter=red]").click()
+    expect(footer).to_have_text("Showing 0 of 3 trackers")
+    expect(clear).to_be_visible()
+    clear.click()
+    expect(footer).to_have_text("Showing 3 of 3 trackers")
+    expect(page.get_by_role("searchbox")).to_have_value("")
+    expect(page.locator("[data-filter=all]")).to_have_attribute("aria-pressed", "true")
+    expect(clear).to_be_hidden()
+    assert "q=" not in page.url and "filter=" not in page.url and "layout=list" in page.url
+    clean(page)
+
+
+def test_footer_uses_the_singular_and_counts_archived_only_when_shown(
+    page, live_server, db, tracker_factory, user_factory
+):
+    tracker_factory(name="Only one")
+    old = tracker_factory(name="Old one", status="archived")
+    open_home(page, live_server, user_factory)
+    expect(page.locator("[data-home-count]")).to_have_text("Showing 1 of 1 tracker")
+    page.goto(live_server + "/?archived=1")
+    expect(page.locator("[data-home-count]")).to_have_text("Showing 2 of 2 trackers")
+    assert old.name
+
+
+def test_heading_sort_and_the_sort_select_agree_and_cards_follow(page, live_server, tracker_factory, user_factory):
+    for name in ("Bravo", "Alpha", "Charlie"):
+        tracker_factory(name=name)
+    open_home(page, live_server, user_factory)
+    page.locator("[data-layout=list]").click()
+    select = page.locator("[data-home-sort]")
+    heading = page.locator("[data-home-list] th", has=page.locator("[data-sort=name]"))
+    heading.locator("button").click()
+    expect(select).to_have_value("name")
+    expect(heading).to_have_attribute("aria-sort", "ascending")
+    assert names(page, "list") == ["alpha", "bravo", "charlie"]
+    assert page.locator("[data-home-cards] [data-card]").evaluate_all("els => els.map(el => el.dataset.name)") == [
+        "alpha",
+        "bravo",
+        "charlie",
+    ]
+    assert "sort=name" in page.url
+    heading.locator("button").click()
+    expect(select).to_have_value("-name")
+    expect(heading).to_have_attribute("aria-sort", "descending")
+    assert names(page, "list") == ["charlie", "bravo", "alpha"]
+    assert "sort=-name" in page.url
+    # The select drives the heading the other way round.
+    select.select_option(value="name")
+    expect(heading).to_have_attribute("aria-sort", "ascending")
+    select.select_option(value="attention")
+    assert "sort=" not in page.url
+    expect(heading).to_have_attribute("aria-sort", "none")
+    clean(page)
+
+
+def test_the_view_is_kept_in_the_address_and_bad_values_are_ignored(
+    page, live_server, db, tracker_factory, region_factory, user_factory
+):
+    emea = region_factory("EMEA")
+    first = tracker_factory(name="Alpha one")
+    tracker_factory(name="Beta two")
+    set_tracker_regions(db, first.id, [emea.id])
+    db.commit()
+    open_home(
+        page, live_server, user_factory, f"?filter=none&region={emea.id}&sort=-name&q=alpha&layout=list&archived=1"
+    )
+    expect(page.locator("[data-filter=none]")).to_have_attribute("aria-pressed", "true")
+    expect(page.get_by_label("Region", exact=True)).to_have_value(str(emea.id))
+    expect(page.locator("[data-home-sort]")).to_have_value("-name")
+    expect(page.get_by_role("searchbox")).to_have_value("alpha")
+    expect(page.locator("[data-layout=list]")).to_have_attribute("aria-pressed", "true")
+    page.locator("[data-clear-for=home]").click()
+    # Clear keeps the sort and the layout, and other keys of the address stay.
+    assert "sort=-name" in page.url and "layout=list" in page.url and "archived=1" in page.url
+    assert "filter=" not in page.url and "region=" not in page.url and "q=" not in page.url
+    page.goto(live_server + "/?filter=bogus&line=999&region=zzz&sort=nope&layout=grid&q=")
+    expect(page.locator("[data-filter=all]")).to_have_attribute("aria-pressed", "true")
+    expect(page.locator("[data-home-sort]")).to_have_value("attention")
+    expect(page.locator("[data-layout=cards]")).to_have_attribute("aria-pressed", "true")
+    expect(page.locator("[data-home-cards] [data-card]:visible")).to_have_count(2)
+    # The next change rewrites the address with defaults left out.
+    page.locator("[data-filter=all]").click()
+    assert page.url.endswith("/")
+    clean(page)
+
+
+def test_layout_in_the_address_wins_over_the_remembered_one(page, live_server, tracker_factory, user_factory):
+    tracker_factory(name="Solo")
+    open_home(page, live_server, user_factory)
+    page.locator("[data-layout=list]").click()
+    page.goto(live_server + "/")
+    expect(page.locator("[data-layout=list]")).to_have_attribute("aria-pressed", "true")
+    page.goto(live_server + "/?layout=cards")
+    expect(page.locator("[data-layout=cards]")).to_have_attribute("aria-pressed", "true")
+    expect(page.locator("[data-home-cards]")).to_be_visible()
+    clean(page)

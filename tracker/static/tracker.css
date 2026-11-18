@@ -320,6 +320,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tracker-list table { min-width: 860px; }
 .tracker-list td { vertical-align: middle; }
 .tracker-list tr:last-child td { border-bottom: 0; }
+.home-pager { margin-top: 4px; padding-left: 4px; padding-right: 4px; border-top: 0; }  /* the footer line under the cards or the list */
+.home-tools-right .list-search { flex: 0 1 240px; }
 .tracker-row-status { position: relative; padding-left: 18px; white-space: nowrap; }
 .tracker-row-progress { min-width: 160px; }
 .tracker-row-progress .bar { margin-bottom: 4px; }

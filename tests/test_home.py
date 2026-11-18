@@ -313,3 +313,39 @@ def test_new_tracker_button_follows_create_trackers(client, logged_in_user, give
     assert 'href="/trackers/new"' not in client.get("/").get_data(as_text=True)
     give_set(["create_trackers"], user=logged_in_user)
     assert 'href="/trackers/new"' in client.get("/").get_data(as_text=True)
+
+
+# --- I. The list view's search, sortable headings and footer -------------------------------------------------------
+
+
+def test_home_has_a_search_box_sort_headings_and_a_footer(client, logged_in_admin, tracker_factory):
+    tracker_factory(name="Alpha tracker")
+    page = client.get("/").get_data(as_text=True)
+    assert 'data-search-for="home"' in page
+    assert re.search(r'data-search-for="home" hidden', page)  # hidden until home.js runs
+    heads = re.findall(r'<button type="button" class="sort-button" data-sort="(\w+)" hidden>', page)
+    assert heads == ["attention", "name", "progress", "forecast", "risks", "last"]
+    # Every heading's sort is an option of the Sort select, ascending and reversed, so the two always agree.
+    select = re.search(r'<select id="home-sort".*?</select>', page, re.S).group(0)
+    values = re.findall(r'<option value="([^"]+)"', select)
+    for key in heads + ["target"]:
+        assert key in values and "-" + key in values
+    assert "data-home-count" in page and 'data-clear-for="home"' in page
+    assert re.search(r"data-home-footer hidden", page)
+
+
+def test_home_rows_carry_every_sort_value(client, logged_in_admin, db, tracker_factory):
+    tracker_factory(name="Beta tracker")
+    page = client.get("/").get_data(as_text=True)
+    row = re.search(r"<tr class=\"tracker-row[^>]*>", page).group(0)
+    for attr in (
+        "data-name",
+        "data-attention",
+        "data-target",
+        "data-progress",
+        "data-forecast",
+        "data-risks",
+        "data-last",
+    ):
+        assert attr + "=" in row
+        assert attr + "=" in re.search(r'<article class="tracker-card[^>]*>', page).group(0)
