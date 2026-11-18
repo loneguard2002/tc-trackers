@@ -303,8 +303,11 @@
   });
   // A click on the dimmed page closes it.
   panel.addEventListener("click", function (event) {
-    // A click on the backdrop targets the dialog itself; its children never do. (Keyboard clicks have no position.)
-    if (event.target === panel) panel.close();
+    // A click on the backdrop targets the dialog itself, as does one on the empty strip inside its box below short
+    // content, so the point must also lie outside the box. Keyboard clicks target a button, never the dialog.
+    if (event.target !== panel) return;
+    var box = panel.getBoundingClientRect();
+    if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) panel.close();
   });
 
   var actions = { rename: startRename, details: openPanel, "delete": startDelete };
