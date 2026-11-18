@@ -84,3 +84,44 @@ def test_ticks_restored_by_the_browser_count_as_unsaved(page, live_server, user_
     card = page.locator("article[data-set-card]", has_text="PMO")
     expect(page.locator("[data-dirty-note]")).to_have_text("Unsaved changes in 1 set")
     expect(card.get_by_text("Changed")).to_be_visible()
+
+
+def test_permission_rows_line_up_across_cards(page, live_server, db, user_factory, give_set):
+    long = give_set(["view_activity"], user=user_factory(), name="PMO")
+    long.description = "Programme management office: reads every tracker and the activity log. " * 3
+    give_set(["manage_users"], user=user_factory(), name="Operations")
+    db.commit()
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(f"{live_server}/admin/permission-sets")
+    cards = page.locator(".perm-cards > .perm-card:not(.perm-card-new)")
+    expect(cards).to_have_count(3)  # Administrators, Operations, PMO
+    tops = [cards.nth(k).bounding_box()["y"] for k in range(3)]
+    assert max(tops) - min(tops) < 1  # the three sit side by side in one row
+    # The same permission, the group headings and the card footers sit at the same height in every card.
+    for selector in (".perm-group", ".perm-row", ".perm-card-foot"):
+        heights = page.evaluate(
+            """sel => [...document.querySelectorAll('.perm-cards > .perm-card:not(.perm-card-new)')]
+                .map(card => [...card.querySelectorAll(sel)].map(el => Math.round(el.getBoundingClientRect().top)))""",
+            selector,
+        )
+        assert all(column == heights[0] for column in heights), (selector, heights)
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_the_save_bar_is_frosted(page, live_server, user_factory, give_set, theme):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(f"{live_server}/admin/permission-sets")
+    page.evaluate(f"document.documentElement.setAttribute('data-theme', '{theme}')")
+    bar = page.locator(".perm-save")
+    blur = bar.evaluate("el => getComputedStyle(el).backdropFilter")
+    assert re.search(r"blur\((1[2-9]|[2-9]\d)px\)", blur), blur  # a strong blur, as on an iPhone
+    # Browsers report a mixed colour as rgba(r, g, b, a) or color(srgb r g b / a); the alpha is the 4th number.
+    colour = bar.evaluate("el => getComputedStyle(el).backgroundColor")
+    numbers = re.findall(r"[\d.]+", colour.replace("srgb", ""))
+    alpha = float(numbers[3]) if len(numbers) > 3 else 1.0
+    assert alpha <= 0.8, colour  # see-through enough for the cards to show behind it

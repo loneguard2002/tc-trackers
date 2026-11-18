@@ -515,7 +515,9 @@ main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-heigh
 .switch input:checked + .switch-track::after { transform: translateX(18px); }
 .switch input:focus-visible + .switch-track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
-.settings-actions { position: sticky; bottom: 12px; z-index: 5; display: flex; justify-content: flex-end; gap: 8px; margin: 0 0 20px; padding: 12px 20px; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: 0 6px 20px rgba(7, 26, 61, .1); backdrop-filter: blur(6px); }
+.settings-actions { position: sticky; bottom: 12px; z-index: 5; display: flex; justify-content: flex-end; gap: 8px; margin: 0 0 20px; padding: 12px 20px; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 72%, transparent); box-shadow: 0 6px 20px rgba(7, 26, 61, .1); -webkit-backdrop-filter: saturate(180%) blur(16px); backdrop-filter: saturate(180%) blur(16px); }
+/* Save bars are frosted glass: the page shows through, blurred. Without backdrop-filter they stay nearly solid. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .settings-actions { background: color-mix(in srgb, var(--surface) 96%, transparent); } }
 .settings-actions .button { font-weight: 600; }
 .button.primary:hover { background: color-mix(in srgb, var(--primary) 88%, var(--text)); }
 .button.danger:hover:not(:disabled) { background: var(--danger); color: var(--surface); }
@@ -1131,6 +1133,17 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .perm-head .page-lede { margin-bottom: 0; }
 .perm-head .button { display: inline-flex; flex: none; align-items: center; gap: 8px; font-weight: 600; }
 .perm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 20px; align-items: start; max-width: 1280px; margin-bottom: 20px; }
+/* Cards side by side share their rows (subgrid): header, permissions, warning and footer each take the height of the
+   tallest card in that row, so the same permission sits at the same height in every card and reads straight across. */
+@supports (grid-template-rows: subgrid) {
+  .perm-cards { row-gap: 0; align-items: stretch; }
+  .perm-cards > .perm-card { display: grid; grid-row: span 4; grid-template-rows: subgrid; row-gap: 0; margin-bottom: 20px; }
+  .perm-card > .perm-card-head { grid-row: 1; }
+  .perm-card > .perm-card-body { grid-row: 2; }
+  .perm-card > .perm-card-warning { grid-row: 3; align-self: start; }
+  .perm-card > .perm-card-foot { grid-row: 4; }
+  .perm-card-new > form { grid-row: 2 / span 3; align-self: start; }
+}
 .perm-card { display: flex; flex-direction: column; min-width: 0; scroll-margin-top: calc(var(--topbar-height) + 16px); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); transition: border-color .15s, box-shadow .15s; }
 .perm-card.is-changed { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent); }
 .perm-card-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 14px; border-bottom: 1px solid var(--border); }
