@@ -514,3 +514,62 @@ def test_a_failed_load_offers_the_sets_own_page(page, live_server, user_factory,
     expect(panel).to_contain_text("The holders could not be loaded.")
     link = panel.get_by_role("link", name="Open the set's own page")
     expect(link).to_have_attribute("href", f"/admin/permission-sets/{permission_set.id}")
+
+
+def test_the_keyboard_works_inside_the_panel_without_closing_it(
+    page, live_server, user_factory, team_factory, give_set
+):
+    holders_set(give_set, user_factory, team_factory)
+    open_page(page, live_server, user_factory)
+    page.on("dialog", lambda d: d.dismiss())  # the Remove confirmation
+    card_of(page, "PMO").get_by_role("link", name="Holders and details").focus()
+    page.keyboard.press("Enter")
+    panel = page.locator("dialog.perm-drawer")
+    expect(panel).to_be_visible()
+    more = panel.get_by_role("button", name="More for PMO")
+    more.focus()
+    page.keyboard.press("Enter")
+    expect(more).to_have_attribute("aria-expanded", "true")
+    expect(panel).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(more).to_be_focused()
+    panel.get_by_role("button", name="Remove").focus()
+    page.keyboard.press("Enter")
+    expect(panel).to_be_visible()
+    expect(panel.get_by_role("button", name="Remove")).to_have_count(1)  # declined, so still held
+    clean(page)
+
+
+@pytest.mark.parametrize("how", ["cancel", "escape"])
+def test_focus_returns_to_the_menu_button_when_a_popup_closes_unsaved(page, live_server, user_factory, give_set, how):
+    give_set(["view_activity"], user=user_factory(), name="PMO")
+    open_page(page, live_server, user_factory)
+    more = card_of(page, "PMO").get_by_role("button", name="More for PMO")
+    for item, name in (("Rename or edit description", "Rename or edit description"), ("Delete…", "Delete PMO?")):
+        more.click()
+        page.get_by_role("menuitem", name=item).click()
+        dialog = page.get_by_role("dialog", name=name)
+        expect(dialog).to_be_visible()
+        if how == "cancel":
+            dialog.get_by_role("button", name="Cancel").click()
+        else:
+            page.keyboard.press("Escape")
+        expect(dialog).to_be_hidden()
+        expect(more).to_be_focused()
+    clean(page)
+
+
+def test_an_expired_session_does_not_fill_the_panel_with_the_sign_in_page(page, live_server, user_factory, give_set):
+    permission_set = give_set(["view_activity"], user=user_factory(), name="PMO")
+    open_page(page, live_server, user_factory)
+    page.route(
+        "**/panel",
+        lambda route: route.fulfill(status=200, content_type="text/html", body="<form><input name=email></form>"),
+    )
+    card_of(page, "PMO").get_by_role("link", name="Holders and details").click()
+    panel = page.locator("dialog.perm-drawer")
+    expect(panel).to_contain_text("The holders could not be loaded.")
+    expect(panel.locator("input[name=email]")).to_have_count(0)
+    expect(panel.get_by_role("link", name="Open the set's own page")).to_have_attribute(
+        "href", f"/admin/permission-sets/{permission_set.id}"
+    )

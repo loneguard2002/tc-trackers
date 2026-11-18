@@ -147,7 +147,11 @@
         item.remove();
         return;
       }
-      item.addEventListener("click", function () { closeMenu(false); run(card); });
+      item.addEventListener("click", function () {
+        var from = openMenu ? openMenu.button : null;
+        closeMenu(false);
+        run(card, from);
+      });
     });
     button.addEventListener("click", function () {
       var wasOpen = openMenu && openMenu.menu === menu;
@@ -175,7 +179,10 @@
   var renameName = document.getElementById("rename-set-name");
   var renameDescription = document.getElementById("rename-set-description");
   var renameError = renameDialog.querySelector("[data-name-error]");
-  function startRename(card) {
+  // The pop-ups give the focus back to the button that opened the menu when they close without saving.
+  var returnFocus = null;
+  function startRename(card, from) {
+    returnFocus = from || null;
     var form = renameDialog.querySelector("form");
     form.action = card.getAttribute("data-rename-url");
     renameDialog.querySelector("[data-dialog-sub]").textContent = setName(card);
@@ -196,7 +203,8 @@
   });
 
   // The delete pop-up: who holds the set (the card's own line) and the permissions they lose (its saved ticks).
-  function startDelete(card) {
+  function startDelete(card, from) {
+    returnFocus = from || null;
     var held = card.querySelector(".perm-card-foot span").textContent.trim();
     var nobody = held.indexOf("Held by") !== 0;
     var lose = Array.prototype.filter.call(card.querySelectorAll(".perm-row input"), function (box) {
@@ -222,6 +230,11 @@
   }
 
   [renameDialog, deleteDialog].forEach(function (dialog) {
+    dialog.addEventListener("close", function () {
+      var back = returnFocus;
+      returnFocus = null;
+      if (back && document.body.contains(back)) back.focus();
+    });
     Array.prototype.forEach.call(dialog.querySelectorAll("[data-close]"), function (button) {
       button.addEventListener("click", function () { dialog.close(); });
     });
@@ -265,11 +278,13 @@
     }
     fetch(card.getAttribute("data-panel-url"), { credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
       .then(function (response) {
-        if (!response.ok) throw new Error("status " + response.status);
+        // An expired session redirects to the sign-in page, which answers 200: treat that as a failure too.
+        if (!response.ok || response.redirected) throw new Error("status " + response.status);
         return response.text();
       })
       .then(function (html) {
         if (panelCard !== card) return;
+        if (html.indexOf("data-panel-set") === -1) throw new Error("not the panel");
         body.innerHTML = html;
       })
       .catch(failed);
@@ -286,11 +301,10 @@
   panel.addEventListener("cancel", function (event) {
     if (openMenu) { event.preventDefault(); closeMenu(true); }
   });
-  // A click on the dimmed page (outside the panel's own box) closes it.
+  // A click on the dimmed page closes it.
   panel.addEventListener("click", function (event) {
-    var box = panel.getBoundingClientRect();
-    var outside = event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
-    if (outside) panel.close();
+    // A click on the backdrop targets the dialog itself; its children never do. (Keyboard clicks have no position.)
+    if (event.target === panel) panel.close();
   });
 
   var actions = { rename: startRename, details: openPanel, "delete": startDelete };
