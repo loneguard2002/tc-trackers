@@ -160,4 +160,11 @@ def run_scheduler_cycle(session, now_utc: datetime) -> int:
     except Exception:
         session.rollback()
         logger.exception("Sending the access request reminder failed")
+    from ..calendar_invites.service import sync_all  # here, as above: the mail package loads its views on import
+
+    try:
+        sync_all(session, now_utc)
+    except Exception:
+        session.rollback()
+        logger.exception("Sending calendar reminders failed")
     return attempted + sending.retry_queued(session, now_utc)
