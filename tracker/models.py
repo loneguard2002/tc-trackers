@@ -414,6 +414,29 @@ class ReportReminder(Base):
     sent_at: Mapped[datetime] = _now()
 
 
+class CalendarReminder(Base):
+    """One person's calendar reminder for one tracker: whether it is switched on and what was last delivered.
+
+    ``sent_state`` and ``sent_fingerprint`` describe the invitation the person's calendar holds now; ``sequence`` is the
+    ``SEQUENCE`` of the last delivery.
+    """
+
+    __tablename__ = "calendar_reminders"
+    __table_args__ = (
+        CheckConstraint("sent_state IN ('none', 'sent', 'cancelled')", name="sent_state"),
+        Index("ix_calendar_reminders_tracker_id", "tracker_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    tracker_id: Mapped[int] = mapped_column(ForeignKey("trackers.id", ondelete="CASCADE"), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    sequence: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    sent_state: Mapped[str] = mapped_column(Text, default="none", server_default="none")
+    sent_fingerprint: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class ReportSend(Base):
     __tablename__ = "report_sends"
     __table_args__ = (
