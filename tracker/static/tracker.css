@@ -1532,3 +1532,5 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .reminder-form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .reminder-status { margin: 10px 0; }
 .reminder-form [hidden] { display: none; }
+.reminder-guard { margin: 10px 0 0; }
+.reminder-guard[hidden] { display: none; }

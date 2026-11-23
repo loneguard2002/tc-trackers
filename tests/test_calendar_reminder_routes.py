@@ -170,3 +170,21 @@ def test_an_archived_tracker_shows_no_switch_and_refuses_changes(client, db, set
     post(client, url(tracker), {"enabled": "on"})
     assert mail == []
     assert db.get(CalendarReminder, (person.id, tracker.id)) is None
+
+
+def test_a_lost_first_insert_race_reads_the_winners_row(client, db, setup, monkeypatch):
+    from tracker.entries.views import _reminder_row
+
+    tracker, person = setup
+    db.add(CalendarReminder(user_id=person.id, tracker_id=tracker.id, enabled=True))
+    db.commit()
+    real_get = db.get
+    calls = []
+
+    def blind_first(model, key, *a, **kw):
+        calls.append(key)
+        return None if len(calls) == 1 else real_get(model, key, *a, **kw)
+
+    monkeypatch.setattr(db, "get", blind_first)
+    row = _reminder_row(db, person.id, tracker.id)
+    assert row is not None and row.enabled is True

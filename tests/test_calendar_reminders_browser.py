@@ -83,3 +83,27 @@ def test_the_panel_is_reachable_by_keyboard(page, live_server, editor, mail):
     page.keyboard.press("Space")
     expect(page.locator("#reminder-status")).to_contain_text("Sent to person@example.com on")
     assert len(mail) == 1
+
+
+def test_unsaved_update_text_blocks_the_switch_and_send_it_again(page, live_server, editor, mail):
+    tracker, _ = editor
+    url = f"{live_server}/trackers/{tracker.id}/inputs"
+    page.goto(url)
+    page.fill("#headline", "Work in progress")
+    page.locator("label[for=calendar-reminder]").click()
+    guard = page.locator("[data-reminder-guard]")
+    expect(guard).to_have_text("Save your weekly update first.")
+    assert page.url == url
+    assert page.input_value("#headline") == "Work in progress"
+    assert not page.is_checked("#calendar-reminder")
+    assert mail == []
+    # Save the update, switch on, then type again and try "Send it again".
+    page.fill("#headline", "")
+    page.locator("label[for=calendar-reminder]").click()
+    expect(page.locator("#reminder-status")).to_contain_text("Sent to person@example.com on")
+    assert len(mail) == 1
+    page.fill("#headline", "More text")
+    page.click("text=Send it again")
+    expect(guard).to_have_text("Save your weekly update first.")
+    assert page.input_value("#headline") == "More text"
+    assert len(mail) == 1

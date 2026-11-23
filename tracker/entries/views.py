@@ -491,6 +491,21 @@ def _back_to_inputs(tracker: Tracker):
     return redirect(url_for("entries.inputs", tracker_id=tracker.id, **({"week": week.isoformat()} if week else {})))
 
 
+def _reminder_row(db, user_id: int, tracker_id: int) -> CalendarReminder:
+    """The person's reminder row, created if absent. Of two first submits at once, the loser reads the winner's row."""
+    key = (user_id, tracker_id)
+    row = db.get(CalendarReminder, key)
+    if row is None:
+        row = CalendarReminder(user_id=user_id, tracker_id=tracker_id, sequence=0, sent_state="none")
+        db.add(row)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            row = db.get(CalendarReminder, key)
+    return row
+
+
 @bp.post("/trackers/<int:tracker_id>/calendar-reminder")
 @require_tracker_role("editor")
 def calendar_reminder(tracker_id: int):
@@ -500,10 +515,7 @@ def calendar_reminder(tracker_id: int):
     if refused:
         return refused
     enabled = request.form.get("enabled") == "on"
-    row = db.get(CalendarReminder, (user.id, tracker.id))
-    if row is None:
-        row = CalendarReminder(user_id=user.id, tracker_id=tracker.id, sequence=0, sent_state="none")
-        db.add(row)
+    row = _reminder_row(db, user.id, tracker.id)
     row.enabled = enabled
     row.last_error = None
     action = sync_reminder(db, row, datetime.now(timezone.utc))

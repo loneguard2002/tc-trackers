@@ -150,12 +150,13 @@
       {%- elif reminder and reminder.enabled %}Not sent yet.
       {%- else %}Off.{% endif %}</p>
     {% if reminder and reminder.enabled and reminder.sent_state == 'sent' %}
-    <form method="post" action="{{ url_for('entries.calendar_reminder_resend', tracker_id=tracker.id) }}">
+    <form method="post" action="{{ url_for('entries.calendar_reminder_resend', tracker_id=tracker.id) }}" data-reminder-resend>
       {{ csrf_field(csrf_token()) }}
       <input type="hidden" name="week" value="{{ week.isoformat() }}">
       <button class="button button-small" type="submit">Send it again</button>
     </form>
     {% endif %}
+    <p class="reminder-guard tone-danger" role="alert" data-reminder-guard hidden>Save your weekly update first.</p>
   </section>
   {% endif %}
 </div>
