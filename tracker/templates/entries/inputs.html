@@ -26,6 +26,30 @@
         {% else %}<span class="button button-small is-disabled" aria-disabled="true">Next{{ icon('chevron-right') }}</span>{% endif %}
       </nav>
     </header>
+    {% if tracker.status != 'archived' %}
+    <div class="reminder-line">
+      <form class="reminder-form" method="post" action="{{ url_for('entries.calendar_reminder', tracker_id=tracker.id) }}" data-reminder-form>
+        {{ csrf_field(csrf_token()) }}
+        <input type="hidden" name="week" value="{{ week.isoformat() }}">
+        <label class="reminder-check" for="calendar-reminder">
+          <input id="calendar-reminder" name="enabled" type="checkbox" value="on" {{ 'checked' if reminder and reminder.enabled }} aria-describedby="reminder-status">
+          Email me a calendar reminder at 08:45 on each week-ending day
+        </label>
+        <button class="link-button" type="submit" data-reminder-save>Save</button>
+      </form>
+      <span class="muted reminder-status" id="reminder-status" title="Sent to {{ current_user.email }}; a free 15-minute event each week-ending day until the tracker ends">
+        {%- if reminder and reminder.enabled and reminder.sent_state == 'sent' and reminder.sent_at %}Sent {{ reminder_sent_on|fdate }}
+        {%- elif reminder and reminder.enabled %}Not sent yet{% endif %}</span>
+      {% if reminder and reminder.enabled and reminder.sent_state == 'sent' %}
+      <form class="reminder-resend" method="post" action="{{ url_for('entries.calendar_reminder_resend', tracker_id=tracker.id) }}" data-reminder-resend>
+        {{ csrf_field(csrf_token()) }}
+        <input type="hidden" name="week" value="{{ week.isoformat() }}">
+        <button class="link-button" type="submit">Send again</button>
+      </form>
+      {% endif %}
+      <span class="reminder-guard tone-danger" role="alert" data-reminder-guard hidden>Save your weekly update first.</span>
+    </div>
+    {% endif %}
     <nav class="week-strip" aria-label="Choose a week" data-week-strip>
       {% for w in weeks %}
       {% set entry = saved.get(w) %}{% set written = entry and (entry.status or entry.headline) %}
@@ -126,38 +150,5 @@
       <button class="button primary" type="submit">Save</button>
     </div>
   </form>
-
-  {% if tracker.status != 'archived' %}
-  <section class="settings-section reminder-panel" aria-labelledby="reminder-title">
-    <header class="settings-section-head">
-      <h2 id="reminder-title">Calendar reminder</h2>
-      <p>A weekly event in your own calendar, sent to {{ current_user.email }}, until the tracker ends. Free time: it does not block your diary.</p>
-    </header>
-    <form class="reminder-form" method="post" action="{{ url_for('entries.calendar_reminder', tracker_id=tracker.id) }}" data-reminder-form>
-      {{ csrf_field(csrf_token()) }}
-      <input type="hidden" name="week" value="{{ week.isoformat() }}">
-      <label class="switch-row" for="calendar-reminder">
-        <span class="switch">
-          <input id="calendar-reminder" name="enabled" type="checkbox" role="switch" value="on" {{ 'checked' if reminder and reminder.enabled }} aria-describedby="reminder-status">
-          <span class="switch-track" aria-hidden="true"></span>
-        </span>
-        Remind me at 08:45 on each week-ending day
-      </label>
-      <button class="button button-small" type="submit" data-reminder-save>Save</button>
-    </form>
-    <p class="muted reminder-status" id="reminder-status">
-      {%- if reminder and reminder.enabled and reminder.sent_state == 'sent' and reminder.sent_at %}Sent to {{ current_user.email }} on {{ reminder_sent_on|fdate }}.
-      {%- elif reminder and reminder.enabled %}Not sent yet.
-      {%- else %}Off.{% endif %}</p>
-    {% if reminder and reminder.enabled and reminder.sent_state == 'sent' %}
-    <form method="post" action="{{ url_for('entries.calendar_reminder_resend', tracker_id=tracker.id) }}" data-reminder-resend>
-      {{ csrf_field(csrf_token()) }}
-      <input type="hidden" name="week" value="{{ week.isoformat() }}">
-      <button class="button button-small" type="submit">Send it again</button>
-    </form>
-    {% endif %}
-    <p class="reminder-guard tone-danger" role="alert" data-reminder-guard hidden>Save your weekly update first.</p>
-  </section>
-  {% endif %}
 </div>
 {% endblock %}

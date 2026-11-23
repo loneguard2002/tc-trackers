@@ -13,7 +13,7 @@ from tracker.mail import smtp
 from tracker.models import CalendarReminder
 
 EMAIL = "person@example.com"
-COPY = "Remind me at 08:45 on each week-ending day"
+COPY = "Email me a calendar reminder at 08:45 on each week-ending day"
 
 
 @pytest.fixture(autouse=True)
@@ -72,7 +72,10 @@ def test_an_editor_sees_the_panel_with_the_switch_off(client, setup):
     assert COPY in html
     assert 'name="enabled"' in html
     assert re.search(r'name="enabled"[^>]*checked', html) is None
-    assert "Send it again" not in html
+    assert "Send again" not in html
+    # One checkbox line in the week header (it covers every week), above this week's update form.
+    assert 'role="switch"' not in html
+    assert html.index("week-picker") < html.index("data-reminder-form") < html.index("data-inputs-form")
 
 
 def test_a_viewer_cannot_reach_either_route(client, db, setup, user_factory, grant):
@@ -100,8 +103,8 @@ def test_switching_on_sends_one_request_and_the_panel_reports_it(client, db, set
     assert flashes(client) == [f"Calendar reminder sent to {EMAIL}."]
     html = page_text(client, tracker)
     today = fmt_date(datetime.now(timezone.utc).date())
-    assert f"Sent to {EMAIL} on {today}." in html
-    assert "Send it again" in html
+    assert f"Sent {today}" in html
+    assert "Send again" in html
     assert re.search(r'name="enabled"[^>]*checked', html)
 
 
@@ -122,7 +125,7 @@ def test_switching_off_sends_one_cancellation(client, db, setup, mail):
     assert flashes(client)[-1] == f"Calendar reminder switched off. A cancellation was sent to {EMAIL}."
     db.expire_all()
     assert db.get(CalendarReminder, (person.id, tracker.id)).enabled is False
-    assert "Send it again" not in page_text(client, tracker)
+    assert "Send again" not in page_text(client, tracker)
 
 
 def test_switching_off_a_reminder_that_was_never_sent_sends_nothing(client, setup, mail):
@@ -209,7 +212,7 @@ def test_without_email_set_up_the_switch_saves_and_says_so(client, db, setup, ma
     db.expire_all()
     row = db.get(CalendarReminder, (person.id, tracker.id))
     assert row.enabled is True and row.last_error is None
-    assert "Not sent yet." in page_text(client, tracker)
+    assert "Not sent yet" in page_text(client, tracker)
 
 
 def test_the_sent_date_is_the_trackers_local_date(client, db, setup, mail):
@@ -220,4 +223,4 @@ def test_the_sent_date_is_the_trackers_local_date(client, db, setup, mail):
     row = db.get(CalendarReminder, (person.id, tracker.id))
     row.sent_at = datetime(2026, 10, 1, 12, 30, tzinfo=timezone.utc)  # 01:30 on 2 October in Auckland (UTC+13)
     db.commit()
-    assert f"Sent to {EMAIL} on 02 Oct 2026." in page_text(client, tracker)
+    assert "Sent 02 Oct 2026" in page_text(client, tracker)

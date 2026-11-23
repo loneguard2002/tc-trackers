@@ -73,7 +73,7 @@
   refresh();
 })();
 
-// Calendar reminder switch: post on change; the Save button stays for visitors without JavaScript. Posting leaves the
+// Calendar reminder checkbox: post on change; the Save button stays for visitors without JavaScript. Posting leaves the
 // page, so while the update form has unsaved changes the switch and "Send it again" do not post.
 (function () {
   "use strict";
