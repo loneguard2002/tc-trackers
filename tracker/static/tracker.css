@@ -1528,9 +1528,12 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
   .wizard-holders .muted { display: none; }
 }
 
-.reminder-panel { margin-top: 20px; }
-.reminder-form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.reminder-status { margin: 10px 0; }
-.reminder-form [hidden] { display: none; }
-.reminder-guard { margin: 10px 0 0; }
-.reminder-guard[hidden] { display: none; }
+/* Calendar reminder: one line in the week header; it covers every week, not the one shown. */
+.reminder-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 10px 20px; border-bottom: 1px solid var(--border); font-size: .9rem; }
+.reminder-form, .reminder-resend { display: inline-flex; align-items: center; gap: 10px; margin: 0; }
+.reminder-check { display: inline-flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; }
+.reminder-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); cursor: pointer; }
+.reminder-status:empty { display: none; }
+.link-button { padding: 0; border: 0; background: none; color: var(--primary); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.link-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
+.reminder-line [hidden] { display: none; }
