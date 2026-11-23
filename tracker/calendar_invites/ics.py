@@ -12,6 +12,7 @@ import html
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from email.message import EmailMessage
+from email.utils import parseaddr
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -196,7 +197,7 @@ def build_calendar(
         f"SUMMARY:{_escape(f'Write the weekly update: {series.name}')}",
         f"DESCRIPTION:{_escape(description)}",
         f"URL:{series.url}",
-        f"ORGANIZER:mailto:{organizer}",
+        f"ORGANIZER:mailto:{parseaddr(organizer)[1] or organizer}",
         f"ATTENDEE;RSVP=FALSE;PARTSTAT=NEEDS-ACTION;ROLE=REQ-PARTICIPANT:mailto:{attendee}",
         f"STATUS:{'CANCELLED' if cancelled else 'CONFIRMED'}",
         "TRANSP:TRANSPARENT",
@@ -241,7 +242,7 @@ def build_invite_email(
     if method == "CANCEL":
         subject = f"Calendar reminder cancelled: {name}"
         lead = f"The weekly reminder to write the update for {name} has been cancelled."
-        note = "Outlook removes it from your calendar."
+        note = "Outlook removes it, or offers to remove it, from your calendar."
     else:
         subject = f"Calendar reminder: {name}"
         lead = f"A weekly reminder to write the update for {name} is in your calendar."

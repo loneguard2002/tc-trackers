@@ -92,6 +92,14 @@
     return blocked;
   }
 
+  // Undoing the edit takes the note away again. The update form's own listeners run first and refresh the dirty note.
+  var inputsForm = document.querySelector("[data-inputs-form]");
+  if (inputsForm) {
+    var recheck = function () { if (guard && !guard.hidden) unsaved(); };
+    inputsForm.addEventListener("input", recheck);
+    inputsForm.addEventListener("change", recheck);
+  }
+
   if (save) save.hidden = true;
   if (box) {
     box.addEventListener("change", function () {

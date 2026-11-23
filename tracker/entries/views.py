@@ -6,6 +6,7 @@ import csv
 import io
 from datetime import date, datetime, timezone
 from typing import NamedTuple
+from zoneinfo import ZoneInfo
 
 from flask import Response, abort, flash, g, redirect, render_template, request, session, url_for
 from sqlalchemy import func, select
@@ -13,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import current_user, require_tracker_role
-from ..calendar_invites.service import sync_reminder
+from ..calendar_invites.service import email_set_up, sync_reminder
 from ..db import get_session
 from ..engine.calc import COMPLETE
 from ..engine.weeks import in_progress_week, week_endings
@@ -483,6 +484,7 @@ def inputs(tracker_id: int):
 
 
 REMINDER_FAILED = "The calendar reminder could not be sent now. It will be tried again shortly."
+REMINDER_NOT_SET_UP = "Email is not set up in this application yet. The reminder will be sent once it is."
 
 
 def _back_to_inputs(tracker: Tracker):
@@ -523,10 +525,12 @@ def calendar_reminder(tracker_id: int):
         failed = row.last_error is not None
         if not failed:
             db.commit()
-        flash(
-            REMINDER_FAILED if failed else f"Calendar reminder is {'on' if enabled else 'off'}.",
-            "danger" if failed else "success",
-        )
+        if failed:
+            flash(REMINDER_FAILED, "danger")
+        elif (enabled or row.sent_state == "sent") and not email_set_up(db):
+            flash(REMINDER_NOT_SET_UP, "success")
+        else:
+            flash(f"Calendar reminder is {'on' if enabled else 'off'}.", "success")
     elif action == "cancel":
         flash(f"Calendar reminder switched off. A cancellation was sent to {user.email}.", "success")
     else:
@@ -548,7 +552,12 @@ def calendar_reminder_resend(tracker_id: int):
         return _back_to_inputs(tracker)
     row.last_error = None
     if sync_reminder(db, row, datetime.now(timezone.utc), force=True) is None:
-        flash(REMINDER_FAILED, "danger")
+        failed = row.last_error is not None
+        db.commit()
+        if failed or email_set_up(db):
+            flash(REMINDER_FAILED, "danger")
+        else:
+            flash(REMINDER_NOT_SET_UP, "success")
     else:
         flash(f"Calendar reminder sent again to {user.email}.", "success")
     return _back_to_inputs(tracker)
@@ -558,6 +567,10 @@ def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[
     db = get_session()
     today = date.today()
     preparer = db.get(User, row.prepared_by) if row and row.prepared_by else None
+    reminder = db.get(CalendarReminder, (current_user().id, tracker.id))
+    reminder_sent_on = (
+        reminder.sent_at.astimezone(ZoneInfo(tracker.send_timezone)).date() if reminder and reminder.sent_at else None
+    )
     saved = {r.week_ending: r for r in db.scalars(select(ReportInput).where(ReportInput.tracker_id == tracker.id))}
     index = weeks.index(week)
     previous = saved.get(weeks[index - 1]) if index else None
@@ -583,7 +596,8 @@ def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[
             red_risks=sum(1 for r in risks if r.rag == "Red"),
             overdue_risks=sum(1 for r in risks if r.target_date and r.target_date < min(week, today)),
             format_date=format_date,
-            reminder=db.get(CalendarReminder, (current_user().id, tracker.id)),
+            reminder=reminder,
+            reminder_sent_on=reminder_sent_on,
             **_page(tracker, "Weekly update"),
         ),
         status,
