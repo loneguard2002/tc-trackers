@@ -146,7 +146,7 @@
       <button class="button button-small" type="submit" data-reminder-save>Save</button>
     </form>
     <p class="muted reminder-status" id="reminder-status">
-      {%- if reminder and reminder.enabled and reminder.sent_state == 'sent' and reminder.sent_at %}Sent to {{ current_user.email }} on {{ reminder.sent_at|fdate }}.
+      {%- if reminder and reminder.enabled and reminder.sent_state == 'sent' and reminder.sent_at %}Sent to {{ current_user.email }} on {{ reminder_sent_on|fdate }}.
       {%- elif reminder and reminder.enabled %}Not sent yet.
       {%- else %}Off.{% endif %}</p>
     {% if reminder and reminder.enabled and reminder.sent_state == 'sent' %}

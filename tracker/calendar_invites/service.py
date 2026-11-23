@@ -26,6 +26,29 @@ logger = logging.getLogger(__name__)
 
 Action = Literal["request", "update", "cancel"]
 
+_not_set_up_logged = False
+
+
+def email_set_up(session) -> bool:
+    """Whether the application has a sending address and a mail host to send from."""
+    config = smtp.get_smtp_config(session)
+    return bool(config.get("from_") and config.get("host"))
+
+
+def _lock(session, row: CalendarReminder, skip_locked: bool = False) -> CalendarReminder | None:
+    """Re-read the row under ``FOR UPDATE`` so the request handler and the scheduler never send for it at once.
+
+    The caller's pending changes are flushed first (the query autoflushes), so they are kept. With ``skip_locked`` a
+    row someone else holds gives ``None``. The lock lasts until the caller commits or rolls back.
+    """
+    query = (
+        select(CalendarReminder)
+        .where(CalendarReminder.user_id == row.user_id, CalendarReminder.tracker_id == row.tracker_id)
+        .with_for_update(skip_locked=skip_locked)
+        .execution_options(populate_existing=True)
+    )
+    return session.scalars(query).first()
+
 
 def wanted(session, row: CalendarReminder) -> bool:
     """Whether the person should hold the reminder now: switched on, tracker active, and able to edit it."""
@@ -64,6 +87,10 @@ def _record_failure(session, row: CalendarReminder, message: str) -> None:
 
 def sync_reminder(session, row: CalendarReminder, now_utc: datetime, force: bool = False) -> Action | None:
     """Send what the person's calendar needs, if anything. Returns the action delivered, or ``None``."""
+    locked = _lock(session, row)
+    if locked is None:
+        return None
+    row = locked
     tracker = session.get(Tracker, row.tracker_id)
     user = session.get(User, row.user_id)
     series = series_for(tracker, user, inputs_url(tracker.id))
@@ -77,7 +104,7 @@ def sync_reminder(session, row: CalendarReminder, now_utc: datetime, force: bool
             action = None
     else:
         action = "cancel" if row.sent_state == "sent" else None
-    if action is None:
+    if action is None or not email_set_up(session):
         return None
 
     if action == "cancel" and row.sent_fingerprint:
@@ -101,7 +128,16 @@ def sync_reminder(session, row: CalendarReminder, now_utc: datetime, force: bool
 
 
 def sync_all(session, now_utc: datetime) -> int:
-    """Bring every switched-on or delivered reminder up to date. Returns the number delivered."""
+    """Bring every switched-on or delivered reminder up to date. Returns the number delivered.
+
+    Does nothing while email is not set up (one info line per process). A row a request is holding is skipped.
+    """
+    global _not_set_up_logged
+    if not email_set_up(session):
+        if not _not_set_up_logged:
+            _not_set_up_logged = True
+            logger.info("Calendar reminders are not sent: email is not set up in this application yet")
+        return 0
     keys = session.execute(
         select(CalendarReminder.user_id, CalendarReminder.tracker_id)
         .where(or_(CalendarReminder.enabled.is_(True), CalendarReminder.sent_state == "sent"))
@@ -111,8 +147,11 @@ def sync_all(session, now_utc: datetime) -> int:
     for user_id, tracker_id in keys:
         try:
             row = session.get(CalendarReminder, (user_id, tracker_id))
+            if row is not None:
+                row = _lock(session, row, skip_locked=True)
             if row is not None and sync_reminder(session, row, now_utc) is not None:
                 delivered += 1
+            session.commit()  # releases the lock
         except Exception:
             session.rollback()
             logger.exception("Calendar reminder for tracker %s, user %s could not be processed", tracker_id, user_id)

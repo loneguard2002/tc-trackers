@@ -19,6 +19,13 @@ RECORDER = (
 )
 
 
+@pytest.fixture(autouse=True)
+def email_set_up(monkeypatch):
+    monkeypatch.setattr(
+        smtp, "get_smtp_config", lambda session=None: {"host": "smtp.example.com", "from_": "reports@example.com"}
+    )
+
+
 @pytest.fixture
 def mail(monkeypatch):
     sent: list = []
@@ -88,6 +95,7 @@ def test_the_panel_is_reachable_by_keyboard(page, live_server, editor, mail):
 def test_unsaved_update_text_blocks_the_switch_and_send_it_again(page, live_server, editor, mail):
     tracker, _ = editor
     url = f"{live_server}/trackers/{tracker.id}/inputs"
+    page.add_init_script(RECORDER)
     page.goto(url)
     page.fill("#headline", "Work in progress")
     page.locator("label[for=calendar-reminder]").click()
@@ -107,3 +115,8 @@ def test_unsaved_update_text_blocks_the_switch_and_send_it_again(page, live_serv
     expect(guard).to_have_text("Save your weekly update first.")
     assert page.input_value("#headline") == "More text"
     assert len(mail) == 1
+    # Undo the edit: the note goes away without another click.
+    page.fill("#headline", "")
+    expect(guard).to_be_hidden()
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []

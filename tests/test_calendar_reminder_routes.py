@@ -16,6 +16,13 @@ EMAIL = "person@example.com"
 COPY = "Remind me at 08:45 on each week-ending day"
 
 
+@pytest.fixture(autouse=True)
+def email_set_up(monkeypatch):
+    monkeypatch.setattr(
+        smtp, "get_smtp_config", lambda session=None: {"host": "smtp.example.com", "from_": "reports@example.com"}
+    )
+
+
 @pytest.fixture
 def mail(monkeypatch):
     sent: list = []
@@ -188,3 +195,29 @@ def test_a_lost_first_insert_race_reads_the_winners_row(client, db, setup, monke
     monkeypatch.setattr(db, "get", blind_first)
     row = _reminder_row(db, person.id, tracker.id)
     assert row is not None and row.enabled is True
+
+
+NOT_SET_UP = "Email is not set up in this application yet. The reminder will be sent once it is."
+
+
+def test_without_email_set_up_the_switch_saves_and_says_so(client, db, setup, mail, monkeypatch):
+    tracker, person = setup
+    monkeypatch.setattr(smtp, "get_smtp_config", lambda session=None: {"host": "smtp.example.com", "from_": ""})
+    post(client, url(tracker), {"enabled": "on"})
+    assert flashes(client) == [NOT_SET_UP]
+    assert mail == []
+    db.expire_all()
+    row = db.get(CalendarReminder, (person.id, tracker.id))
+    assert row.enabled is True and row.last_error is None
+    assert "Not sent yet." in page_text(client, tracker)
+
+
+def test_the_sent_date_is_the_trackers_local_date(client, db, setup, mail):
+    tracker, person = setup
+    tracker.send_timezone = "Pacific/Auckland"
+    db.commit()
+    post(client, url(tracker), {"enabled": "on"})
+    row = db.get(CalendarReminder, (person.id, tracker.id))
+    row.sent_at = datetime(2026, 10, 1, 12, 30, tzinfo=timezone.utc)  # 01:30 on 2 October in Auckland (UTC+13)
+    db.commit()
+    assert f"Sent to {EMAIL} on 02 Oct 2026." in page_text(client, tracker)

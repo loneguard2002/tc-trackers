@@ -154,6 +154,13 @@ def test_attendee_and_organizer():
     assert f"ORGANIZER:mailto:{ORGANIZER}" in lines_of(text)
 
 
+def test_organizer_is_the_bare_address_when_the_sender_has_a_display_name():
+    text = build_calendar(make_series(), "Reports <reports@example.com>", ATTENDEE, "REQUEST", 0, NOW)
+    assert "ORGANIZER:mailto:reports@example.com" in lines_of(text)
+    msg = build_invite_email(make_series(), "Reports <reports@example.com>", ATTENDEE, "REQUEST", 0, NOW)
+    assert msg["From"] == "Reports <reports@example.com>"
+
+
 def test_request_header_properties():
     text = calendar(sequence=3)
     lines = lines_of(text)
@@ -239,6 +246,7 @@ def test_cancellation_email():
     part = next(p for p in msg.walk() if p.get_content_type() == "text/calendar")
     assert part.get_param("method") == "CANCEL"
     assert "STATUS:CANCELLED" in part.get_content()
+    assert "Outlook removes it, or offers to remove it, from your calendar." in msg.get_body(("plain",)).get_content()
 
 
 def test_a_long_name_with_other_characters_survives_in_the_subject():
