@@ -72,3 +72,15 @@
   form.addEventListener("change", refresh);
   refresh();
 })();
+
+// Calendar reminder switch: post on change; the Save button stays for visitors without JavaScript.
+(function () {
+  "use strict";
+
+  var form = document.querySelector("[data-reminder-form]");
+  if (!form) return;
+  var save = form.querySelector("[data-reminder-save]");
+  var box = form.querySelector("input[type=checkbox]");
+  if (save) save.hidden = true;
+  if (box) box.addEventListener("change", function () { form.submit(); });
+})();
