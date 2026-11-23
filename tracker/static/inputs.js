@@ -73,7 +73,8 @@
   refresh();
 })();
 
-// Calendar reminder switch: post on change; the Save button stays for visitors without JavaScript.
+// Calendar reminder switch: post on change; the Save button stays for visitors without JavaScript. Posting leaves the
+// page, so while the update form has unsaved changes the switch and "Send it again" do not post.
 (function () {
   "use strict";
 
@@ -81,6 +82,26 @@
   if (!form) return;
   var save = form.querySelector("[data-reminder-save]");
   var box = form.querySelector("input[type=checkbox]");
+  var resend = document.querySelector("[data-reminder-resend]");
+  var guard = document.querySelector("[data-reminder-guard]");
+  var note = document.querySelector("[data-dirty-note]");
+
+  function unsaved() {
+    var blocked = !!note && note.classList.contains("is-dirty");
+    if (guard) guard.hidden = !blocked;
+    return blocked;
+  }
+
   if (save) save.hidden = true;
-  if (box) box.addEventListener("change", function () { form.submit(); });
+  if (box) {
+    box.addEventListener("change", function () {
+      if (unsaved()) { box.checked = !box.checked; return; }
+      form.submit();
+    });
+  }
+  if (resend) {
+    resend.addEventListener("submit", function (event) {
+      if (unsaved()) event.preventDefault();
+    });
+  }
 })();
