@@ -13,11 +13,12 @@ from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import current_user, require_tracker_role
+from ..calendar_invites.service import sync_reminder
 from ..db import get_session
 from ..engine.calc import COMPLETE
 from ..engine.weeks import in_progress_week, week_endings
 from ..ids import parse_id
-from ..models import CompletionEntry, Group, ReportInput, Risk, Tracker, User, Week
+from ..models import CalendarReminder, CompletionEntry, Group, ReportInput, Risk, Tracker, User, Week
 from ..report.build import compute_position, default_report_week, select_top_risks
 from ..trackers.forms import RAG_VALUES, parse_date
 from ..trackers.views import _jsonable, _ordered_groups, _refuse_if_archived
@@ -481,6 +482,66 @@ def inputs(tracker_id: int):
     return _render_inputs(tracker, weeks, week, row, form, [], 200)
 
 
+REMINDER_FAILED = "The calendar reminder could not be sent now. It will be tried again shortly."
+
+
+def _back_to_inputs(tracker: Tracker):
+    """Return to the Weekly update tab, on the week the form came from when it names one."""
+    week = parse_date(request.form.get("week"))
+    return redirect(url_for("entries.inputs", tracker_id=tracker.id, **({"week": week.isoformat()} if week else {})))
+
+
+@bp.post("/trackers/<int:tracker_id>/calendar-reminder")
+@require_tracker_role("editor")
+def calendar_reminder(tracker_id: int):
+    """Switch the person's own calendar reminder on or off (the ``enabled`` field is ``on`` or absent)."""
+    tracker, db, user = g.tracker, get_session(), current_user()
+    refused = _refuse_if_archived(tracker, "entries.inputs")
+    if refused:
+        return refused
+    enabled = request.form.get("enabled") == "on"
+    row = db.get(CalendarReminder, (user.id, tracker.id))
+    if row is None:
+        row = CalendarReminder(user_id=user.id, tracker_id=tracker.id, sequence=0, sent_state="none")
+        db.add(row)
+    row.enabled = enabled
+    row.last_error = None
+    action = sync_reminder(db, row, datetime.now(timezone.utc))
+    if action is None:
+        failed = row.last_error is not None
+        if not failed:
+            db.commit()
+        flash(
+            REMINDER_FAILED if failed else f"Calendar reminder is {'on' if enabled else 'off'}.",
+            "danger" if failed else "success",
+        )
+    elif action == "cancel":
+        flash(f"Calendar reminder switched off. A cancellation was sent to {user.email}.", "success")
+    else:
+        flash(f"Calendar reminder sent to {user.email}.", "success")
+    return _back_to_inputs(tracker)
+
+
+@bp.post("/trackers/<int:tracker_id>/calendar-reminder/resend")
+@require_tracker_role("editor")
+def calendar_reminder_resend(tracker_id: int):
+    """Send the person's calendar reminder again as an update to the same series."""
+    tracker, db, user = g.tracker, get_session(), current_user()
+    refused = _refuse_if_archived(tracker, "entries.inputs")
+    if refused:
+        return refused
+    row = db.get(CalendarReminder, (user.id, tracker.id))
+    if row is None or not row.enabled:
+        flash("Switch the calendar reminder on first.", "danger")
+        return _back_to_inputs(tracker)
+    row.last_error = None
+    if sync_reminder(db, row, datetime.now(timezone.utc), force=True) is None:
+        flash(REMINDER_FAILED, "danger")
+    else:
+        flash(f"Calendar reminder sent again to {user.email}.", "success")
+    return _back_to_inputs(tracker)
+
+
 def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[str], status: int):
     db = get_session()
     today = date.today()
@@ -510,6 +571,7 @@ def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[
             red_risks=sum(1 for r in risks if r.rag == "Red"),
             overdue_risks=sum(1 for r in risks if r.target_date and r.target_date < min(week, today)),
             format_date=format_date,
+            reminder=db.get(CalendarReminder, (current_user().id, tracker.id)),
             **_page(tracker, "Weekly update"),
         ),
         status,

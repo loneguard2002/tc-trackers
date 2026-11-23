@@ -126,5 +126,37 @@
       <button class="button primary" type="submit">Save</button>
     </div>
   </form>
+
+  {% if tracker.status != 'archived' %}
+  <section class="settings-section reminder-panel" aria-labelledby="reminder-title">
+    <header class="settings-section-head">
+      <h2 id="reminder-title">Calendar reminder</h2>
+      <p>A weekly event in your own calendar, sent to {{ current_user.email }}, until the tracker ends. Free time: it does not block your diary.</p>
+    </header>
+    <form class="reminder-form" method="post" action="{{ url_for('entries.calendar_reminder', tracker_id=tracker.id) }}" data-reminder-form>
+      {{ csrf_field(csrf_token()) }}
+      <input type="hidden" name="week" value="{{ week.isoformat() }}">
+      <label class="switch-row" for="calendar-reminder">
+        <span class="switch">
+          <input id="calendar-reminder" name="enabled" type="checkbox" role="switch" value="on" {{ 'checked' if reminder and reminder.enabled }} aria-describedby="reminder-status">
+          <span class="switch-track" aria-hidden="true"></span>
+        </span>
+        Remind me at 08:45 on each week-ending day
+      </label>
+      <button class="button button-small" type="submit" data-reminder-save>Save</button>
+    </form>
+    <p class="muted reminder-status" id="reminder-status">
+      {%- if reminder and reminder.enabled and reminder.sent_state == 'sent' and reminder.sent_at %}Sent to {{ current_user.email }} on {{ reminder.sent_at|fdate }}.
+      {%- elif reminder and reminder.enabled %}Not sent yet.
+      {%- else %}Off.{% endif %}</p>
+    {% if reminder and reminder.enabled and reminder.sent_state == 'sent' %}
+    <form method="post" action="{{ url_for('entries.calendar_reminder_resend', tracker_id=tracker.id) }}">
+      {{ csrf_field(csrf_token()) }}
+      <input type="hidden" name="week" value="{{ week.isoformat() }}">
+      <button class="button button-small" type="submit">Send it again</button>
+    </form>
+    {% endif %}
+  </section>
+  {% endif %}
 </div>
 {% endblock %}

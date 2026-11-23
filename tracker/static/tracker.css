@@ -1527,3 +1527,8 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
   .wizard-steps li { font-size: .75rem; }
   .wizard-holders .muted { display: none; }
 }
+
+.reminder-panel { margin-top: 20px; }
+.reminder-form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.reminder-status { margin: 10px 0; }
+.reminder-form [hidden] { display: none; }
