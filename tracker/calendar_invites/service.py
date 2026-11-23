@@ -10,7 +10,8 @@ remembered except ``last_error``, so the next cycle tries again.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from dataclasses import replace
+from datetime import date, datetime
 from typing import Literal
 
 from sqlalchemy import or_, select
@@ -19,7 +20,7 @@ from ..auth.roles import user_role
 from ..mail import smtp
 from ..mail.sending import error_text
 from ..models import CalendarReminder, Tracker, User
-from .ics import build_invite_email, fingerprint, inputs_url, series_for
+from .ics import Series, build_invite_email, fingerprint, inputs_url, series_for
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,30 @@ def wanted(session, row: CalendarReminder) -> bool:
     if tracker is None or user is None or tracker.status != "active":
         return False
     return user_role(session, user, tracker.id) in ("editor", "owner")
+
+
+def _sent_series(current: Series, sent: dict) -> Series:
+    """The series as last delivered, from its stored fingerprint; the link is the current one."""
+    return replace(
+        current,
+        name=sent["name"],
+        weekday=sent["weekday"],
+        first=date.fromisoformat(sent["first"]),
+        last=date.fromisoformat(sent["last"]),
+        tz=sent["tz"],
+    )
+
+
+def _record_failure(session, row: CalendarReminder, message: str) -> None:
+    """Remember the error and commit, keeping the caller's other pending changes. Never raises."""
+    try:
+        row.last_error = message
+        session.commit()
+    except Exception:
+        logger.exception(
+            "Calendar reminder error for tracker %s, user %s could not be recorded", row.tracker_id, row.user_id
+        )
+        session.rollback()
 
 
 def sync_reminder(session, row: CalendarReminder, now_utc: datetime, force: bool = False) -> Action | None:
@@ -55,6 +80,8 @@ def sync_reminder(session, row: CalendarReminder, now_utc: datetime, force: bool
     if action is None:
         return None
 
+    if action == "cancel" and row.sent_fingerprint:
+        series = _sent_series(series, row.sent_fingerprint)  # cancel exactly what the calendar holds
     sequence = 0 if row.sent_at is None else row.sequence + 1
     method = "CANCEL" if action == "cancel" else "REQUEST"
     try:
@@ -62,10 +89,7 @@ def sync_reminder(session, row: CalendarReminder, now_utc: datetime, force: bool
         smtp.send_message(build_invite_email(series, organizer, user.email, method, sequence, now_utc))
     except Exception as exc:
         logger.exception("Calendar reminder %s for tracker %s, user %s failed", action, row.tracker_id, row.user_id)
-        session.rollback()
-        row = session.get(CalendarReminder, (row.user_id, row.tracker_id))
-        row.last_error = error_text(exc)
-        session.commit()
+        _record_failure(session, row, error_text(exc))
         return None
     row.sequence = sequence
     row.sent_state = "cancelled" if action == "cancel" else "sent"

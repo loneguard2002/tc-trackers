@@ -198,3 +198,44 @@ def test_the_scheduler_cycle_sends_a_due_update(db, setup, row, mail):
     db.commit()
     run_scheduler_cycle(db, NOW)
     assert len(mail) == 2 and field(mail[1], "SEQUENCE") == "1"
+
+
+def _failing(monkeypatch):
+    def boom(_msg):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(smtp, "send_message", boom)
+
+
+def test_a_new_uncommitted_row_survives_a_failed_delivery(db, setup, monkeypatch):
+    tracker, person = setup
+    _failing(monkeypatch)
+    new = CalendarReminder(user_id=person.id, tracker_id=tracker.id, enabled=True)
+    db.add(new)
+    assert service.sync_reminder(db, new, NOW) is None
+    db.expire_all()
+    stored = db.get(CalendarReminder, (person.id, tracker.id))
+    assert stored.enabled is True and stored.sent_state == "none"
+    assert "connection refused" in stored.last_error
+
+
+def test_a_failed_delivery_keeps_the_callers_other_pending_changes(db, setup, row, monkeypatch):
+    tracker, person = setup
+    _failing(monkeypatch)
+    person.full_name = "Changed by the caller"
+    assert service.sync_reminder(db, row, NOW) is None
+    db.expire_all()
+    assert db.get(type(person), person.id).full_name == "Changed by the caller"
+    assert db.get(CalendarReminder, (person.id, tracker.id)).last_error
+
+
+def test_a_cancellation_is_built_from_what_was_sent(db, setup, row, mail):
+    tracker, _ = setup
+    service.sync_reminder(db, row, NOW)
+    tracker.name = "Renamed"
+    tracker.status = "archived"
+    db.commit()
+    assert service.sync_all(db, NOW) == 1
+    assert field(mail[1], "METHOD") == "CANCEL"
+    assert field(mail[1], "SUMMARY") == r"Write the weekly update: Fit-out"
+    assert mail[1]["Subject"] == "Calendar reminder cancelled: Fit-out"
