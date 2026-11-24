@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+import unicodedata
 from datetime import date, datetime, timezone
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
@@ -521,7 +522,7 @@ def calendar_reminder(tracker_id: int):
         return refused
     enabled = request.form.get("enabled") == "on"
     row = _reminder_row(db, user.id, tracker.id)
-    if row.enabled != enabled:
+    if bool(row.enabled) != enabled:
         record_event(db, user.id, tracker.id, "switched_on" if enabled else "switched_off", "By you")
     row.enabled = enabled
     row.last_error = None
@@ -581,7 +582,8 @@ def calendar_reminder_ics(tracker_id: int):
     organizer = smtp.get_smtp_config(db).get("from_") or user.email
     series = series_for(tracker, user, inputs_url(tracker.id))
     text = build_calendar(series, organizer, user.email, "PUBLISH", sequence, datetime.now(timezone.utc))
-    filename = f"{re.sub(r'[^A-Za-z0-9 _-]', '', tracker.name).strip()} reminder.ics".strip()
+    plain = "".join(c for c in unicodedata.normalize("NFKD", tracker.name) if not unicodedata.combining(c))
+    filename = f"{re.sub(r'[^A-Za-z0-9 _-]', '', plain).strip()} reminder.ics".strip()
     record_event(db, user.id, tracker.id, "downloaded", filename)
     db.commit()
     return Response(

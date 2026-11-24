@@ -440,3 +440,38 @@ def test_events_for_is_one_persons_one_tracker_newest_first(db, setup, user_fact
     found = service.events_for(db, person.id, tracker.id)
     assert [e.kind for e in found] == ["switched_off", "switched_on"]
     assert all(e.user_id == person.id and e.tracker_id == tracker.id for e in found)
+
+
+def _failing_with(monkeypatch, text):
+    def boom(_msg):
+        raise OSError(text)
+
+    monkeypatch.setattr(smtp, "send_message", boom)
+
+
+def test_a_repeated_failure_records_one_failed_event(db, setup, row, monkeypatch):
+    _failing_with(monkeypatch, "down")
+    for _ in range(3):
+        service.sync_reminder(db, row, NOW)
+    assert [kind for kind, _ in events(db, setup)] == ["failed"]
+
+
+def test_a_different_error_records_a_second_failed_event(db, setup, row, monkeypatch):
+    _failing_with(monkeypatch, "down")
+    service.sync_reminder(db, row, NOW)
+    service.sync_reminder(db, row, NOW)
+    _failing_with(monkeypatch, "refused")
+    service.sync_reminder(db, row, NOW)
+    assert [kind for kind, _ in events(db, setup)] == ["failed", "failed"]
+
+
+def test_a_success_between_failures_records_another_failed_event(db, setup, row, mail, monkeypatch):
+    _failing_with(monkeypatch, "down")
+    service.sync_reminder(db, row, NOW)
+    monkeypatch.setattr(smtp, "send_message", mail.append)
+    service.sync_reminder(db, row, NOW)
+    setup[0].name = "Renamed"
+    db.commit()
+    _failing_with(monkeypatch, "down")
+    service.sync_reminder(db, row, NOW)
+    assert [kind for kind, _ in events(db, setup)] == ["failed", "sent", "failed"]

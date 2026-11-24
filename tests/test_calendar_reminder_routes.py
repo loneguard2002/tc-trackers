@@ -296,3 +296,25 @@ def test_an_archived_tracker_refuses_the_download(client, db, setup):
     response = client.get(ics_url(tracker))
     assert response.status_code == 302
     assert event_list(db, tracker, person) == []
+
+
+def test_accented_letters_are_transliterated_in_the_file_name(client, db, setup):
+    tracker, _ = setup
+    tracker.name = "Évaluation Zoë"
+    db.commit()
+    response = client.get(ics_url(tracker))
+    assert response.headers["Content-Disposition"] == 'attachment; filename="Evaluation Zoe reminder.ics"'
+
+
+def test_a_name_that_sanitises_to_nothing_gives_a_bare_file_name(client, db, setup):
+    tracker, _ = setup
+    tracker.name = "!!!/"
+    db.commit()
+    response = client.get(ics_url(tracker))
+    assert response.headers["Content-Disposition"] == 'attachment; filename="reminder.ics"'
+
+
+def test_a_first_off_submit_on_a_new_row_records_nothing(client, db, setup, mail):
+    tracker, person = setup
+    post(client, url(tracker), {})
+    assert event_list(db, tracker, person) == []

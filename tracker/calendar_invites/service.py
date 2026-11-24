@@ -138,7 +138,10 @@ def _record_failure(session, row: CalendarReminder, message: str) -> None:
     """Remember the error and commit, keeping the caller's other pending changes. Never raises."""
     try:
         row.last_error = message
-        record_event(session, row.user_id, row.tracker_id, "failed", message[:ERROR_DETAIL_LIMIT])
+        detail = message[:ERROR_DETAIL_LIMIT]
+        newest = events_for(session, row.user_id, row.tracker_id)[:1]
+        if not (newest and newest[0].kind == "failed" and newest[0].detail == detail):  # one event per outage
+            record_event(session, row.user_id, row.tracker_id, "failed", detail)
         session.commit()
     except Exception:
         logger.exception(
