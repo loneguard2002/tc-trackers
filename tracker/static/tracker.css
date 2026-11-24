@@ -385,7 +385,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 /* Weekly inputs: a strip of weeks, the commentary beside the week's figures, and a preview of the status band. */
 .inputs-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; max-width: 1280px; container-type: inline-size; }
 .inputs-page > *, .inputs-layout > * { min-width: 0; }
-.inputs-page .settings-section { margin: 0; }
+.inputs-page .settings-section, .inputs-page > .settings-actions { margin: 0; }
 .week-bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 20px; }
 .week-bar-row .week-steps { margin-left: auto; }
 .week-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 0; border: 0; background: none; color: var(--text); font: inherit; font-size: 1.1rem; font-weight: 700; cursor: pointer; }
@@ -409,14 +409,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .inputs-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
 .inputs-form { display: contents; }
 .inputs-layout > .reminder-card, .inputs-form > .settings-section { min-width: 0; }
-.inputs-form > .settings-actions { grid-column: 1 / -1; grid-row: 3; margin: 0; }
 .inputs-form > .settings-section { grid-row: 1; }
 .reminder-card { grid-row: 2; }
 @media (min-width: 1000px) {
   .inputs-layout { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
   .reminder-card { grid-row: 1; grid-column: 2; }
   .inputs-form > .settings-section { grid-column: 1; }
-  .inputs-form > .settings-actions { grid-row: 2; }
 }
 .field-counter { display: block; margin-top: 4px; color: var(--muted); font-size: .75rem; text-align: right; }
 .field-counter.is-long { color: var(--warning); font-weight: 600; }

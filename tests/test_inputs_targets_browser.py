@@ -184,6 +184,29 @@ def test_nothing_on_the_page_follows_the_scroll_except_the_save_bar(page, live_s
     assert [c for c in sticky if "settings-actions" not in c] == []
 
 
+def test_the_save_bar_stays_at_the_bottom_down_to_the_end_of_the_page(page, live_server, editor):
+    page.add_init_script(RECORDER)
+    page.set_viewport_size({"width": 1440, "height": 600})
+    page.goto(inputs_url(live_server, editor, WEEKS[1]))
+    bar = page.locator(".settings-actions")
+    page.evaluate("window.scrollTo(0, 300)")
+    box = bar.bounding_box()
+    assert abs(box["y"] + box["height"] - (600 - 12)) < 2  # pinned 12px above the bottom of the window
+    # At the end of the page it sits below the Past updates table, not above it.
+    page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+    box = bar.bounding_box()
+    past = page.locator(".past-updates").bounding_box()
+    assert box["y"] >= past["y"] + past["height"] - 1
+    # The button outside the form still saves it.
+    page.fill("#headline", "Saved from the bar")
+    expect(page.locator("[data-dirty-note]")).to_have_class("settings-actions-note is-dirty")
+    bar.get_by_role("button", name="Save").click()
+    expect(page.locator(".flash")).to_contain_text("Weekly update saved.")
+    expect(page.locator("#headline")).to_have_value("Saved from the bar")
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
 def test_the_page_does_not_scroll_sideways_on_a_phone(page, live_server, editor):
     page.set_viewport_size({"width": 390, "height": 800})
     page.goto(inputs_url(live_server, editor))

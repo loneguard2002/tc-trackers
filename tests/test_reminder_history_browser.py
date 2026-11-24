@@ -227,7 +227,7 @@ def test_unsaved_text_blocks_the_panel_actions_with_a_message_in_the_panel(page,
     assert page.input_value("#headline") == "Typed but not saved"
 
     page.keyboard.press("Escape")
-    page.click("[data-inputs-form] button[type=submit]")
+    page.click(".settings-actions button[type=submit]")
     expect(page.locator("#headline")).to_have_value("Typed but not saved")
     page.click("[data-history-url]")
     expect(panel.locator("#history-table[data-table-ready]")).to_be_attached()

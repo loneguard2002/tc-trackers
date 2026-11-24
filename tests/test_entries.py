@@ -472,8 +472,11 @@ def test_inputs_page_cards(client, db, tracker_factory, user_factory, grant):
     assert html.count('class="access-card-head"') == 3
     commentary, reminder, _past = html.split('class="access-card-head"')[1:]
     assert "Commentary" in commentary[:200] and "Calendar reminder" in reminder[:200]
-    # The preview sits inside the Commentary card, above the Save bar.
-    assert commentary.index("data-band") < commentary.index("settings-actions")
+    # The preview sits inside the Commentary card; the Save bar comes last on the page, after Past updates, and its
+    # button names the form it saves.
+    assert "data-band" in commentary and "settings-actions" not in commentary
+    assert html.index('class="settings-section past-updates"') < html.index('class="settings-actions"')
+    assert 'type="submit" form="inputs-form">Save</button>' in html and 'id="inputs-form"' in html
     assert "Preview: top of the report" in commentary
     assert "Use last week" not in html or html.index("Use last week") < html.index("data-band")
 

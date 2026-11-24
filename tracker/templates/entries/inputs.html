@@ -68,7 +68,7 @@
   </div>
 
   <div class="inputs-layout">
-  <form class="inputs-form" method="post" action="{{ url_for('entries.inputs', tracker_id=tracker.id, week=week.isoformat()) }}" data-inputs-form>
+  <form class="inputs-form" id="inputs-form" method="post" action="{{ url_for('entries.inputs', tracker_id=tracker.id, week=week.isoformat()) }}" data-inputs-form>
     {{ csrf_field(csrf_token()) }}
     <section class="settings-section" aria-labelledby="section-inputs">
       {% include "entries/_errors.html" %}
@@ -116,10 +116,6 @@
       </div>
     </section>
 
-    <div class="settings-actions">
-      <span class="settings-actions-note" data-dirty-note>{% if row and row.prepared_by %}Last prepared by {{ preparer.full_name if preparer else 'a former user' }}.{% endif %}</span>
-      <button class="button primary" type="submit">Save</button>
-    </div>
   </form>
   {% if tracker.status != 'archived' %}
   {% set on = reminder and reminder.enabled %}
@@ -201,6 +197,12 @@
     <p class="empty-note">No earlier weeks yet.</p>
     {% endif %}
   </section>
+  {# The Save bar sits at the end of the page, outside the form (the button names the form), so it stays at the bottom of
+     the window all the way down, past the Past updates table. #}
+  <div class="settings-actions">
+    <span class="settings-actions-note" data-dirty-note>{% if row and row.prepared_by %}Last prepared by {{ preparer.full_name if preparer else 'a former user' }}.{% endif %}</span>
+    <button class="button primary" type="submit" form="inputs-form">Save</button>
+  </div>
 </div>
 {% if tracker.status != 'archived' %}<dialog class="perm-drawer" id="history-panel"></dialog>{% endif %}
 {% endblock %}
