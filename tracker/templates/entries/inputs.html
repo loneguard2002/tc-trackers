@@ -90,13 +90,16 @@
           </div>
         </div>
       </div>
-      {% call setting('Headline', 'One or two sentences on how the week went. Shown under the status on the report.', 'headline', 'is-wide') %}
-      <textarea id="headline" name="headline" rows="3" aria-describedby="headline-help" data-counted>{{ form.get('headline', '') }}</textarea>
-      <span class="field-counter" data-counter hidden></span>
-      {% endcall %}
-      {% call setting('Decisions or support needed', 'Anything you need from readers. Shown as "Needed from you"; leave blank to show None.', 'decisions', 'is-wide') %}
-      <textarea id="decisions" name="decisions" rows="3" aria-describedby="decisions-help">{{ form.get('decisions', '') }}</textarea>
-      {% endcall %}
+      {# Headline and decisions side by side in one row; they stack when the card is narrow. #}
+      <div class="inputs-pair">
+        {% call setting('Headline', 'One or two sentences on how the week went. Shown under the status on the report.', 'headline', 'is-wide') %}
+        <textarea id="headline" name="headline" rows="4" aria-describedby="headline-help" data-counted>{{ form.get('headline', '') }}</textarea>
+        <span class="field-counter" data-counter hidden></span>
+        {% endcall %}
+        {% call setting('Decisions or support needed', 'Anything you need from readers. Shown as "Needed from you"; leave blank to show None.', 'decisions', 'is-wide') %}
+        <textarea id="decisions" name="decisions" rows="4" aria-describedby="decisions-help">{{ form.get('decisions', '') }}</textarea>
+        {% endcall %}
+      </div>
       {% if previous %}
       <div class="copy-last" data-copy-last hidden
         data-status="{{ previous.status or '' }}" data-headline="{{ previous.headline }}" data-decisions="{{ previous.decisions }}">

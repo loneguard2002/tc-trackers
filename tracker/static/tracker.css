@@ -416,6 +416,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
   .reminder-card { grid-row: 1; grid-column: 2; }
   .inputs-form > .settings-section { grid-column: 1; }
 }
+/* Weekly update: Headline and Decisions side by side in one row of the Commentary card, stacked when it is narrow. */
+/* The two rows share the label and box rows (subgrid), so the boxes line up even when one help text wraps. */
+.inputs-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto 1fr; border-top: 1px solid var(--border); }
+.inputs-pair > .setting-row { grid-row: span 2; grid-template-rows: subgrid; }
+.inputs-pair > .setting-row + .setting-row { border-top: 0; border-left: 1px solid var(--border); }
+.inputs-pair .setting-control { display: flex; flex-direction: column; }
+.inputs-pair textarea { flex: 1; }
+@container (max-width: 640px) {
+  .inputs-pair { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+  .inputs-pair > .setting-row { grid-row: auto; grid-template-rows: none; }
+  .inputs-pair > .setting-row + .setting-row { border-top: 1px solid var(--border); border-left: 0; }
+}
 .field-counter { display: block; margin-top: 4px; color: var(--muted); font-size: .75rem; text-align: right; }
 .field-counter.is-long { color: var(--warning); font-weight: 600; }
 .copy-last { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 20px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); color: var(--muted); font-size: .85rem; }
