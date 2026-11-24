@@ -765,3 +765,14 @@ def test_report_page_puts_the_tracker_name_above_the_tabs(app, client, db, small
     with app.test_request_context("/"):
         printable = render_print_html(build_report(db, small_tracker, WEEKS[1], WEEKS[1]))
     assert f"<h1>{small_tracker.name}: week ending 11 Sep 2026</h1>" in printable
+
+
+def test_each_group_shows_its_amount_done_before_the_first_week(app):
+    report, _ = synthetic_report()
+    positions = [_group("Site A", 100, 10, 20), _group("Site C", 50, 0, 5)]
+    body = body_html(app, _with_groups(report, positions))
+    items = body[body.index('class="group-progress"') :].split("<li>")[1:]
+    first, second = items[0], items[1]
+    assert 'class="bar-start" width="10.00"' in first and 'class="bar-fill" width="20.00"' in first
+    assert "10 done before the first week" in flat_text(first)
+    assert "bar-start" not in second and "before the first week" not in flat_text(second)
