@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from datetime import date
 
 from ..engine.calc import IN_PROGRESS, WeekRow
-from ..trackers.targets import TargetEntry
+from ..trackers.targets import TargetEntry, shows_history
 from .charts import PALETTE, chart_series
 
 
@@ -22,6 +22,7 @@ def chart_payload(
     ``report_week``, ``targets`` (the target changes made by then; a removed target has no date, so no line, but keeps
     its number) and ``forecast_end`` serve the Status at a glance chart; the classic charts ignore them.
     """
+    targets = list(targets)
     return {
         "unit_label": tracker.unit_label,
         "palette": PALETTE,
@@ -35,5 +36,7 @@ def chart_payload(
             for entry in targets
             if entry.date is not None
         ],
+        "target_numbers": shows_history(targets),
+        "report_week_in_progress": any(row.week_ending == report_week and row.state == IN_PROGRESS for row in rows),
         "forecast_end": forecast_end.isoformat() if forecast_end else None,
     }

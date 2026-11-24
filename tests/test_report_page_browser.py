@@ -344,7 +344,7 @@ def test_glance_chart_draws_with_direct_labels(page, live_server, seeded):
 def test_glance_chart_marks_the_report_week_and_every_week(page, live_server, seeded):
     open_glance(page, live_server, seeded)
     host = page.locator(".chart-host-remaining-glance")
-    expect(host.locator("svg text", has_text=re.compile(r"(Today|Report week) 11 Sep")).first).to_be_visible()
+    expect(host.locator("svg text", has_text=re.compile(r"^Week ending 11 Sep$")).first).to_be_visible()
     series = {s["id"]: s for s in glance_option(page)["series"]}
     assert len(series["actual"]["data"]) == 2  # the weeks drawn so far; a dot each
     assert len(series["plan"]["data"]) == len(WEEKS)
@@ -418,3 +418,57 @@ def test_glance_picture_stays_when_the_chart_data_fails(page, live_server, seede
     page.wait_for_load_state("networkidle")
     expect(page.locator("img[data-chart='remaining-glance']")).to_be_visible()
     assert page.evaluate("window.__errors") == []
+
+
+def patch_chart_data(page, **changes):
+    def handle(route):
+        data = route.fetch().json()
+        data.update(changes)
+        route.fulfill(content_type="application/json", body=json.dumps(data))
+
+    page.route("**/report/data.json*", handle)
+
+
+def test_glance_chart_names_the_week_in_progress(page, live_server, seeded):
+    patch_chart_data(page, report_week_in_progress=True)
+    open_glance(page, live_server, seeded)
+    host = page.locator(".chart-host-remaining-glance")
+    expect(host.locator("svg text", has_text=re.compile(r"^This week, ending 11 Sep$")).first).to_be_visible()
+    expect(host.locator("svg text", has_text=re.compile(r"^Week ending 11 Sep$"))).to_have_count(0)
+
+
+def test_glance_chart_draws_no_forecast_backwards(page, live_server, seeded):
+    patch_chart_data(page, forecast_end="2026-09-04")
+    open_glance(page, live_server, seeded)
+    series = {s["id"]: s for s in glance_option(page)["series"]}
+    assert series["forecast"]["data"] == []
+
+
+def test_glance_chart_steps_the_y_axis_to_the_size_of_the_tracker(page, live_server, seeded):
+    open_glance(page, live_server, seeded)
+    axis = glance_option(page)["yAxis"][0]
+    assert axis["interval"] == 20 and axis["max"] == 100  # five steps, not drawn flat in 0 to 100 by hundreds
+
+
+def test_glance_chart_with_a_lone_target_has_no_number_badge(page, live_server, seeded, db):
+    from datetime import datetime, timezone
+
+    from report_helpers import add_target_change
+
+    add_target_change(db, seeded.tracker, None, date(2026, 12, 18), datetime(2026, 9, 1, 9, tzinfo=timezone.utc))
+    open_glance(page, live_server, seeded)
+    host = page.locator(".chart-host-remaining-glance")
+    expect(host.locator("svg text", has_text="Target 18 Dec").first).to_be_visible()
+    lines = [s for s in glance_option(page)["series"] if s["id"] == "targets"][0]["markLine"]["data"]
+    assert len(lines) == 1 and lines[0]["label"]["show"] is False
+    expect(host.locator("svg text", has_text=re.compile(r"^1$"))).to_have_count(0)
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
+
+
+def test_glance_direct_labels_sit_clear_of_the_lines(page, live_server, seeded):
+    open_glance(page, live_server, seeded)
+    series = {s["id"]: s for s in glance_option(page)["series"]}
+    plan = [d for d in series["plan"]["data"] if isinstance(d, dict) and "label" in d][0]["label"]
+    assert plan["align"] == "right" and plan["distance"] >= 12  # below the ring, to the side the line has left
+    forecast = [d for d in series["forecast"]["data"] if isinstance(d, dict) and "label" in d][0]["label"]
+    assert forecast["position"] == "top" and forecast["distance"] > 10
