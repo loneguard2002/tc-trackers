@@ -3,6 +3,7 @@
 import re
 from datetime import date, datetime, timedelta, timezone
 from html import unescape
+from pathlib import Path
 
 from sqlalchemy import select
 
@@ -426,7 +427,7 @@ def test_inputs_page_week_bar_deadline_follows_the_send(client, db, tracker_fact
         ReportSend(
             tracker_id=tracker.id,
             week_ending=date(2026, 10, 23),
-            trigger="scheduled",
+            trigger="manual",
             status="failed",
             recipients=[],
             sent_at=datetime(2026, 10, 23, 15, 0, tzinfo=timezone.utc),
@@ -436,7 +437,7 @@ def test_inputs_page_week_bar_deadline_follows_the_send(client, db, tracker_fact
         ReportSend(
             tracker_id=tracker.id,
             week_ending=date(2026, 10, 23),
-            trigger="manual",
+            trigger="scheduled",
             status="sent",
             recipients=[],
             sent_at=datetime(2026, 10, 23, 16, 2, tzinfo=timezone.utc),
@@ -446,6 +447,23 @@ def test_inputs_page_week_bar_deadline_follows_the_send(client, db, tracker_fact
     assert "Report sent on Fri 23 Oct at 17:02" in client.get(url).get_data(as_text=True)
     # A week with nothing sent and its send time long gone.
     assert "Report was due on Fri 16 Oct at 17:00" in client.get(url.replace("23", "16")).get_data(as_text=True)
+
+
+def test_inputs_page_week_bar_ignores_a_manual_send(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client, schedule_enabled=True)
+    db.add(
+        ReportSend(
+            tracker_id=tracker.id,
+            week_ending=date(2026, 10, 23),
+            trigger="manual",
+            status="sent",
+            recipients=[],
+            sent_at=datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc),
+        )
+    )
+    db.commit()
+    html = client.get(f"/trackers/{tracker.id}/inputs?week=2026-10-23").get_data(as_text=True)
+    assert "Report sent on" not in html and "Report was due on Fri 23 Oct at 17:00" in html
 
 
 def test_inputs_page_cards(client, db, tracker_factory, user_factory, grant):
@@ -915,3 +933,56 @@ def test_entries_ignore_a_location_id_that_cannot_exist(client, db, tracker_fact
         assert page.status_code == 200 and "at A" in page.get_data(as_text=True)
         csv_page = client.get(entry_url(tracker, f".csv?group={big}"))
         assert csv_page.status_code == 200 and len(csv_page.get_data(as_text=True).splitlines()) == 2
+
+
+def test_past_updates_list_only_weeks_that_have_started(client, db, tracker_factory, user_factory, grant):
+    from tracker.engine.weeks import in_progress_week, week_endings
+
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    weeks = week_endings(tracker.first_week_ending, tracker.last_week_ending)
+    started = in_progress_week(date.today(), tracker.week_ending_weekday)
+    html = client.get(f"/trackers/{tracker.id}/inputs?week={weeks[-1].isoformat()}").get_data(as_text=True)
+    listed = [re.search(r'data-sort-week="([\d-]+)"', r).group(1) for r in past_rows(html)]
+    expected = [w.isoformat() for w in reversed(weeks[:-1]) if w <= started]
+    assert listed == expected and len(listed) < len(weeks) - 1
+    assert f'<span class="count-pill">{len(expected)}' in html
+    assert f"Showing {len(expected)} of {len(expected)} weeks" in html
+
+
+def test_red_risks_tile_counts_only_red_risks_past_their_target_date(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    db.add(Risk(tracker_id=tracker.id, ref="R1", description="d", rag="Red", target_date=date(2026, 12, 20)))
+    db.add(Risk(tracker_id=tracker.id, ref="R2", description="d", rag="Amber", target_date=date(2026, 10, 1)))
+    db.commit()
+    page = unescape(client.get(f"/trackers/{tracker.id}/inputs?week=2026-10-16").get_data(as_text=True))
+    assert "None past their target date" in page and "past its target date" not in page
+
+
+def test_the_rate_tile_without_a_required_rate(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client, target_completion=None)
+    page = unescape(client.get(f"/trackers/{tracker.id}/inputs?week=2026-10-16").get_data(as_text=True))
+    assert "a week · no required rate" in page and "– needed" not in page
+
+
+def test_the_disabled_week_steps_use_screen_reader_text(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    html = client.get(f"/trackers/{tracker.id}/inputs?week=2026-09-04").get_data(as_text=True)
+    assert re.search(r'is-disabled" aria-disabled="true">.*?<span class="sr-only">Previous week</span>', html, re.S)
+    assert 'aria-disabled="true" aria-label' not in html
+
+
+def test_only_the_red_risks_tile_takes_the_hover_border():
+    css = (Path(__file__).parent.parent / "tracker" / "static" / "tracker.css").read_text()
+    assert ".inputs-page div.access-tile:hover { border-color: var(--border); }" in css
+
+
+def test_past_updates_name_a_missing_preparer_as_a_former_user(db, tracker_factory):
+    from tracker.entries.views import _past_updates
+
+    tracker = tracker_factory()
+    week = date(2026, 9, 4)
+    saved = {
+        week: ReportInput(tracker_id=tracker.id, week_ending=week, status="Green", headline="h", prepared_by=999999)
+    }
+    [row] = _past_updates(db, [week], saved)
+    assert row["prepared_by"] == "a former user"

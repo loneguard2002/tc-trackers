@@ -124,9 +124,9 @@
           head.insertBefore(head.querySelector(".perm-more"), cross);
           head.insertBefore(head.querySelector(".perm-menu"), cross);
           holder.remove();
-          // On the form itself, so it runs before tracker.js asks "Are you sure?" and stops the event reaching it.
+          // On each form (menu and calendar section), so it runs before tracker.js asks "Are you sure?" and stops the event reaching it.
           var message = body.querySelector("[data-history-guard]");
-          Array.prototype.forEach.call(head.querySelectorAll("[data-history-form]"), function (form) {
+          Array.prototype.forEach.call(panel.querySelectorAll("[data-history-form]"), function (form) {
             form.addEventListener("submit", function (event) {
               if (!blocked(message)) return;
               event.preventDefault();

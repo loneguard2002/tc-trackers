@@ -31,12 +31,14 @@ def deadline(tracker: Tracker, week, sent_at: datetime | None, now_utc: datetime
     """The deadline text and its tone (``warning`` or ``muted``) for the shown week. Pure; no database.
 
     The week's send fires on the week-ending day at the tracker's send time, in its time zone. A report that went
-    out is reported as sent, whatever the schedule says now.
+    out is reported as sent, whatever the schedule says now. An archived tracker sends nothing.
     """
     zone = ZoneInfo(tracker.send_timezone)
     if sent_at is not None:
         local = sent_at.astimezone(zone)
         return f"Report sent on {_day(local)} at {local:%H:%M}", "muted"
+    if tracker.status != "active":
+        return "Archived: no report goes out", "muted"
     if not tracker.schedule_enabled:
         return "Automatic sending is off", "muted"
     fires = datetime.combine(week, tracker.send_time, tzinfo=zone)

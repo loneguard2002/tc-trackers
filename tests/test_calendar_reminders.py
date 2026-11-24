@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import re
+import smtplib
+import socket
 from datetime import date, datetime, timezone
 
 import pytest
@@ -426,7 +428,44 @@ def test_a_failed_delivery_records_one_failed_event_with_the_error(db, setup, ro
     monkeypatch.setattr(smtp, "send_message", boom)
     service.sync_reminder(db, row, NOW)
     [(kind, detail)] = events(db, setup)
-    assert kind == "failed" and "connection refused" in detail and len(detail) <= 200
+    assert (kind, detail) == ("failed", "The mail server did not answer")
+    assert "connection refused" in row.last_error  # the raw text stays for the log and the row
+
+
+@pytest.mark.parametrize(
+    "error, detail",
+    [
+        (ConnectionRefusedError("connection refused"), "The mail server did not answer"),
+        (TimeoutError("timed out"), "The mail server did not answer"),
+        (socket.gaierror("name not known"), "The mail server did not answer"),
+        (smtplib.SMTPServerDisconnected("gone"), "The mail server did not answer"),
+        (smtplib.SMTPAuthenticationError(535, b"bad"), "The mail server refused the sign-in"),
+        (smtp.MailError("OAuth2 token request failed: invalid_client"), "The mail server refused the sign-in"),
+        (smtplib.SMTPRecipientsRefused({"a@b.c": (550, b"no")}), "The mail server refused the address"),
+        (smtplib.SMTPDataError(554, b"spam"), "The mail server refused the message"),
+        (ValueError("odd"), "The mail server refused the message"),
+    ],
+)
+def test_a_failure_detail_is_in_plain_language(db, setup, row, monkeypatch, error, detail):
+    def boom(_msg):
+        raise error
+
+    monkeypatch.setattr(smtp, "send_message", boom)
+    service.sync_reminder(db, row, NOW)
+    assert events(db, setup) == [("failed", detail)]
+    assert row.last_error
+
+
+def test_a_wrapped_error_is_read_by_its_cause(db, setup, row, monkeypatch):
+    def boom(_msg):
+        try:
+            raise smtplib.SMTPAuthenticationError(535, b"bad")
+        except smtplib.SMTPException as exc:
+            raise smtp.MailError("(535, b'bad')") from exc
+
+    monkeypatch.setattr(smtp, "send_message", boom)
+    service.sync_reminder(db, row, NOW)
+    assert events(db, setup) == [("failed", "The mail server refused the sign-in")]
 
 
 def test_events_for_is_one_persons_one_tracker_newest_first(db, setup, user_factory, tracker_factory):
@@ -440,6 +479,13 @@ def test_events_for_is_one_persons_one_tracker_newest_first(db, setup, user_fact
     found = service.events_for(db, person.id, tracker.id)
     assert [e.kind for e in found] == ["switched_off", "switched_on"]
     assert all(e.user_id == person.id and e.tracker_id == tracker.id for e in found)
+
+
+def _raiser(error):
+    def boom(_msg):
+        raise error
+
+    return boom
 
 
 def _failing_with(monkeypatch, text):
@@ -460,7 +506,7 @@ def test_a_different_error_records_a_second_failed_event(db, setup, row, monkeyp
     _failing_with(monkeypatch, "down")
     service.sync_reminder(db, row, NOW)
     service.sync_reminder(db, row, NOW)
-    _failing_with(monkeypatch, "refused")
+    monkeypatch.setattr(smtp, "send_message", _raiser(smtplib.SMTPAuthenticationError(535, b"bad")))
     service.sync_reminder(db, row, NOW)
     assert [kind for kind, _ in events(db, setup)] == ["failed", "failed"]
 

@@ -9,7 +9,7 @@
 <div class="set-panel history-panel history-page">
   <h2>Calendar reminder</h2>
   <p class="muted">Sent to {{ email }}</p>
-  {{ history_body(tracker, state, description, next_date, events) }}
-  <p><a href="{{ url_for('entries.inputs', tracker_id=tracker.id) }}">Back to the weekly update</a></p>
+  {{ history_body(tracker, state, description, next_date, events, sent=sent, week=week) }}
+  <p><a href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=week.isoformat() if week else none) }}">Back to the weekly update</a></p>
 </div>
 {% endblock %}

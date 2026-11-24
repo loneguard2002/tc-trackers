@@ -18,6 +18,7 @@ def make(**kw) -> Tracker:
         "send_time": time(17, 0),
         "send_timezone": "Europe/London",
         "schedule_enabled": True,
+        "status": "active",
     }
     values.update(kw)
     return Tracker(**values)
@@ -55,6 +56,16 @@ def test_a_sent_week_wins_over_sending_off():
     assert (
         deadline(make(schedule_enabled=False), FRIDAY, utc(2026, 11, 20, 17, 2), utc(2026, 11, 22, 9, 0))[1] == "muted"
     )
+
+
+def test_an_archived_tracker_promises_no_report():
+    text, tone = deadline(make(status="archived"), FRIDAY, None, utc(2026, 11, 18, 9, 0))
+    assert (text, tone) == ("Archived: no report goes out", "muted")
+
+
+def test_an_archived_tracker_still_shows_a_report_that_went_out():
+    text, _ = deadline(make(status="archived"), FRIDAY, utc(2026, 11, 20, 17, 2), utc(2026, 11, 22, 9, 0))
+    assert text == "Report sent on Fri 20 Nov at 17:02"
 
 
 def test_sending_off():
