@@ -12,10 +12,18 @@ import pytest
 from report_helpers import synthetic_report
 from test_report import WEEKS, seed
 
-from tracker.engine.calc import Headline
+from tracker.engine.calc import IN_PROGRESS, Headline
+from tracker.formatting import fmt_rate
 from tracker.models import Group, ReportInput, Risk
 from tracker.report.build import build_report
-from tracker.report.dashboard import StatusWeek, answer_sentence, build_dashboard, build_tiles, summarise_statuses
+from tracker.report.dashboard import (
+    StatusWeek,
+    answer_sentence,
+    build_dashboard,
+    build_tiles,
+    summarise_statuses,
+    target_note,
+)
 from tracker.trackers.targets import TargetEntry, record_target_change
 
 
@@ -249,14 +257,27 @@ def test_build_dashboard_uses_the_target_in_force_in_the_report_week(db, small_t
     change = db.scalars(select(TargetChange).where(TargetChange.tracker_id == small_tracker.id)).one()
     change.changed_at = datetime(2026, 9, 20, 9, 0, tzinfo=timezone.utc)
     db.commit()
-    early = build_dashboard(
-        db, build_report(db, small_tracker, WEEKS[1], date(2026, 9, 14), with_charts=False), date(2026, 9, 14)
-    )
-    assert early.target == date(2026, 12, 11) and early.targets == []
+    early_report = build_report(db, small_tracker, WEEKS[1], date(2026, 9, 14), with_charts=False)
+    early = build_dashboard(db, early_report, date(2026, 9, 14))
+    # The target in place before the change was recorded stands as an unnumbered "set" entry.
+    assert early.target == date(2026, 12, 11)
+    assert [(e.date, e.kind, e.changed_on, e.current) for e in early.targets] == [
+        (date(2026, 12, 11), "set", None, True)
+    ]
+    assert early.target_lines == [] and early.target_note == ""
+    # The rate needed comes from that target (13 weeks from 11 Sep to 11 Dec), not today's 25 Dec one.
+    needed = fmt_rate(early_report.headline.remaining / 13)
+    assert early.tiles["rate"]["sub"] == f"{needed} a week needed"
+    assert needed != fmt_rate(early_report.headline.required_rate)
     late = build_dashboard(
         db, build_report(db, small_tracker, WEEKS[3], date(2026, 9, 28), with_charts=False), date(2026, 9, 28)
     )
-    assert late.target == date(2026, 12, 25) and len(late.targets) == 1
+    assert late.target == date(2026, 12, 25) and len(late.targets) == 2
+    assert late.target_note == "moved once, 14 days later than first set"
+    assert [line.text for line in late.target_lines] == [
+        "In place before changes were recorded.",
+        "Moved on 20 Sep, 14 days later. No reason given.",
+    ]
 
 
 def test_behind_plan_comes_from_the_report_week(db, small_tracker):
@@ -267,6 +288,66 @@ def test_behind_plan_comes_from_the_report_week(db, small_tracker):
     dashboard = build_dashboard(db, report, date(2026, 9, 14))
     assert (f"{behind} behind plan" in dashboard.answer) == (behind > 0)
     assert dashboard.tone == "none" and dashboard.needed is None and dashboard.written_by is None
+
+
+MID_WEEK = date(2026, 9, 9)  # a Wednesday in the week ending 11 Sep
+
+
+def test_behind_plan_in_a_week_in_progress_comes_from_the_last_complete_week(db, small_tracker):
+    seed(db, small_tracker)  # 8 done in the week ending 4 Sep against 10; the week ending 11 Sep has just begun
+    report = build_report(db, small_tracker, WEEKS[1], MID_WEEK, with_charts=False)
+    assert report.in_progress
+    answer = build_dashboard(db, report, MID_WEEK).answer
+    assert answer.endswith(", though 2 behind plan.") and "12 behind plan" not in answer
+
+
+def test_risks_in_a_week_in_progress_are_past_due_against_today(db, small_tracker):
+    group = seed(db, small_tracker)
+    make_risks(db, small_tracker, group)  # R1 was due on 8 Sep
+    db.add(Risk(tracker_id=small_tracker.id, ref="R6", rag="Red", description="Soon", target_date=date(2026, 9, 10)))
+    db.commit()
+    report = build_report(db, small_tracker, WEEKS[1], MID_WEEK, with_charts=False)
+    risks = {risk.ref: risk for risk in build_dashboard(db, report, MID_WEEK).risks}
+    assert (risks["R1"].due, risks["R1"].past) == ("1 day past 8 Sep", True)
+    assert (risks["R6"].due, risks["R6"].past) == ("Due 10 Sep", False)
+
+
+def test_the_page_marks_a_week_in_progress(client, db, small_tracker, viewer, monkeypatch):
+    monkeypatch.setattr("tracker.report.views.today", lambda: MID_WEEK)
+    group = seed(db, small_tracker)
+    from tracker.models import CompletionEntry
+
+    db.add(
+        CompletionEntry(
+            tracker_id=small_tracker.id, group_id=group.id, quantity=3, entry_date=MID_WEEK, week_ending=WEEKS[1]
+        )
+    )
+    db.commit()
+    html = page(client, small_tracker)
+    assert re.search(
+        r'<section class="answer-card[^"]*".*?<span class="badge badge-info">In progress</span>', html, re.S
+    )
+    assert "3 so far of 10 target" in text_of(html)
+    assert "In progress" not in page(client, small_tracker, WEEKS[0])
+
+
+def test_the_view_is_written_to_the_session_only_when_it_changes(app):
+    from flask import session
+
+    from tracker.report.views import _chosen_view
+
+    with app.test_request_context("/?view=classic"):
+        session["report_view"] = "classic"
+        session.modified = False
+        assert _chosen_view() == "classic" and not session.modified
+    with app.test_request_context("/"):
+        session["report_view"] = "new"
+        session.modified = False
+        assert _chosen_view() == "new" and not session.modified
+    with app.test_request_context("/?view=classic"):
+        assert _chosen_view() == "classic" and session["report_view"] == "classic" and session.modified
+    with app.test_request_context("/"):
+        assert _chosen_view() == "new" and session["report_view"] == "new"
 
 
 # --- Tiles (no database) ---------------------------------------------------------------------------------------
@@ -320,16 +401,48 @@ def test_this_week_sparkline_covers_the_weeks_up_to_the_report_week():
     assert spark["last_x"] and spark["last_y"]
 
 
+def test_this_week_tile_in_a_week_in_progress_says_so_far():
+    report, _ = synthetic_report(in_progress=True)
+    report = replace(report, headline=replace(report.headline, this_week_actual=28, this_week_target=40))
+    week = build_tiles(report, TARGET, [])["week"]
+    assert (week["value"], week["unit"]) == ("28", "so far of 40 target")
+    assert week["sub"] == "12 to go · next week 10" and week["tone"] == ""
+    ahead = replace(report, headline=replace(report.headline, this_week_actual=42, this_week_target=40))
+    assert build_tiles(ahead, TARGET, [])["week"]["sub"] == "+2 against target · next week 10"
+    unplanned = replace(report, headline=replace(report.headline, this_week_actual=28, this_week_target=None))
+    assert build_tiles(unplanned, TARGET, [])["week"]["unit"] == "so far"
+
+
+def test_this_week_sparkline_leaves_out_the_week_in_progress():
+    report, _ = synthetic_report()
+    rows = list(report.rows)
+    rows[1] = replace(rows[1], state=IN_PROGRESS)
+    spark = build_tiles(replace(report, rows=rows), None, [])["week"]["spark"]
+    assert len(spark["points"].split()) == 1
+
+
+# The synthetic report week ends on 11 Sep; a 9 Oct target leaves 4 weeks.
+FOUR_WEEKS = date(2026, 10, 9)
+
+
 def test_rate_tile():
-    tile = tiles_for()["rate"]
-    assert (tile["value"], tile["sub"], tile["tone"]) == ("41.3", "31.3 a week needed", "success")
+    tile = tiles_for(target=FOUR_WEEKS, remaining=124)["rate"]
+    assert (tile["value"], tile["sub"], tile["tone"]) == ("41.3", "31.0 a week needed", "success")
     assert 0 < float(tile["fill"]) <= 100 and 0 < float(tile["mark"]) <= 100
     assert float(tile["mark"]) < float(tile["fill"])
-    slow = tiles_for(forecast_rate=20.0)["rate"]
+    slow = tiles_for(target=FOUR_WEEKS, remaining=124, forecast_rate=20.0)["rate"]
     assert slow["tone"] == "danger" and float(slow["mark"]) > float(slow["fill"])
-    none = tiles_for(required_rate=None)["rate"]
+    none = tiles_for(target=None)["rate"]
     assert none["sub"] == "No required rate" and none["mark"] is None
     assert tiles_for(forecast_rate=None)["rate"]["fill"] is None
+
+
+def test_rate_tile_needs_the_target_given_not_the_headline_one():
+    # The headline's own rate (31.3) is for today's target; the tile works from the target it is given.
+    assert tiles_for(target=date(2026, 10, 2), remaining=120)["rate"]["sub"] == "40.0 a week needed"  # 3 weeks
+    assert tiles_for(target=date(2026, 9, 14), remaining=120)["rate"]["sub"] == "120.0 a week needed"  # part week
+    for passed in (date(2026, 9, 11), date(2026, 9, 1)):
+        assert tiles_for(target=passed)["rate"]["sub"] == "No required rate"
 
 
 def test_forecast_tile_against_the_target():
@@ -354,6 +467,24 @@ def test_forecast_tile_lists_where_the_target_moved():
     three = tiles_for(targets=[entry(1, first), entry(2, second), entry(3, third), entry(4, TARGET)])["forecast"]
     assert three["moved"].startswith("Target moved 4 times: ")
     assert tiles_for(targets=[entry(1, first, "set")])["forecast"]["moved"] is None  # set once, never moved
+
+
+def test_forecast_tile_after_a_removal_counts_only_what_it_lists():
+    first, second, third, fourth = date(2026, 12, 4), date(2026, 12, 11), TARGET, date(2026, 12, 25)
+    history = [entry(1, first, "set"), entry(2, second), entry(3, None, "removed")]
+    assert tiles_for(targets=history)["forecast"]["moved"] is None  # no target now
+    again = history + [entry(4, third, "set")]
+    assert tiles_for(targets=again)["forecast"]["moved"] == "Target set again: 18 Dec"
+    moved = again + [entry(5, fourth)]
+    assert tiles_for(targets=moved)["forecast"]["moved"] == "Target moved once: 18 Dec → 25 Dec"
+
+
+def test_target_note_says_back_to_the_first_date_only_when_it_is():
+    first = date(2026, 12, 4)
+    later = [entry(1, first, "set"), entry(2, first + timedelta(days=7))]
+    assert target_note(later) == "moved once, 7 days later than first set"
+    assert target_note([*later, entry(3, first)]) == "moved twice, back to the date first set"
+    assert target_note([entry(1, first, "set")]) == ""
 
 
 # --- Status summary (no database) ------------------------------------------------------------------------------
@@ -646,3 +777,38 @@ def test_a_lone_set_has_no_list_and_a_move_brings_it_back(client, db, small_trac
         db, small_tracker, date(2026, 12, 4), date(2026, 12, 11), datetime(2026, 9, 2, 9, tzinfo=timezone.utc)
     )
     assert "Target date changes" in page(client, small_tracker)
+
+
+def test_the_first_move_of_a_target_set_before_recording_began(client, db, small_tracker, viewer):
+    from report_helpers import add_target_change
+
+    seed(db, small_tracker)  # the target, 25 Dec, was set before changes were recorded
+    add_target_change(
+        db, small_tracker, date(2026, 12, 18), date(2026, 12, 25), datetime(2026, 9, 9, 9, tzinfo=timezone.utc)
+    )
+    html = page(client, small_tracker)
+    flat = text_of(html)
+    assert "Target date changes moved once, 7 days later than first set" in flat
+    assert "back to the date first set" not in flat
+    items = re.findall(r'<li class="glance-target(?: is-current)?">(.*?)</li>', html, re.S)
+    assert len(items) == 2
+    assert "<s>18 Dec</s>" in items[0] and "In place before changes were recorded." in items[0]
+    assert "<s>" not in items[1] and "Moved on 9 Sep, 7 days later. No reason given." in text_of(items[1])
+    assert "Target moved once: 18 Dec → 25 Dec" in flat
+    # The week before the change answers against the date in place then, with no list.
+    before = page(client, small_tracker, WEEKS[0])
+    assert "Target date changes" not in before and "18 Dec target" in text_of(before)
+
+
+def test_a_reason_is_shown_as_text(client, db, small_tracker, viewer):
+    from report_helpers import add_target_change
+
+    seed(db, small_tracker)
+    add_target_change(db, small_tracker, None, date(2026, 12, 4), datetime(2026, 9, 1, 9, tzinfo=timezone.utc))
+    reason = '<img src=x onerror="alert(1)"> & <b>late</b>'
+    add_target_change(
+        db, small_tracker, date(2026, 12, 4), date(2026, 12, 11), datetime(2026, 9, 2, 9, tzinfo=timezone.utc), reason
+    )
+    html = page(client, small_tracker)
+    assert "<img src=x" not in html and "<b>late</b>" not in html
+    assert "&lt;img src=x onerror=&#34;alert(1)&#34;&gt; &amp; &lt;b&gt;late&lt;/b&gt;" in html

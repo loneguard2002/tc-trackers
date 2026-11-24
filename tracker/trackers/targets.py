@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -19,7 +19,7 @@ class TargetEntry:
     number: int
     date: date | None
     kind: Literal["set", "moved", "removed"]
-    changed_on: date
+    changed_on: date | None  # None: in place before changes were recorded
     by: str | None
     reason: str
     days: int | None
@@ -35,22 +35,31 @@ def record_target_change(
     session.add(TargetChange(tracker_id=tracker_id, changed_by=user_id, old_date=old, new_date=new, reason=reason))
 
 
-def _changes_by(session: Session, tracker: Tracker, upto: date) -> list[tuple[TargetChange, date]]:
-    """The tracker's changes made on or before ``upto`` (a calendar day in its own time zone), oldest first."""
+def _changes(session: Session, tracker: Tracker) -> list[tuple[TargetChange, date]]:
+    """Every change of the tracker's target with the calendar day it was made in its own time zone, oldest first."""
     zone = ZoneInfo(tracker.send_timezone)
     rows = session.scalars(select(TargetChange).where(TargetChange.tracker_id == tracker.id).order_by(TargetChange.id))
-    dated = [(row, row.changed_at.astimezone(zone).date()) for row in rows]
-    return [(row, day) for row, day in dated if day <= upto]
+    return [(row, row.changed_at.astimezone(zone).date()) for row in rows]
 
 
 def target_history(session: Session, tracker: Tracker, upto: date) -> list[TargetEntry]:
-    changes = _changes_by(session, tracker, upto)
+    """The target's history as it stood on ``upto``: one entry per change made by then, oldest first.
+
+    Changes made before recording began are not known (nothing is backfilled), but the target in place then is: a target
+    with no recorded change, or the date the first recorded change replaced, stands as a "set" entry with no
+    ``changed_on``. So the last entry is always the target in force on ``upto`` (none when it was removed or never set).
+    """
+    changes = _changes(session, tracker)
+    in_place = changes[0][0].old_date if changes else tracker.target_completion
+    held = [(change, day) for change, day in changes if day <= upto]
     names = {
         user.id: user.full_name
-        for user in session.scalars(select(User).where(User.id.in_({c.changed_by for c, _ in changes if c.changed_by})))
+        for user in session.scalars(select(User).where(User.id.in_({c.changed_by for c, _ in held if c.changed_by})))
     }
     entries = []
-    for number, (change, day) in enumerate(changes, start=1):
+    if in_place is not None:
+        entries.append(TargetEntry(1, in_place, "set", None, None, "", None, False))
+    for change, day in held:
         if change.new_date is None:
             kind, days = "removed", None
         elif change.old_date is None:
@@ -59,29 +68,25 @@ def target_history(session: Session, tracker: Tracker, upto: date) -> list[Targe
             kind, days = "moved", (change.new_date - change.old_date).days
         entries.append(
             TargetEntry(
-                number=number,
+                number=len(entries) + 1,
                 date=change.new_date,
                 kind=kind,
                 changed_on=day,
                 by=names.get(change.changed_by),
                 reason=change.reason,
                 days=days,
-                current=number == len(changes),
+                current=False,
             )
         )
+    if entries:
+        entries[-1] = replace(entries[-1], current=True)
     return entries
 
 
 def target_as_of(session: Session, tracker: Tracker, upto: date) -> date | None:
-    """The target in force on ``upto``: the last change by then; before the first change, the date it replaced."""
-    zone = ZoneInfo(tracker.send_timezone)
-    rows = list(
-        session.scalars(select(TargetChange).where(TargetChange.tracker_id == tracker.id).order_by(TargetChange.id))
-    )
-    if not rows:
-        return tracker.target_completion
-    held = [row for row in rows if row.changed_at.astimezone(zone).date() <= upto]
-    return held[-1].new_date if held else rows[0].old_date
+    """The target in force on ``upto``: the last entry of its history by then."""
+    history = target_history(session, tracker, upto)
+    return history[-1].date if history else None
 
 
 def shows_history(entries: Iterable[TargetEntry]) -> bool:

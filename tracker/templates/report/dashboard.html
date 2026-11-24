@@ -23,6 +23,7 @@
   <section class="answer-card answer-card-{{ d.tone }}" aria-label="Status at a glance">
     <div class="answer-main">
       <span class="status-badge status-badge-{{ d.tone }}">{{ icon(icons[d.tone]) }}{{ status or 'Not set' }}</span>
+      {%- if report.in_progress %} <span class="badge badge-info">In progress</span>{% endif %}
       <p class="answer-sentence">{{ d.answer }}</p>
       {% if report.inputs and report.inputs.headline %}<p class="answer-headline">{{ report.inputs.headline }}</p>{% endif %}
     </div>

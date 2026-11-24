@@ -47,13 +47,14 @@ VIEW_KEY = "report_view"
 
 
 def _chosen_view() -> str:
-    """The view asked for with ``?view=`` (kept in the session for the next report), else the one kept, else new."""
+    """The view asked for with ``?view=`` (kept in the session for the next report), else the one kept, else new. The
+    session is written only when the choice changes."""
     asked = request.args.get("view")
-    if asked in VIEWS:
-        session[VIEW_KEY] = asked
     kept = session.get(VIEW_KEY)
-    session[VIEW_KEY] = kept if kept in VIEWS else "new"
-    return session[VIEW_KEY]
+    chosen = asked if asked in VIEWS else kept if kept in VIEWS else "new"
+    if kept != chosen:
+        session[VIEW_KEY] = chosen
+    return chosen
 
 
 @bp.get("/trackers/<int:tracker_id>/report")
