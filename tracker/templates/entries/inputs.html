@@ -20,10 +20,10 @@
       <span class="badge badge-{{ deadline_tone }} week-deadline">{{ deadline_text }}</span>
       <nav class="week-steps" aria-label="Step through weeks">
         {% if prev_week %}<a class="button button-small" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=prev_week.isoformat()) }}" rel="prev" aria-label="Previous week" title="Previous week">{{ icon('chevron-left') }}</a>
-        {% else %}<span class="button button-small is-disabled" aria-disabled="true" aria-label="Previous week">{{ icon('chevron-left') }}</span>{% endif %}
+        {% else %}<span class="button button-small is-disabled" aria-disabled="true">{{ icon('chevron-left') }}<span class="sr-only">Previous week</span></span>{% endif %}
         <a class="button button-small" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=latest_week.isoformat()) }}">Latest week</a>
         {% if next_week %}<a class="button button-small" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=next_week.isoformat()) }}" rel="next" aria-label="Next week" title="Next week">{{ icon('chevron-right') }}</a>
-        {% else %}<span class="button button-small is-disabled" aria-disabled="true" aria-label="Next week">{{ icon('chevron-right') }}</span>{% endif %}
+        {% else %}<span class="button button-small is-disabled" aria-disabled="true">{{ icon('chevron-right') }}<span class="sr-only">Next week</span></span>{% endif %}
       </nav>
     </div>
     <div class="week-strip-panel" id="week-strip-panel" data-week-panel>
@@ -55,7 +55,7 @@
       <span class="figure-sub">{{ h.pct_complete|pct }} · {{ h.remaining|num }} left</span></div>
     <div class="access-tile"><span class="access-tile-label">Rate ({{ tracker.moving_average_weeks }} week{{ '' if tracker.moving_average_weeks == 1 else 's' }})</span>
       <span class="access-tile-count">{{ h.forecast_rate|rate }}</span>
-      <span class="figure-sub{{ ' tone-danger' if ahead is not none and ahead < 0 }}{{ ' tone-success' if ahead is not none and ahead >= 0 }}">a week · {{ h.required_rate|rate }} needed</span></div>
+      <span class="figure-sub{{ ' tone-danger' if ahead is not none and ahead < 0 }}{{ ' tone-success' if ahead is not none and ahead >= 0 }}">a week · {{ (h.required_rate|rate ~ ' needed') if h.required_rate is not none else 'no required rate' }}</span></div>
     <div class="access-tile"><span class="access-tile-label">Forecast</span>
       <span class="access-tile-count">{{ short_date(h.forecast_completion) }}</span>
       <span class="figure-sub{{ ' tone-danger' if dvt is not none and dvt > 0 }}{{ ' tone-success' if dvt is not none and dvt <= 0 }}">{% if h.target_completion %}Target {{ short_date(h.target_completion) }}{% if dvt is not none %} · {% if dvt == 0 %}on target{% else %}{{ dvt|abs }} day{{ '' if dvt|abs == 1 else 's' }} {{ 'late' if dvt > 0 else 'early' }}{% endif %}{% endif %}{% else %}No target date{% endif %}</span></div>
@@ -144,7 +144,7 @@
         {%- if on %}
         {% if reminder_next %}<p>Next: {{ reminder_next }}</p>{% endif %}
         <p>
-          {%- if reminder.sent_state == 'sent' and reminder.sent_at %}Last sent: {{ reminder_sent_on|fdate }}
+          {%- if reminder.sent_state == 'sent' and reminder.sent_at %}Last sent: {{ reminder_sent_on }}
           {%- elif email_ready %}Not sent yet
           {%- else %}Email is not set up in this application yet{% endif %}</p>
         {% endif -%}
@@ -159,7 +159,7 @@
           <button class="button button-small" type="submit">Email it again</button>
         </form>
         {% endif %}
-        <a class="reminder-history" href="{{ url_for('entries.calendar_reminder_history', tracker_id=tracker.id) }}" data-history-url="{{ url_for('entries.calendar_reminder_history_panel', tracker_id=tracker.id) }}">History</a>
+        <a class="reminder-history" href="{{ url_for('entries.calendar_reminder_history', tracker_id=tracker.id, week=week.isoformat()) }}" data-history-url="{{ url_for('entries.calendar_reminder_history_panel', tracker_id=tracker.id, week=week.isoformat()) }}">History</a>
       </div>
     </div>
   </section>

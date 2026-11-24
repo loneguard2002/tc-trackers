@@ -152,7 +152,7 @@ reminder_history.html` (no-JavaScript page), `tracker/static/reminder-history.js
   tracker's zone, the send being the week-ending day at `send_time`); with `sent_at`: "Report sent on Fri 20 Nov at
   17:02" (muted); sending off: "Automatic sending is off" (muted); send time passed, nothing sent: "Report was due on
   Fri 20 Nov at 17:00" (muted, ruling P2). `week_state`: "Not written yet", "Written · Amber", "Written · status not set".
-  `sent_at` is the latest `ReportSend.sent_at` with `status == "sent"` for that week, any trigger.
+  `sent_at` is the latest `ReportSend.sent_at` with `status == "sent"` for that week, scheduled sends only.
 - [ ] Tests first (page): the week bar has the week button with `aria-expanded`/`aria-controls`, the state and deadline
   pills, ‹ Latest week ›; without JavaScript the week strip shows; with it the strip starts hidden and the button opens
   it. Six tiles in `.access-tiles` with the labels and values of the spec (Done this week "42" / "of 40 · +2 against

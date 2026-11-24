@@ -10,6 +10,7 @@ remembered except ``last_error``, so the next cycle tries again.
 from __future__ import annotations
 
 import logging
+import smtplib
 from dataclasses import replace
 from datetime import date, datetime
 from typing import Literal
@@ -44,7 +45,6 @@ EVENT_GROUPS = {
     "switched_on": "change",
     "switched_off": "change",
 }
-ERROR_DETAIL_LIMIT = 200
 
 _not_set_up_logged = False
 
@@ -138,11 +138,31 @@ def _sent_series(current: Series, sent: dict) -> Series:
     )
 
 
-def _record_failure(session, row: CalendarReminder, message: str) -> None:
+def failure_detail(exc: BaseException) -> str:
+    """A failed send in plain words for the history; the raw error stays in the log and on the reminder row."""
+    chain = []
+    seen = exc
+    while seen is not None and seen not in chain:
+        chain.append(seen)
+        seen = seen.__cause__
+    for found in chain:
+        if isinstance(found, smtplib.SMTPAuthenticationError) or str(found).startswith("OAuth2 token request failed"):
+            return "The mail server refused the sign-in"
+        if isinstance(found, smtplib.SMTPRecipientsRefused):
+            return "The mail server refused the address"
+        if isinstance(found, (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError)):
+            return "The mail server did not answer"
+        if isinstance(found, smtplib.SMTPException):
+            return "The mail server refused the message"
+        if isinstance(found, OSError):  # connection refused, timeouts, name lookups, TLS
+            return "The mail server did not answer"
+    return "The mail server refused the message"
+
+
+def _record_failure(session, row: CalendarReminder, message: str, detail: str) -> None:
     """Remember the error and commit, keeping the caller's other pending changes. Never raises."""
     try:
         row.last_error = message
-        detail = message[:ERROR_DETAIL_LIMIT]
         newest = session.scalars(_events_query(row.user_id, row.tracker_id).limit(1)).first()
         if not (newest and newest.kind == "failed" and newest.detail == detail):  # one event per outage
             record_event(session, row.user_id, row.tracker_id, "failed", detail)
@@ -191,7 +211,7 @@ def sync_reminder(session, row: CalendarReminder, now_utc: datetime, force: bool
         smtp.send_message(build_invite_email(series, organizer, user.email, method, sequence, now_utc))
     except Exception as exc:
         logger.exception("Calendar reminder %s for tracker %s, user %s failed", action, row.tracker_id, row.user_id)
-        _record_failure(session, row, error_text(exc))
+        _record_failure(session, row, error_text(exc), failure_detail(exc))
         return None
     row.sequence = sequence
     row.sent_state = "cancelled" if action == "cancel" else "sent"

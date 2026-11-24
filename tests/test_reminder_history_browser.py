@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from datetime import datetime, timezone
+
 import pytest
 from conftest import browser_sign_in
 from playwright.sync_api import expect
@@ -40,7 +43,16 @@ def editor(page, live_server, db, tracker_factory, user_factory, grant):
     tracker = tracker_factory(name="Fit-out")
     user = user_factory(email="person@example.com")
     grant(user, tracker, "editor")
-    db.add(CalendarReminder(user_id=user.id, tracker_id=tracker.id, enabled=True, sequence=0, sent_state="none"))
+    db.add(
+        CalendarReminder(
+            user_id=user.id,
+            tracker_id=tracker.id,
+            enabled=True,
+            sequence=0,
+            sent_state="sent",
+            sent_at=datetime.now(timezone.utc),
+        )
+    )
     record_event(db, user.id, tracker.id, "switched_on", "By you")
     record_event(db, user.id, tracker.id, "sent", "Fridays, 08:45 to 09:00 (London time), 4 Sep – 25 Dec 2026")
     record_event(db, user.id, tracker.id, "failed", "Mail host refused the message")
@@ -160,6 +172,19 @@ def test_the_menu_emails_it_again(page, live_server, editor, mail):
     assert len(mail) == 1
 
 
+def test_the_panel_returns_to_the_week_being_viewed(page, live_server, editor, mail):
+    tracker, _ = editor
+    page.add_init_script(RECORDER)
+    page.goto(f"{live_server}/trackers/{tracker.id}/inputs?week=2026-10-16")
+    page.click("[data-history-url]")
+    panel = page.locator("dialog.perm-drawer")
+    expect(panel.locator("#history-table[data-table-ready]")).to_be_attached()
+    panel.get_by_role("button", name="Email it again").click()
+    expect(page.locator(".flash")).to_have_text("Calendar reminder sent again to person@example.com.")
+    assert page.url.endswith(f"/trackers/{tracker.id}/inputs?week=2026-10-16")
+    assert page.evaluate("window.__errors") == [] and page.evaluate("window.__csp") == []
+
+
 def test_the_link_goes_to_the_history_page_without_javascript(browser, live_server, editor):
     tracker, user = editor
     context = browser.new_context(java_script_enabled=False)
@@ -168,7 +193,11 @@ def test_the_link_goes_to_the_history_page_without_javascript(browser, live_serv
         browser_sign_in(page, live_server, user)
         page.goto(f"{live_server}/trackers/{tracker.id}/inputs")
         page.click("[data-history-url]")
-        expect(page).to_have_url(f"{live_server}/trackers/{tracker.id}/calendar-reminder/history")
+        expect(page).to_have_url(
+            re.compile(rf"/trackers/{tracker.id}/calendar-reminder/history\?week=\d{{4}}-\d\d-\d\d$")
+        )
+        expect(page.get_by_role("button", name="Email it again")).to_be_visible()
+        expect(page.get_by_role("link", name="Download .ics")).to_be_visible()
         expect(page.get_by_role("heading", name="Calendar reminder")).to_be_visible()
         expect(page.locator("#history-table tbody tr")).to_have_count(4)
     finally:

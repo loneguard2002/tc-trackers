@@ -10,7 +10,6 @@ import pytest
 from conftest import post, sign_in
 
 from tracker.calendar_invites import service
-from tracker.formatting import fmt_date
 from tracker.mail import smtp
 from tracker.models import CalendarReminder
 
@@ -105,8 +104,8 @@ def test_switching_on_sends_one_request_and_the_panel_reports_it(client, db, set
     assert len(mail) == 1 and method_of(mail[0]) == "REQUEST"
     assert flashes(client) == [f"Calendar reminder sent to {EMAIL}."]
     html = page_text(client, tracker)
-    today = fmt_date(datetime.now(timezone.utc).date())
-    assert f"Last sent: {today}" in html
+    today = datetime.now(timezone.utc).date()
+    assert f"Last sent: {today.day} {today:%b %Y}" in html
     assert "Email it again" in html
     assert re.search(r'name="enabled"[^>]*checked', html)
 
@@ -227,7 +226,7 @@ def test_the_sent_date_is_the_trackers_local_date(client, db, setup, mail):
     row = db.get(CalendarReminder, (person.id, tracker.id))
     row.sent_at = datetime(2026, 10, 1, 12, 30, tzinfo=timezone.utc)  # 01:30 on 2 October in Auckland (UTC+13)
     db.commit()
-    assert "Last sent: 02 Oct 2026" in page_text(client, tracker)
+    assert "Last sent: 2 Oct 2026" in page_text(client, tracker)
 
 
 def event_list(db, tracker, person):
@@ -457,7 +456,11 @@ def test_the_summary_names_the_next_week_ending_and_none_after_the_last(client, 
 def test_the_inputs_page_links_to_the_history(client, setup):
     tracker, _ = setup
     html = page_text(client, tracker)
-    assert f'href="{history_url(tracker)}" data-history-url="{history_url(tracker, panel=True)}"' in html
+    week = re.search(r'name="week" value="([\d-]+)"', html).group(1)
+    assert (
+        f'href="{history_url(tracker)}?week={week}" data-history-url="{history_url(tracker, panel=True)}?week={week}"'
+        in html
+    )
     assert 'id="history-panel"' in html and "reminder-history.js" in html and "lists.js" in html
 
 
@@ -500,7 +503,8 @@ def test_the_card_shows_on_next_and_last_sent(client, db, setup, mail):
     card = card_of(page_text(client, tracker))
     assert re.search(r'badge-success">On</span>', card)
     assert f"Next: Fri {friday.day} {friday:%b}, 08:45" in card
-    assert f"Last sent: {fmt_date(datetime.now(timezone.utc).date())}" in card
+    today = datetime.now(timezone.utc).date()
+    assert f"Last sent: {today.day} {today:%b %Y}" in card
     assert "Email it again" in card
 
 
@@ -538,3 +542,53 @@ def test_the_history_next_date_skips_a_reminder_that_has_gone(client, db, setup,
             as_text=True
         )
         assert f"Next: {expected}, 08:45" in page_text(client, tracker)
+
+
+def enabled_unsent(db, person, tracker):
+    db.add(CalendarReminder(user_id=person.id, tracker_id=tracker.id, enabled=True, sequence=0, sent_state="none"))
+    db.commit()
+
+
+def test_email_it_again_is_offered_only_once_a_series_was_sent(client, db, setup, mail):
+    tracker, person = setup
+    enabled_unsent(db, person, tracker)
+    panel = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+    page = client.get(history_url(tracker)).get_data(as_text=True)
+    assert "Email it again" not in panel and "Email it again" not in page
+    assert "Switch the reminder off" in panel and "Download .ics" in panel and "Download .ics" in page
+    post(client, url(tracker, "/resend"))  # sends the first request (nothing sent yet)
+    row = db.get(CalendarReminder, (person.id, tracker.id))
+    db.refresh(row)
+    assert row.sent_state == "sent"
+    panel = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+    page = client.get(history_url(tracker)).get_data(as_text=True)
+    assert panel.count("Email it again") == 2  # the menu and the calendar section
+    assert page.count("Email it again") == 1
+
+
+def test_the_calendar_section_has_the_download_and_a_plain_resend_form(client, db, setup, mail):
+    tracker, _ = setup
+    post(client, url(tracker), {"enabled": "on"})
+    page = client.get(history_url(tracker)).get_data(as_text=True)
+    section = page[
+        page.index('aria-labelledby="history-reminder-title"') : page.index('aria-labelledby="history-events-title"')
+    ]
+    assert f'href="{ics_url(tracker)}"' in section and "Download .ics" in section
+    assert f'action="{url(tracker, "/resend")}"' in section and "data-history-form" not in section
+    assert 'name="csrf_token"' in section
+    panel = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+    assert "Switch the reminder off" in panel and "Switch the reminder off" not in page
+
+
+def test_the_panel_forms_carry_the_week_being_viewed(client, setup, mail):
+    tracker, _ = setup
+    post(client, url(tracker), {"enabled": "on"})
+    panel = client.get(history_url(tracker, panel=True) + "?week=2026-09-11").get_data(as_text=True)
+    assert panel.count('name="week" value="2026-09-11"') == 3  # Email it again, Switch off, and the section's form
+    for bad in ("", "?week=rubbish"):
+        plain = client.get(history_url(tracker, panel=True) + bad).get_data(as_text=True)
+        assert 'name="week"' not in plain
+    response = post(client, url(tracker, "/resend"), {"week": "2026-09-11"})
+    assert response.headers["Location"].endswith(f"/trackers/{tracker.id}/inputs?week=2026-09-11")
+    inputs = client.get(f"/trackers/{tracker.id}/inputs?week=2026-09-18").get_data(as_text=True)
+    assert f'data-history-url="{history_url(tracker, panel=True)}?week=2026-09-18"' in inputs

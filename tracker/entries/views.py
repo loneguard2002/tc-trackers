@@ -627,6 +627,7 @@ def _upcoming_week_ending(tracker: Tracker) -> date | None:
 
 def _history_context(tracker: Tracker, db, user: User) -> dict:
     """What the history shows: the reminder in a line and the person's own events, newest first."""
+    week = parse_date(request.args.get("week"))
     zone = ZoneInfo(tracker.send_timezone)
     row = db.get(CalendarReminder, (user.id, tracker.id))
     series = series_for(tracker, user, inputs_url(tracker.id))
@@ -662,6 +663,8 @@ def _history_context(tracker: Tracker, db, user: User) -> dict:
         "next_date": f"{upcoming:%a} {upcoming.day} {upcoming:%b %Y}" if enabled and upcoming else None,
         "events": events,
         "email": user.email,
+        "sent": enabled and row.sent_state == "sent",
+        "week": week,
     }
 
 
@@ -704,7 +707,7 @@ def _past_updates(db, past_weeks, saved) -> list[dict]:
                 "token": (status.lower() if status else "nostatus") if written else "unwritten",
                 "headline": (entry.headline or "") if written else "",
                 "decisions": (entry.decisions or "") if written else "",
-                "prepared_by": names.get(entry.prepared_by, "") if written and entry.prepared_by else "",
+                "prepared_by": names.get(entry.prepared_by, "a former user") if written and entry.prepared_by else "",
             }
         )
     return rows
@@ -722,17 +725,22 @@ def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[
     today = date.today()
     preparer = db.get(User, row.prepared_by) if row and row.prepared_by else None
     reminder = db.get(CalendarReminder, (current_user().id, tracker.id))
-    reminder_sent_on = (
-        reminder.sent_at.astimezone(ZoneInfo(tracker.send_timezone)).date() if reminder and reminder.sent_at else None
-    )
+    reminder_sent_on = None
+    if reminder and reminder.sent_at:
+        sent_day = reminder.sent_at.astimezone(ZoneInfo(tracker.send_timezone)).date()
+        reminder_sent_on = f"{sent_day.day} {sent_day:%b %Y}"  # as the history writes dates
     saved = {r.week_ending: r for r in db.scalars(select(ReportInput).where(ReportInput.tracker_id == tracker.id))}
     index = weeks.index(week)
     previous = saved.get(weeks[index - 1]) if index else None
-    past = _past_updates(db, weeks[:index], saved)
+    current_week = in_progress_week(today, tracker.week_ending_weekday)
+    past = _past_updates(db, [w for w in weeks[:index] if w <= current_week], saved)
     risks = list(db.scalars(select(Risk).where(Risk.tracker_id == tracker.id, Risk.status != "Closed")))
     sent_at = db.scalar(
         select(func.max(ReportSend.sent_at)).where(
-            ReportSend.tracker_id == tracker.id, ReportSend.week_ending == week, ReportSend.status == "sent"
+            ReportSend.tracker_id == tracker.id,
+            ReportSend.week_ending == week,
+            ReportSend.status == "sent",
+            ReportSend.trigger == "scheduled",  # a manual send does not move the deadline
         )
     )
     deadline_text, deadline_tone = deadline(tracker, week, sent_at, datetime.now(timezone.utc))
@@ -761,11 +769,13 @@ def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[
             prev_week=weeks[index - 1] if index else None,
             next_week=weeks[index + 1] if index + 1 < len(weeks) else None,
             latest_week=default_report_week(tracker, today),
-            current_week=in_progress_week(today, tracker.week_ending_weekday),
+            current_week=current_week,
             today=today,
             headline=compute_position(db, tracker, week, today).headline,
             red_risks=sum(1 for r in risks if r.rag == "Red"),
-            overdue_risks=sum(1 for r in risks if r.target_date and r.target_date < min(week, today)),
+            overdue_risks=sum(
+                1 for r in risks if r.rag == "Red" and r.target_date and r.target_date < min(week, today)
+            ),
             format_date=format_date,
             reminder=reminder,
             reminder_sent_on=reminder_sent_on,

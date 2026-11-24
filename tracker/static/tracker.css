@@ -723,6 +723,7 @@ main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-heigh
 .access-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .access-tile { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); color: var(--text); text-decoration: none; }
 .access-tile:hover { border-color: var(--primary); }
+.inputs-page div.access-tile:hover { border-color: var(--border); }
 .access-tile-label { color: var(--muted); font-size: .8125rem; font-weight: 600; }
 .access-tile-count { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
 .access-inactive { border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); border-left-color: var(--warning); background: color-mix(in srgb, var(--warning) 6%, var(--surface)); }

@@ -3,7 +3,7 @@
 {# The person's calendar reminder history: the reminder in a line, then every event as a standard table. The side panel
    (``panel``) keeps the table's keys out of the address (data-no-address) because the page under it owns the address;
    the full page uses them. Rows arrive newest first, so the When heading carries no default marker. #}
-{% macro history_body(tracker, state, description, next_date, events, panel=False) -%}
+{% macro history_body(tracker, state, description, next_date, events, panel=False, sent=False, week=none) -%}
 {% set table_id = 'history-table' %}
 {% set counts = {'all': events|length, 'sent': events|selectattr('group', 'equalto', 'sent')|list|length, 'failed': events|selectattr('group', 'equalto', 'failed')|list|length, 'download': events|selectattr('group', 'equalto', 'download')|list|length} %}
 <section aria-labelledby="history-reminder-title">
@@ -12,6 +12,16 @@
   <p class="history-state"><strong>{{ state }}</strong></p>
   <p class="history-line muted">{{ description }}</p>
   {% if next_date %}<p class="history-line muted">Next: {{ next_date }}</p>{% endif %}
+  <div class="reminder-actions">
+    <a class="button button-small" href="{{ url_for('entries.calendar_reminder_ics', tracker_id=tracker.id) }}">{{ icon('download') }}Download .ics</a>
+    {% if sent %}
+    <form class="reminder-resend" method="post" action="{{ url_for('entries.calendar_reminder_resend', tracker_id=tracker.id) }}"{% if panel %} data-history-form{% endif %}>
+      {{ csrf_field(csrf_token()) }}
+      {% if week %}<input type="hidden" name="week" value="{{ week.isoformat() }}">{% endif %}
+      <button class="button button-small" type="submit">Email it again</button>
+    </form>
+    {% endif %}
+  </div>
 </section>
 <section aria-labelledby="history-events-title">
   <h3 id="history-events-title">History</h3>
@@ -45,24 +55,28 @@
 
 {# The fragment for the side panel. The ⋯ menu arrives with it, hidden; reminder-history.js moves it into the panel's
    header. Its two forms post the existing routes. #}
-{% macro history_panel(tracker, enabled, state, description, next_date, events, email) -%}
+{% macro history_panel(tracker, enabled, state, description, next_date, events, email, sent=False, week=none) -%}
 <div class="set-panel history-panel" data-panel-history data-subtitle="{{ tracker.name }} · sent to {{ email }}">
   <div data-history-menu hidden>
     <button class="perm-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="More for the calendar reminder">{{ icon('more') }}</button>
     <div class="perm-menu" role="menu" hidden>
       <a role="menuitem" href="{{ url_for('entries.calendar_reminder_ics', tracker_id=tracker.id) }}">{{ icon('download') }}Download invite (.ics)</a>
-      {% if enabled %}
+      {% if sent %}
       <form method="post" action="{{ url_for('entries.calendar_reminder_resend', tracker_id=tracker.id) }}" data-history-form>
         {{ csrf_field(csrf_token()) }}
+        {% if week %}<input type="hidden" name="week" value="{{ week.isoformat() }}">{% endif %}
         <button type="submit" role="menuitem">{{ icon('mail') }}Email it again</button>
       </form>
+      {% endif %}
+      {% if enabled %}
       <form method="post" action="{{ url_for('entries.calendar_reminder', tracker_id=tracker.id) }}" data-history-form data-confirm="Switch the calendar reminder off? A cancellation is sent to Outlook.">
         {{ csrf_field(csrf_token()) }}
+        {% if week %}<input type="hidden" name="week" value="{{ week.isoformat() }}">{% endif %}
         <button type="submit" role="menuitem" class="is-danger">{{ icon('trash') }}Switch the reminder off…</button>
       </form>
       {% endif %}
     </div>
   </div>
-  {{ history_body(tracker, state, description, next_date, events, panel=True) }}
+  {{ history_body(tracker, state, description, next_date, events, panel=True, sent=sent, week=week) }}
 </div>
 {%- endmacro %}
