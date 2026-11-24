@@ -1189,6 +1189,8 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .status-failed { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); color: var(--danger); }
 .status-queued { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); color: var(--warning); }
 .status-sending { border-color: color-mix(in srgb, var(--info) 45%, var(--border)); color: var(--info); }
+.recent-sends .send-people summary { cursor: pointer; }
+.recent-sends .send-people ul { margin: 6px 0 0; padding-left: 18px; font-size: .8125rem; }
 .send-error { max-width: 28ch; color: var(--muted); font-size: .8125rem; overflow-wrap: anywhere; }
 .preview-week { flex: none; }
 .preview-week select { width: auto; max-width: 15rem; padding: 6px 10px; font-size: .875rem; }

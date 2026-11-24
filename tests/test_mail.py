@@ -911,3 +911,47 @@ def test_the_risks_table_is_a_data_table_with_due_aligned_right():
     table = placeholder_context(report, LINK)["risks"]
     assert '<table class="mail-risks" role="presentation"' not in table
     assert re.search(r'<th style="[^"]*text-align:right[^"]*">Due</th>', table)
+
+
+def test_recent_sends_use_the_standard_table_and_list_who_they_went_to(
+    client, db, tracker_factory, user_factory, grant
+):
+    tracker, owner = tracker_factory(), user_factory()
+    grant(owner, tracker, "owner")
+    user_factory(full_name="Ann Able", email="ann@example.com")
+    week = tracker.first_week_ending
+    for k in range(11):
+        db.add(
+            ReportSend(
+                tracker_id=tracker.id, week_ending=week, trigger="manual", status="sent", recipients=["ann@example.com"]
+            )
+        )
+    db.add(
+        ReportSend(
+            tracker_id=tracker.id,
+            week_ending=week,
+            trigger="manual",
+            status="queued",
+            attempts=2,
+            recipients=["ANN@example.com", "x@external.com", "b@external.com", "c@external.com"],
+            error="connection refused",
+        )
+    )
+    db.commit()
+    sign_in(client, owner)
+    page = client.get(f"/trackers/{tracker.id}/mail").get_data(as_text=True)
+    table = page[page.index('id="recent"') : page.index("</section>", page.index('id="recent"'))]
+    # Every send, not only the last ten, in the standard table.
+    assert 'id="recent-sends"' in table and "data-sortable" in table and "data-table-frame" in table
+    assert table.count("<tr data-status=") == 12
+    assert 'id="recent-sends-search"' in table
+    for chip, count in (("All", 12), ("Sent", 11), ("Queued", 1), ("Failed", 0)):
+        assert re.search(rf'{chip} <span class="chip-count[^"]*" data-count[^>]*>{count}</span>', table), chip
+    assert "Showing 12 of 12 sends" in table
+    # Who each send went to: a person's name where the address is a user's (any case), else the address.
+    newest = table[table.index("<tr data-status=") : table.index("</tr>", table.index("<tr data-status="))]
+    assert 'data-status="queued"' in newest
+    assert "Ann Able" in newest and "x@external.com" in newest and "+2 more" in newest
+    assert "b@external.com" in newest and "c@external.com" in newest  # all of them, inside the disclosure
+    assert "ann able" in newest.split('data-search="')[1].split('"')[0]
+    assert "Sent to" in table
