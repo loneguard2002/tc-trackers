@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timezone
+from dataclasses import replace
+from datetime import date, datetime, timedelta, timezone
 from html import unescape
 
 import pytest
+from report_helpers import synthetic_report
 from test_report import WEEKS, seed
 
 from tracker.engine.calc import Headline
-from tracker.models import ReportInput
+from tracker.models import Group, ReportInput, Risk
 from tracker.report.build import build_report
-from tracker.report.dashboard import answer_sentence, build_dashboard
-from tracker.trackers.targets import record_target_change
+from tracker.report.dashboard import StatusWeek, answer_sentence, build_dashboard, build_tiles, summarise_statuses
+from tracker.trackers.targets import TargetEntry, record_target_change
 
 
 def headline(**overrides) -> Headline:
@@ -264,3 +266,265 @@ def test_behind_plan_comes_from_the_report_week(db, small_tracker):
     dashboard = build_dashboard(db, report, date(2026, 9, 14))
     assert (f"{behind} behind plan" in dashboard.answer) == (behind > 0)
     assert dashboard.tone == "none" and dashboard.needed is None and dashboard.written_by is None
+
+
+# --- Tiles (no database) ---------------------------------------------------------------------------------------
+
+
+def entry(number, day, kind="moved"):
+    return TargetEntry(number, day, kind, date(2026, 10, 1), None, "", None, False)
+
+
+def tiles_for(**overrides):
+    target = overrides.pop("target", TARGET)
+    targets = overrides.pop("targets", [])
+    report, _ = synthetic_report()
+    values = dict(
+        completed=375,
+        total_scope=500,
+        pct_complete=0.75,
+        remaining=125,
+        this_week_actual=42,
+        this_week_target=40,
+        next_week_target=40,
+        forecast_rate=41.3,
+        required_rate=31.3,
+        forecast_completion=date(2026, 12, 11),
+    )
+    values.update(overrides)
+    report = replace(report, headline=replace(report.headline, **values))
+    return build_tiles(report, target, targets)
+
+
+def test_completed_tile():
+    tile = tiles_for()["completed"]
+    assert (tile["value"], tile["unit"], tile["sub"]) == ("375", "of 500", "75% · 125 left")
+    assert tile["pct"] == "75.00"
+
+
+def test_this_week_tile_against_target():
+    assert tiles_for()["week"]["sub"] == "+2 against target · next week 40"
+    assert tiles_for()["week"]["tone"] == "success"
+    assert tiles_for(this_week_actual=40)["week"]["sub"].startswith("On target")
+    behind = tiles_for(this_week_actual=37)["week"]
+    assert behind["sub"] == "−3 against target · next week 40" and behind["tone"] == "danger"
+    assert tiles_for(this_week_target=None)["week"]["sub"] == "No target for this week"
+    assert tiles_for(next_week_target=None)["week"]["sub"] == "+2 against target"
+
+
+def test_this_week_sparkline_covers_the_weeks_up_to_the_report_week():
+    report, _ = synthetic_report()  # report week is the second of four; two weeks have actuals
+    spark = build_tiles(report, None, [])["week"]["spark"]
+    assert len(spark["points"].split()) == 2
+    assert spark["last_x"] and spark["last_y"]
+
+
+def test_rate_tile():
+    tile = tiles_for()["rate"]
+    assert (tile["value"], tile["sub"], tile["tone"]) == ("41.3", "31.3 a week needed", "success")
+    assert 0 < float(tile["fill"]) <= 100 and 0 < float(tile["mark"]) <= 100
+    assert float(tile["mark"]) < float(tile["fill"])
+    slow = tiles_for(forecast_rate=20.0)["rate"]
+    assert slow["tone"] == "danger" and float(slow["mark"]) > float(slow["fill"])
+    none = tiles_for(required_rate=None)["rate"]
+    assert none["sub"] == "No required rate" and none["mark"] is None
+    assert tiles_for(forecast_rate=None)["rate"]["fill"] is None
+
+
+def test_forecast_tile_against_the_target():
+    early = tiles_for()["forecast"]
+    assert early["value"] == "11 Dec" and early["sub"] == "7 days before the 18 Dec target"
+    assert early["tone"] == "success"
+    late = tiles_for(forecast_completion=date(2026, 12, 19))["forecast"]
+    assert late["sub"] == "1 day after the 18 Dec target" and late["tone"] == "danger"
+    assert tiles_for(forecast_completion=TARGET)["forecast"]["sub"] == "On the target date"
+    assert tiles_for(target=None)["forecast"]["sub"] == "No target date"
+    assert tiles_for(forecast_completion=None)["forecast"]["sub"] == "No forecast yet"
+    assert tiles_for(forecast_completion=None)["forecast"]["value"] == "–"
+
+
+def test_forecast_tile_lists_where_the_target_moved():
+    first, second, third = date(2026, 12, 4), date(2026, 12, 11), TARGET
+    assert tiles_for()["forecast"]["moved"] is None
+    one = tiles_for(targets=[entry(1, first, "set"), entry(2, second)])["forecast"]["moved"]
+    assert one == "Target moved once: 4 Dec → 11 Dec"
+    two = tiles_for(targets=[entry(1, first, "set"), entry(2, second), entry(3, third)])["forecast"]["moved"]
+    assert two == "Target moved twice: 4 Dec → 11 Dec → 18 Dec"
+    three = tiles_for(targets=[entry(1, first), entry(2, second), entry(3, third), entry(4, TARGET)])["forecast"]
+    assert three["moved"].startswith("Target moved 4 times: ")
+    assert tiles_for(targets=[entry(1, first, "set")])["forecast"]["moved"] is None  # set once, never moved
+
+
+# --- Status summary (no database) ------------------------------------------------------------------------------
+
+
+def weeks_of(*statuses):
+    start = date(2026, 9, 4)
+    return [StatusWeek(start + timedelta(days=7 * i), s) for i, s in enumerate(statuses)]
+
+
+def test_summary_streak_and_red_weeks():
+    weeks = weeks_of("Green", "Red", "Amber", "Amber", "Amber")  # Red on 11 Sep
+    assert summarise_statuses(weeks) == "Amber for 3 weeks; Red once, on 11 Sep."
+    assert summarise_statuses(weeks_of("Green", "Green", "Green", "Green", "Green")) == "Green for 5 weeks."
+    assert summarise_statuses(weeks_of("Green")) == "Green for 1 week."
+
+
+def test_summary_red_counts_and_dashes_break_streaks():
+    assert summarise_statuses(weeks_of("Red", "Green", "Red", "Green", "Red", None)).startswith("Red 3 times")
+    assert (
+        summarise_statuses(weeks_of("Red", None, "Red", "Green")) == "Green for 1 week; Red twice, on 4 Sep and 18 Sep."
+    )
+    assert summarise_statuses(weeks_of("Green", "Green", None, "Green")) == "Green for 1 week."
+
+
+def test_summary_when_the_streak_is_red_or_nothing_is_set():
+    assert summarise_statuses(weeks_of("Green", "Red", "Red")) == "Red for 2 weeks."
+    assert summarise_statuses(weeks_of(None, None)) == "No statuses yet."
+    assert summarise_statuses([]) == "No statuses yet."
+    assert summarise_statuses(weeks_of("Green", None)) == "No status for the report week."
+
+
+# --- The page --------------------------------------------------------------------------------------------------
+
+
+def page(client, tracker, week=None):
+    week = (week or WEEKS[1]).isoformat()
+    return client.get(url(tracker, f"?view=new&week={week}")).get_data(as_text=True)
+
+
+def test_the_page_shows_the_four_tiles(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    html = page(client, small_tracker)
+    flat = text_of(html)
+    for label in ("Completed", "This week", "Rate", "Forecast"):
+        assert re.search(rf'class="glance-tile-label"[^>]*>\s*{label}', html)
+    assert "20 of 100" in flat and "20% · 80 left" in flat
+    assert 'width="20.00"' in html
+    assert "12 of 10 target" in flat and "+2 against target · next week 10" in flat
+    assert html.count('class="glance-tile ') == 4
+
+
+def text_of(html: str) -> str:
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", html)).split())
+
+
+def test_the_status_strip_marks_the_report_week_and_summarises(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    for week, status in ((WEEKS[0], "Red"), (WEEKS[1], "Amber"), (WEEKS[3], "Green")):  # after the report week
+        db.add(
+            ReportInput(
+                tracker_id=small_tracker.id, week_ending=week, status=status, updated_at=datetime.now(timezone.utc)
+            )
+        )
+    db.commit()
+    html = page(client, small_tracker)
+    squares = re.findall(
+        r'<li class="strip-week strip-(\w+)( is-report)?"[^>]*>\s*<span class="strip-letter">(.)</span>'
+        r'\s*<span class="strip-day">(\d+)</span>',
+        html,
+    )
+    assert [(tone, letter, day) for tone, _, letter, day in squares] == [("red", "R", "4"), ("amber", "A", "11")]
+    assert [bool(mark) for _, mark, _, _ in squares] == [False, True]
+    flat = text_of(html)
+    assert "Status, last 12 weeks" in flat and "Amber for 1 week; Red once, on 4 Sep." in flat
+
+
+def test_the_status_strip_with_no_statuses(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    flat = text_of(page(client, small_tracker))
+    assert "No statuses yet." in flat
+    assert re.search(r'strip-none[^>]*>\s*<span class="strip-letter">–<', page(client, small_tracker))
+
+
+def test_the_status_strip_shows_at_most_twelve_weeks(client, db, tracker_factory, grant, logged_in_user):
+    first = date(2026, 1, 2)
+    weeks = [first + timedelta(days=7 * i) for i in range(15)]
+    tracker = tracker_factory(first_week_ending=weeks[0], last_week_ending=weeks[-1])
+    grant(logged_in_user, tracker, "viewer")
+    html = client.get(url(tracker, f"?view=new&week={weeks[-1].isoformat()}")).get_data(as_text=True)
+    assert html.count('class="strip-week ') == 12
+
+
+def make_risks(db, tracker, group):
+    rows = (
+        ("R1", "Red", "Power cut", date(2026, 9, 8), "Open"),  # past the report week (11 Sep) by 3 days
+        ("R2", "Amber", "Late kit", date(2026, 9, 30), "In progress"),
+        ("R3", "Green", "Minor", None, "Open"),
+        ("R4", "Green", "Extra one", None, "Open"),
+        ("R5", "Green", "Closed one", None, "Closed"),
+    )
+    for ref, rag, description, due, status in rows:
+        db.add(
+            Risk(
+                tracker_id=tracker.id,
+                ref=ref,
+                rag=rag,
+                description=description,
+                target_date=due,
+                status=status,
+                owner_role="Programme Lead",
+                group_id=group.id,
+            )
+        )
+    db.commit()
+
+
+def test_top_risks_card(client, db, small_tracker, viewer):
+    group = seed(db, small_tracker)
+    make_risks(db, small_tracker, group)
+    html = page(client, small_tracker)
+    flat = text_of(html)
+    assert "Top risks 3 of 4 open" in flat
+    assert "R1 Power cut" in flat and "R2 Late kit" in flat and "R4 Extra one" not in flat
+    assert re.search(r'<span class="tone-danger">3 days past 8 Sep</span>', html)
+    assert "Due 30 Sep" in flat and "Site A · Programme Lead" in flat
+    assert re.search(r'glance-chip glance-chip-red">\s*<svg[^>]*>.*?</svg>\s*Red', html, re.S)
+
+
+def test_top_risks_card_without_risks(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    flat = text_of(page(client, small_tracker))
+    assert "Top risks 0 of 0 open" in flat and "No open risks." in flat
+
+
+def test_locations_are_live_ones_furthest_behind_first(client, db, small_tracker, viewer):
+    first = seed(db, small_tracker)  # Site A: 20 of 100
+    first.starting_completed = 5
+    db.add(Group(tracker_id=small_tracker.id, name="Site B", baseline=160, sort_order=2, starting_completed=0))
+    db.add(Group(tracker_id=small_tracker.id, name="Site C", baseline=10, sort_order=3, retired=True))
+    db.commit()
+    html = page(client, small_tracker)
+    flat = text_of(html)
+    assert "Locations, furthest behind first" in flat
+    names = re.findall(r'class="location-name">([^<]+)<', html)
+    assert names == ["Site B", "Site A"]  # 0% then 25%; the retired one is left out
+    assert "25 of 100 · 25%" in flat
+    assert "75 left · 5 done before the first week" in flat
+    assert "Done before the first week" in flat and "Done since" in flat
+    assert "Not shown: 1 retired location" in flat
+    assert re.search(r'class="bar-start"', html)
+
+
+def test_locations_with_none(client, db, small_tracker, viewer):
+    flat = text_of(page(client, small_tracker))
+    assert "Locations, furthest behind first" in flat and "No locations yet." in flat
+
+
+def test_the_chart_placeholder_is_there_for_the_next_task(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    html = page(client, small_tracker)
+    assert re.search(r'<section[^>]*id="glance-chart"[^>]*>.*?<h2[^>]*>Remaining</h2>', html, re.S)
+    assert 'class="report-glance' in html
+
+
+def test_a_tracker_without_a_target_has_no_forecast_target_text(client, db, tracker_factory, grant, logged_in_user):
+    tracker = tracker_factory(first_week_ending=WEEKS[0], last_week_ending=WEEKS[-1], target_completion=None)
+    grant(logged_in_user, tracker, "viewer")
+    seed(db, tracker)
+    html = page(client, tracker)
+    assert response_ok(html) and "Target moved" not in html and "against the" not in text_of(html)
+
+
+def response_ok(html: str) -> bool:
+    return "glance-tile" in html
