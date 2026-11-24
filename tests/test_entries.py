@@ -1,14 +1,14 @@
 """Data entry routes: completions, targets, weekly inputs, risks (database required)."""
 
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from html import unescape
 
 from sqlalchemy import select
 
 from tests.conftest import post
 from tracker.engine.calc import group_positions
-from tracker.models import AuditLog, CompletionEntry, Group, ReportInput, Risk, TrackerRole, Week
+from tracker.models import AuditLog, CompletionEntry, Group, ReportInput, ReportSend, Risk, TrackerRole, Week
 from tracker.trackers import load_engine_inputs
 
 OUTSIDE = "That date is outside this tracker&#39;s weeks (04 Sep 2026 to 25 Dec 2026)."
@@ -416,6 +416,36 @@ def test_inputs_page_week_bar(client, db, tracker_factory, user_factory, grant):
     assert 'id="week-strip-panel"' in html and "data-week-strip" in html
     # Not the week bar's old header copy.
     assert "This week is still in progress." not in html
+
+
+def test_inputs_page_week_bar_deadline_follows_the_send(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client, schedule_enabled=True)
+    url = f"/trackers/{tracker.id}/inputs?week=2026-10-23"
+    # 16:02 UTC on 23 Oct 2026 is 17:02 in London (summer time).
+    db.add(
+        ReportSend(
+            tracker_id=tracker.id,
+            week_ending=date(2026, 10, 23),
+            trigger="scheduled",
+            status="failed",
+            recipients=[],
+            sent_at=datetime(2026, 10, 23, 15, 0, tzinfo=timezone.utc),
+        )
+    )
+    db.add(
+        ReportSend(
+            tracker_id=tracker.id,
+            week_ending=date(2026, 10, 23),
+            trigger="manual",
+            status="sent",
+            recipients=[],
+            sent_at=datetime(2026, 10, 23, 16, 2, tzinfo=timezone.utc),
+        )
+    )
+    db.commit()
+    assert "Report sent on Fri 23 Oct at 17:02" in client.get(url).get_data(as_text=True)
+    # A week with nothing sent and its send time long gone.
+    assert "Report was due on Fri 16 Oct at 17:00" in client.get(url.replace("23", "16")).get_data(as_text=True)
 
 
 def test_inputs_page_cards(client, db, tracker_factory, user_factory, grant):

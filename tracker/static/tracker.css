@@ -428,6 +428,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .figure-sub { color: var(--muted); font-size: .8rem; }
 .figure-sub.tone-success { color: var(--success); } .figure-sub.tone-danger { color: var(--danger); }
 .inputs-page .access-card-head { background: none; }
+.inputs-page .access-tiles { margin-bottom: 0; }
 .inputs-form .form-alert { margin: 16px 20px 0; }
 .settings-actions-note.is-dirty { color: var(--primary); font-weight: 600; }
 

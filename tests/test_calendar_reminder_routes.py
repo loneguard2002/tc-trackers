@@ -518,3 +518,23 @@ def test_the_card_names_no_next_date_after_the_last_week(client, db, setup, mail
     db.commit()
     post(client, url(tracker), {"enabled": "on"})
     assert "Next:" not in card_of(page_text(client, tracker))
+
+
+def test_the_history_next_date_skips_a_reminder_that_has_gone(client, db, setup, mail, monkeypatch):
+    from tracker.entries import views
+
+    tracker, _ = setup
+    tracker.first_week_ending, tracker.last_week_ending = date(2026, 11, 6), date(2026, 11, 27)
+    db.commit()
+    post(client, url(tracker), {"enabled": "on"})
+    for moment, expected in (
+        (datetime(2026, 11, 20, 8, 44, tzinfo=timezone.utc), "Fri 20 Nov"),
+        (datetime(2026, 11, 20, 8, 45, tzinfo=timezone.utc), "Fri 27 Nov"),
+    ):
+        monkeypatch.setattr(
+            views, "datetime", type("D", (datetime,), {"now": classmethod(lambda cls, tz=None: moment)})
+        )
+        assert f"Next: {expected}" in client.get(f"/trackers/{tracker.id}/calendar-reminder/history").get_data(
+            as_text=True
+        )
+        assert f"Next: {expected}, 08:45" in page_text(client, tracker)
