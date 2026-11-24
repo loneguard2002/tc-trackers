@@ -176,32 +176,30 @@ def test_home_card_for_a_tracker_not_started_yet(client, logged_in_user, tracker
     tracker = tracker_factory(name="Later", first_week_ending=date(2099, 1, 2), last_week_ending=date(2099, 3, 27))
     grant(logged_in_user, tracker, "viewer")
     html = client.get("/").get_data(as_text=True)
-    assert "Starts 02 Jan 2099" in html and "not written" not in html and 'class="spark"' not in html
+    assert "Starts 02 Jan 2099" in html and "not written" not in html and "card-todo" not in html
 
 
 def test_home_card_shows_the_target_when_there_is_no_forecast(client, logged_in_user, tracker_factory, grant):
     tracker = tracker_factory(name="Mine", target_completion=date(2026, 12, 18))
     grant(logged_in_user, tracker, "viewer")
     card = cards_by_name(client.get("/").get_data(as_text=True))["Mine"]
-    assert '<span class="fact-value">Not yet</span>' in card
-    assert '<span class="fact-sub fact-line">Target 18 Dec 2026</span>' in card
+    assert "<strong>No forecast yet</strong>" in card
+    assert "<span>Target</span><strong>18 Dec 2026</strong>" in card
+    assert "<span>Forecast</span><strong>Not yet</strong>" in card
 
 
-def test_home_shows_the_chart_key_under_each_chart(client, logged_in_user, db, tracker_factory, grant):
-    tracker = tracker_factory(name="Charted")
+def test_home_card_draws_progress_against_the_plan_and_a_timeline(client, logged_in_user, db, tracker_factory, grant):
+    tracker = tracker_factory(name="Timed", target_completion=date(2026, 12, 18))
     grant(logged_in_user, tracker, "viewer")
     group = make_group(db, tracker, baseline=40)
     add_entry(db, tracker, group, date(2026, 9, 3), 10, date(2026, 9, 4))
-    later = tracker_factory(name="Uncharted", first_week_ending=date(2099, 1, 2), last_week_ending=date(2099, 3, 27))
-    grant(logged_in_user, later, "viewer")
-    html = client.get("/").get_data(as_text=True)
-    assert 'class="spark"' in html and "Latest week" not in html
-    assert html.count('class="spark-key') == 1  # only the card with a chart has a key
-    card = cards_by_name(html)["Charted"]
-    # The key sits under the chart and above the Forecast, This week and Red risks facts.
-    assert card.index('class="spark"') < card.index('class="spark-key card-key"') < card.index("tracker-card-facts")
-    assert "Done, below target" in card and "Weekly target" in card
-    assert "spark-key" not in cards_by_name(html)["Uncharted"]
+    card = cards_by_name(client.get("/").get_data(as_text=True))["Timed"]
+    assert 'class="card-ring' in card and '<span class="card-ring-pct">25%</span>' in card
+    # The timeline comes before the list of dates beside it, then the facts.
+    assert card.index('class="card-timeline"') < card.index('class="card-dates"') < card.index("tracker-card-facts")
+    for label in ("Start", "Today", "Target", "Forecast"):
+        assert f"<span>{label}</span>" in card
+    assert "Last entry" in card and "03 Sep 2026" in card
 
 
 # --- F. Status and alerts -------------------------------------------------------------------------------------------
@@ -247,8 +245,9 @@ def test_cards_flag_a_status_the_forecast_disagrees_with(client, logged_in_admin
     page = client.get("/").get_data(as_text=True)
     by_name = cards_by_name(page)
     assert "Green, but the forecast is 3 weeks behind target</span>" in by_name["Slipping"]
-    assert 'class="alert alert-warn"' in by_name["Slipping"] and 'data-disagree="true"' in by_name["Slipping"]
-    assert "tracker-card-disagree" in by_name["Slipping"] and 'class="verdict-pill is-warning"' in by_name["Slipping"]
+    assert 'class="card-todo"' in by_name["Slipping"] and 'data-disagree="true"' in by_name["Slipping"]
+    assert "tracker-card-disagree" in by_name["Slipping"] and "forecast disagrees" in by_name["Slipping"]
+    assert '<li class="is-note"><span>Red, but the forecast' in by_name["Worried"]
     assert "Red, but the forecast is on track for target</span>" in by_name["Worried"]
     assert 'data-disagree="false"' in by_name["Worried"] and "tracker-card-disagree" not in by_name["Worried"]
     assert "but the forecast" not in by_name["Steady"] + by_name["Amber one"]

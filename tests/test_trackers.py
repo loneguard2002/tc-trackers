@@ -361,40 +361,52 @@ def test_viewer_cannot_open_groups(client, logged_in_user, db, tracker_factory, 
     assert client.get(f"/trackers/{tracker.id}/groups").status_code == 404
 
 
-def test_spark_chart_takes_the_last_completed_weeks_and_marks_short_weeks():
+def test_countdown_plan_is_the_targets_due_by_the_report_week():
+    from types import SimpleNamespace
+
     from tracker.engine.calc import build_week_rows
     from tracker.engine.weeks import week_endings
-    from tracker.trackers.views import SPARK_WEEKS, spark_chart
+    from tracker.trackers.views import _plan_fraction
 
     weeks = week_endings(date(2026, 9, 4), date(2026, 11, 6))
-    targets = {w: 10 for w in weeks}
-    actuals = {w: (5 if i % 2 else 12) for i, w in enumerate(weeks)}
-    rows = build_week_rows(weeks, targets, actuals, 200, 0, 3, weeks[-1], 4)
-    chart = spark_chart(rows)
-    assert len(chart["bars"]) == SPARK_WEEKS and chart["weeks"] == SPARK_WEEKS
-    assert [b["low"] for b in chart["bars"]] == [i % 2 == 1 for i in range(2, 10)]
-    assert chart["target"].count("M") == SPARK_WEEKS
-    assert spark_chart(build_week_rows(weeks, targets, {}, 200, 0, 3, date(2026, 9, 1), 4)) is None
+    rows = build_week_rows(weeks, {w: 10 for w in weeks}, {}, 200, 0, 3, weeks[3], 4)
+    headline = SimpleNamespace(total_scope=200, report_week=weeks[3])
+    assert _plan_fraction(rows, headline) == 0.2  # four weeks of 10 out of 200
+    gappy = build_week_rows(weeks, {w: 10 for w in weeks[1:]}, {}, 200, 0, 3, weeks[3], 4)
+    assert _plan_fraction(gappy, headline) is None  # a week with no target: no full plan to compare with
+    assert _plan_fraction(rows, SimpleNamespace(total_scope=0, report_week=weeks[3])) is None
 
 
-def test_spark_chart_keeps_its_eight_slots_when_few_weeks_are_done():
-    from tracker.engine.calc import build_week_rows
-    from tracker.engine.weeks import week_endings
-    from tracker.trackers.views import SPARK_WEEKS, spark_chart
+def test_countdown_ring_shades_the_shortfall_and_ticks_the_plan():
+    from tracker.trackers.views import _ring
 
-    weeks = week_endings(date(2026, 9, 4), date(2026, 11, 6))
-    targets = {w: 10 for w in weeks}
-    actuals = {w: 12 for w in weeks}
-    full = spark_chart(build_week_rows(weeks, targets, actuals, 200, 0, 3, weeks[-1], 4))
-    chart = spark_chart(build_week_rows(weeks, targets, actuals, 200, 0, 3, weeks[1], 4))
-    assert chart["weeks"] == 2 and len(chart["bars"]) == 2
-    assert {b["width"] for b in chart["bars"]} == {full["bars"][0]["width"]}
-    assert [b["x"] for b in chart["bars"]] == [b["x"] for b in full["bars"][-2:]]
-    assert len(chart["empty"]) == SPARK_WEEKS - 2 and full["empty"] == []
-    assert all(e["x"] < chart["bars"][0]["x"] for e in chart["empty"])
-    starts = [segment.split(",")[0] for segment in chart["target"].split(" ") if segment.startswith("M")]
-    full_starts = [segment.split(",")[0] for segment in full["target"].split(" ") if segment.startswith("M")]
-    assert starts == full_starts[-2:]
+    behind = _ring(0.16, 0.59)
+    assert behind["short"] > 0 and behind["short_offset"] == round(-behind["c"] * 0.16, 1) and not behind["ahead"]
+    assert behind["done"] == round(behind["c"] * 0.16, 1)
+    ahead = _ring(0.72, 0.6)
+    assert ahead["short"] == 0 and ahead["ahead"]
+    quarter = _ring(0.1, 0.25)["tick"]  # the ring starts at twelve o'clock, so a quarter is at three o'clock
+    assert (quarter["x1"], quarter["y1"], quarter["x2"], quarter["y2"]) == (94.0, 56.0, 111.0, 56.0)
+    assert _ring(0.3, None)["tick"] is None and _ring(0.3, None)["short"] == 0
+
+
+def test_countdown_timeline_marks_a_late_forecast_and_months():
+    from tracker.trackers.views import TIMELINE_PAD, TIMELINE_WIDTH, _timeline
+
+    start, today, last = date(2026, 9, 28), date(2026, 11, 24), date(2027, 1, 1)
+    late = _timeline(start, today, date(2027, 1, 3), date(2027, 8, 1), last)
+    assert TIMELINE_PAD < late["today"] < late["target"] < late["forecast"] < TIMELINE_WIDTH - TIMELINE_PAD
+    assert late["late"] == {"x": late["target"], "width": round(late["forecast"] - late["target"], 1)}
+    # Eleven months: every other month is labelled. A short line labels every month.
+    assert [label for _, label in late["months"]][:3] == ["Oct", "", "Dec"]
+    early = _timeline(start, today, date(2027, 1, 3), date(2026, 12, 20), last)
+    assert early["late"] is None and early["forecast"] < early["target"]
+    assert [label for _, label in early["months"]] == ["Oct", "Nov", "Dec", "Jan"]
+    unknown = _timeline(start, today, None, None, last)
+    assert unknown["target"] is None and unknown["forecast"] is None
+    # A forecast years away keeps the month labels to about ten, so they never touch.
+    far = _timeline(start, today, date(2027, 1, 3), date(2030, 6, 1), last)
+    assert len([label for _, label in far["months"] if label]) <= 10
 
 
 def test_archive_is_admin_only(client, logged_in_user, tracker_factory, grant):
