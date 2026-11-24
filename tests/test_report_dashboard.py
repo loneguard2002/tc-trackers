@@ -359,7 +359,6 @@ def entry(number, day, kind="moved"):
 
 def tiles_for(**overrides):
     target = overrides.pop("target", TARGET)
-    targets = overrides.pop("targets", [])
     report, _ = synthetic_report()
     values = dict(
         completed=375,
@@ -375,7 +374,7 @@ def tiles_for(**overrides):
     )
     values.update(overrides)
     report = replace(report, headline=replace(report.headline, **values))
-    return build_tiles(report, target, targets)
+    return build_tiles(report, target)
 
 
 def test_completed_tile():
@@ -396,7 +395,7 @@ def test_this_week_tile_against_target():
 
 def test_this_week_sparkline_covers_the_weeks_up_to_the_report_week():
     report, _ = synthetic_report()  # report week is the second of four; two weeks have actuals
-    spark = build_tiles(report, None, [])["week"]["spark"]
+    spark = build_tiles(report, None)["week"]["spark"]
     assert len(spark["points"].split()) == 2
     assert spark["last_x"] and spark["last_y"]
 
@@ -404,20 +403,20 @@ def test_this_week_sparkline_covers_the_weeks_up_to_the_report_week():
 def test_this_week_tile_in_a_week_in_progress_says_so_far():
     report, _ = synthetic_report(in_progress=True)
     report = replace(report, headline=replace(report.headline, this_week_actual=28, this_week_target=40))
-    week = build_tiles(report, TARGET, [])["week"]
+    week = build_tiles(report, TARGET)["week"]
     assert (week["value"], week["unit"]) == ("28", "so far of 40 target")
     assert week["sub"] == "12 to go · next week 10" and week["tone"] == ""
     ahead = replace(report, headline=replace(report.headline, this_week_actual=42, this_week_target=40))
-    assert build_tiles(ahead, TARGET, [])["week"]["sub"] == "+2 against target · next week 10"
+    assert build_tiles(ahead, TARGET)["week"]["sub"] == "+2 against target · next week 10"
     unplanned = replace(report, headline=replace(report.headline, this_week_actual=28, this_week_target=None))
-    assert build_tiles(unplanned, TARGET, [])["week"]["unit"] == "so far"
+    assert build_tiles(unplanned, TARGET)["week"]["unit"] == "so far"
 
 
 def test_this_week_sparkline_leaves_out_the_week_in_progress():
     report, _ = synthetic_report()
     rows = list(report.rows)
     rows[1] = replace(rows[1], state=IN_PROGRESS)
-    spark = build_tiles(replace(report, rows=rows), None, [])["week"]["spark"]
+    spark = build_tiles(replace(report, rows=rows), None)["week"]["spark"]
     assert len(spark["points"].split()) == 1
 
 
@@ -457,26 +456,17 @@ def test_forecast_tile_against_the_target():
     assert tiles_for(forecast_completion=None)["forecast"]["value"] == "–"
 
 
-def test_forecast_tile_lists_where_the_target_moved():
-    first, second, third = date(2026, 12, 4), date(2026, 12, 11), TARGET
-    assert tiles_for()["forecast"]["moved"] is None
-    one = tiles_for(targets=[entry(1, first, "set"), entry(2, second)])["forecast"]["moved"]
-    assert one == "Target moved once: 4 Dec → 11 Dec"
-    two = tiles_for(targets=[entry(1, first, "set"), entry(2, second), entry(3, third)])["forecast"]["moved"]
-    assert two == "Target moved twice: 4 Dec → 11 Dec → 18 Dec"
-    three = tiles_for(targets=[entry(1, first), entry(2, second), entry(3, third), entry(4, TARGET)])["forecast"]
-    assert three["moved"].startswith("Target moved 4 times: ")
-    assert tiles_for(targets=[entry(1, first, "set")])["forecast"]["moved"] is None  # set once, never moved
+def test_forecast_tile_does_not_list_where_the_target_moved(client, db, small_tracker, viewer):
+    # The owner's call: the moves are on the chart and in "Target date changes", not on the tile.
+    from report_helpers import add_target_change
 
-
-def test_forecast_tile_after_a_removal_counts_only_what_it_lists():
-    first, second, third, fourth = date(2026, 12, 4), date(2026, 12, 11), TARGET, date(2026, 12, 25)
-    history = [entry(1, first, "set"), entry(2, second), entry(3, None, "removed")]
-    assert tiles_for(targets=history)["forecast"]["moved"] is None  # no target now
-    again = history + [entry(4, third, "set")]
-    assert tiles_for(targets=again)["forecast"]["moved"] == "Target set again: 18 Dec"
-    moved = again + [entry(5, fourth)]
-    assert tiles_for(targets=moved)["forecast"]["moved"] == "Target moved once: 18 Dec → 25 Dec"
+    seed(db, small_tracker)
+    add_target_change(
+        db, small_tracker, date(2026, 12, 18), date(2026, 12, 25), datetime(2026, 9, 9, 9, tzinfo=timezone.utc)
+    )
+    html = page(client, small_tracker)
+    assert "Target date changes" in html and "Target moved" not in html
+    assert "moved" not in tiles_for()["forecast"]
 
 
 def test_target_note_says_back_to_the_first_date_only_when_it_is():
@@ -744,13 +734,13 @@ def response_ok(html: str) -> bool:
 
 def test_timeline_never_draws_backwards():
     report, _ = synthetic_report()  # report week 11 Sep 2026
-    early = build_tiles(report, date(2026, 8, 1), [])["forecast"]["timeline"]
+    early = build_tiles(report, date(2026, 8, 1))["forecast"]["timeline"]
     assert float(early["target"]) >= float(early["start"])
     past = replace(report, headline=replace(report.headline, forecast_completion=date(2026, 8, 1)))
-    line = build_tiles(past, date(2026, 12, 18), [])["forecast"]["timeline"]
+    line = build_tiles(past, date(2026, 12, 18))["forecast"]["timeline"]
     assert float(line["forecast"]) >= float(line["start"])
     assert float(line["end"]) >= float(line["start"])
-    both = build_tiles(past, date(2026, 7, 1), [])["forecast"]["timeline"]
+    both = build_tiles(past, date(2026, 7, 1))["forecast"]["timeline"]
     assert float(both["end"]) >= float(both["start"])
 
 
@@ -794,7 +784,7 @@ def test_the_first_move_of_a_target_set_before_recording_began(client, db, small
     assert len(items) == 2
     assert "<s>18 Dec</s>" in items[0] and "In place before changes were recorded." in items[0]
     assert "<s>" not in items[1] and "Moved on 9 Sep, 7 days later. No reason given." in text_of(items[1])
-    assert "Target moved once: 18 Dec → 25 Dec" in flat
+    assert "Target moved" not in flat
     # The week before the change answers against the date in place then, with no list.
     before = page(client, small_tracker, WEEKS[0])
     assert "Target date changes" not in before and "18 Dec target" in text_of(before)

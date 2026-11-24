@@ -1627,13 +1627,13 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .glance-tile-visual .bar { height: 10px; }
 .glance-tile-sub { margin: 0; color: var(--muted); font-size: .85rem; }
 .glance-tile-sub.tone-success { color: var(--success); } .glance-tile-sub.tone-danger { color: var(--danger); }
-.glance-tile-moved { color: var(--text); }
 .glance-spark { height: 28px; } .glance-spark-line { stroke: var(--g-actual); } .glance-spark-dot { fill: var(--g-actual); }
 .glance-rate-bar { height: 12px; } .glance-rate-mark { fill: var(--text); }
 .glance-timeline { height: 24px; } .glance-timeline-line { stroke: color-mix(in srgb, var(--text) 25%, transparent); }
 .glance-timeline-target { fill: var(--text); } .glance-timeline-forecast { fill: var(--g-forecast); }
-.glance-main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start; }
-.glance-side { display: grid; gap: 16px; min-width: 0; }
+/* The chart across the full width; Status and Top risks side by side under it, each two tile columns wide. */
+.glance-main { display: grid; gap: 16px; }
+.glance-side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; min-width: 0; }
 .glance-card { padding: 16px 18px; }
 .glance-card h2 { margin: 0 0 4px; font-size: 1rem; }
 .glance-note { margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
@@ -1661,7 +1661,7 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .glance-location-name { min-width: 0; overflow-wrap: anywhere; }
 .glance-location-num { margin-left: auto; font-size: .85rem; }
 .glance-location-note { margin: 4px 0 0; color: var(--muted); font-size: .8rem; }
-@media (max-width: 900px) { .glance-main { grid-template-columns: 1fr; } .glance-locations-grid { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .glance-side { grid-template-columns: 1fr; } .glance-locations-grid { grid-template-columns: 1fr; } }
 .glance-chart .chart-host { margin: 8px 0 0; }
 .glance-targets { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .glance-card .glance-targets-title { margin: 0; font-size: .95rem; }
