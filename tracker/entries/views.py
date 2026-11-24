@@ -10,14 +10,32 @@ from datetime import date, datetime, timezone
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
-from flask import Response, abort, flash, g, redirect, render_template, request, session, url_for
+from flask import (
+    Response,
+    abort,
+    flash,
+    g,
+    get_template_attribute,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import current_user, require_tracker_role
-from ..calendar_invites.ics import build_calendar, inputs_url, series_for
-from ..calendar_invites.service import email_set_up, record_event, sync_reminder
+from ..calendar_invites.ics import build_calendar, describe_series, fingerprint, inputs_url, series_for
+from ..calendar_invites.service import (
+    EVENT_GROUPS,
+    EVENT_LABELS,
+    email_set_up,
+    events_for,
+    record_event,
+    sync_reminder,
+)
 from ..db import get_session
 from ..engine.calc import COMPLETE
 from ..engine.weeks import in_progress_week, week_endings
@@ -599,6 +617,68 @@ def calendar_reminder_ics(tracker_id: int):
         mimetype="text/calendar",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+def _history_context(tracker: Tracker, db, user: User) -> dict:
+    """What the history shows: the reminder in a line and the person's own events, newest first."""
+    zone = ZoneInfo(tracker.send_timezone)
+    row = db.get(CalendarReminder, (user.id, tracker.id))
+    series = series_for(tracker, user, inputs_url(tracker.id))
+    enabled = bool(row and row.enabled)
+    if not enabled:
+        state = "Off"
+    elif row.sent_state == "sent" and row.sent_fingerprint == fingerprint(series):
+        state = "On \u00b7 up to date"
+    else:
+        state = "On \u00b7 not sent yet"
+    today = datetime.now(zone).date()
+    upcoming = next((w for w in week_endings(tracker.first_week_ending, tracker.last_week_ending) if w >= today), None)
+    events = []
+    for event in events_for(db, user.id, tracker.id):
+        local = event.at.astimezone(zone)
+        label = EVENT_LABELS[event.kind]
+        events.append(
+            {
+                "when": f"{local.day} {local:%b %Y}, {local:%H:%M}",
+                # Events of one request share a time (the transaction start), so the id breaks the tie.
+                "iso": f"{event.at.astimezone(timezone.utc):%Y-%m-%dT%H:%M:%S}.{event.id:012d}",
+                "label": label,
+                "detail": event.detail,
+                "group": EVENT_GROUPS[event.kind],
+                "search": f"{label} {event.detail}".lower(),
+            }
+        )
+    return {
+        "tracker": tracker,
+        "enabled": enabled,
+        "state": state,
+        "description": describe_series(series),
+        "next_date": f"{upcoming:%a} {upcoming.day} {upcoming:%b %Y}" if enabled and upcoming else None,
+        "events": events,
+        "email": user.email,
+    }
+
+
+@bp.get("/trackers/<int:tracker_id>/calendar-reminder/history")
+@require_tracker_role("editor")
+def calendar_reminder_history(tracker_id: int):
+    """The person's reminder history on a page of its own (the panel's content, for visitors without JavaScript)."""
+    refused = _refuse_if_archived(g.tracker, "entries.inputs")
+    if refused:
+        return refused
+    context = _history_context(g.tracker, get_session(), current_user())
+    return render_template("entries/reminder_history.html", **{**context, **_page(g.tracker, "Weekly update")})
+
+
+@bp.get("/trackers/<int:tracker_id>/calendar-reminder/history/panel")
+@require_tracker_role("editor")
+def calendar_reminder_history_panel(tracker_id: int):
+    """The history as a fragment for the side panel."""
+    refused = _refuse_if_archived(g.tracker, "entries.inputs")
+    if refused:
+        return refused
+    context = _history_context(g.tracker, get_session(), current_user())
+    return get_template_attribute("entries/_reminder_history.html", "history_panel")(**context)
 
 
 def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[str], status: int):

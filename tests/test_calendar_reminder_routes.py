@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 from conftest import post, sign_in
@@ -326,3 +327,133 @@ def test_letters_without_a_decomposition_are_mapped_in_the_file_name(client, db,
     db.commit()
     response = client.get(ics_url(tracker))
     assert response.headers["Content-Disposition"] == 'attachment; filename="Strasse O reminder.ics"'
+
+
+def history_url(tracker, panel=False) -> str:
+    return url(tracker, "/history/panel" if panel else "/history")
+
+
+def next_friday(tracker) -> date:
+    today = datetime.now(ZoneInfo(tracker.send_timezone)).date()
+    return today + timedelta(days=(4 - today.weekday()) % 7)
+
+
+def row_attributes(html: str) -> list[dict]:
+    return [dict(re.findall(r'(data-[a-z-]+)="([^"]*)"', tag)) for tag in re.findall(r"<tr data-status[^>]*>", html)]
+
+
+def test_a_viewer_cannot_reach_either_history_route(client, db, setup, user_factory, grant):
+    tracker, _ = setup
+    viewer = user_factory()
+    grant(viewer, tracker, "viewer")
+    sign_in(client, viewer)
+    assert client.get(history_url(tracker)).status_code == 404
+    assert client.get(history_url(tracker, panel=True)).status_code == 404
+
+
+def test_an_archived_tracker_refuses_the_history(client, db, setup):
+    tracker, _ = setup
+    tracker.status = "archived"
+    db.commit()
+    assert client.get(history_url(tracker)).status_code == 302
+    assert client.get(history_url(tracker, panel=True)).status_code == 302
+
+
+def test_the_panel_lists_only_the_persons_own_events_newest_first(client, db, setup, mail, user_factory, grant):
+    tracker, person = setup
+    other = user_factory()
+    grant(other, tracker, "editor")
+    service.record_event(db, other.id, tracker.id, "failed", "Somebody else's trouble")
+    db.commit()
+    post(client, url(tracker), {"enabled": "on"})
+    post(client, url(tracker, "/resend"))
+    client.get(ics_url(tracker))
+    html = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+    assert "Somebody else" not in html
+    assert "<html" not in html and "data-panel-history" in html
+    rows = row_attributes(html)
+    assert [r["data-sort-what"] for r in rows] == ["Downloaded", "Update sent", "Invite sent", "Switched on"]
+    assert [r["data-status"] for r in rows] == ["download", "sent", "sent", "change"]
+    assert all(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{12}", r["data-sort-when"]) for r in rows)
+    assert rows[0]["data-search"] == "downloaded fit-out reminder.ics"
+    assert re.search(r"<td>\d{1,2} [A-Z][a-z]{2} \d{4}, \d\d:\d\d</td>", html)
+    assert 'aria-sort="ascending"' not in html and "data-sort-default" not in html
+
+
+def test_the_panel_table_keeps_out_of_the_address_and_the_page_does_not(client, setup, mail):
+    tracker, _ = setup
+    post(client, url(tracker), {"enabled": "on"})
+    panel = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+    assert "data-no-address" in panel and 'data-state-prefix="history-"' in panel
+    page = client.get(history_url(tracker)).get_data(as_text=True)
+    assert "data-no-address" not in page and "Switch the reminder off" not in page
+    assert "<html" in page and 'id="history-table"' in page
+
+
+def test_the_panel_has_chips_with_counts_and_a_footer(client, db, setup, mail):
+    tracker, person = setup
+    post(client, url(tracker), {"enabled": "on"})
+    service.record_event(db, person.id, tracker.id, "failed", "Mail host refused")
+    db.commit()
+    client.get(ics_url(tracker))
+    html = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+    chips = re.findall(r'data-status="(\w+)" aria-pressed="\w+">(\w+) <span class="chip-count"[^>]*>(\d+)', html)
+    assert chips == [
+        ("all", "All", "4"),
+        ("sent", "Sent", "1"),
+        ("failed", "Failed", "1"),
+        ("download", "Downloads", "1"),
+    ]
+    assert "Showing 4 of 4 events" in html
+    assert "No events match." in html and "Clear filters" in html
+
+
+def test_the_footer_says_event_for_one(client, db, setup):
+    tracker, person = setup
+    service.record_event(db, person.id, tracker.id, "downloaded", "Fit-out reminder.ics")
+    db.commit()
+    html = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+    assert "Showing 1 of 1 event" in html and "Showing 1 of 1 events" not in html
+
+
+def summary_of(html: str) -> str:
+    return re.sub(r"\s+", " ", re.search(r'<p class="history-state">(.*?)</p>', html, flags=re.S).group(1))
+
+
+def test_the_summary_follows_the_reminder(client, db, setup, mail):
+    tracker, person = setup
+    off = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+    assert "<strong>Off</strong>" in summary_of(off) and "Next:" not in off
+    assert "Nothing has happened to this reminder yet." in off
+    post(client, url(tracker), {"enabled": "on"})
+    on = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+    assert "On \u00b7 up to date" in summary_of(on)
+    assert "Fridays, 08:45 to 09:00" in on
+
+
+def test_the_summary_says_not_sent_yet_without_email(client, db, setup, monkeypatch):
+    tracker, _ = setup
+    monkeypatch.setattr(smtp, "get_smtp_config", lambda session=None: {})
+    post(client, url(tracker), {"enabled": "on"})
+    html = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+    assert "On \u00b7 not sent yet" in summary_of(html)
+
+
+def test_the_summary_names_the_next_week_ending_and_none_after_the_last(client, db, setup, mail):
+    tracker, _ = setup
+    friday = next_friday(tracker)
+    tracker.first_week_ending, tracker.last_week_ending = friday - timedelta(days=14), friday + timedelta(days=14)
+    db.commit()
+    post(client, url(tracker), {"enabled": "on"})
+    html = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+    assert f"Next: Fri {friday.day} {friday:%b %Y}" in html
+    tracker.first_week_ending, tracker.last_week_ending = friday - timedelta(days=28), friday - timedelta(days=7)
+    db.commit()
+    assert "Next:" not in client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+
+
+def test_the_inputs_page_links_to_the_history(client, setup):
+    tracker, _ = setup
+    html = page_text(client, tracker)
+    assert f'href="{history_url(tracker)}" data-history-url="{history_url(tracker, panel=True)}"' in html
+    assert 'id="history-panel"' in html and "reminder-history.js" in html and "lists.js" in html
