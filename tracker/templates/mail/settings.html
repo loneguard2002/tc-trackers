@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, field, icon, rag_dot %}
+{% from "lists/_table.html" import search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='email.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
@@ -129,20 +131,41 @@
     <section class="settings-section" id="recent" aria-labelledby="section-recent">
       <header class="settings-section-head">
         <h2 id="section-recent">Recent sends</h2>
-        <p>The last ten sends, newest first, with any error and when the next attempt is due.</p>
+        <p>Every send, newest first: who it went to, any error and when the next attempt is due.</p>
       </header>
       {% if recent %}
-      <div class="section-table">
-        <table class="table">
-          <thead><tr><th>Week ending</th><th>Trigger</th><th>Status</th><th class="num">Recipients</th><th>Attempts</th><th>Next attempt</th><th>Error</th></tr></thead>
+      {% set send_counts = {'all': recent|length, 'sent': recent|selectattr('send.status', 'equalto', 'sent')|list|length, 'queued': recent|selectattr('send.status', 'equalto', 'queued')|list|length, 'failed': recent|selectattr('send.status', 'equalto', 'failed')|list|length} %}
+      <div class="list-tools">
+        {{ search_box('recent-sends', 'Search sends') }}
+        {{ status_filters('recent-sends', 'sends', (('all', 'All'), ('sent', 'Sent'), ('queued', 'Queued'), ('failed', 'Failed')), send_counts, alerts=('failed',)) }}
+        {{ clear_filters('recent-sends') }}
+      </div>
+      <div class="section-table register" data-table-frame>
+        <table id="recent-sends" class="table recent-sends" data-sortable data-state-prefix="sends-">
+          <thead><tr>{{ sort_header('Week ending', 'week', type='date') }}{{ sort_header('Trigger', 'trigger') }}{{ sort_header('Status', 'status') }}<th scope="col">Sent to</th>{{ sort_header('Attempts', 'attempts', 'num', type='number') }}<th scope="col">Next attempt</th><th scope="col">Error</th></tr></thead>
           <tbody>
-          {% for s in recent %}
-            <tr><td>{{ s.week_ending|fdate }}</td><td>{{ s.trigger|capitalize }}</td><td><span class="status-pill status-{{ s.status }}">{{ s.status|capitalize }}</span></td><td class="num">{{ s.recipients|length }}</td>
-              <td>{{ s.attempts }}</td><td>{{ s.next_attempt_at.strftime('%d %b %Y %H:%M') if s.next_attempt_at else '–' }}</td><td class="send-error">{{ s.error|dash }}</td></tr>
+          {% for row in recent %}
+          {% set s = row.send %}
+            <tr data-status="{{ s.status }}" data-search="{{ row.search }}" data-sort-week="{{ s.week_ending.isoformat() }}" data-sort-trigger="{{ s.trigger }}" data-sort-status="{{ s.status }}" data-sort-attempts="{{ s.attempts }}">
+              <td>{{ s.week_ending|fdate }}</td>
+              <td data-label="Trigger:">{{ s.trigger|capitalize }}</td>
+              <td data-label="Status:"><span class="status-pill status-{{ s.status }}">{{ s.status|capitalize }}</span></td>
+              <td data-label="Sent to:">
+                {%- set shown = row.people[:2] %}
+                {%- if row.people|length <= 2 %}<span class="send-people">{% for p in shown %}<span title="{{ p.email }}">{{ p.name }}</span>{{ ', ' if not loop.last }}{% else %}–{% endfor %}</span>
+                {%- else %}<details class="send-people"><summary>{% for p in shown %}<span title="{{ p.email }}">{{ p.name }}</span>{{ ', ' if not loop.last }}{% endfor %} +{{ row.people|length - 2 }} more</summary>
+                  <ul>{% for p in row.people %}<li>{{ p.name }}{% if p.name != p.email %} <span class="muted">{{ p.email }}</span>{% endif %}</li>{% endfor %}</ul></details>{% endif %}
+              </td>
+              <td class="num" data-label="Attempts:">{{ s.attempts }}</td>
+              <td data-label="Next attempt:">{{ s.next_attempt_at.strftime('%d %b %Y %H:%M') if s.next_attempt_at else '–' }}</td>
+              <td class="send-error" data-label="Error:">{{ s.error|dash }}</td>
+            </tr>
           {% endfor %}
           </tbody>
         </table>
+        {{ no_match('No sends match.', 'recent-sends') }}
       </div>
+      {{ table_pager('recent-sends', 'sends', 'send', recent|length) }}
       {% else %}<p class="empty-note">Nothing has been sent yet.</p>{% endif %}
     </section>
   </div>

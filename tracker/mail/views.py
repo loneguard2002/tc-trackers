@@ -7,8 +7,9 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from flask import current_app, flash, g, redirect, render_template, request, url_for
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import defer
 
 from ..audit import record
 from ..auth import current_user, require_tracker_role
@@ -16,7 +17,7 @@ from ..auth.roles import lead_in_charge
 from ..db import get_session
 from ..engine.weeks import week_endings
 from ..ids import parse_id
-from ..models import EmailTemplate, Recipient, ReportSend
+from ..models import EmailTemplate, Recipient, ReportSend, User
 from ..report import views as report_views
 from ..report.build import build_report, default_report_week
 from ..trackers.views import _refuse_if_archived
@@ -82,6 +83,37 @@ def _preview(tracker, week, values: dict) -> dict:
     }
 
 
+def _recent_sends(db, tracker) -> list[SimpleNamespace]:
+    """Every send of the tracker, newest first, with who it went to: a person's name where the address is a user's
+    (matched without regard to case), else the address. The stored PDFs are not loaded."""
+    sends = db.scalars(
+        select(ReportSend)
+        .options(defer(ReportSend.pdf))
+        .where(ReportSend.tracker_id == tracker.id)
+        .order_by(ReportSend.id.desc())
+    ).all()
+    addresses = {address.lower() for send in sends for address in send.recipients}
+    names = (
+        {
+            email.lower(): name
+            for email, name in db.execute(
+                select(User.email, User.full_name).where(func.lower(User.email).in_(addresses))
+            )
+        }
+        if addresses
+        else {}
+    )
+    rows = []
+    for send in sends:
+        people = [SimpleNamespace(email=a, name=names.get(a.lower(), a)) for a in send.recipients]
+        search = " ".join(
+            [send.week_ending.isoformat(), send.trigger, send.status, send.error or ""]
+            + [f"{p.name} {p.email}" for p in people]
+        )
+        rows.append(SimpleNamespace(send=send, people=people, search=search.lower()))
+    return rows
+
+
 def _page(tracker, week, form=None, status: int = 200):
     from ..sched.runner import next_send
 
@@ -91,9 +123,7 @@ def _page(tracker, week, form=None, status: int = 200):
         "subject": report_subject(db),
         "body_html": form["body_html"] if form else template.body_html if template else DEFAULT_BODY,
     }
-    recent = db.scalars(
-        select(ReportSend).where(ReportSend.tracker_id == tracker.id).order_by(ReportSend.id.desc()).limit(10)
-    ).all()
+    recent = _recent_sends(db, tracker)
     return (
         render_template(
             "mail/settings.html",
