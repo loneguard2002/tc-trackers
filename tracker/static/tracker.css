@@ -370,6 +370,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tracker-card-facts > div { min-width: 0; }
 .tracker-card-facts dt { color: var(--muted); font-size: .72rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
 .tracker-card-facts dd { display: grid; gap: 1px; margin: 0; }
+.fact-link { display: grid; gap: 1px; color: inherit; text-decoration: none; }  /* the open count reads as the link */
+.fact-link .fact-sub { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+.fact-link:hover .fact-sub { text-decoration-thickness: 2px; }
 .card-todo summary { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--warning) 11%, transparent); font-size: .875rem; font-weight: 700; list-style: none; cursor: pointer; }
 .card-todo summary::-webkit-details-marker { display: none; }
 .todo-count { display: grid; place-items: center; min-width: 22px; height: 22px; border-radius: 999px; background: var(--warning); color: var(--surface); font-size: .75rem; }
@@ -580,6 +583,7 @@ main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-heigh
 .subnav a:hover { color: var(--text); }
 .subnav a[aria-current="location"] { color: var(--text); text-decoration: underline 2px var(--primary); text-underline-offset: 6px; }
 .settings-section { scroll-margin-top: calc(var(--topbar-height) + var(--subnav-height) + 16px); }
+#risks { scroll-margin-top: calc(var(--sticky-top) + 16px); }  /* the home card's risk link lands on Top risks clear of the bars */
 .settings-section.is-current { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent); }
 @media (prefers-reduced-motion: no-preference) {
   :root:has(.subnav) { scroll-behavior: smooth; }
