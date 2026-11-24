@@ -71,11 +71,13 @@
 
 {# A progress bar drawn as SVG: the Content Security Policy blocks inline styles, so widths are attributes.
    ``extra`` draws a lighter band after the value (for example work that is ready but not yet complete). #}
-{% macro bar(value, total, extra=0, label='') -%}
+{#- ``start``: the part of ``value`` done before the tracker's first week, drawn lighter at the start of the fill. -#}
+{% macro bar(value, total, extra=0, label='', start=0) -%}
 {% set fill = [[(value or 0) / total * 100 if total else 0, 0]|max, 100]|min %}
 {% set more = [[((value or 0) + (extra or 0)) / total * 100 if total else 0, 0]|max, 100]|min %}
+{% set first = [[(start or 0) / total * 100 if total else 0, 0]|max, fill]|min %}
 <span class="bar"><svg viewBox="0 0 100 8" preserveAspectRatio="none" role="img" aria-label="{{ label }}">
-  <rect class="bar-track" width="100" height="8"/>{% if extra %}<rect class="bar-extra" width="{{ '%.2f'|format(more) }}" height="8"/>{% endif %}<rect class="bar-fill" width="{{ '%.2f'|format(fill) }}" height="8"/></svg></span>
+  <rect class="bar-track" width="100" height="8"/>{% if extra %}<rect class="bar-extra" width="{{ '%.2f'|format(more) }}" height="8"/>{% endif %}<rect class="bar-fill" width="{{ '%.2f'|format(fill) }}" height="8"/>{% if start %}<rect class="bar-start" width="{{ '%.2f'|format(first) }}" height="8"/>{% endif %}</svg></span>
 {%- endmacro %}
 
 {# One settings row: the label and a short explanation on the left, the control (the call body) on the right.

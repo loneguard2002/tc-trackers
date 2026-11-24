@@ -186,6 +186,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .bar-track { fill: color-mix(in srgb, var(--text) 10%, transparent); }
 .bar-extra { fill: color-mix(in srgb, var(--primary) 35%, transparent); }
 .bar-fill { fill: var(--primary); }
+.bar-start { fill: color-mix(in srgb, var(--primary) 45%, var(--surface)); }  /* done before the first week, as in the split key */
 .stat-band { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); }
 .stat { display: grid; gap: 2px; align-content: start; min-width: 0; padding: 14px 18px; }
 .stat + .stat { border-left: 1px solid var(--border); }

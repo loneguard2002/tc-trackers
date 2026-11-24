@@ -128,8 +128,9 @@
         <li>
           <div class="group-progress-head">{% if gp.rag %}{{ rag_dot(gp.rag) }}{% endif %}<strong>{{ gp.name }}</strong>
             <span class="group-progress-num"><strong>{{ gp.deployed|num }}</strong> of {{ gp.baseline|num }} · {{ gp.pct_complete|pct }}</span></div>
-          {{ bar(gp.deployed, gp.baseline, extra=gp.ready_not_complete, label=gp.name ~ ': ' ~ (gp.pct_complete|pct) ~ ' complete') }}
+          {{ bar(gp.deployed, gp.baseline, extra=gp.ready_not_complete, start=gp.starting_completed, label=gp.name ~ ': ' ~ (gp.pct_complete|pct) ~ ' complete' ~ ((', ' ~ gp.starting_completed|num ~ ' done before the first week') if gp.starting_completed else '')) }}
           <p class="group-progress-meta">{{ gp.remaining|num }} left
+            {%- if gp.starting_completed %} · {{ gp.starting_completed|num }} done before the first week{% endif %}
             {%- if gp.ready_not_complete %} · {{ gp.ready_not_complete|num }} ready, not yet complete{% endif %}
             {%- if gp.planned_completion %} · planned {{ gp.planned_completion|fdate }}{% endif %}
             {%- if gp.comment %} · {{ gp.comment }}{% endif %}</p>
