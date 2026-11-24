@@ -264,6 +264,21 @@ class Tracker(Base):
     created_at: Mapped[datetime] = _now()
 
 
+class TargetChange(Base):
+    """One change of a tracker's target completion date: set, moved or removed, with who made it and why."""
+
+    __tablename__ = "target_changes"
+    __table_args__ = (Index("ix_target_changes_tracker_id_id", "tracker_id", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    tracker_id: Mapped[int] = mapped_column(ForeignKey("trackers.id", ondelete="CASCADE"))
+    changed_at: Mapped[datetime] = _now()
+    changed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    old_date: Mapped[date | None] = mapped_column(Date)
+    new_date: Mapped[date | None] = mapped_column(Date)
+    reason: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+
 class TrackerRegion(Base):
     __tablename__ = "tracker_regions"
     __table_args__ = (Index("ix_tracker_regions_region_id", "region_id"),)

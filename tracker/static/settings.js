@@ -241,8 +241,18 @@
   var saved = {};
   names.forEach(function (name) { saved[name] = value(name); });
 
+  // The reason for moving the target shows only once the date differs from the saved one (always, without JavaScript).
+  var targetField = els.target_completion;
+  var reasonBox = form.querySelector("[data-target-reason]");
+
+  function targetReason() {
+    if (!reasonBox || !targetField) return;
+    reasonBox.hidden = targetField.value === targetField.getAttribute("data-saved");
+  }
+
   function refresh() {
     general();
+    targetReason();
     period();
     forecast();
     schedule(saved);

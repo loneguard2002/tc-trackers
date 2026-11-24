@@ -73,8 +73,15 @@
       {% endcall %}
     </div>
     {% call field('Target completion', 'Optional. The forecast finish is compared with this date to judge whether the work is on track.', 'target_completion', 'field-short') %}
-    <input id="target_completion" name="target_completion" type="date" value="{{ form.get('target_completion', '') }}" aria-describedby="target_completion-help">
+    <input id="target_completion" name="target_completion" type="date" value="{{ form.get('target_completion', '') }}" aria-describedby="target_completion-help"{% if tracker %} data-saved="{{ tracker.target_completion.isoformat() if tracker.target_completion else '' }}"{% endif %}>
     {% endcall %}
+    {% if tracker %}
+    <div data-target-reason>
+      {% call field('Why is the target moving?', 'Optional. Recorded with the change, and shown on the report.', 'target_reason') %}
+      <textarea id="target_reason" name="target_reason" rows="2" maxlength="500" aria-describedby="target_reason-help">{{ form.get('target_reason', '') }}</textarea>
+      {% endcall %}
+    </div>
+    {% endif %}
     <div class="period-timeline" data-timeline hidden>
       <svg class="timeline" viewBox="0 0 600 46" preserveAspectRatio="none" role="img" aria-label="The tracker's weeks"></svg>
       <p class="timeline-ends"><span data-timeline-first></span><span data-timeline-last></span></p>
