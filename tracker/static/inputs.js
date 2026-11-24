@@ -16,7 +16,7 @@
   var headline = form.querySelector("#headline");
   var decisions = form.querySelector("#decisions");
   var counter = form.querySelector("[data-counter]");
-  var note = form.querySelector("[data-dirty-note]");
+  var note = document.querySelector("[data-dirty-note]");  // in the Save bar, outside the form
   var savedNote = note ? note.textContent : "";
 
   function status() {
