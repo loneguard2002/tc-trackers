@@ -165,21 +165,7 @@ def _needed_rate(remaining: int, target: date | None, week_ending: date) -> floa
     return remaining / weeks_left if weeks_left > 0 else None
 
 
-def _moved_text(targets: list[TargetEntry]) -> str | None:
-    """ "Target moved twice: 4 Dec → 11 Dec → 18 Dec" for the current target since it was last set; "Target set
-    again: 18 Dec" when it was set again after a removal and not moved since; nothing otherwise."""
-    if not targets or targets[-1].kind == "removed":
-        return None
-    removals = [i for i, e in enumerate(targets) if e.kind == "removed"]
-    run = targets[removals[-1] + 1 :] if removals else targets
-    count = moves(run)
-    if count == 0:
-        return f"Target set again: {_short(run[-1].date)}" if removals else None
-    times = {1: "once", 2: "twice"}.get(count, f"{count} times")
-    return f"Target moved {times}: {' → '.join(_short(e.date) for e in run)}"
-
-
-def build_tiles(report: Report, target: date | None, targets: list[TargetEntry]) -> dict:
+def build_tiles(report: Report, target: date | None) -> dict:
     """The four figure tiles. Each is a dict of the display strings and the numbers for its small visual."""
     h = report.headline
     completed = {
@@ -243,7 +229,6 @@ def build_tiles(report: Report, target: date | None, targets: list[TargetEntry])
         "sub": sub,
         "tone": "" if days is None else ("danger" if days > 0 else "success"),
         "timeline": _timeline(report.week_ending, forecast, target),
-        "moved": _moved_text(targets),
     }
     return {"completed": completed, "week": week, "rate": rate_tile, "forecast": forecast_tile}
 
@@ -378,7 +363,7 @@ def build_dashboard(session: Session, report: Report, today: date) -> Dashboard:
         needed=(inputs.decisions or None) if inputs else None,
         written_by=written_by,
         written_on=written_on,
-        tiles=build_tiles(report, target, targets),
+        tiles=build_tiles(report, target),
         statuses=statuses,
         status_summary=summarise_statuses(statuses),
         locations=_location_lines(report),
