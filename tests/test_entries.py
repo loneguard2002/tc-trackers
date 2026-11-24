@@ -451,13 +451,79 @@ def test_inputs_page_week_bar_deadline_follows_the_send(client, db, tracker_fact
 def test_inputs_page_cards(client, db, tracker_factory, user_factory, grant):
     tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
     html = client.get(f"/trackers/{tracker.id}/inputs?week=2026-10-16").get_data(as_text=True)
-    assert html.count('class="access-card-head"') == 2
-    commentary, reminder = html.split('class="access-card-head"')[1:]
+    assert html.count('class="access-card-head"') == 3
+    commentary, reminder, _past = html.split('class="access-card-head"')[1:]
     assert "Commentary" in commentary[:200] and "Calendar reminder" in reminder[:200]
     # The preview sits inside the Commentary card, above the Save bar.
     assert commentary.index("data-band") < commentary.index("settings-actions")
     assert "Preview: top of the report" in commentary
     assert "Use last week" not in html or html.index("Use last week") < html.index("data-band")
+
+
+def past_rows(html):
+    table = html[html.index('id="past-updates"') :]
+    table = table[: table.index("</table>")]
+    return re.findall(r"<tr data-status.*?</tr>", table, re.S)
+
+
+def test_past_updates_table(client, db, tracker_factory, user_factory, grant):
+    tracker, user, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    db.add_all(
+        [
+            ReportInput(
+                tracker_id=tracker.id,
+                week_ending=date(2026, 9, 4),
+                status="Green",
+                headline="On plan",
+                decisions="",
+                prepared_by=user.id,
+            ),
+            ReportInput(
+                tracker_id=tracker.id, week_ending=date(2026, 9, 11), status="Red", headline="Late", decisions="Staff"
+            ),
+            ReportInput(tracker_id=tracker.id, week_ending=date(2026, 9, 18), status=None, headline="No status yet"),
+        ]
+    )
+    db.commit()
+    html = client.get(f"/trackers/{tracker.id}/inputs?week=2026-10-02").get_data(as_text=True)
+    assert "Past updates" in html and "Each week's commentary as the report showed it." in html
+    assert '<span class="count-pill">4' in html
+    assert 'id="past-updates"' in html and 'data-state-prefix="past-"' in html
+    assert "Search updates" in html and "lists.js" in html
+    for label in ("Week ending", "Status", "Headline", "Needed from you", "Prepared by"):
+        assert label in html[html.index('id="past-updates"') :]
+    rows = past_rows(html)
+    # Newest first, so the week before the shown one leads.
+    assert [re.search(r'data-sort-week="([\d-]+)"', r).group(1) for r in rows] == [
+        "2026-09-25",
+        "2026-09-18",
+        "2026-09-11",
+        "2026-09-04",
+    ]
+    unwritten, nostatus, red, green = rows
+    assert 'data-status="unwritten"' in unwritten and "Not written" in unwritten
+    assert unwritten.count(">\u2013</td>") == 3 and "None" not in unwritten
+    assert 'data-status="nostatus"' in nostatus and "Status not set" in nostatus and "No status yet" in nostatus
+    assert 'data-status="red"' in red and "rag-dot-red" in red and "Staff" in red
+    assert 'data-status="green"' in green and "None" in green and user.full_name in green
+    assert f'href="/trackers/{tracker.id}/inputs?week=2026-09-04"' in green
+    # Counts: All 4, Green 1, Amber 0, Red 1, Not written 1 (the week without a status counts only in All).
+    chips = re.findall(r'data-status="(\w+)" aria-pressed="\w+">([^<]+) <span class="chip-count[^>]*>(\d+)', html)
+    assert [(c[1].strip(), c[2]) for c in chips if c[0] in ("all", "green", "amber", "red", "unwritten")][:5] == [
+        ("All", "4"),
+        ("Green", "1"),
+        ("Amber", "0"),
+        ("Red", "1"),
+        ("Not written", "1"),
+    ]
+    assert "Showing 4 of 4 weeks" in html
+
+
+def test_past_updates_first_week_has_no_table(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    html = client.get(f"/trackers/{tracker.id}/inputs?week=2026-09-04").get_data(as_text=True)
+    assert "Past updates" in html and "No earlier weeks yet." in html
+    assert 'id="past-updates"' not in html
 
 
 def test_inputs_week_outside_tracker_is_404(client, db, tracker_factory, user_factory, grant):
