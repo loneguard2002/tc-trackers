@@ -171,6 +171,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .flash-danger { color: var(--danger); }
 .flash-success { color: var(--success); }
 .flash-info { color: var(--info); }
+.flash-warning { color: var(--warning); }
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(128, 128, 128, 0.3); }
 .row-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
@@ -225,6 +226,20 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .report-panel-head p { margin: 2px 0 0; color: var(--muted); font-size: .85rem; }
 .report-empty { margin: 0; padding: 16px 18px; color: var(--muted); }
 .report-check { margin: 12px 18px 0; }
+/* Progress by group: one bar split into what is done before and since the first week, retired groups, work on the
+   tracker but not on a group, and what is left; a key with the numbers underneath. */
+.group-split { padding: 14px 18px 4px; }
+.group-split svg { display: block; width: 100%; height: 10px; border-radius: 5px; overflow: hidden; }
+.split-start, .split-start-key { fill: color-mix(in srgb, var(--primary) 45%, var(--surface)); background: color-mix(in srgb, var(--primary) 45%, var(--surface)); }
+.split-since, .split-since-key { fill: var(--primary); background: var(--primary); }
+.split-retired, .split-retired-key { fill: var(--muted); background: var(--muted); }
+.split-loose, .split-loose-key { fill: var(--warning); background: var(--warning); }
+.split-left-key { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.group-split-key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: .78rem; }
+.group-split-key li { display: inline-flex; align-items: center; gap: 6px; }
+.group-split-key strong { color: var(--text); }
+.key-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.group-progress-hidden { margin: 0; padding: 8px 18px 12px; color: var(--muted); font-size: .8rem; }
 .report-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
 .top-risks, .group-progress { margin: 0; padding: 0; list-style: none; }
 .top-risk { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 12px 18px 12px 20px; }
