@@ -177,7 +177,6 @@
       if (!params || !params.length) return "";
       var day = params[0].value[0];
       var index = days.indexOf(day);
-      var html = '<div class="chart-tooltip-title">Week ending ' + longDate(dayIso(day)) + "</div>";
       function row(id, name, value) {
         return '<div class="chart-tooltip-row"><span><span class="chart-swatch chart-swatch-' + id + '"></span>' + name +
           "</span><strong>" + value + "</strong></div>";
@@ -185,15 +184,31 @@
       var plan = index >= 0 ? s.planned_remaining[index] : null;
       var actual = actualAt[day];
       var forecast = index >= 0 && day >= lastActualDay ? s.forecast_remaining[index] : null;
-      if (actual !== undefined) html += row("actual", "Actual", formatValue("actual", actual));
-      if (plan !== null && plan !== undefined) html += row("plan", "Plan", formatValue("plan", plan));
-      if (forecast !== null && forecast !== undefined && actual === undefined) {
-        html += row("forecast", "Forecast", formatValue("forecast", forecast));
+      // Past the tracker's last week the only figure is the forecast's end point, when the pointer is on it.
+      if (index < 0) {
+        params.forEach(function (p) {
+          if (p.seriesId === "forecast" && p.value && p.value[0] === day) forecast = p.value[1];
+        });
       }
+      var rows = "";
+      if (actual !== undefined) rows += row("actual", "Actual", formatValue("actual", actual));
+      if (plan !== null && plan !== undefined) rows += row("plan", "Plan", formatValue("plan", plan));
+      if (forecast !== null && forecast !== undefined && actual === undefined) {
+        rows += row("forecast", "Forecast", formatValue("forecast", forecast));
+      }
+      // No figures, no tooltip: never a week's title on its own.
+      if (!rows) return "";
       var gap = actual !== undefined ? gapText(plan, actual, true) : "";
-      if (gap) html += '<div class="chart-tooltip-gap">' + gap + "</div>";
-      return html;
+      if (gap) rows += '<div class="chart-tooltip-gap">' + gap + "</div>";
+      return '<div class="chart-tooltip-title">Week ending ' + longDate(dayIso(day)) + "</div>" + rows;
     };
+  }
+
+  // Below this width the glance chart's direct labels wrap onto more lines.
+  var NARROW = 520;
+
+  function isNarrow(host) {
+    return (host.clientWidth || 600) < NARROW;
   }
 
   function buildGlance(data, entry) {
@@ -249,7 +264,8 @@
     // above and to the right of its point, the lower line's below and to the left, past the ring.
     var planAtReport = null;
     plan.forEach(function (p) { if (p[0] === reportDay) planAtReport = p[1]; });
-    var narrow = (entry.host.clientWidth || 600) < 520;
+    var narrow = isNarrow(entry.host);
+    entry.narrow = narrow;
     var actualAbove = last === null || planAtReport === null || last[1] >= planAtReport;
     function pointLabel(text, above, colour) {
       return { show: true, formatter: text, position: above ? "top" : "bottom", align: above ? "left" : "right",
@@ -269,8 +285,8 @@
       var width = entry.host.clientWidth || 600;
       var when = "on " + shortDate(data.forecast_end);
       // On a narrow chart the label wraps to three short lines, so it stays clear of the actual label beside it.
-      var text = width < 520 ? "Forecast:\nnone left\n" + when : "Forecast: none left " + when;
-      var longest = width < 520 ? 9 : text.length;
+      var text = narrow ? "Forecast:\nnone left\n" + when : "Forecast: none left " + when;
+      var longest = narrow ? 9 : text.length;
       // Above the end point, lifted by how far the dotted line rises over the width of the words, so it clears the line.
       var height = entry.host.clientHeight || 340;
       var perDay = (width - 80) / (high - low);
@@ -463,16 +479,24 @@
     }
     document.addEventListener("tracker:themechange", redraw);
     document.addEventListener("tracker:reportview", redraw);
+    // A chart whose labels depend on its width (the glance chart's, at NARROW) is rebuilt when it crosses that width,
+    // so its labels reflow; the others are only resized.
+    function resize() {
+      charts.forEach(function (entry) {
+        entry.chart.resize();
+        if (entry.narrow !== undefined && entry.narrow !== isNarrow(entry.host)) {
+          entry.built = buildOption(entry.name, data, entry);
+          entry.chart.setOption(entry.built.option, true);
+          entry.chart.setOption({ backgroundColor: surfaceColour(entry.host) });
+        }
+      });
+    }
     // Resize with the host, not just the window: collapsing the sidebar changes the width without a resize event.
     if (window.ResizeObserver) {
-      var observer = new window.ResizeObserver(function () {
-        charts.forEach(function (entry) { entry.chart.resize(); });
-      });
+      var observer = new window.ResizeObserver(resize);
       charts.forEach(function (entry) { observer.observe(entry.host); });
     } else {
-      window.addEventListener("resize", function () {
-        charts.forEach(function (entry) { entry.chart.resize(); });
-      });
+      window.addEventListener("resize", resize);
     }
   }
 
