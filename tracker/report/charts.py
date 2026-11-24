@@ -160,11 +160,11 @@ def week_label(report_week: date, in_progress: bool) -> str:
 
 
 def target_label_text(entry: TargetEntry, numbered: bool) -> str:
-    """An earlier target is just its number; the current one says "Target 18 Dec", behind its number when numbered."""
-    if entry.date is None or not entry.current:
+    """A numbered target is just its number in a ring (the current one has "Target 18 Dec" above the rings, drawn
+    apart); a lone target says "Target 18 Dec"."""
+    if entry.date is None or numbered or not entry.current:
         return str(entry.number)
-    words = f"Target {entry.date.day} {entry.date:%b}"
-    return f"{entry.number}  {words}" if numbered else words
+    return f"Target {entry.date.day} {entry.date:%b}"
 
 
 def glance_plan_points(rows: list[WeekRow]) -> tuple[list[date], list[float]]:
@@ -195,7 +195,8 @@ def remaining_glance_chart(
     forecast (dotted) down to none left, the report week, and a dashed line per target (earlier ones faint, numbered).
 
     Every artist has a ``gid`` (``glance-actual``, ``glance-target-2``, ...) so the SVG can be inspected."""
-    fig, ax = _new_figure("", unit_label)
+    fig, ax = _new_figure("", unit_title(unit_label, "left"))
+    ax.set_xlabel("Week ending", fontsize=8)
     px, py = glance_plan_points(rows)
     ax_, ay = actual_series(rows, "actual_remaining", report_week)
     if not (px or ax_):
@@ -272,15 +273,30 @@ def remaining_glance_chart(
             ha="center",
             va="bottom",
             annotation_clip=False,
-            color=GLANCE_INK if entry.current else "#5d6b83",
+            color=("white" if numbered else GLANCE_INK) if entry.current else "#5d6b83",
             bbox={
-                "boxstyle": "circle,pad=0.25" if faint else "round,pad=0.25",
-                "fc": "white",
+                "boxstyle": "circle,pad=0.25" if numbered else "round,pad=0.25",
+                "fc": GLANCE_INK if numbered and entry.current else "white",
                 "ec": GLANCE_INK,
                 "alpha": 1,
             },
         )
         label.set_gid(f"glance-target-label-{entry.number}")
+        if numbered and entry.current:
+            # Above the row of rings, ending at the line, so it never covers an earlier target's number.
+            title = ax.annotate(
+                f"Target {entry.date.day} {entry.date:%b}",
+                (entry.date, top * 1.12),
+                xytext=(4, 14),
+                textcoords="offset points",
+                fontsize=7,
+                fontweight="bold",
+                ha="right",
+                va="bottom",
+                annotation_clip=False,
+                color=GLANCE_INK,
+            )
+            title.set_gid("glance-target-title")
     weeks = [low + timedelta(days=7 * i) for i in range(((high - low).days // 7) + 1)]
     ticks, labels, last_month = [], [], None
     for week in weeks:
@@ -288,7 +304,10 @@ def remaining_glance_chart(
         labels.append(_day_label(week, week.month != last_month))
         last_month = week.month
     ax.set_xticks(ticks, labels, fontsize=7)
-    ax.legend(fontsize=8, frameon=False, loc="upper right", ncols=3)
+    # The key under the chart, clear of the target lines, in the order of the interactive chart's key.
+    handles = dict(zip(*reversed(ax.get_legend_handles_labels()), strict=True))
+    order = [name for name in ("Actual", "Plan", "Forecast") if name in handles]
+    fig.legend([handles[name] for name in order], order, fontsize=8, frameon=False, loc="outside lower center", ncols=3)
     return _render(fig, fmt)
 
 

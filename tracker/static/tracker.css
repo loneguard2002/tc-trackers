@@ -1601,6 +1601,9 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid currentColor; border-radius: 999px; color: var(--muted); font-size: .85rem; font-weight: 700; }
 .status-badge-red { color: var(--danger); } .status-badge-amber { color: var(--warning); } .status-badge-green { color: var(--success); }
 .status-badge .icon { width: 16px; height: 16px; }
+/* The status and "In progress" side by side, the same height, centred on one line. */
+.answer-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.status-badge-progress { color: var(--info); }
 .answer-sentence { margin: 12px 0 6px; font-size: 1.6rem; font-weight: 700; line-height: 1.25; }
 .answer-headline { margin: 0; color: var(--muted); }
 .answer-needed { align-self: start; padding: 16px 20px; border-radius: var(--radius); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
@@ -1648,22 +1651,39 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .glance-chip { display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 1px 8px; border: 1px solid currentColor; border-radius: 999px; color: var(--muted); font-size: .75rem; font-weight: 700; }
 .glance-chip .icon { width: 13px; height: 13px; }
 .glance-chip-green { color: var(--success); } .glance-chip-amber { color: var(--warning); } .glance-chip-red { color: var(--danger); }
-.glance-risks { display: grid; gap: 12px; margin: 12px 0 0; padding: 0; list-style: none; }
-.glance-risks li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; }
-.glance-risks p { margin: 0; overflow-wrap: anywhere; }
-.glance-risk-meta { color: var(--muted); font-size: .8rem; }
+.glance-risks { margin: 12px 0 0; }
+.glance-risk-title { overflow-wrap: anywhere; }
 .glance-key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: .8rem; }
 .glance-key li { display: inline-flex; align-items: center; gap: 6px; }
 .glance-locations .report-check { margin: 12px 0 0; }
-.glance-locations-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 32px; margin: 14px 0 0; padding: 0; list-style: none; }
+.glance-locations-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 32px; margin: 14px 0 0; padding: 0; list-style: none; }
 .glance-location { min-width: 0; }
 .glance-location-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 6px; }
 .glance-location-name { min-width: 0; overflow-wrap: anywhere; }
 .glance-location-num { margin-left: auto; font-size: .85rem; }
 .glance-location-note { margin: 4px 0 0; color: var(--muted); font-size: .8rem; }
-@media (max-width: 900px) { .glance-side { grid-template-columns: 1fr; } .glance-locations-grid { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .glance-side { grid-template-columns: 1fr; } .glance-locations-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .glance-locations-grid { grid-template-columns: 1fr; } }
 .glance-chart .chart-host { margin: 8px 0 0; }
-.glance-targets { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+/* Under the chart: "Target date changes" on the left, the key to the chart on the right. The key belongs to the
+   interactive chart (report-charts.js marks it "charts-ready"); the picture shown without JavaScript, or when the
+   chart data fails, carries its own. */
+.glance-chart-foot { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 32px; margin-top: 12px;
+  padding-top: 12px; border-top: 1px solid var(--border); }
+.glance-chart-foot.is-legend-only { margin-top: 4px; padding-top: 0; border-top: 0; }
+.glance-targets { flex: 1 1 24rem; min-width: 0; }
+.glance-legend, .glance-chart-foot.is-legend-only { display: none; }
+.report-glance.charts-ready:not(.charts-failed) .glance-legend,
+.report-glance.charts-ready:not(.charts-failed) .glance-chart-foot.is-legend-only { display: flex; }
+.glance-legend { flex-wrap: wrap; gap: 6px 18px; margin: 0 0 0 auto; padding: 0; list-style: none; font-size: .85rem; }
+.glance-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.glance-swatch { width: 30px; height: 10px; overflow: visible; }
+.glance-swatch line { stroke-width: 2; }
+.glance-swatch-actual line { stroke: var(--g-actual); } .glance-swatch-actual circle { fill: var(--g-actual); }
+.glance-swatch-plan line { stroke: var(--g-plan); stroke-dasharray: 5 3; }
+.glance-swatch-forecast line { stroke: var(--g-forecast); stroke-dasharray: 2 3; }
+.glance-swatch-plan circle, .glance-swatch-forecast circle { fill: var(--surface); stroke-width: 1.5; }
+.glance-swatch-plan circle { stroke: var(--g-plan); } .glance-swatch-forecast circle { stroke: var(--g-forecast); }
 .glance-card .glance-targets-title { margin: 0; font-size: .95rem; }
 .glance-targets-title .glance-note { margin: 0 0 0 6px; font-weight: 400; }
 .glance-target-list { display: grid; gap: 8px; margin: 10px 0; padding: 0; list-style: none; }

@@ -211,6 +211,12 @@
     return (host.clientWidth || 600) < NARROW;
   }
 
+  // An axis title such as "Devices left": the unit with its first letter raised, as charts.py unit_title.
+  function unitTitle(unit, rest) {
+    unit = (unit || "").trim();
+    return unit ? unit.charAt(0).toUpperCase() + unit.slice(1) + " " + rest : rest.charAt(0).toUpperCase() + rest.slice(1);
+  }
+
   // How long the Remaining chart (new view) takes to draw its lines up to the last point.
   var GLANCE_REVEAL_MS = 1500;
 
@@ -324,7 +330,8 @@
     };
     // "Week ending 16 Oct" (or "This week, ending ...") beside the line at the head of the plot, or at its foot when the lines are still high there (the
     // forecast label sits at the foot, near the end, and the two never meet that way).
-    var low_ = last !== null && last[1] > yMax * 0.8;
+    // At the head of the plot it would meet the actual label once the lines are in the upper half.
+    var low_ = last !== null && last[1] > yMax * 0.5;
     actualSeries.markPoint = {
       silent: true, symbol: "circle", symbolSize: 1, itemStyle: { color: "transparent" }, animation: false,
       data: [{
@@ -378,19 +385,22 @@
       empty: empty,
       option: {
         title: titles,
-        grid: { left: 8, right: 28, top: 80, bottom: 12, containLabel: true },
-        legend: { left: 8, top: 4, itemWidth: 30, itemHeight: 10, data: ["Actual", "Plan", "Forecast"], textStyle: { color: ink } },
+        // The key is in the page, under the chart (dashboard.html); the head of the plot leaves room for the target labels.
+        grid: { left: 30, right: 28, top: targets.length ? 52 : 20, bottom: 30, containLabel: true },
         tooltip: {
           trigger: "axis", className: "chart-tooltip", axisPointer: { type: "line", snap: true },
           formatter: glanceTooltip(days, s, actualAt, last ? last[0] : reportDay)
         },
         xAxis: {
           type: "value", min: low, max: high, interval: 7,
+          name: "Week ending", nameLocation: "middle", nameGap: 44, nameTextStyle: { color: muted, fontSize: 12, fontWeight: 600 },
           axisLabel: { formatter: weekTick(low), color: ink, hideOverlap: true, lineHeight: 15, fontSize: 12, showMinLabel: true, showMaxLabel: true },
           axisTick: { show: true }, splitLine: { show: false }
         },
         yAxis: {
           type: "value", min: 0, max: yMax, interval: step,
+          name: unitTitle(data.unit_label, "left"), nameLocation: "middle", nameRotate: 90, nameGap: 46,
+          nameTextStyle: { color: muted, fontSize: 12, fontWeight: 600 },
           axisLabel: { color: ink, fontSize: 12, formatter: function (v) { return Math.round(v).toLocaleString("en-GB"); } }
         },
         series: series
@@ -463,6 +473,8 @@
   }
 
   function start(container, data) {
+    // The interactive charts are in: the new view shows its key under the chart (the pictures carry their own).
+    if (container.classList.contains("report-glance")) container.classList.add("charts-ready");
     var images = container.querySelectorAll("img[data-chart]");
     Array.prototype.forEach.call(images, function (img) {
       var name = img.getAttribute("data-chart");

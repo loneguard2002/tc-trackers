@@ -1,8 +1,10 @@
 {% extends "base.html" %}
-{% from "macros.html" import bar, icon %}
+{% from "macros.html" import bar, icon, labels_text %}
+{% from "lists/_table.html" import sort_header %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='vendor/echarts-6.1.0.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='report-charts.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
@@ -20,10 +22,16 @@
 <span class="glance-chip glance-chip-{{ tone }}">{{ icon(icons[tone]) }}{{ rag or 'Not set' }}</span>
 {%- endmacro %}
 <div class="report-glance report-dashboard report-live" data-chart-data="{{ url_for('report.chart_data', tracker_id=tracker.id, week=report.week_ending.isoformat()) }}">
+  <div class="report-title glance-title">
+    <h2>Week ending {{ report.week_ending|fdate }}</h2>
+    <p class="report-meta">{{ labels_text(report.labels) }}</p>
+  </div>
   <section class="answer-card answer-card-{{ d.tone }}" aria-label="Status at a glance">
     <div class="answer-main">
-      <span class="status-badge status-badge-{{ d.tone }}">{{ icon(icons[d.tone]) }}{{ status or 'Not set' }}</span>
-      {%- if report.in_progress %} <span class="badge badge-info">In progress</span>{% endif %}
+      <div class="answer-badges">
+        <span class="status-badge status-badge-{{ d.tone }}">{{ icon(icons[d.tone]) }}{{ status or 'Not set' }}</span>
+        {%- if report.in_progress %}<span class="status-badge status-badge-progress">In progress</span>{% endif %}
+      </div>
       <p class="answer-sentence">{{ d.answer }}</p>
       {% if report.inputs and report.inputs.headline %}<p class="answer-headline">{{ report.inputs.headline }}</p>{% endif %}
     </div>
@@ -76,6 +84,7 @@
       <h2 id="glance-chart-title">Remaining</h2>
       <p class="glance-note">{{ d.chart_subtitle }}</p>
       <img class="report-chart glance-chart-picture" data-chart="remaining-glance" alt="{{ d.chart_subtitle }}: actual, plan and forecast, with the target dates" src="{{ url_for('report.chart_image', tracker_id=tracker.id, name='remaining-glance', week=report.week_ending.isoformat()) }}">
+      <div class="glance-chart-foot{{ ' is-legend-only' if not d.target_lines }}">
       {% if d.target_lines %}
       <div class="glance-targets">
         <h3 class="glance-targets-title">Target date changes{% if d.target_note %} <span class="glance-note">{{ d.target_note }}</span>{% endif %}</h3>
@@ -91,6 +100,12 @@
         <p class="glance-note">Earlier targets are the faint numbered lines. Hover a week for its figures.</p>
       </div>
       {% endif %}
+      <ul class="glance-legend" aria-label="Key to the chart">
+        <li><svg class="glance-swatch glance-swatch-actual" viewBox="0 0 30 10" aria-hidden="true"><line x1="1" y1="5" x2="29" y2="5"/><circle cx="15" cy="5" r="3"/></svg>Actual</li>
+        <li><svg class="glance-swatch glance-swatch-plan" viewBox="0 0 30 10" aria-hidden="true"><line x1="1" y1="5" x2="29" y2="5"/><circle cx="15" cy="5" r="2.6"/></svg>Plan</li>
+        <li><svg class="glance-swatch glance-swatch-forecast" viewBox="0 0 30 10" aria-hidden="true"><line x1="1" y1="5" x2="29" y2="5"/><circle cx="15" cy="5" r="2.6"/></svg>Forecast</li>
+      </ul>
+      </div>
     </section>
     <div class="glance-side">
       <section class="glance-card" aria-labelledby="glance-status-title">
@@ -109,18 +124,23 @@
         <h2 id="glance-risks-title">Top risks</h2>
         <p class="glance-note">{{ d.risks|length }} of {{ report.open_risks }} open</p>
         {% if d.risks %}
-        <ul class="glance-risks">
-          {% for risk in d.risks %}
-          <li>
-            {{ chip(risk.rag) }}
-            <div>
-              <p class="glance-risk-title"><strong>{{ risk.ref }}</strong> {{ risk.description|dash }}</p>
-              <p class="glance-risk-meta">{% if risk.past %}<span class="tone-danger">{{ risk.due }}</span>{% else %}{{ risk.due }}{% endif %}
-                {%- if risk.location %} · {{ risk.location }}{% endif %}{% if risk.owner %} · {{ risk.owner }}{% endif %}</p>
-            </div>
-          </li>
-          {% endfor %}
-        </ul>
+        {#- Sorted with lists.js; the address keeps only the week. Without JavaScript the rows stay worst first. -#}
+        <div class="section-table glance-risks" data-table-frame>
+          <table id="glance-risks-table" class="table card-rows" data-sortable data-no-address>
+            <thead><tr>{{ sort_header('Status', 'rag', type='number') }}{{ sort_header('Risk', 'risk') }}{{ sort_header('Due', 'due', type='date') }}{{ sort_header('Location', 'location') }}{{ sort_header('Owner', 'owner') }}</tr></thead>
+            <tbody>
+            {% for risk in d.risks %}
+            <tr data-sort-rag="{{ {'Red': 3, 'Amber': 2, 'Green': 1}.get(risk.rag, 0) }}" data-sort-risk="{{ risk.ref }}" data-sort-due="{{ risk.due_on.isoformat() if risk.due_on else '' }}" data-sort-location="{{ risk.location or '' }}" data-sort-owner="{{ risk.owner }}">
+              <td data-label="Status:">{{ chip(risk.rag) }}</td>
+              <td class="glance-risk-title"><strong>{{ risk.ref }}</strong> {{ risk.description|dash }}</td>
+              <td data-label="Due:">{% if risk.past %}<span class="tone-danger">{{ risk.due }}</span>{% else %}{{ risk.due }}{% endif %}</td>
+              <td data-label="Location:">{{ risk.location|dash }}</td>
+              <td data-label="Owner:">{{ risk.owner|dash }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
         {% else %}<p class="glance-empty">No open risks.</p>{% endif %}
       </section>
     </div>

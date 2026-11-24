@@ -37,6 +37,7 @@ class RiskLine:
     location: str | None
     due: str  # "Due 4 Dec", "4 days past 20 Nov" or "No due date"
     past: bool
+    due_on: date | None = None  # for sorting the table by due date
 
 
 @dataclass(frozen=True)
@@ -284,7 +285,14 @@ def _risk_lines(report: Report, on: date) -> list[RiskLine]:
             text = f"Due {_short(due)}"
         lines.append(
             RiskLine(
-                risk.ref, risk.description or "", risk.rag, risk.owner_role or "", places.get(risk.group_id), text, past
+                risk.ref,
+                risk.description or "",
+                risk.rag,
+                risk.owner_role or "",
+                places.get(risk.group_id),
+                text,
+                past,
+                due,
             )
         )
     return lines
