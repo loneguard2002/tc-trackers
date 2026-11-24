@@ -65,8 +65,9 @@ finishes, and whether the goalposts moved.
 ## Calls made (the owner may change these)
 
 - The new view is the default for everyone; the classic view is one click away and remembered.
-- The PDF, PNG and email keep the classic layout for now; moving them to the new layout is a follow-up once the page
-  has settled.
+- The PDF and PNG follow the view they are downloaded from: the new view's Download buttons give the new layout (the
+  Remaining chart as the server-drawn picture; on an A4 page Status sits above Top risks), the classic view's give the
+  classic one. A download link without a view, as in the email, stays classic, and the email keeps the classic layout.
 - The reason for moving the target is **optional** (a change without one is still recorded); the history shows "No
   reason given".
 - Target changes made before this ships are not known; history starts with the first change after it (the current
