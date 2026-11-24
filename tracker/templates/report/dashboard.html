@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import icon, rag_tone %}
+{% from "macros.html" import bar, icon %}
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
@@ -8,7 +8,14 @@
 {% set d = dashboard %}
 {% set status = report.inputs.status if report.inputs and report.inputs.status else None %}
 {% set icons = {'green': 'check', 'amber': 'warning', 'red': 'ban', 'none': 'info'} %}
-<div class="report-dashboard">
+{% set tones = {'Red': 'red', 'Amber': 'amber', 'Green': 'green'} %}
+{% set h = report.headline %}
+{% set group_name = tracker.group_label or 'Group' %}
+{% macro chip(rag) -%}
+{%- set tone = tones.get(rag, 'none') -%}
+<span class="glance-chip glance-chip-{{ tone }}">{{ icon(icons[tone]) }}{{ rag or 'Not set' }}</span>
+{%- endmacro %}
+<div class="report-glance report-dashboard">
   <section class="answer-card answer-card-{{ d.tone }}" aria-label="Status at a glance">
     <div class="answer-main">
       <span class="status-badge status-badge-{{ d.tone }}">{{ icon(icons[d.tone]) }}{{ status or 'Not set' }}</span>
@@ -26,6 +33,105 @@
       <p class="answer-written">No weekly update written for this week.</p>
       {% endif %}
     </aside>
+  </section>
+
+  <section class="glance-tiles" aria-label="Headline figures">
+    {% set t = d.tiles %}
+    <article class="glance-tile glance-tile-completed">
+      <h2 class="glance-tile-label">Completed</h2>
+      <p class="glance-tile-value">{{ t.completed.value }} <small>{{ t.completed.unit }}</small></p>
+      <div class="glance-tile-visual"><span class="bar"><svg viewBox="0 0 100 8" preserveAspectRatio="none" role="img" aria-label="{{ t.completed.label }}"><rect class="bar-track" width="100" height="8"/><rect class="bar-fill" width="{{ t.completed.pct }}" height="8"/></svg></span></div>
+      <p class="glance-tile-sub">{{ t.completed.sub }}</p>
+    </article>
+    <article class="glance-tile glance-tile-week">
+      <h2 class="glance-tile-label">This week</h2>
+      <p class="glance-tile-value">{{ t.week.value }}{% if t.week.unit %} <small>{{ t.week.unit }}</small>{% endif %}</p>
+      <div class="glance-tile-visual">{% if t.week.spark %}
+        <svg class="spark" viewBox="0 0 120 32" role="img" aria-label="Weekly completions up to this week"><polyline class="spark-line" fill="none" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="{{ t.week.spark.points }}"/><circle class="spark-dot" cx="{{ t.week.spark.last_x }}" cy="{{ t.week.spark.last_y }}" r="3.5"/></svg>{% endif %}</div>
+      <p class="glance-tile-sub{{ ' tone-' ~ t.week.tone if t.week.tone }}">{{ t.week.sub }}</p>
+    </article>
+    <article class="glance-tile glance-tile-rate">
+      <h2 class="glance-tile-label">{{ t.rate.label }}</h2>
+      <p class="glance-tile-value">{{ t.rate.value }} <small>{{ t.rate.unit }}</small></p>
+      <div class="glance-tile-visual">{% if t.rate.fill %}
+        <svg class="rate-bar" viewBox="0 0 100 12" preserveAspectRatio="none" role="img" aria-label="Rate against the rate needed"><rect class="bar-track" y="2" width="100" height="8" rx="4"/><rect class="bar-fill" y="2" width="{{ t.rate.fill }}" height="8" rx="4"/>{% if t.rate.mark %}<rect class="rate-mark" x="{{ t.rate.mark }}" width="1.2" height="12"/>{% endif %}</svg>{% endif %}</div>
+      <p class="glance-tile-sub{{ ' tone-' ~ t.rate.tone if t.rate.tone }}">{{ t.rate.sub }}</p>
+    </article>
+    <article class="glance-tile glance-tile-forecast">
+      <h2 class="glance-tile-label">Forecast</h2>
+      <p class="glance-tile-value">{{ t.forecast.value }}</p>
+      <div class="glance-tile-visual">{% if t.forecast.timeline %}{% set tl = t.forecast.timeline %}
+        <svg class="timeline" viewBox="0 0 240 24" role="img" aria-label="Forecast finish and target date on a timeline"><line class="timeline-line" x1="{{ '%.1f'|format(tl.start|float * 2.4) }}" x2="{{ '%.1f'|format([tl.forecast, tl.target]|select|map('float')|max * 2.4) }}" y1="12" y2="12" stroke-width="2"/>{% if tl.target %}<rect class="timeline-target" x="{{ '%.1f'|format(tl.target|float * 2.4 - 1) }}" y="3" width="2" height="18"/>{% endif %}{% if tl.forecast %}<circle class="timeline-forecast" cx="{{ '%.1f'|format(tl.forecast|float * 2.4) }}" cy="12" r="5"/>{% endif %}</svg>{% endif %}</div>
+      <p class="glance-tile-sub{{ ' tone-' ~ t.forecast.tone if t.forecast.tone }}">{{ t.forecast.sub }}</p>
+      {% if t.forecast.moved %}<p class="glance-tile-sub glance-tile-moved">{{ t.forecast.moved }}</p>{% endif %}
+    </article>
+  </section>
+
+  <div class="glance-main">
+    <section class="glance-card glance-chart" id="glance-chart" aria-labelledby="glance-chart-title">
+      <h2 id="glance-chart-title">Remaining</h2>
+    </section>
+    <div class="glance-side">
+      <section class="glance-card" aria-labelledby="glance-status-title">
+        <h2 id="glance-status-title">Status, last 12 weeks</h2>
+        <ul class="strip">
+          {% for w in d.statuses %}{% set tone = tones.get(w.status, 'none') %}
+          <li class="strip-week strip-{{ tone }}{{ ' is-report' if w.week_ending == report.week_ending }}"{% if w.week_ending == report.week_ending %} aria-current="date"{% endif %} title="Week ending {{ w.week_ending|fdate }}: {{ w.status or 'Not set' }}">
+            <span class="strip-letter">{{ {'Red': 'R', 'Amber': 'A', 'Green': 'G'}.get(w.status, '–') }}</span>
+            <span class="strip-day">{{ w.week_ending.day }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        <p class="glance-note">{{ d.status_summary }}</p>
+      </section>
+      <section class="glance-card" aria-labelledby="glance-risks-title">
+        <h2 id="glance-risks-title">Top risks</h2>
+        <p class="glance-note">{{ d.risks|length }} of {{ report.open_risks }} open</p>
+        {% if d.risks %}
+        <ul class="glance-risks">
+          {% for risk in d.risks %}
+          <li>
+            {{ chip(risk.rag) }}
+            <div>
+              <p class="glance-risk-title"><strong>{{ risk.ref }}</strong> {{ risk.description|dash }}</p>
+              <p class="glance-risk-meta">{% if risk.past %}<span class="tone-danger">{{ risk.due }}</span>{% else %}{{ risk.due }}{% endif %}
+                {%- if risk.location %} · {{ risk.location }}{% endif %}{% if risk.owner %} · {{ risk.owner }}{% endif %}</p>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}<p class="glance-empty">No open risks.</p>{% endif %}
+      </section>
+    </div>
+  </div>
+
+  {% set one = group_name|lower %}{% set many = group_name|plural|lower %}
+  {% set retired = report.groups|selectattr('retired')|list %}
+  <section class="glance-card glance-locations" aria-labelledby="glance-locations-title">
+    <h2 id="glance-locations-title">{{ group_name|plural }}, furthest behind first</h2>
+    <ul class="glance-key">
+      <li><span class="key-swatch split-start-key" aria-hidden="true"></span>Done before the first week</li>
+      <li><span class="key-swatch split-since-key" aria-hidden="true"></span>Done since</li>
+    </ul>
+    {% set gap = h.history_completed - h.completed %}
+    {% if not h.totals_check_ok %}
+    <p class="flash flash-warning report-check">
+      {%- if gap > 0 %}The {{ many }} add up to {{ h.completed|num }} done, but the tracker's weekly history has {{ h.history_completed|num }}. {{ gap|num }} are on the tracker but not on any {{ one }}: set as completed before the first week (Settings), or weekly figures imported without a {{ one }}.
+      {%- else %}The {{ many }} add up to {{ h.completed|num }} done, {{ (0 - gap)|num }} more than the tracker's weekly history ({{ h.history_completed|num }}). A {{ one }}'s starting figure may count work done before the tracker's first week that the history does not.{% endif %}</p>
+    {% endif %}
+    {% if d.locations %}
+    <ul class="glance-locations-grid">
+      {% for loc in d.locations %}{% set gp = loc.group %}
+      <li class="location">
+        <div class="location-head">{{ chip(gp.rag) }}<strong class="location-name">{{ gp.name }}</strong>
+          <span class="location-num"><strong>{{ gp.deployed|num }}</strong> of {{ gp.baseline|num }} · {{ gp.pct_complete|pct }}</span></div>
+        {{ bar(gp.deployed, gp.baseline, extra=gp.ready_not_complete, start=gp.starting_completed, label=gp.name ~ ': ' ~ (gp.pct_complete|pct) ~ ' complete' ~ ((', ' ~ gp.starting_completed|num ~ ' done before the first week') if gp.starting_completed else '')) }}
+        <p class="location-note">{{ loc.note }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="glance-empty">No {{ many }} yet.</p>{% endif %}
+    {% if retired %}<p class="glance-note glance-hidden">Not shown: {{ retired|length }} retired {{ one if retired|length == 1 else many }}, {{ retired|sum(attribute='deployed')|num }} done.</p>{% endif %}
   </section>
 </div>
 {% endblock %}
