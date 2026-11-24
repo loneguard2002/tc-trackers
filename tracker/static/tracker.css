@@ -1672,6 +1672,10 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .glance-strip-week.is-report { color: var(--text); font-weight: 700; }
 .glance-chip { display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 1px 8px; border: 1px solid currentColor; border-radius: 999px; color: var(--muted); font-size: .75rem; font-weight: 700; }
 .glance-chip .icon { width: 13px; height: 13px; }
+/* An editor's chip opens the location pop-up (report-locations.js). */
+.glance-chip-button { text-decoration: none; cursor: pointer; }
+.glance-chip-button:hover { background: color-mix(in srgb, currentColor 12%, var(--surface)); }
+.glance-dialog-more { margin-right: auto; white-space: nowrap; }
 .glance-chip-green { color: var(--success); } .glance-chip-amber { color: var(--warning); } .glance-chip-red { color: var(--danger); }
 .glance-risks { margin: 12px 0 0; }
 .glance-risk-title { overflow-wrap: anywhere; }

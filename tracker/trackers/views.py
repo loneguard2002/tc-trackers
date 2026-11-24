@@ -910,6 +910,41 @@ def edit_group(tracker_id: int, group_id: int):
     return redirect(url_for("trackers.groups", tracker_id=tracker.id))
 
 
+@bp.post("/trackers/<int:tracker_id>/groups/<int:group_id>/status")
+@require_tracker_role("editor")
+def set_group_status(tracker_id: int, group_id: int):
+    """The report's location pop-up: any editor sets the status fields (status, planned completion, ready and the
+    comment), then returns to the report week it came from. The name, baseline and starting figure stay on the full
+    edit page."""
+    tracker, db = g.tracker, get_session()
+    group = db.get(Group, group_id)
+    if group is None or group.tracker_id != tracker.id:
+        abort(404)
+    try:
+        week = date.fromisoformat(request.form.get("week", ""))
+    except ValueError:
+        week = None
+    back = url_for("report.view", tracker_id=tracker.id, **({"week": week.isoformat()} if week else {}))
+    if tracker.status == "archived":
+        flash(ARCHIVED_MESSAGE, "danger")
+        return redirect(back)
+    values, errors = validate_snapshot_form(request.form)
+    if errors:
+        flash(errors[0], "danger")
+        return redirect(back)
+    changes = {}
+    for field, new_value in values.items():
+        old_value = getattr(group, field)
+        if old_value != new_value:
+            changes[field] = [_jsonable(old_value), _jsonable(new_value)]
+            setattr(group, field, new_value)
+    if changes:
+        _audit_group(db, tracker, "group_updated", group, changes)
+    db.commit()
+    flash(f"{group.name} saved.", "success")
+    return redirect(back)
+
+
 def _render_group_form(tracker: Tracker, group: Group | None, done: int, form, errors: list[str], status: int):
     label = tracker.group_label or "Group"
     return (

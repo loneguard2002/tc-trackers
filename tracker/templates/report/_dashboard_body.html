@@ -1,7 +1,7 @@
 {#- The "Status at a glance" report body, shared by the live page (dashboard.html) and the PDF and PNG
     (print_dashboard.html). Expects ``tracker``, ``report`` and ``dashboard``; the print document sets ``print_page``
     (titled with the tracker's name, no live chart data) and ``glance_chart`` (the Remaining picture, drawn in). -#}
-{% from "macros.html" import bar, icon, labels_text %}
+{% from "macros.html" import bar, csrf_field, icon, labels_text %}
 {% from "lists/_table.html" import sort_header %}
 {% set d = dashboard %}
 {% set status = report.inputs.status if report.inputs and report.inputs.status else None %}
@@ -12,6 +12,13 @@
 {% macro chip(rag) -%}
 {%- set tone = tones.get(rag, 'none') -%}
 <span class="glance-chip glance-chip-{{ tone }}">{{ icon(icons[tone]) }}{{ rag or 'Not set' }}</span>
+{%- endmacro %}
+{#- An editor's location chip: a link to the full edit page, opened as the status pop-up by report-locations.js. -#}
+{% set can_set = can_set_locations|default(false) and not print_page|default(false) %}
+{% macro location_chip(gp) -%}
+{%- set tone = tones.get(gp.rag, 'none') -%}
+{%- set edit = {'action': url_for('trackers.set_group_status', tracker_id=tracker.id, group_id=gp.group_id), 'name': gp.name, 'rag': gp.rag or '', 'planned_completion': gp.planned_completion.isoformat() if gp.planned_completion else '', 'ready_not_complete': gp.ready_not_complete, 'comment': gp.comment or ''} -%}
+<a class="glance-chip glance-chip-{{ tone }} glance-chip-button" href="{{ url_for('trackers.edit_group', tracker_id=tracker.id, group_id=gp.group_id) }}" data-location-edit='{{ edit|tojson }}' title="Set the status of {{ gp.name }}">{{ icon(icons[tone]) }}{{ gp.rag or 'Not set' }}<span class="sr-only">: set the status of {{ gp.name }}</span></a>
 {%- endmacro %}
 {%- if print_page|default(false) %}
 <div class="report-glance report-dashboard">
@@ -162,7 +169,7 @@
     <ul class="glance-locations-grid">
       {% for loc in d.locations %}{% set gp = loc.group %}
       <li class="glance-location">
-        <div class="glance-location-head">{{ chip(gp.rag) }}<strong class="glance-location-name">{{ gp.name }}</strong>
+        <div class="glance-location-head">{% if can_set %}{{ location_chip(gp) }}{% else %}{{ chip(gp.rag) }}{% endif %}<strong class="glance-location-name">{{ gp.name }}</strong>
           <span class="glance-location-num"><strong>{{ gp.deployed|num }}</strong> of {{ gp.baseline|num }} · {{ gp.pct_complete|pct }}</span></div>
         {{ bar(gp.deployed, gp.baseline, extra=gp.ready_not_complete, start=gp.starting_completed, label=gp.name ~ ': ' ~ (gp.pct_complete|pct) ~ ' complete' ~ ((', ' ~ gp.starting_completed|num ~ ' done before the first week') if gp.starting_completed else '')) }}
         <p class="glance-location-note">{{ loc.note }}</p>
@@ -172,4 +179,51 @@
     {% else %}<p class="glance-empty">No {{ many }} yet.</p>{% endif %}
     {% if retired %}<p class="glance-note glance-hidden">Not shown: {{ retired|length }} retired {{ one if retired|length == 1 else many }}, {{ retired|sum(attribute='deployed')|num }} done.</p>{% endif %}
   </section>
+  {% if can_set %}
+  {% set unit = tracker.unit_label %}
+  <dialog id="location-dialog" class="list-dialog" aria-labelledby="location-dialog-title">
+    <form method="post" action="">
+      {{ csrf_field(csrf_token()) }}
+      <input type="hidden" name="week" value="{{ report.week_ending.isoformat() }}">
+      <header class="list-dialog-head">
+        <div><h2 id="location-dialog-title">Set the status</h2><p class="list-dialog-sub" data-location-name></p></div>
+        <button class="tool-button" type="button" data-close title="Close">{{ icon('close') }}<span class="sr-only">Close</span></button>
+      </header>
+      <div class="list-dialog-body">
+        <div class="field" role="radiogroup" aria-labelledby="location-rag-label">
+          <span class="field-label" id="location-rag-label">Status</span>
+          <div class="segmented">
+            <label><input type="radio" name="rag" value=""><span class="rag-dot" aria-hidden="true"></span>Not set</label>
+            {% for r in ('Green', 'Amber', 'Red') %}
+            <label><input type="radio" name="rag" value="{{ r }}"><span class="rag-dot rag-dot-{{ r|lower }}" aria-hidden="true"></span>{{ r }}</label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="field">
+          <label for="location-planned">Planned completion</label>
+          <input id="location-planned" name="planned_completion" type="date" aria-describedby="location-planned-help">
+          <p class="field-help" id="location-planned-help">When all the work in scope should be finished.</p>
+        </div>
+        <div class="field">
+          <label for="location-ready">Ready, not yet complete</label>
+          <div class="input-affix">
+            <input id="location-ready" name="ready_not_complete" type="number" min="0" step="1" inputmode="numeric" aria-describedby="location-ready-help">
+            {% if unit %}<span aria-hidden="true">{{ unit }}</span>{% endif %}
+          </div>
+          <p class="field-help" id="location-ready-help">Work prepared and waiting to be finished.</p>
+        </div>
+        <div class="field">
+          <label for="location-comment">Comment or exception</label>
+          <textarea id="location-comment" name="comment" rows="3" aria-describedby="location-comment-help"></textarea>
+          <p class="field-help" id="location-comment-help">Anything the report reader should know, such as a delay and its cause.</p>
+        </div>
+      </div>
+      <footer class="list-dialog-foot">
+        <a class="button glance-dialog-more" href="#" data-location-more>All settings</a>
+        <button class="button" type="button" data-close>Cancel</button>
+        <button class="button primary" type="submit">Save</button>
+      </footer>
+    </form>
+  </dialog>
+  {% endif %}
 </div>

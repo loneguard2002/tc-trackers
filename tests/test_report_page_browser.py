@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 from conftest import browser_sign_in
 from playwright.sync_api import expect
+from sqlalchemy import select
 
 from tracker.models import CompletionEntry, Group, Week
 
@@ -653,4 +654,32 @@ def test_glance_top_risks_table_sorts_by_its_headings(page, live_server, seeded,
     table.get_by_role("button", name="Due").click()
     expect(first_cells).to_have_text(["R1", "R2", "R3"])  # latest first, no date still last
     assert "sort" not in page.url  # the address keeps only the week and the view
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
+
+
+def test_an_editor_sets_a_location_status_from_the_report(page, live_server, seeded, db):
+    from tracker.models import TrackerRole
+
+    db.scalars(select(TrackerRole).where(TrackerRole.user_id == seeded.viewer.id)).one().role = "editor"
+    db.commit()
+    open_glance(page, live_server, seeded)
+    chip = page.locator("a[data-location-edit]", has_text="Not set")
+    chip.click()
+    dialog = page.locator("#location-dialog")
+    expect(dialog).to_be_visible()
+    expect(dialog.locator("[data-location-name]")).to_have_text("LD5")
+    expect(dialog.locator('input[name="rag"][value=""]')).to_be_checked()
+    expect(dialog.locator("[data-location-more]")).to_have_attribute(
+        "href", re.compile(rf"^/trackers/{seeded.tracker.id}/groups/\d+$")
+    )
+    dialog.get_by_text("Green", exact=True).click()
+    dialog.locator("#location-comment").fill("All kit on site")
+    dialog.get_by_role("button", name="Save").click()
+    expect(page.locator(".glance-location .glance-chip-green")).to_have_text(re.compile("Green"))
+    assert "week=2026-09-11" in page.url
+    expect(page.get_by_text("LD5 saved.")).to_be_visible()
+    # Cancel leaves everything as it was.
+    page.locator("a[data-location-edit]").click()
+    dialog.get_by_role("button", name="Cancel").click()
+    expect(dialog).to_be_hidden()
     assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
