@@ -213,6 +213,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .report-status .rag-dot { width: 10px; height: 10px; }
 .report-status-word { color: var(--tone-text); }
 .report-chart { width: 100%; height: auto; display: block; }
+/* With scripts running, the light server-drawn pictures stay hidden in a box the size of the chart that replaces them, so
+   dark mode never flashes white and nothing jumps; report-charts.js adds .charts-failed to bring them back. */
+.has-js .report-live[data-chart-data]:not(.charts-failed) img.report-chart { visibility: hidden; height: 340px; }
+.has-js .report-live[data-chart-data]:not(.charts-failed) .report-charts img.report-chart { height: 280px; }
 .report-panel { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); }
 .report-panel .chart-host { margin: 0; border: 0; }
 .report-panel-chart { padding: 6px; }

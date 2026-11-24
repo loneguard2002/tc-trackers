@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date
 from types import SimpleNamespace
 
@@ -261,3 +262,42 @@ def test_preview_is_light_in_the_dark_theme(page, live_server, seeded):
     expect(weekly).to_have_attribute("data-chart-theme", "light")
     assert weekly.evaluate("e => getComputedStyle(e).backgroundColor") == "rgb(255, 255, 255)"
     assert weekly.locator("svg > rect").first.get_attribute("fill") == "#fff"
+
+
+def _hold_chart_data(page):
+    held = []
+    page.route("**/report/data.json*", lambda route: held.append(route))
+    return held
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_no_white_picture_or_jump_before_the_charts_draw(page, live_server, seeded, theme):
+    # The server-drawn pictures are light and sized by their own shape; with JavaScript they stay hidden in a box the
+    # size of the chart, so nothing flashes white in dark mode and nothing jumps when the chart replaces them.
+    page.add_init_script(f"localStorage.setItem('tracker-theme', '{theme}')")
+    held = _hold_chart_data(page)
+    open_report(page, live_server, seeded, wait=False)
+    page.wait_for_selector("img[data-chart='remaining']", state="attached")
+    sizes = {}
+    for name in ("remaining", "weekly", "cumulative"):
+        img = page.locator(f"img[data-chart='{name}']")
+        assert img.evaluate("e => getComputedStyle(e).visibility") == "hidden"
+        sizes[name] = round(img.bounding_box()["height"])
+    assert sizes == {"remaining": 340, "weekly": 280, "cumulative": 280}
+    held[0].continue_()
+    page.wait_for_selector(".chart-host-cumulative :is(svg, canvas)")
+    for name, height in sizes.items():
+        assert round(page.locator(f".chart-host-{name}").bounding_box()["height"]) == height
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+def test_the_pictures_come_back_when_the_chart_data_fails(page, live_server, seeded):
+    page.route("**/report/data.json*", lambda route: route.abort())
+    open_report(page, live_server, seeded, wait=False)
+    picture = page.locator("img[data-chart='remaining']")
+    expect(picture).to_be_visible()
+    expect(page.locator(".report-live")).to_have_class(re.compile(r"\bcharts-failed\b"))
+    assert picture.evaluate("e => getComputedStyle(e).visibility") == "visible"
+    assert picture.evaluate("e => e.naturalWidth") > 0
+    assert page.evaluate("window.__csp") == []

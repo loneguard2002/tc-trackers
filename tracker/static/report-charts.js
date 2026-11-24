@@ -228,7 +228,11 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     var container = document.querySelector(".report-live[data-chart-data]");
-    if (!container || !window.echarts || !window.fetch) return;
+    if (!container) return;
+    // The style sheet hides the server-drawn pictures while the charts load (they are light and a different size);
+    // when the charts cannot be drawn, this brings the pictures back.
+    function keepPictures() { container.classList.add("charts-failed"); }
+    if (!window.echarts || !window.fetch) { keepPictures(); return; }
     window.fetch(container.getAttribute("data-chart-data"), {
       credentials: "same-origin",
       headers: { Accept: "application/json" }
@@ -238,8 +242,7 @@
       return response.json();
     }).then(function (data) {
       if (data && data.weeks && data.series) start(container, data);
-    }).catch(function () {
-      // Keep the server-drawn pictures.
-    });
+      else keepPictures();
+    }).catch(keepPictures);
   });
 })();

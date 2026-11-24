@@ -13,6 +13,8 @@
     theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
   document.documentElement.setAttribute("data-theme", theme);
+  // Marks that scripts run, so the style sheet can hold back content a script replaces (the report's chart pictures).
+  document.documentElement.classList.add("has-js");
 
   // The desktop sidebar's collapsed state is applied here too, so the layout does not jump on load.
   try {
