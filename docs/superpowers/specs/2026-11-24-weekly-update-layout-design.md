@@ -1,7 +1,8 @@
 # Weekly update page: layout, calendar reminder card and its history
 
 Agreed with the owner on 24 Nov 2026 from the "Weekly update: calendar invite" canvas
-(https://claude.ai/artifact/8ZzVkrKuQ2oG3YniUeymE3): layout from design C, history side panel from design B.
+(https://claude.ai/artifact/8ZzVkrKuQ2oG3YniUeymE3): design D (the slim week bar of C, the figures as tiles on top,
+card headings and tables as on a person's Access page and Users), with the history side panel from design B.
 Builds on `docs/superpowers/specs/2026-11-18-calendar-reminders-design.md` (what the reminder sends) and
 `docs/design-rules.md`.
 
@@ -22,24 +23,26 @@ invite or see what was sent.
      "… tomorrow at 17:00" or "… on Fri 27 Nov at 17:00", in the tracker's time zone, amber. Once that week was sent:
      "Report sent on Fri 20 Nov at 17:02" (muted). Automatic sending off: "Automatic sending is off" (muted). Times
      come from the existing schedule (`next_send`, `send_time`, `send_timezone`) and the report sends.
-2. **Writing on the left, facts on the right.** From 1000 px wide: the Commentary card on the left (about 60%), the
-   figures and the reminder on the right (about 40%). The right column stays in view while the page scrolls (sticky,
-   under the top bar and section links). Narrower: one column in this order: week bar, Commentary (with its preview),
-   figures, reminder.
-3. **The preview belongs to the form.** "Preview: top of the report" moves into the Commentary card, under the boxes,
-   as a tinted strip (design rule 3: no box inside a box). It updates as you type, as today. "Use last week's text"
-   stays above it.
-4. **The figures first.** The right column starts with "This week's figures" as today (the four figures with their
-   comparisons, next week's target, last week's status), then the verdict line and the Red and overdue risk counts with
-   "Open risks".
-5. **Calendar reminder card** under the figures, for editors, owners and the person in charge (not on an archived
+2. **The figures as tiles on top**, under the week bar, in the style of the summary tiles on a person's Access page
+   (`.access-tiles`): Done this week ("42", "of 40 · +2 against target"), Completed ("318", "64% · 182 left"), Rate
+   ("38", "a week · 31 needed"), Forecast ("11 Dec", "Target 18 Dec · 7 days early"), Next week's target ("40",
+   "Week ending 27 Nov") and Red risks ("1", "1 past its target date", linking to Risks). The sub-line takes the
+   success or danger colour where the figure is ahead or behind. As many tiles fit across as the width allows. These
+   replace the "This week's figures" panel.
+3. **Commentary on the left, the reminder on the right.** From 1000 px wide: the Commentary card (about 60%) and the
+   Calendar reminder card (about 40%) side by side. Neither follows the page as it scrolls. Narrower: the reminder
+   goes under the Commentary card.
+4. **Card headings as on the Access page** (`.access-card-head`): the title, a pill where there is something to count
+   or a state to show, and a short note on the right. "Use last week's text" stays in the Commentary card, and "Preview:
+   top of the report" moves into it, under the boxes, as a tinted strip (design rule 3: no box inside a box). It
+   updates as you type, as today.
+5. **Calendar reminder card** beside the Commentary card, its heading pill "On" or "Off", for editors, owners and the person in charge (not on an archived
    tracker):
    - The checkbox "Email me an Outlook reminder", with "08:45 on each week-ending day" under it. Ticking and
      unticking behave as today, including "Save your weekly update first." while the update has unsaved changes.
-   - A status line: "Next: Fri 27 Nov · sent 23 Nov", "Not sent yet", "Email is not set up in this application yet",
-     or nothing while it is off.
-   - Two icon buttons with labels for screen readers and a tooltip: **Download the invite (.ics)** and **Email the
-     invite again** (today's "Send again"; shown only when a series was sent).
+   - Two lines: "Next: Fri 27 Nov, 08:45" and "Last sent: 23 Nov 2026" ("Not sent yet", or "Email is not set up in
+     this application yet", in their place when that applies; nothing while it is off).
+   - Two buttons: **Download .ics** and **Email it again** (today's "Send again"; shown only when a series was sent).
    - **History**, which opens the history side panel.
 6. **Download the invite.** `GET /trackers/<id>/calendar-reminder.ics` returns the person's series as a file
    (`<tracker name> reminder.ics`): the same series, UID and time zone as the email, `METHOD:PUBLISH`, so opening it
@@ -55,7 +58,12 @@ invite or see what was sent.
      Detail, "No events match." with Clear filters, the footer "Showing 6 of 6 events" and paging past 25. The panel's
      table does not write to the address (`data-no-address`), like the holders panel.
    - Without JavaScript, History links to a plain page with the same two sections.
-8. **An event log** so the history exists: one row per event for a person and tracker, with when it happened, what
+8. **Past updates**, a table under the two cards in the standard table design as on Users (toolkit in
+   `lists/_table.html` and `lists.js`): heading "Past updates" with the count, a search box ("Search updates"), chips
+   All / Green / Amber / Red / Not written with counts, columns Week ending (sortable, newest first by default), Status
+   (pill), Headline, Needed from you, Prepared by, and Open (goes to that week), the footer "Showing 11 of 11 weeks",
+   paging past 25 and cards on a phone. It lists every week before the one shown that has started.
+9. **An event log** so the history exists: one row per event for a person and tracker, with when it happened, what
    (switched on, switched off, invite sent, update sent, cancellation sent, sending failed, downloaded) and a short
    detail ("Tracker renamed", "The mail server did not answer"). Written where these happen today (the switch, "Email
    it again", the scheduler sync, the download). History starts when this ships; earlier sends are not shown.
@@ -68,8 +76,10 @@ invite or see what was sent.
 
 ## Approaches
 
-- **Chosen: C with B's history panel.** The slim week bar puts writing near the top, the figures stay in view, and the
-  reminder becomes a small card with a clear label.
+- **Chosen: D with B's history panel.** The slim week bar and the figure tiles give the week at a glance, writing
+  starts near the top, the reminder is a small labelled card, and past weeks are one table like the rest of the app.
+- Considered: C (figures in a right-hand column that follows the page): the owner preferred the figures on top and no
+  card that moves while scrolling.
 - Considered: A (the reminder as a line in the week header, history in a centred pop-up): smallest change, but keeps
   the tall header and mixes the reminder with the week.
 - Considered: B alone (the reminder card above the figures): pushes the figures down, though they are read every week
@@ -85,6 +95,5 @@ invite or see what was sent.
 
 ## Left to the builder
 
-Markup and class names, the event table's name and shape, the route for the no-JavaScript history page, and how the
-sticky right column clears the top bar, as long as the behaviour above holds, the page passes the Content Security
+Markup and class names, the event table's name and shape, and the route for the no-JavaScript history page, as long as the behaviour above holds, the page passes the Content Security
 Policy, and every new string is British English without contractions.
