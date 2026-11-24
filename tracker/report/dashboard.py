@@ -122,16 +122,16 @@ def _rate_bar(rate: float | None, needed: float | None) -> tuple[str | None, str
 
 def _timeline(week_ending: date, forecast: date | None, target: date | None) -> dict | None:
     """Positions (0 to 100) of the forecast dot and the target mark on a line from the report week onwards."""
-    days = [d for d in (week_ending, forecast, target) if d is not None]
     if forecast is None and target is None:
         return None
-    first, last = min(days), max(days)
-    span = max((last - first).days, 1)
+    last = max(d for d in (week_ending, forecast, target) if d is not None)
+    span = max((last - week_ending).days, 1)
 
     def at(day: date | None) -> str | None:
-        return None if day is None else f"{6 + (day - first).days / span * 88:.2f}"
+        """A day's place on the line; a day before the report week sits at its start, never before it."""
+        return None if day is None else f"{6 + max((day - week_ending).days, 0) / span * 88:.2f}"
 
-    return {"forecast": at(forecast), "target": at(target), "start": at(week_ending)}
+    return {"forecast": at(forecast), "target": at(target), "start": at(week_ending), "end": at(last)}
 
 
 def build_tiles(report: Report, target: date | None, targets: list[TargetEntry]) -> dict:
@@ -212,13 +212,15 @@ def summarise_statuses(weeks: list[StatusWeek]) -> str:
                 break
             streak += 1
         parts.append(f"{last} for {streak} week{'' if streak == 1 else 's'}")
-    reds = [w for w in weeks if w.status == "Red"]
-    if reds and last != "Red":
+    # The Red weeks outside the streak ending at the last week (all of them when the streak is not Red).
+    reds = [w for w in weeks[: len(weeks) - streak] if w.status == "Red"]
+    if reds:
+        before = " before" if last == "Red" else ""
         if len(reds) > 2:
-            parts.append(f"Red {len(reds)} times")
+            parts.append(f"Red {len(reds)} times{before}")
         else:
             when = " and ".join(_short(w.week_ending) for w in reds)
-            parts.append(f"Red {'once' if len(reds) == 1 else 'twice'}, on {when}")
+            parts.append(f"Red {'once' if len(reds) == 1 else 'twice'}{before}, on {when}")
     return "; ".join(parts) + "." if parts else "No status for the report week."
 
 

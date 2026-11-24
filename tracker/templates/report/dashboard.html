@@ -47,21 +47,21 @@
       <h2 class="glance-tile-label">This week</h2>
       <p class="glance-tile-value">{{ t.week.value }}{% if t.week.unit %} <small>{{ t.week.unit }}</small>{% endif %}</p>
       <div class="glance-tile-visual">{% if t.week.spark %}
-        <svg class="spark" viewBox="0 0 120 32" role="img" aria-label="Weekly completions up to this week"><polyline class="spark-line" fill="none" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="{{ t.week.spark.points }}"/><circle class="spark-dot" cx="{{ t.week.spark.last_x }}" cy="{{ t.week.spark.last_y }}" r="3.5"/></svg>{% endif %}</div>
+        <svg class="glance-spark" viewBox="0 0 120 32" role="img" aria-label="Weekly completions up to this week"><polyline class="glance-spark-line" fill="none" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="{{ t.week.spark.points }}"/><circle class="glance-spark-dot" cx="{{ t.week.spark.last_x }}" cy="{{ t.week.spark.last_y }}" r="3.5"/></svg>{% endif %}</div>
       <p class="glance-tile-sub{{ ' tone-' ~ t.week.tone if t.week.tone }}">{{ t.week.sub }}</p>
     </article>
     <article class="glance-tile glance-tile-rate">
       <h2 class="glance-tile-label">{{ t.rate.label }}</h2>
       <p class="glance-tile-value">{{ t.rate.value }} <small>{{ t.rate.unit }}</small></p>
       <div class="glance-tile-visual">{% if t.rate.fill %}
-        <svg class="rate-bar" viewBox="0 0 100 12" preserveAspectRatio="none" role="img" aria-label="Rate against the rate needed"><rect class="bar-track" y="2" width="100" height="8" rx="4"/><rect class="bar-fill" y="2" width="{{ t.rate.fill }}" height="8" rx="4"/>{% if t.rate.mark %}<rect class="rate-mark" x="{{ t.rate.mark }}" width="1.2" height="12"/>{% endif %}</svg>{% endif %}</div>
+        <svg class="glance-rate-bar" viewBox="0 0 100 12" preserveAspectRatio="none" role="img" aria-label="Rate against the rate needed"><rect class="bar-track" y="2" width="100" height="8" rx="4"/><rect class="bar-fill" y="2" width="{{ t.rate.fill }}" height="8" rx="4"/>{% if t.rate.mark %}<rect class="glance-rate-mark" x="{{ t.rate.mark }}" width="1.2" height="12"/>{% endif %}</svg>{% endif %}</div>
       <p class="glance-tile-sub{{ ' tone-' ~ t.rate.tone if t.rate.tone }}">{{ t.rate.sub }}</p>
     </article>
     <article class="glance-tile glance-tile-forecast">
       <h2 class="glance-tile-label">Forecast</h2>
       <p class="glance-tile-value">{{ t.forecast.value }}</p>
       <div class="glance-tile-visual">{% if t.forecast.timeline %}{% set tl = t.forecast.timeline %}
-        <svg class="timeline" viewBox="0 0 240 24" role="img" aria-label="Forecast finish and target date on a timeline"><line class="timeline-line" x1="{{ '%.1f'|format(tl.start|float * 2.4) }}" x2="{{ '%.1f'|format([tl.forecast, tl.target]|select|map('float')|max * 2.4) }}" y1="12" y2="12" stroke-width="2"/>{% if tl.target %}<rect class="timeline-target" x="{{ '%.1f'|format(tl.target|float * 2.4 - 1) }}" y="3" width="2" height="18"/>{% endif %}{% if tl.forecast %}<circle class="timeline-forecast" cx="{{ '%.1f'|format(tl.forecast|float * 2.4) }}" cy="12" r="5"/>{% endif %}</svg>{% endif %}</div>
+        <svg class="glance-timeline" viewBox="0 0 240 24" role="img" aria-label="Forecast finish and target date on a timeline"><line class="glance-timeline-line" x1="{{ '%.1f'|format(tl.start|float * 2.4) }}" x2="{{ '%.1f'|format(tl.end|float * 2.4) }}" y1="12" y2="12" stroke-width="2"/>{% if tl.target %}<rect class="glance-timeline-target" x="{{ '%.1f'|format(tl.target|float * 2.4 - 1) }}" y="3" width="2" height="18"/>{% endif %}{% if tl.forecast %}<circle class="glance-timeline-forecast" cx="{{ '%.1f'|format(tl.forecast|float * 2.4) }}" cy="12" r="5"/>{% endif %}</svg>{% endif %}</div>
       <p class="glance-tile-sub{{ ' tone-' ~ t.forecast.tone if t.forecast.tone }}">{{ t.forecast.sub }}</p>
       {% if t.forecast.moved %}<p class="glance-tile-sub glance-tile-moved">{{ t.forecast.moved }}</p>{% endif %}
     </article>
@@ -74,11 +74,11 @@
     <div class="glance-side">
       <section class="glance-card" aria-labelledby="glance-status-title">
         <h2 id="glance-status-title">Status, last 12 weeks</h2>
-        <ul class="strip">
+        <ul class="glance-strip">
           {% for w in d.statuses %}{% set tone = tones.get(w.status, 'none') %}
-          <li class="strip-week strip-{{ tone }}{{ ' is-report' if w.week_ending == report.week_ending }}"{% if w.week_ending == report.week_ending %} aria-current="date"{% endif %} title="Week ending {{ w.week_ending|fdate }}: {{ w.status or 'Not set' }}">
-            <span class="strip-letter">{{ {'Red': 'R', 'Amber': 'A', 'Green': 'G'}.get(w.status, '–') }}</span>
-            <span class="strip-day">{{ w.week_ending.day }}</span>
+          <li class="glance-strip-week glance-strip-{{ tone }}{{ ' is-report' if w.week_ending == report.week_ending }}"{% if w.week_ending == report.week_ending %} aria-current="date"{% endif %} title="Week ending {{ w.week_ending|fdate }}: {{ w.status or 'Not set' }}">
+            <span class="glance-strip-letter">{{ {'Red': 'R', 'Amber': 'A', 'Green': 'G'}.get(w.status, '–') }}</span>
+            <span class="glance-strip-day">{{ w.week_ending.day }}</span>
           </li>
           {% endfor %}
         </ul>
@@ -122,11 +122,11 @@
     {% if d.locations %}
     <ul class="glance-locations-grid">
       {% for loc in d.locations %}{% set gp = loc.group %}
-      <li class="location">
-        <div class="location-head">{{ chip(gp.rag) }}<strong class="location-name">{{ gp.name }}</strong>
-          <span class="location-num"><strong>{{ gp.deployed|num }}</strong> of {{ gp.baseline|num }} · {{ gp.pct_complete|pct }}</span></div>
+      <li class="glance-location">
+        <div class="glance-location-head">{{ chip(gp.rag) }}<strong class="glance-location-name">{{ gp.name }}</strong>
+          <span class="glance-location-num"><strong>{{ gp.deployed|num }}</strong> of {{ gp.baseline|num }} · {{ gp.pct_complete|pct }}</span></div>
         {{ bar(gp.deployed, gp.baseline, extra=gp.ready_not_complete, start=gp.starting_completed, label=gp.name ~ ': ' ~ (gp.pct_complete|pct) ~ ' complete' ~ ((', ' ~ gp.starting_completed|num ~ ' done before the first week') if gp.starting_completed else '')) }}
-        <p class="location-note">{{ loc.note }}</p>
+        <p class="glance-location-note">{{ loc.note }}</p>
       </li>
       {% endfor %}
     </ul>
