@@ -323,69 +323,96 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tracker-card-amber, .tracker-row-amber { --tone: var(--warning); --tone-text: var(--warning); }
 .tracker-card-green, .tracker-row-green { --tone: var(--success); --tone-text: var(--success); }
 .tracker-card.is-archived { opacity: .75; }
-.tracker-card-head { display: grid; gap: 4px; padding: 16px 18px 8px 23px; }
+/* The card leads with time (design 2026-11-24): a ring of done against the plan beside the title, the finish date, a
+   timeline from the start to the target and forecast with the dates listed beside it, three facts and a folded to-do
+   list. Nothing inside the card has a frame of its own (docs/design-rules.md rule 3). */
+.tracker-card-head { display: flex; gap: 14px; align-items: center; padding: 16px 18px 10px 23px; background: linear-gradient(to bottom, color-mix(in srgb, var(--tone) 9%, var(--surface)), var(--surface)); }
+.tracker-card-titles { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.tracker-card-status { margin: 2px 0 0; font-size: .8125rem; }
+.tracker-card-status .status-word { font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.tracker-card:not(.tracker-card-red, .tracker-card-amber, .tracker-card-green) .status-word { text-transform: none; letter-spacing: 0; font-weight: 700; }
+.tracker-card-disagree .status-word { color: var(--success); }  /* the owner's word keeps its colour; the edge warns */
+.card-ring { position: relative; flex: none; width: 60px; height: 60px; }
+.card-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.card-ring circle { fill: none; stroke-width: 10; }
+.ring-track { stroke: color-mix(in srgb, var(--text) 10%, var(--surface)); }
+.ring-short { stroke: color-mix(in srgb, var(--danger) 35%, transparent); }
+.ring-done { stroke: var(--primary); stroke-linecap: round; }
+.card-ring.is-ahead .ring-done { stroke: var(--success); }
+.ring-tick { stroke: var(--text); stroke-width: 4; stroke-linecap: round; }
+.card-ring-pct { position: absolute; inset: 0; display: grid; place-items: center; font-size: .95rem; font-weight: 800; }
+.tracker-card-body { display: grid; gap: 14px; padding: 6px 18px 14px 23px; }
+.tracker-card-finish { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; font-weight: 700; }
+.tracker-card-finish strong { font-size: 1.3rem; font-weight: 800; }
+.tracker-card-when { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
+.card-timeline { display: block; width: 100%; height: auto; overflow: visible; }
+.card-timeline text { fill: var(--muted); font-size: 11px; font-weight: 600; }
+.tl-track { fill: color-mix(in srgb, var(--text) 10%, var(--surface)); }
+.tl-elapsed { fill: color-mix(in srgb, var(--primary) 30%, var(--surface)); }
+.tl-month { stroke: var(--field-border); stroke-width: 1; }
+.tl-late { fill: color-mix(in srgb, var(--danger) 30%, transparent); }
+.tl-today { stroke: var(--text); stroke-width: 2; }
+.tl-target { fill: var(--text); }
+.tl-forecast { fill: var(--success); stroke: var(--surface); stroke-width: 2; }
+.tl-forecast.is-late { fill: var(--danger); }
+.card-dates { display: grid; gap: 4px; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--border); list-style: none; font-size: .78rem; }
+.card-dates li { display: grid; grid-template-columns: 14px auto auto; gap: 7px; align-items: center; white-space: nowrap; }
+.card-dates span { color: var(--muted); }
+.card-dates strong { text-align: right; }
+.mark { display: inline-block; justify-self: center; }
+.mark-start { width: 9px; height: 9px; border: 2px solid var(--field-border); border-radius: 50%; }
+.mark-today { width: 2px; height: 13px; background: var(--text); }
+.mark-target { width: 8px; height: 8px; background: var(--text); transform: rotate(45deg); }
+.mark-forecast { width: 10px; height: 10px; border-radius: 50%; background: var(--success); }
+.mark-forecast.is-late { background: var(--danger); }
+.mark-forecast.is-none { background: transparent; border: 1px dashed var(--field-border); }
+.tracker-card-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.tracker-card-facts > div { min-width: 0; }
+.tracker-card-facts dt { color: var(--muted); font-size: .72rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+.tracker-card-facts dd { display: grid; gap: 1px; margin: 0; }
+.card-todo summary { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--warning) 11%, transparent); font-size: .875rem; font-weight: 700; list-style: none; cursor: pointer; }
+.card-todo summary::-webkit-details-marker { display: none; }
+.todo-count { display: grid; place-items: center; min-width: 22px; height: 22px; border-radius: 999px; background: var(--warning); color: var(--surface); font-size: .75rem; }
+.todo-chevron { width: 16px; height: 16px; margin-left: auto; transition: transform .15s; }
+.card-todo[open] .todo-chevron { transform: rotate(180deg); }
+.card-todo ul { display: grid; margin: 0; padding: 2px 4px 0; list-style: none; }
+.card-todo li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: .8125rem; }
+.card-todo li:first-child { border-top: 0; }
+.card-todo li::before { content: ""; flex: none; width: 16px; height: 16px; border: 2px solid var(--warning); border-radius: 5px; }
+.card-todo li.is-note::before { border-color: var(--muted); }
+.card-todo li > span { flex: 1; min-width: 0; }
+.card-todo .button { padding: 4px 11px; font-size: .8125rem; font-weight: 600; white-space: nowrap; }
+.card-clear { display: flex; align-items: center; gap: 10px; margin: 0; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--success) 11%, transparent); font-size: .8125rem; }
+.card-clear .icon { width: 18px; height: 18px; color: var(--success); }
+.tracker-card-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: auto; padding: 10px 18px 10px 23px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); font-size: .8125rem; }
+.tracker-card-foot a { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; text-decoration: none; }
+.tracker-card-foot a:hover { text-decoration: underline; }
+.tracker-card-foot .icon { width: 16px; height: 16px; }
+.tracker-card-foot .tracker-card-update { margin-left: auto; }
+@media (max-width: 520px) {
+  .tracker-card-when { grid-template-columns: minmax(0, 1fr); }
+  .card-dates { padding: 8px 0 0; border-left: 0; border-top: 1px solid var(--border); }
+}
+@media (prefers-reduced-motion: reduce) { .todo-chevron { transition: none; } }
 .tracker-card-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 0; font-size: 1.1rem; }
 .tracker-card-title a { color: var(--text); text-decoration: none; }
 .tracker-card-title a:hover { color: var(--primary); text-decoration: underline; }
 .role-tag { padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .75rem; font-weight: 600; }
 .tracker-card-team { margin: 2px 0 0; color: var(--muted); font-size: .8rem; }
-.tracker-card-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 0; font-size: .8125rem; font-weight: 700; }
 .tracker-card-disagree { --tone: var(--warning); }  /* Green yet behind: the edge warns, the status pill keeps the owner's word */
 .tracker-card-lead { margin: 0; color: var(--muted); font-size: .8rem; }
 .tracker-card-lead strong { color: var(--text); font-weight: 600; }
-.card-status-pill, .verdict-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; }
-.card-status-pill { border-color: color-mix(in srgb, var(--tone-text) 45%, var(--border)); background: color-mix(in srgb, var(--tone-text) 10%, var(--surface)); color: var(--tone-text); }
-.tracker-card-disagree .card-status-pill { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); background: color-mix(in srgb, var(--success) 10%, var(--surface)); color: var(--success); }
-.verdict-pill { background: color-mix(in srgb, var(--text) 4%, var(--surface)); color: var(--muted); font-weight: 600; }
-.verdict-pill.is-warning { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); background: color-mix(in srgb, var(--warning) 10%, var(--surface)); color: var(--warning); font-weight: 700; }
-.verdict-pill .icon { width: 14px; height: 14px; }
-.card-key { justify-content: flex-start; gap: 2px 14px; margin: 8px 0 0; }
-.card-key > span { white-space: nowrap; }
-.card-key .key:first-child { margin-left: 0; }
 .fact-line { font-size: .72rem; }
-.tracker-card-alerts { display: grid; gap: 5px; margin: 0; padding: 10px 18px 10px 23px; list-style: none; border-top: 1px solid var(--border); font-size: .8125rem; }
-.alert { display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start; }
-.alert .icon { width: 16px; height: 16px; margin-top: 1px; }
-.alert-warn { color: var(--warning); font-weight: 600; }
-.alert-info { color: var(--muted); }
 .status-word { color: var(--tone-text); font-weight: 700; }
-.tracker-card-progress { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 20px; align-items: start; padding: 6px 18px 16px 23px; }
-.tracker-card-total { display: grid; gap: 4px; min-width: 0; padding-top: 2px; }
-.total-pct { font-size: 1.9rem; font-weight: 700; line-height: 1.1; }
-.total-pct small { display: block; color: var(--muted); font-size: .72rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
-.total-count { color: var(--muted); font-size: .8125rem; }
-.total-count strong { color: var(--text); }
-.tracker-card-total .bar { margin-top: 6px; }
-.tracker-card-spark { min-width: 0; }
-.spark { display: block; width: 100%; height: 84px; }
-.spark-bar { fill: var(--primary); }
-.spark-bar.is-low { fill: color-mix(in srgb, var(--danger) 30%, transparent); stroke: var(--danger); stroke-width: 1.5; stroke-dasharray: 3 2; }  /* outlined as well as red */
-.spark-slot { fill: var(--border); }
-.spark-target { fill: none; stroke: var(--text); stroke-opacity: .6; stroke-width: 2; }
-.spark-key { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin: 6px 0 0; color: var(--muted); font-size: .78rem; }
-.spark-key strong { color: var(--text); }
 .key { display: inline-block; width: 10px; height: 10px; margin: 0 5px 0 10px; border-radius: 2px; vertical-align: -1px; }
 .key:first-child { margin-left: 0; }
-.key-on { background: var(--primary); } .key-low { background: color-mix(in srgb, var(--danger) 30%, transparent); outline: 1.5px dashed var(--danger); outline-offset: -1.5px; }
+.key-on { background: var(--primary); }
 .key-target { height: 2px; background: var(--text); opacity: .6; vertical-align: 3px; }
-.spark-empty { margin: 0; padding: 10px 0; color: var(--muted); font-size: .85rem; }
-.tracker-card-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; border-top: 1px solid var(--border); }
-.tracker-card-facts > div { min-width: 0; padding: 10px 14px; }
-.tracker-card-facts > div:first-child { padding-left: 23px; }
-.tracker-card-facts > div + div { border-left: 1px solid var(--border); }
-.tracker-card-facts dt { color: var(--muted); font-size: .72rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
-.tracker-card-facts dd { display: grid; gap: 1px; margin: 0; }
 .fact-value { font-size: .95rem; font-weight: 700; }
 .fact-sub { color: var(--muted); font-size: .78rem; }
 .fact-sub.tone-danger { color: var(--danger); } .fact-sub.tone-success { color: var(--success); }
-.tracker-card-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: auto; padding: 10px 18px 10px 23px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); color: var(--muted); font-size: .8125rem; }
 .flag, .cell-sub.flag { color: var(--warning); font-weight: 600; }
 .flag.flag-mild { color: var(--muted); }  /* a status more cautious than its forecast: worth a look, not a warning */
-.tracker-card-links { display: flex; flex-wrap: wrap; gap: 6px 16px; width: 100%; }
-.tracker-card-links a { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; text-decoration: none; }
-.tracker-card-links .icon { width: 16px; height: 16px; }
-.tracker-card-links .tracker-card-update { margin-left: auto; }
-.tracker-card-links a:hover { text-decoration: underline; }
 .tracker-list { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); }
 .tracker-list table { min-width: 860px; }
 .tracker-list td { vertical-align: middle; }
@@ -396,11 +423,6 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tracker-row-progress { min-width: 160px; }
 .tracker-row-progress .bar { margin-bottom: 4px; }
 .tracker-row-forecast .fact-sub { display: block; }
-@media (max-width: 520px) {
-  .tracker-card-progress, .tracker-card-facts { grid-template-columns: minmax(0, 1fr); }
-  .tracker-card-facts > div + div { border-left: 0; border-top: 1px solid var(--border); }
-  .tracker-card-facts > div { padding-left: 23px; }
-}
 
 /* Weekly inputs: a strip of weeks, the commentary beside the week's figures, and a preview of the status band. */
 .inputs-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; max-width: 1280px; container-type: inline-size; }

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from math import cos, pi, sin
 
 from flask import abort, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import func, select, union_all
@@ -37,6 +38,7 @@ from ..engine.calc import (
     status_mismatch,
 )
 from ..engine.weeks import week_endings
+from ..formatting import fmt_date
 from ..ids import parse_id
 from ..lists.catalogue import (
     business_line_choices,
@@ -199,49 +201,116 @@ def _data_range(session, tracker: Tracker) -> tuple[date | None, date | None]:
 # --- Home ----------------------------------------------------------------------------------------------------
 
 
-SPARK_WEEKS = 8
-SPARK_WIDTH, SPARK_HEIGHT, SPARK_HEADROOM = 320, 84, 6
 STATUS_ATTENTION = {"Red": 0, "Amber": 2, "Green": 3}
+RING_RADIUS = 46  # the progress ring is drawn in a 112 x 112 box
+TIMELINE_WIDTH, TIMELINE_PAD = 320, 8
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
-def spark_chart(rows: list[WeekRow]) -> dict | None:
-    """Bars and target segments for the home card's chart of the last completed weeks (SVG user units).
-
-    The chart always has SPARK_WEEKS slots, newest on the right, so a tracker with few weeks done keeps narrow bars;
-    the slots before its first week are returned as `empty` for a faint stub on the baseline.
-    """
-    done = [r for r in rows if r.state == COMPLETE][-SPARK_WEEKS:]
-    if not done:
+def _plan_fraction(rows: list[WeekRow], headline) -> float | None:
+    """The share of the scope the weekly targets planned to have done by the report week, or None with no full plan."""
+    if not headline.total_scope:
         return None
-    peak = max([r.actual or 0 for r in done] + [r.target or 0 for r in done]) or 1
-    scale = (SPARK_HEIGHT - SPARK_HEADROOM) / (peak * 1.05)
-    step = SPARK_WIDTH / SPARK_WEEKS
-    offset = SPARK_WEEKS - len(done)
-    empty = [{"x": round(i * step + 4, 1), "width": round(step - 8, 1)} for i in range(offset)]
-    bars, target = [], []
-    for i, row in enumerate(done, start=offset):
-        actual = row.actual or 0
-        height = actual * scale
-        bars.append(
-            {
-                "x": round(i * step + 4, 1),
-                "y": round(SPARK_HEIGHT - height, 1),
-                "width": round(step - 8, 1),
-                "height": round(height, 1),
-                "low": row.target is not None and actual < row.target,
-            }
+    row = next((r for r in rows if r.week_ending == headline.report_week), None)
+    if row is None or row.cum_target is None:
+        return None
+    return max(0.0, min(1.0, row.cum_target / headline.total_scope))
+
+
+def _ring(done: float, plan: float | None) -> dict:
+    """Dash lengths for the progress ring: done, the shortfall against the plan (red) and the plan tick (SVG units)."""
+    circumference = 2 * pi * RING_RADIUS
+    ring = {
+        "r": RING_RADIUS,
+        "c": round(circumference, 1),
+        "done": round(circumference * done, 1),
+        "short": 0,
+        "tick": None,
+    }
+    ring["ahead"] = plan is not None and done >= plan
+    if plan is not None:
+        if plan > done:
+            ring["short"] = round(circumference * (plan - done), 1)
+            ring["short_offset"] = round(-circumference * done, 1)
+        angle = plan * 2 * pi - pi / 2  # the ring starts at twelve o'clock
+        ring["tick"] = {
+            key: round(56 + trig(angle) * radius, 1)
+            for key, trig, radius in (("x1", cos, 38), ("y1", sin, 38), ("x2", cos, 55), ("y2", sin, 55))
+        }
+    return ring
+
+
+def _timeline(start: date, today: date, target: date | None, forecast: date | None, last: date) -> dict:
+    """Positions on the home card's timeline (SVG units): today, the target, the forecast and the month marks.
+
+    The line runs from the tracker's start to the later of its target and forecast (or its last week without either),
+    with a little room after the last marker so it is not cut in half by the edge.
+    """
+    end = max(d for d in (target, forecast, last) if d is not None)
+    span = max((end - start).days, 1)
+    end_days = span * 1.04
+    inner = TIMELINE_WIDTH - 2 * TIMELINE_PAD
+
+    def x(day: date) -> float:
+        return round(TIMELINE_PAD + max(0.0, min(end_days, (day - start).days)) / end_days * inner, 1)
+
+    months, month = [], date(start.year + (start.month == 12), start.month % 12 + 1, 1)
+    while (month - start).days < end_days:
+        months.append((x(month), MONTHS[month.month - 1]))
+        month = date(month.year + (month.month == 12), month.month % 12 + 1, 1)
+    step = max(1, -(-len(months) // 10))  # at most about ten labels, so they never touch
+    timeline = {
+        "width": TIMELINE_WIDTH,
+        "pad": TIMELINE_PAD,
+        "inner": inner,
+        "today": x(today),
+        "target": x(target) if target else None,
+        "forecast": x(forecast) if forecast else None,
+        "months": [(mx, label if i % step == 0 else "") for i, (mx, label) in enumerate(months)],
+        "late": None,
+    }
+    if target and forecast and forecast > target:
+        timeline["late"] = {"x": timeline["target"], "width": round(timeline["forecast"] - timeline["target"], 1)}
+    return timeline
+
+
+def _card_tasks(card: dict, today: date) -> list[dict]:
+    """The card's warnings as things to do, each with the page that fixes it: the update, completions, the status."""
+    tracker, headline = card["tracker"], card["headline"]
+    update = url_for("entries.inputs", tracker_id=tracker.id, week=headline.report_week.isoformat())
+    tasks = []
+    if card["inputs_missing"]:
+        text = f"Weekly update for {fmt_date(headline.report_week)} not written"
+        tasks.append({"text": text, "action": "Write", "href": update, "main": True, "note": False})
+    if card["entry_stale"]:
+        last = card["last_entry"]
+        text = (
+            f"No completions for {(today - last).days} days (last {fmt_date(last)})"
+            if last
+            else "No completions recorded yet"
         )
-        if row.target is not None:
-            y = round(SPARK_HEIGHT - row.target * scale, 1)
-            target.append(f"M{round(i * step + 1, 1)},{y} H{round((i + 1) * step - 1, 1)}")
-    last = done[-1]
+        href = url_for("entries.list_entries", tracker_id=tracker.id)
+        tasks.append({"text": text, "action": "Record", "href": href, "main": False, "note": False})
+    if card["mismatch"]:
+        tone, text = card["mismatch"]
+        tasks.append({"text": text, "action": "Review", "href": update, "main": False, "note": tone == "note"})
+    return tasks
+
+
+def countdown(tracker: Tracker, headline, rows: list[WeekRow], today: date) -> dict:
+    """What the home card draws: the progress ring against the plan, and the timeline from the start to the finish."""
+    done = min(1.0, headline.completed / headline.total_scope) if headline.total_scope else 0.0
+    plan = _plan_fraction(rows, headline)
+    start = tracker.first_week_ending - timedelta(days=6)
+    target, forecast = headline.target_completion, headline.forecast_completion
     return {
-        "bars": bars,
-        "empty": empty,
-        "target": " ".join(target),
-        "weeks": len(done),
-        "actual": last.actual,
-        "goal": last.target,
+        "done": done,
+        "plan": plan,
+        "short_points": round((plan - done) * 100) if plan is not None and plan > done else 0,
+        "ring": _ring(done, plan),
+        "timeline": _timeline(start, today, target, forecast, tracker.last_week_ending),
+        "start": start,
+        "late": bool(target and forecast and forecast > target),
     }
 
 
@@ -335,12 +404,13 @@ def home():
             "behind": dvt is not None and dvt > 0,
             "mismatch": status_mismatch(status, headline),
             "lead": lead_in_charge(db, t),
-            "spark": spark_chart(position.rows),
+            "countdown": countdown(t, headline, position.rows, today),
             "labels": labels[t.id],
             "line_data": str(t.business_line_id) if t.business_line_id is not None else "none",
             "regions_data": " " + (" ".join(str(region_id) for region_id, _ in regions[t.id]) or "none") + " ",
         }
         card["disagree"] = bool(card["mismatch"]) and card["mismatch"][0] == "warning"
+        card["tasks"] = _card_tasks(card, today)
         card["attention"] = (
             (10 if t.status != "active" else 0)
             + STATUS_ATTENTION.get(status, 4)
