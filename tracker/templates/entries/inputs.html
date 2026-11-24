@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, icon, rag_dot, rag_tone, setting %}
+{% from "lists/_table.html" import search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='inputs.js', v=app_version) }}" defer></script>
@@ -164,6 +165,42 @@
   </section>
   {% endif %}
   </div>
+  {% set table_id = 'past-updates' %}
+  <section class="settings-section past-updates" aria-labelledby="past-title">
+    <header class="access-card-head">
+      <h2 id="past-title">Past updates</h2>
+      <span class="count-pill">{{ past|length }}<span class="sr-only"> weeks</span></span>
+      <p class="access-card-note">Each week's commentary as the report showed it.</p>
+    </header>
+    {% if past %}
+    <div class="list-tools">
+      {{ search_box(table_id, 'Search updates') }}
+      {{ status_filters(table_id, 'updates', (('all', 'All'), ('green', 'Green'), ('amber', 'Amber'), ('red', 'Red'), ('unwritten', 'Not written')), past_counts) }}
+      {{ clear_filters(table_id) }}
+    </div>
+    <div class="section-table" data-table-frame>
+      <table id="{{ table_id }}" class="table card-rows" data-sortable data-state-prefix="past-">
+        <thead><tr>{{ sort_header('Week ending', 'week', type='date') }}{{ sort_header('Status', 'status') }}<th scope="col">Headline</th><th scope="col">Needed from you</th>{{ sort_header('Prepared by', 'by') }}<th scope="col"><span class="sr-only">Open</span></th></tr></thead>
+        <tbody>
+        {% for r in past %}
+        <tr data-status="{{ r.token }}" data-search="{{ (format_date(r.week) ~ ' ' ~ (r.status or '') ~ ' ' ~ r.headline ~ ' ' ~ r.decisions ~ ' ' ~ r.prepared_by)|lower }}" data-sort-week="{{ r.week.isoformat() }}" data-sort-status="{{ r.token }}" data-sort-by="{{ r.prepared_by }}">
+          <td>{{ format_date(r.week) }}</td>
+          <td data-label="Status:">{% if not r.written %}<span class="muted">Not written</span>{% elif r.status %}<span class="badge badge-muted">{{ rag_dot(r.status) }}{{ r.status }}</span>{% else %}<span class="muted">Status not set</span>{% endif %}</td>
+          <td data-label="Headline:">{{ r.headline or '–' }}</td>
+          <td data-label="Needed from you:">{% if r.written %}{{ r.decisions or 'None' }}{% else %}–{% endif %}</td>
+          <td data-label="Prepared by:">{{ r.prepared_by or '–' }}</td>
+          <td class="cell-actions"><a class="button button-small" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=r.week.isoformat()) }}">Open<span class="sr-only"> week ending {{ format_date(r.week) }}</span></a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {{ no_match('No updates match.', table_id) }}
+    </div>
+    {{ table_pager(table_id, 'weeks', 'week', past|length) }}
+    {% else %}
+    <p class="empty-note">No earlier weeks yet.</p>
+    {% endif %}
+  </section>
 </div>
 {% if tracker.status != 'archived' %}<dialog class="perm-drawer" id="history-panel"></dialog>{% endif %}
 {% endblock %}

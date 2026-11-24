@@ -687,6 +687,36 @@ def calendar_reminder_history_panel(tracker_id: int):
     return get_template_attribute("entries/_reminder_history.html", "history_panel")(**context)
 
 
+def _past_updates(db, past_weeks, saved) -> list[dict]:
+    """One row per week before the shown one, newest first, for the Past updates table."""
+    ids = {saved[w].prepared_by for w in past_weeks if w in saved and saved[w].prepared_by}
+    names = {u.id: u.full_name for u in db.scalars(select(User).where(User.id.in_(ids)))} if ids else {}
+    rows = []
+    for w in reversed(past_weeks):
+        entry = saved.get(w)
+        written = bool(entry and (entry.status or entry.headline))
+        status = entry.status if written else None
+        rows.append(
+            {
+                "week": w,
+                "written": written,
+                "status": status,
+                "token": (status.lower() if status else "nostatus") if written else "unwritten",
+                "headline": (entry.headline or "") if written else "",
+                "decisions": (entry.decisions or "") if written else "",
+                "prepared_by": names.get(entry.prepared_by, "") if written and entry.prepared_by else "",
+            }
+        )
+    return rows
+
+
+def _past_counts(rows: list[dict]) -> dict:
+    counts = {"all": len(rows)}
+    for token in ("green", "amber", "red", "unwritten"):
+        counts[token] = sum(1 for r in rows if r["token"] == token)
+    return counts
+
+
 def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[str], status: int):
     db = get_session()
     today = date.today()
@@ -698,6 +728,7 @@ def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[
     saved = {r.week_ending: r for r in db.scalars(select(ReportInput).where(ReportInput.tracker_id == tracker.id))}
     index = weeks.index(week)
     previous = saved.get(weeks[index - 1]) if index else None
+    past = _past_updates(db, weeks[:index], saved)
     risks = list(db.scalars(select(Risk).where(Risk.tracker_id == tracker.id, Risk.status != "Closed")))
     sent_at = db.scalar(
         select(func.max(ReportSend.sent_at)).where(
@@ -724,6 +755,8 @@ def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[
             errors=errors,
             rag_values=RAG_VALUES,
             saved=saved,
+            past=past,
+            past_counts=_past_counts(past),
             previous=previous if previous and (previous.status or previous.headline or previous.decisions) else None,
             prev_week=weeks[index - 1] if index else None,
             next_week=weeks[index + 1] if index + 1 < len(weeks) else None,

@@ -189,3 +189,24 @@ def test_the_page_does_not_scroll_sideways_on_a_phone(page, live_server, editor)
     page.goto(inputs_url(live_server, editor))
     page.click("[data-week-toggle]")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+
+def test_the_past_updates_table_searches_filters_and_opens_a_week(page, live_server, editor):
+    page.add_init_script(RECORDER)
+    page.goto(inputs_url(live_server, editor, WEEKS[3]))
+    rows = page.locator("#past-updates tbody tr")
+    expect(rows).to_have_count(3)
+    expect(page.locator("[data-pager-for='past-updates'] [data-pager-count]")).to_have_text("Showing 3 of 3 weeks")
+    page.fill("[data-search-for='past-updates'] input", "slow")
+    expect(page.locator("#past-updates tbody tr:not([hidden])")).to_have_count(1)
+    expect(page.locator("[data-pager-for='past-updates'] [data-pager-count]")).to_have_text("Showing 1 of 3 weeks")
+    page.click("[data-clear-for='past-updates']")
+    expect(page.locator("[data-pager-for='past-updates'] [data-pager-count]")).to_have_text("Showing 3 of 3 weeks")
+    page.click("[data-status-for='past-updates'] [data-status='unwritten']")
+    expect(page.locator("[data-pager-for='past-updates'] [data-pager-count]")).to_have_text("Showing 2 of 3 weeks")
+    assert "past-filter=unwritten" in page.url
+    page.click("[data-clear-for='past-updates']")
+    page.get_by_role("link", name="Open").last.click()
+    expect(page).to_have_url(inputs_url(live_server, editor, WEEKS[0]))
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
