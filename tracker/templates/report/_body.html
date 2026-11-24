@@ -89,8 +89,38 @@
         <h2 id="report-groups-title">Progress by {{ group_name|lower }}</h2>
         <p>Completed against each {{ group_name|lower }}'s scope.</p>
       </header>
+      {% set many = group_name|plural|lower %}{% set one = group_name|lower %}
+      {% set gap = h.history_completed - h.completed %}
       {% if not h.totals_check_ok %}
-      <p class="flash flash-danger report-check">Data check: the tracker total does not match the sum of the groups.</p>
+      <p class="flash flash-warning report-check">
+        {%- if gap > 0 %}The {{ many }} add up to {{ h.completed|num }} done, but the tracker's weekly history has {{ h.history_completed|num }}. {{ gap|num }} are on the tracker but not on any {{ one }}: set as completed before the first week (Settings), or weekly figures imported without a {{ one }}.
+        {%- else %}The {{ many }} add up to {{ h.completed|num }} done, {{ (0 - gap)|num }} more than the tracker's weekly history ({{ h.history_completed|num }}). A {{ one }}'s starting figure may count work done before the tracker's first week that the history does not.{% endif %}</p>
+      {% endif %}
+      {#- One bar for all of them, so the starting amount shows: done before the first week, done since, retired, on the
+          tracker but not on a group, and what is left. Parts that are 0 are left out. #}
+      {% set retired = r.groups|selectattr('retired')|list %}
+      {% set before = live|sum(attribute='starting_completed') %}
+      {% set since = live|sum(attribute='deployed') - before %}
+      {% set gone = retired|sum(attribute='deployed') %}
+      {% set loose = [gap, 0]|max %}
+      {% set left = [h.total_scope - h.completed, 0]|max %}
+      {% set whole = [before + since + gone + loose + left, 1]|max %}
+      {% set parts = [('split-start', 'Done before the first week', before), ('split-since', 'Done since the first week', since), ('split-retired', 'Retired ' ~ many, gone), ('split-loose', 'On the tracker, not on a ' ~ one, loose)] %}
+      {% if live or retired %}
+      <div class="group-split">
+        <svg viewBox="0 0 1000 10" preserveAspectRatio="none" role="img" aria-label="Done before the first week {{ before }}, since {{ since }}, retired {{ gone }}, not on a {{ one }} {{ loose }}, left to do {{ left }}">
+          <rect class="bar-track" width="1000" height="10"/>
+          {%- set ns = namespace(x=0) %}
+          {%- for cls, label, n in parts if n > 0 %}
+          <rect class="{{ cls }}" x="{{ '%.2f'|format(ns.x) }}" width="{{ '%.2f'|format(n / whole * 1000) }}" height="10"/>
+          {%- set ns.x = ns.x + n / whole * 1000 %}
+          {%- endfor %}
+        </svg>
+        <ul class="group-split-key">
+          {% for cls, label, n in parts if n > 0 %}<li><span class="key-swatch {{ cls }}-key" aria-hidden="true"></span>{{ label }} <strong>{{ n|num }}</strong></li>{% endfor %}
+          <li><span class="key-swatch split-left-key" aria-hidden="true"></span>Left to do <strong>{{ left|num }}</strong></li>
+        </ul>
+      </div>
       {% endif %}
       {% if live %}
       <ul class="group-progress">
@@ -108,6 +138,7 @@
       </ul>
       {% set done = live|sum(attribute='deployed') %}{% set scope = live|sum(attribute='baseline') %}
       <p class="group-progress-total"><span>All {{ group_name|plural|lower }}</span><span>{{ done|num }} of {{ scope|num }} · {{ (done / scope if scope else none)|pct }}</span></p>
+      {% if retired %}<p class="group-progress-hidden">Not shown: {{ retired|length }} retired {{ one if retired|length == 1 else many }}, {{ gone|num }} done.</p>{% endif %}
       {% else %}<p class="report-empty">No {{ group_name|plural|lower }} yet.</p>{% endif %}
     </section>
   </div>

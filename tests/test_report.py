@@ -633,14 +633,88 @@ def test_forecast_box_says_how_the_forecast_compares_with_the_target(
         assert "to 25 Dec" not in box and "weeks to" not in box
 
 
-def test_data_check_warning_when_totals_differ(app):
+def _with_groups(report, positions, completed_history=None):
     import dataclasses
 
+    completed = sum(p.deployed for p in positions)
+    scope = sum(p.baseline for p in positions)
+    history = completed if completed_history is None else completed_history
+    headline = dataclasses.replace(
+        report.headline,
+        completed=completed,
+        total_scope=scope,
+        remaining=scope - completed,
+        history_completed=history,
+        totals_check_ok=history == completed,
+    )
+    return dataclasses.replace(report, headline=headline, groups=positions)
+
+
+def _group(name, baseline, starting, deployed, retired=False):
+    from tracker.engine.calc import GroupPosition
+
+    return GroupPosition(
+        group_id=hash(name) % 1000,
+        name=name,
+        baseline=baseline,
+        deployed=deployed,
+        ready_not_complete=0,
+        remaining=baseline - deployed,
+        pct_complete=deployed / baseline,
+        planned_completion=None,
+        rag=None,
+        comment=None,
+        retired=retired,
+        starting_completed=starting,
+    )
+
+
+def test_data_check_explains_a_tracker_figure_not_on_any_group(app):
     report, _ = synthetic_report()
-    bad = dataclasses.replace(report, headline=dataclasses.replace(report.headline, totals_check_ok=False))
-    assert "Data check: the tracker total does not match the sum of the groups." in body_html(app, bad)
-    good = dataclasses.replace(report, headline=dataclasses.replace(report.headline, totals_check_ok=True))
-    assert "Data check:" not in body_html(app, good)
+    body = body_html(app, _with_groups(report, [_group("Site A", 100, 10, 20)], completed_history=32))
+    text = flat_text(body)
+    assert "flash-danger" not in body and "report-check" in body
+    assert "The sites add up to 20 done, but the tracker's weekly history has 32." in text
+    assert "12 are on the tracker but not on any site" in text
+    assert "completed before the first week (Settings)" in text and "imported without a site" in text
+
+
+def test_data_check_explains_groups_counting_more_than_the_history(app):
+    report, _ = synthetic_report()
+    text = flat_text(body_html(app, _with_groups(report, [_group("Site A", 100, 10, 20)], completed_history=15)))
+    assert "The sites add up to 20 done, 5 more than the tracker's weekly history (15)." in text
+    assert "starting figure" in text
+
+
+def test_no_data_check_when_the_totals_agree(app):
+    report, _ = synthetic_report()
+    body = body_html(app, _with_groups(report, [_group("Site A", 100, 10, 20)]))
+    assert "report-check" not in body
+
+
+def test_progress_panel_shows_the_starting_amount_in_a_split_bar(app):
+    report, _ = synthetic_report()
+    positions = [_group("Site A", 100, 10, 20), _group("Site B", 10, 0, 5, retired=True)]
+    body = body_html(app, _with_groups(report, positions, completed_history=30))
+    text = flat_text(body)
+    split = body[body.index('class="group-split"') :]
+    for cls in ("split-start", "split-since", "split-retired", "split-loose"):
+        assert f'class="{cls}"' in split
+    assert "Done before the first week 10" in text
+    assert "Done since the first week 10" in text
+    assert "Retired sites 5" in text
+    assert "On the tracker, not on a site 5" in text
+    assert "Left to do 85" in text
+    # Retired groups stay out of the list but are named under it.
+    assert "Not shown: 1 retired site, 5 done." in text
+
+
+def test_split_bar_leaves_out_empty_parts(app):
+    report, _ = synthetic_report()
+    text = flat_text(body_html(app, _with_groups(report, [_group("Site A", 100, 0, 20)])))
+    assert "Done since the first week 20" in text
+    assert "Done before the first week" not in text and "Retired" not in text and "not on a site" not in text
+    assert "Not shown:" not in text
 
 
 def test_headline_figures_render_with_missing_values(app):

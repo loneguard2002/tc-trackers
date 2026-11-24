@@ -56,6 +56,7 @@ class GroupPosition:
     rag: str | None
     comment: str | None
     retired: bool
+    starting_completed: int = 0  # done before the first week, part of ``deployed``
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ class Headline:
     next_week_target: int | None
     totals_check_ok: bool
     verdict: str
+    history_completed: int = 0  # the weekly history's total: completed before the first week plus every week's actual
 
 
 def _plural(n: int) -> str:
@@ -175,6 +177,7 @@ def group_positions(groups: list[GroupInput], entry_totals: dict[int, int]) -> l
                 rag=g.rag,
                 comment=g.comment,
                 retired=g.retired,
+                starting_completed=g.starting_completed,
             )
         )
     return positions
@@ -291,5 +294,6 @@ def build_headline(
         this_week_target=this_week.target if this_week is not None else None,
         next_week_target=next_week.target if next_week is not None else None,
         totals_check_ok=completed == expected_completed,
+        history_completed=expected_completed,
         verdict=_verdict(remaining, total_scope, forecast_completion, target_completion),
     )
