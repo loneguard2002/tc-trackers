@@ -118,7 +118,7 @@
         </ul>
         <p class="glance-note">{{ d.status_summary }}</p>
       </section>
-      <section class="glance-card" aria-labelledby="glance-risks-title">
+      <section class="glance-card" id="risks" aria-labelledby="glance-risks-title">
         <h2 id="glance-risks-title">Top risks</h2>
         <p class="glance-note">{{ d.risks|length }} of {{ report.open_risks }} open</p>
         {% if d.risks %}

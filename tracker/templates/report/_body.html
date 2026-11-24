@@ -61,7 +61,7 @@
   </section>
 
   <div class="report-columns">
-    <section class="report-panel report-risks" aria-labelledby="report-risks-title">
+    <section class="report-panel report-risks" id="risks" aria-labelledby="report-risks-title">
       <header class="report-panel-head">
         <h2 id="report-risks-title">Top risks</h2>
         <p>{{ r.open_risks }} open, {{ r.red_risks }} Red{% if r.top_risks|length < r.open_risks %}. The {{ r.top_risks|length }} most serious are shown{% endif %}.</p>

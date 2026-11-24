@@ -278,6 +278,35 @@ def test_home_card_counts_only_open_red_risks(client, logged_in_user, db, tracke
     assert "No open risks" in by_name["Calm"]
 
 
+def test_home_card_links_open_risks_where_each_person_can_see_them(client, logged_in_user, db, tracker_factory, grant):
+    edited, read, calm = tracker_factory(name="Edited"), tracker_factory(name="Read"), tracker_factory(name="Calm")
+    grant(logged_in_user, edited, "editor")
+    grant(logged_in_user, read, "viewer")
+    grant(logged_in_user, calm, "editor")
+    db.add_all(
+        [
+            Risk(tracker_id=edited.id, ref="R1", description="a", rag="Red"),
+            Risk(tracker_id=read.id, ref="R1", description="b", rag="Amber"),
+        ]
+    )
+    db.commit()
+    by_name = cards_by_name(client.get("/").get_data(as_text=True))
+    # An editor goes to the Risks tab, showing only the Red ones when there are any.
+    assert f'<a class="fact-link" href="/trackers/{edited.id}/risks?filter=red">' in by_name["Edited"]
+    # A viewer cannot open the Risks tab, so the link goes to the report's Top risks.
+    assert f'<a class="fact-link" href="/trackers/{read.id}/report#risks">' in by_name["Read"]
+    assert "No open risks" in by_name["Calm"] and "fact-link" not in by_name["Calm"]
+
+
+def test_editor_risk_link_without_red_risks_opens_all_open_risks(client, logged_in_user, db, tracker_factory, grant):
+    tracker = tracker_factory(name="Amber only")
+    grant(logged_in_user, tracker, "owner")
+    db.add(Risk(tracker_id=tracker.id, ref="R1", description="a", rag="Amber"))
+    db.commit()
+    card = cards_by_name(client.get("/").get_data(as_text=True))["Amber only"]
+    assert f'<a class="fact-link" href="/trackers/{tracker.id}/risks">' in card
+
+
 # --- H. Role, actions and person in charge --------------------------------------------------------------------------
 
 
