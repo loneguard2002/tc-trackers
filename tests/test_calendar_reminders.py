@@ -475,3 +475,32 @@ def test_a_success_between_failures_records_another_failed_event(db, setup, row,
     _failing_with(monkeypatch, "down")
     service.sync_reminder(db, row, NOW)
     assert [kind for kind, _ in events(db, setup)] == ["failed", "sent", "failed"]
+
+
+def test_events_are_ordered_by_insert_order_not_by_time(db, setup):
+    from tracker.models import CalendarReminderEvent
+
+    tracker, person = setup
+    later, earlier = datetime(2026, 10, 2, tzinfo=timezone.utc), datetime(2026, 10, 1, tzinfo=timezone.utc)
+    for kind, at in (("switched_on", later), ("failed", earlier)):
+        db.add(CalendarReminderEvent(user_id=person.id, tracker_id=tracker.id, kind=kind, at=at, detail="down"))
+        db.flush()
+    db.commit()
+    assert [e.kind for e in service.events_for(db, person.id, tracker.id)] == ["failed", "switched_on"]
+
+
+def test_the_failure_dedupe_looks_at_the_last_inserted_event(db, setup, row, monkeypatch):
+    from tracker.models import CalendarReminderEvent
+
+    tracker, person = setup
+    _failing_with(monkeypatch, "down")
+    service.sync_reminder(db, row, NOW)
+    # a later-inserted event that carries an older time must still count as the newest
+    db.add(
+        CalendarReminderEvent(
+            user_id=person.id, tracker_id=tracker.id, kind="switched_off", at=datetime(2000, 1, 1, tzinfo=timezone.utc)
+        )
+    )
+    db.commit()
+    service.sync_reminder(db, row, NOW)
+    assert [kind for kind, _ in events(db, setup)] == ["failed", "switched_off", "failed"]

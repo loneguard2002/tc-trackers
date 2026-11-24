@@ -487,6 +487,10 @@ def inputs(tracker_id: int):
     return _render_inputs(tracker, weeks, week, row, form, [], 200)
 
 
+# letters NFKD does not decompose
+_FILE_NAME_LETTERS = str.maketrans(
+    {"ß": "ss", "Æ": "AE", "æ": "ae", "Œ": "OE", "œ": "oe", "Ø": "O", "ø": "o", "Ł": "L", "ł": "l", "Đ": "D", "đ": "d"}
+)
 REMINDER_FAILED = "The calendar reminder could not be sent now. It will be tried again shortly."
 REMINDER_NOT_SET_UP = "Email is not set up in this application yet. The reminder will be sent once it is."
 
@@ -582,7 +586,11 @@ def calendar_reminder_ics(tracker_id: int):
     organizer = smtp.get_smtp_config(db).get("from_") or user.email
     series = series_for(tracker, user, inputs_url(tracker.id))
     text = build_calendar(series, organizer, user.email, "PUBLISH", sequence, datetime.now(timezone.utc))
-    plain = "".join(c for c in unicodedata.normalize("NFKD", tracker.name) if not unicodedata.combining(c))
+    plain = "".join(
+        c
+        for c in unicodedata.normalize("NFKD", tracker.name.translate(_FILE_NAME_LETTERS))
+        if not unicodedata.combining(c)
+    )
     filename = f"{re.sub(r'[^A-Za-z0-9 _-]', '', plain).strip()} reminder.ics".strip()
     record_event(db, user.id, tracker.id, "downloaded", filename)
     db.commit()
