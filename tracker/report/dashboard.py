@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ..engine.calc import GroupPosition, Headline
 from ..formatting import fmt_num, fmt_pct, fmt_rate
 from ..models import ReportInput, User
-from ..trackers.targets import TargetEntry, moves, target_as_of, target_history
+from ..trackers.targets import TargetEntry, moves, shows_history, target_as_of, target_history
 from .build import Report
 from .charts import unit_title
 
@@ -347,6 +347,6 @@ def build_dashboard(session: Session, report: Report, today: date) -> Dashboard:
         locations=_location_lines(report),
         risks=_risk_lines(report),
         chart_subtitle=unit_title(tracker.unit_label or "units", "left to do, by week ending"),
-        target_lines=target_lines(targets),
+        target_lines=target_lines(targets) if shows_history(targets) else [],
         target_note=target_note(targets),
     )

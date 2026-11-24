@@ -844,3 +844,26 @@ def test_glance_picture_is_served_to_viewers_and_the_classic_pictures_stay(clien
     assert response.status_code == 200 and response.mimetype == "image/svg+xml"
     assert b'id="glance-actual"' in response.data
     assert b'id="glance-actual"' not in client.get(f"{base}/remaining.svg?week={WEEKS[1].isoformat()}").data
+
+
+def test_glance_picture_wording_and_helpers():
+    from tracker.report.charts import glance_plan_points, nice_step, target_label_text, week_label
+
+    assert week_label(date(2026, 10, 16), True) == "This week, ending 16 Oct"
+    assert week_label(date(2026, 10, 16), False) == "Week ending 16 Oct"
+    entry = _entry(2, date(2026, 12, 18), current=True)
+    assert target_label_text(entry, True) == "2  Target 18 Dec"
+    assert target_label_text(entry, False) == "Target 18 Dec"
+    assert target_label_text(_entry(1, date(2026, 12, 4)), True) == "1"
+    assert [nice_step(top) for top in (0, 60, 90, 100, 130, 240, 500, 700, 1500, 12000)] == [
+        10, 10, 20, 20, 25, 50, 100, 200, 250, 2000,
+    ]  # fmt: skip
+    rows = build_week_rows(WEEKS, {w: 10 for w in WEEKS}, {}, 25, 0, 3, date(2026, 9, 3), FRIDAY)
+    _, values = glance_plan_points(rows)
+    assert values == [15, 5, 0]  # stops at the first week with none left; never below zero
+
+
+def test_glance_picture_draws_no_forecast_backwards_or_when_nothing_is_left():
+    assert 'id="glance-forecast"' in _glance(forecast_end=date(2026, 10, 2))
+    assert 'id="glance-forecast"' not in _glance(forecast_end=WEEKS[0])
+    assert 'id="glance-forecast"' not in _glance(forecast_end=WEEKS[1])  # the last actual is the report week

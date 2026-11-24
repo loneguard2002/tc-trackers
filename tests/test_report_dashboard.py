@@ -633,3 +633,16 @@ def test_new_styles_are_scoped_to_the_glance_view():
         if sel.startswith("@media"):
             continue
         assert re.match(r'(\[data-theme="dark"\] )?\.(report-glance|glance-)', sel), sel
+
+
+def test_a_lone_set_has_no_list_and_a_move_brings_it_back(client, db, small_tracker, viewer):
+    from report_helpers import add_target_change
+
+    seed(db, small_tracker)
+    add_target_change(db, small_tracker, None, date(2026, 12, 4), datetime(2026, 9, 1, 9, tzinfo=timezone.utc))
+    html = page(client, small_tracker)
+    assert "Target date changes" not in html and "glance-target-badge" not in html
+    add_target_change(
+        db, small_tracker, date(2026, 12, 4), date(2026, 12, 11), datetime(2026, 9, 2, 9, tzinfo=timezone.utc)
+    )
+    assert "Target date changes" in page(client, small_tracker)

@@ -220,8 +220,12 @@
     });
     var last = actual.length ? actual[actual.length - 1] : null;
     var forecastEnd = data.forecast_end ? dayNumber(data.forecast_end) : null;
-    var forecast = last && forecastEnd !== null && last[1] > 0 ? [last, [forecastEnd, 0]] : [];
-    var targets = (data.targets || []).map(function (t) {
+    // Never backwards: a forecast end on or before the last actual draws no line.
+    var forecast = last && forecastEnd !== null && forecastEnd > last[0] && last[1] > 0 ? [last, [forecastEnd, 0]] : [];
+    var numbered = data.target_numbers === true;
+    var targets = (data.targets || []).filter(function (t) {
+      return numbered || t.current;
+    }).map(function (t) {
       return { day: dayNumber(t.date), number: t.number, current: t.current, date: t.date };
     });
     var empty = !plan.length && !actual.length;
@@ -238,32 +242,43 @@
 
     var top = 0;
     plan.concat(actual).forEach(function (p) { if (p[1] > top) top = p[1]; });
-    var step = 100;
-    var ticks = Math.ceil(top / 100);
-    if (ticks > 12) step = 100 * Math.ceil(ticks / 10);
+    var step = niceStep(top);
     var yMax = Math.max(step, Math.ceil(top / step) * step);
 
-    // Direct labels at the report week: the higher line's label above, the lower one's below, so they never collide.
+    // Direct labels at the report week, both clear of the lines (which fall from left to right): the higher line's label
+    // above and to the right of its point, the lower line's below and to the left, past the ring.
     var planAtReport = null;
     plan.forEach(function (p) { if (p[0] === reportDay) planAtReport = p[1]; });
+    var narrow = (entry.host.clientWidth || 600) < 520;
     var actualAbove = last === null || planAtReport === null || last[1] >= planAtReport;
-    function pointLabel(text, position, colour) {
-      return { show: true, formatter: text, position: position, color: colour, fontWeight: 700, fontSize: 12,
-        align: "left", textBorderColor: surface, textBorderWidth: 3, distance: 8 };
+    function pointLabel(text, above, colour) {
+      return { show: true, formatter: text, position: above ? "top" : "bottom", align: above ? "left" : "right",
+        color: colour, fontWeight: 700, fontSize: 12, textBorderColor: surface, textBorderWidth: 3,
+        distance: above ? 12 : 16 };
     }
     var actualData = actual.map(function (p, i) {
       if (i !== actual.length - 1) return p;
-      return { value: p, label: pointLabel("Actual: " + leftText(p[1]), actualAbove ? "top" : "bottom", c.actual) };
+      return { value: p, label: pointLabel("Actual:" + (narrow ? "\n" : " ") + leftText(p[1]), actualAbove, c.actual) };
     });
     var planData = plan.map(function (p) {
       if (p[0] !== reportDay) return p;
-      return { value: p, label: pointLabel("Plan: " + leftText(p[1]), actualAbove ? "bottom" : "top", c.plan) };
+      return { value: p, label: pointLabel("Plan:" + (narrow ? "\n" : " ") + leftText(p[1]), !actualAbove, c.plan) };
     });
     var forecastData = forecast.map(function (p, i) {
       if (i === 0) return { value: p, symbol: "none" };
-      var text = data.forecast_end ? "Forecast: none left on " + shortDate(data.forecast_end) : "";
-      var label = pointLabel(text, "top", c.forecast);
+      var width = entry.host.clientWidth || 600;
+      var when = "on " + shortDate(data.forecast_end);
+      // On a narrow chart the label wraps to three short lines, so it stays clear of the actual label beside it.
+      var text = width < 520 ? "Forecast:\nnone left\n" + when : "Forecast: none left " + when;
+      var longest = width < 520 ? 9 : text.length;
+      // Above the end point, lifted by how far the dotted line rises over the width of the words, so it clears the line.
+      var height = entry.host.clientHeight || 340;
+      var perDay = (width - 80) / (high - low);
+      var perUnit = (height - 122) / yMax;
+      var rise = Math.min(last[1], last[1] / (forecastEnd - last[0]) * (6.6 * longest) / perDay);
+      var label = pointLabel(text, true, c.forecast);
       label.align = "right";
+      label.distance = Math.round(rise * perUnit) + 10;
       return { value: p, symbol: "circle", symbolSize: 8, label: label };
     });
 
@@ -281,7 +296,7 @@
       silent: true, symbol: "none", animation: false,
       data: [{ xAxis: reportDay, lineStyle: { color: muted, type: "solid", width: 1.4 }, label: { show: false } }]
     };
-    // "Today 16 Oct" beside the line at the head of the plot, or at its foot when the lines are still high there (the
+    // "Week ending 16 Oct" (or "This week, ending ...") beside the line at the head of the plot, or at its foot when the lines are still high there (the
     // forecast label sits at the foot, near the end, and the two never meet that way).
     var low_ = last !== null && last[1] > yMax * 0.8;
     actualSeries.markPoint = {
@@ -290,7 +305,7 @@
         coord: [reportDay, low_ ? 0 : yMax],
         label: { show: true, position: "right", offset: [4, low_ ? -10 : 10], color: muted, fontSize: 11, fontWeight: 600,
           backgroundColor: surface, padding: [1, 3],
-          formatter: (todayIsReportWeek(reportDay) ? "Today " : "Report week ") + shortDate(dayIso(reportDay)) }
+          formatter: (data.report_week_in_progress ? "This week, ending " : "Week ending ") + shortDate(dayIso(reportDay)) }
       }]
     };
     var series = [actualSeries, planSeries, forecastSeries];
@@ -305,7 +320,7 @@
               xAxis: t.day,
               lineStyle: { color: ink, type: "dashed", width: t.current ? 1.8 : 1.2, opacity: t.current ? 0.85 : 0.3 },
               label: {
-                show: true, position: "end", distance: 4, color: ink,
+                show: numbered, position: "end", distance: 4, color: ink,
                 formatter: "{" + (t.current ? "c" : "r") + "|" + t.number + "}",
                 rich: {
                   c: { backgroundColor: ink, color: surface, width: 20, height: 20, borderRadius: 10, align: "center",
@@ -325,7 +340,7 @@
           silent: true, symbol: "circle", symbolSize: 1, itemStyle: { color: "transparent" }, animation: false,
           data: [{
             coord: [current.day, yMax],
-            label: { show: true, position: "top", offset: [right ? 10 : -10, -26], align: right ? "right" : "left",
+            label: { show: true, position: "top", offset: [right ? 10 : -10, numbered ? -26 : -4], align: right ? "right" : "left",
               color: ink, fontSize: 12, fontWeight: 700, formatter: "Target " + shortDate(current.date) }
           }]
         };
@@ -357,11 +372,14 @@
     };
   }
 
-  // Whether the report week is the week in progress now, so its marker can say "Today"; for a past week it says
-  // "Report week" instead of claiming the report week is today.
-  function todayIsReportWeek(reportDay) {
-    var now = Math.floor(Date.now() / DAY_MS);
-    return now <= reportDay && now > reportDay - 7;
+  // A y-axis step from 10, 20, 25, 50, 100, 200, ... giving at most six ticks up to the top value.
+  function niceStep(top) {
+    var factors = [1, 2, 2.5, 5];
+    for (var magnitude = 10; ; magnitude *= 10) {
+      for (var i = 0; i < factors.length; i++) {
+        if (Math.ceil(top / (factors[i] * magnitude)) <= 6) return factors[i] * magnitude;
+      }
+    }
   }
 
   function buildOption(name, data, entry) {

@@ -84,5 +84,12 @@ def target_as_of(session: Session, tracker: Tracker, upto: date) -> date | None:
     return held[-1].new_date if held else rows[0].old_date
 
 
+def shows_history(entries: Iterable[TargetEntry]) -> bool:
+    """Whether the target's history is worth drawing and listing: it has moved or been removed. A target set once and
+    never changed is just "the target", with no numbered badges and no list."""
+    entries = list(entries)
+    return moves(entries) > 0 or any(entry.kind == "removed" for entry in entries)
+
+
 def moves(entries: Iterable[TargetEntry]) -> int:
     return sum(1 for entry in entries if entry.kind == "moved")

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
@@ -72,3 +74,39 @@ def test_chart_data_without_target_history_has_no_targets(client, viewer, small_
     assert data["targets"] == [] and data["report_week"] == "2026-09-18"
     assert {"unit_label", "palette", "weeks", "series", "in_progress"} <= set(data)  # nothing removed
     assert "forecast_end" in data
+
+
+def test_chart_data_says_whether_to_number_the_targets_and_whether_the_week_is_in_progress(
+    client, db, viewer, small_tracker
+):
+    from datetime import datetime, timezone
+
+    from report_helpers import add_target_change
+
+    url = f"/trackers/{small_tracker.id}/report/data.json?week=2026-09-11"
+    add_target_change(db, small_tracker, None, date(2026, 12, 4), datetime(2026, 9, 1, 9, tzinfo=timezone.utc))
+    lone = client.get(url).get_json()
+    assert lone["target_numbers"] is False and lone["report_week_in_progress"] is False
+    add_target_change(
+        db, small_tracker, date(2026, 12, 4), date(2026, 12, 11), datetime(2026, 9, 2, 9, tzinfo=timezone.utc)
+    )
+    assert client.get(url).get_json()["target_numbers"] is True
+
+
+def test_chart_payload_numbers_targets_after_a_removal_and_flags_the_week_in_progress():
+    from report_helpers import sample_rows
+
+    from tracker.engine.calc import IN_PROGRESS
+    from tracker.report.chart_data import chart_payload
+    from tracker.trackers.targets import TargetEntry
+
+    removed = [
+        TargetEntry(1, date(2026, 12, 4), "set", date(2026, 9, 1), None, "", None, False),
+        TargetEntry(2, None, "removed", date(2026, 9, 2), None, "", None, True),
+    ]
+    rows = sample_rows()
+    rows[1] = replace(rows[1], state=IN_PROGRESS)
+    payload = chart_payload(SimpleNamespace(unit_label="d"), rows, rows[1].week_ending, removed)
+    assert payload["target_numbers"] is True
+    assert payload["report_week_in_progress"] is True
+    assert chart_payload(SimpleNamespace(unit_label="d"), rows, rows[0].week_ending)["report_week_in_progress"] is False

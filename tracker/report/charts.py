@@ -16,7 +16,7 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import MultipleLocator
 
 from ..engine.calc import COMPLETE, IN_PROGRESS, WeekRow
-from ..trackers.targets import TargetEntry
+from ..trackers.targets import TargetEntry, shows_history
 
 PLAN = "#888888"
 ACTUAL = "#2c7be5"
@@ -143,6 +143,42 @@ def glance_x_range(weeks: Sequence[date], targets: Sequence[date], forecast_end:
     return anchor - timedelta(days=7 * before), anchor + timedelta(days=7 * after)
 
 
+def nice_step(top: float) -> int:
+    """A y-axis step from 10, 20, 25, 50, 100, 200, ... that gives at most six ticks up to ``top``."""
+    magnitude = 10
+    while True:
+        for factor in (1, 2, 2.5, 5):
+            step = int(factor * magnitude)
+            if -(-top // step) <= 6:
+                return step
+        magnitude *= 10
+
+
+def week_label(report_week: date, in_progress: bool) -> str:
+    """The report-week marker: "This week, ending 16 Oct" while the week is in progress, else "Week ending 16 Oct"."""
+    return f"{'This week, ending' if in_progress else 'Week ending'} {report_week.day} {report_week:%b}"
+
+
+def target_label_text(entry: TargetEntry, numbered: bool) -> str:
+    """An earlier target is just its number; the current one says "Target 18 Dec", behind its number when numbered."""
+    if entry.date is None or not entry.current:
+        return str(entry.number)
+    words = f"Target {entry.date.day} {entry.date:%b}"
+    return f"{entry.number}  {words}" if numbered else words
+
+
+def glance_plan_points(rows: list[WeekRow]) -> tuple[list[date], list[float]]:
+    """The plan line: remaining never below none left, and nothing after the first week it reaches it."""
+    xs: list[date] = []
+    ys: list[float] = []
+    for x, y in zip(*_series(rows, "planned_remaining")):
+        if ys and ys[-1] <= 0:
+            break
+        xs.append(x)
+        ys.append(max(0, y))
+    return xs, ys
+
+
 def _day_label(day: date, first_of_month: bool) -> str:
     return f"{day.day}\n{day:%b}" if first_of_month else str(day.day)
 
@@ -160,7 +196,7 @@ def remaining_glance_chart(
 
     Every artist has a ``gid`` (``glance-actual``, ``glance-target-2``, ...) so the SVG can be inspected."""
     fig, ax = _new_figure("", unit_label)
-    px, py = _series(rows, "planned_remaining")
+    px, py = glance_plan_points(rows)
     ax_, ay = actual_series(rows, "actual_remaining", report_week)
     if not (px or ax_):
         return _finish(fig, ax, False, fmt)
@@ -193,7 +229,7 @@ def remaining_glance_chart(
             label="Actual",
             gid="glance-actual",
         )
-        if forecast_end and ay[-1] > 0:
+        if forecast_end and forecast_end > ax_[-1] and ay[-1] > 0:
             ax.plot(
                 [ax_[-1], forecast_end],
                 [ay[-1], 0],
@@ -204,12 +240,12 @@ def remaining_glance_chart(
                 gid="glance-forecast",
             )
     top = max([*py, *ay, 1])
+    step = nice_step(top)
     ax.set_ylim(0, top * 1.12)
-    if top <= 1200:
-        ax.yaxis.set_major_locator(MultipleLocator(100))
+    ax.yaxis.set_major_locator(MultipleLocator(step))
     ax.axvline(report_week, color=GLANCE_INK, linewidth=1, alpha=0.6, gid="glance-report-week")
     ax.annotate(
-        f"Report week {report_week.day} {report_week:%b}",
+        week_label(report_week, any(r.week_ending == report_week and r.state == IN_PROGRESS for r in rows)),
         (report_week, top * 1.12),
         fontsize=7,
         ha="center",
@@ -217,6 +253,7 @@ def remaining_glance_chart(
         annotation_clip=False,
         color=GLANCE_INK,
     )
+    numbered = shows_history(targets)
     for entry in dated:
         faint = not entry.current
         ax.axvline(
@@ -227,7 +264,7 @@ def remaining_glance_chart(
             alpha=0.35 if faint else 0.9,
             gid=f"glance-target-{entry.number}",
         )
-        text = str(entry.number) if faint else f"{entry.number}  Target {entry.date.day} {entry.date:%b}"
+        text = target_label_text(entry, numbered)
         label = ax.annotate(
             text,
             (entry.date, top * 1.12),
