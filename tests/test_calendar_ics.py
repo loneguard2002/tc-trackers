@@ -8,7 +8,14 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from tracker.calendar_invites.ics import Series, build_calendar, build_invite_email, fingerprint, series_for
+from tracker.calendar_invites.ics import (
+    Series,
+    build_calendar,
+    build_invite_email,
+    describe_series,
+    fingerprint,
+    series_for,
+)
 
 NOW = datetime(2026, 11, 18, 9, 30, 15, tzinfo=timezone.utc)
 ORGANIZER = "reports@example.com"
@@ -257,7 +264,7 @@ def test_a_long_name_with_other_characters_survives_in_the_subject():
 
 def test_unknown_method_is_refused():
     with pytest.raises(ValueError):
-        calendar(method="PUBLISH")
+        calendar(method="BOGUS")
 
 
 def test_the_calendar_part_has_a_transfer_encoding_that_survives_a_hop_without_8bitmime():
@@ -272,3 +279,23 @@ def test_the_calendar_part_has_a_transfer_encoding_that_survives_a_hop_without_8
 def test_the_email_is_marked_as_a_calendar_message():
     msg = build_invite_email(make_series(), ORGANIZER, ATTENDEE, "REQUEST", 0, NOW)
     assert msg["Content-Class"] == "urn:content-classes:calendarmessage"
+
+
+def test_describe_series_within_one_year():
+    series = make_series(weekday=4, first=date(2026, 10, 2), last=date(2026, 12, 18))
+    assert describe_series(series) == "Fridays, 08:45 to 09:00 (London time), 2 Oct \u2013 18 Dec 2026"
+
+
+def test_describe_series_across_two_years_and_a_multi_word_place():
+    series = make_series(weekday=0, first=date(2026, 12, 7), last=date(2027, 1, 18), tz="America/New_York")
+    assert describe_series(series) == "Mondays, 08:45 to 09:00 (New York time), 7 Dec 2026 \u2013 18 Jan 2027"
+
+
+def test_a_publish_calendar_has_no_attendee_but_keeps_the_rest():
+    text = build_calendar(make_series(), ORGANIZER, ATTENDEE, "PUBLISH", 2, NOW)
+    lines = lines_of(text)
+    assert "METHOD:PUBLISH" in lines and "SEQUENCE:2" in lines
+    assert "ATTENDEE" not in text
+    assert f"ORGANIZER:mailto:{ORGANIZER}" in lines
+    assert any(line.startswith("UID:tracker-7-user-12@") for line in lines)
+    assert "BEGIN:VALARM" in lines

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tracker.calendar_invites import service
+from tracker.calendar_invites.ics import describe_series, inputs_url, series_for
 from tracker.mail import smtp
 from tracker.models import CalendarReminder, TrackerRole
 from tracker.sched.runner import run_scheduler_cycle
@@ -306,3 +307,136 @@ def test_without_email_set_up_the_scheduler_attempts_nothing_and_logs_once(db, r
 def test_without_email_set_up_a_direct_sync_sends_nothing_and_records_no_error(db, row, mail, not_set_up):
     assert service.sync_reminder(db, row, NOW) is None
     assert mail == [] and row.last_error is None
+
+
+# --- the event log -------------------------------------------------------------------------------------------
+
+
+def events(db, setup):
+    tracker, person = setup
+    return [(e.kind, e.detail) for e in reversed(service.events_for(db, person.id, tracker.id))]
+
+
+def test_event_labels_and_groups():
+    assert service.EVENT_LABELS == {
+        "switched_on": "Switched on",
+        "switched_off": "Switched off",
+        "sent": "Invite sent",
+        "updated": "Update sent",
+        "cancelled": "Cancellation sent",
+        "failed": "Sending failed",
+        "downloaded": "Downloaded",
+    }
+    assert service.EVENT_GROUPS == {
+        "sent": "sent", "updated": "sent", "cancelled": "sent", "failed": "failed", "downloaded": "download",
+        "switched_on": "change", "switched_off": "change",
+    }  # fmt: skip
+
+
+def test_a_first_send_records_sent_with_the_series_description(db, setup, row, mail):
+    tracker, person = setup
+    service.sync_reminder(db, row, NOW)
+    expected = describe_series(series_for(tracker, person, inputs_url(tracker.id)))
+    assert events(db, setup) == [("sent", expected)]
+
+
+def test_a_rename_records_updated_tracker_renamed(db, setup, row, mail):
+    tracker, _ = setup
+    service.sync_reminder(db, row, NOW)
+    tracker.name = "Fit-out phase 2"
+    db.commit()
+    service.sync_reminder(db, row, NOW)
+    assert events(db, setup)[-1] == ("updated", "Tracker renamed")
+
+
+@pytest.mark.parametrize(
+    ("changes", "detail"),
+    [
+        ({"last_week_ending": date(2027, 1, 8)}, "Dates changed"),
+        ({"first_week_ending": date(2026, 9, 11)}, "Dates changed"),
+        ({"week_ending_weekday": 3, "first_week_ending": date(2026, 9, 3)}, "Dates changed; Week-ending day changed"),
+        ({"send_timezone": "Asia/Tokyo"}, "Time zone changed"),
+        ({"name": "Other", "send_timezone": "Asia/Tokyo"}, "Tracker renamed; Time zone changed"),
+    ],
+)
+def test_an_update_names_what_changed(db, setup, row, mail, changes, detail):
+    tracker, _ = setup
+    service.sync_reminder(db, row, NOW)
+    for key, value in changes.items():
+        setattr(tracker, key, value)
+    db.commit()
+    service.sync_reminder(db, row, NOW)
+    assert events(db, setup)[-1] == ("updated", detail)
+
+
+def test_the_weekday_alone_is_week_ending_day_changed(db, setup, row, mail):
+    tracker, _ = setup
+    service.sync_reminder(db, row, NOW)
+    tracker.week_ending_weekday = 3
+    db.commit()
+    service.sync_reminder(db, row, NOW)
+    assert events(db, setup)[-1] == ("updated", "Week-ending day changed")
+
+
+def test_force_without_a_change_records_sent_again(db, row, setup, mail):
+    service.sync_reminder(db, row, NOW)
+    service.sync_reminder(db, row, NOW, force=True)
+    assert events(db, setup)[-1] == ("updated", "Sent again")
+
+
+def test_archiving_records_cancelled_tracker_archived(db, setup, row, mail):
+    tracker, _ = setup
+    service.sync_reminder(db, row, NOW)
+    tracker.status = "archived"
+    db.commit()
+    service.sync_reminder(db, row, NOW)
+    assert events(db, setup)[-1] == ("cancelled", "Tracker archived")
+
+
+def test_lost_rights_record_cancelled_edit_rights_removed(db, setup, row, mail):
+    tracker, person = setup
+    service.sync_reminder(db, row, NOW)
+    db.query(TrackerRole).filter_by(user_id=person.id, tracker_id=tracker.id).update({"role": "viewer"})
+    db.commit()
+    service.sync_reminder(db, row, NOW)
+    assert events(db, setup)[-1] == ("cancelled", "Edit rights removed")
+
+
+def test_an_inactive_person_records_cancelled_account_not_active(db, setup, row, mail):
+    _, person = setup
+    service.sync_reminder(db, row, NOW)
+    person.status = "disabled"
+    db.commit()
+    service.sync_reminder(db, row, NOW)
+    assert events(db, setup)[-1] == ("cancelled", "Account not active")
+
+
+def test_switching_off_records_cancelled_switched_off(db, setup, row, mail):
+    service.sync_reminder(db, row, NOW)
+    row.enabled = False
+    db.commit()
+    service.sync_reminder(db, row, NOW)
+    assert events(db, setup)[-1] == ("cancelled", "Switched off")
+
+
+def test_a_failed_delivery_records_one_failed_event_with_the_error(db, setup, row, monkeypatch):
+    def boom(_msg):
+        raise OSError("connection refused " + "x" * 400)
+
+    monkeypatch.setattr(smtp, "send_message", boom)
+    service.sync_reminder(db, row, NOW)
+    [(kind, detail)] = events(db, setup)
+    assert kind == "failed" and "connection refused" in detail and len(detail) <= 200
+
+
+def test_events_for_is_one_persons_one_tracker_newest_first(db, setup, user_factory, tracker_factory):
+    tracker, person = setup
+    other_user, other_tracker = user_factory(), tracker_factory()
+    service.record_event(db, person.id, tracker.id, "switched_on", "By you")
+    service.record_event(db, person.id, tracker.id, "switched_off", "By you")
+    service.record_event(db, other_user.id, tracker.id, "switched_on", "By you")
+    service.record_event(db, person.id, other_tracker.id, "switched_on", "By you")
+    db.commit()
+    found = service.events_for(db, person.id, tracker.id)
+    assert [e.kind for e in found] == ["switched_off", "switched_on"]
+    assert all(e.user_id == person.id and e.tracker_id == tracker.id for e in found)

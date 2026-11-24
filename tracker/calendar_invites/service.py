@@ -19,14 +19,75 @@ from sqlalchemy import or_, select
 from ..auth.roles import user_role
 from ..mail import smtp
 from ..mail.sending import error_text
-from ..models import CalendarReminder, Tracker, User
-from .ics import Series, build_invite_email, fingerprint, inputs_url, series_for
+from ..models import CalendarReminder, CalendarReminderEvent, Tracker, User
+from .ics import Series, build_invite_email, describe_series, fingerprint, inputs_url, series_for
 
 logger = logging.getLogger(__name__)
 
 Action = Literal["request", "update", "cancel"]
 
+EVENT_LABELS = {
+    "switched_on": "Switched on",
+    "switched_off": "Switched off",
+    "sent": "Invite sent",
+    "updated": "Update sent",
+    "cancelled": "Cancellation sent",
+    "failed": "Sending failed",
+    "downloaded": "Downloaded",
+}
+EVENT_GROUPS = {
+    "sent": "sent",
+    "updated": "sent",
+    "cancelled": "sent",
+    "failed": "failed",
+    "downloaded": "download",
+    "switched_on": "change",
+    "switched_off": "change",
+}
+ERROR_DETAIL_LIMIT = 200
+
 _not_set_up_logged = False
+
+
+def record_event(session, user_id: int, tracker_id: int, kind: str, detail: str = "") -> None:
+    """Add an event to the person's history for the tracker. The caller commits it with the change it records."""
+    session.add(CalendarReminderEvent(user_id=user_id, tracker_id=tracker_id, kind=kind, detail=detail))
+
+
+def events_for(session, user_id: int, tracker_id: int) -> list[CalendarReminderEvent]:
+    """One person's events for one tracker, newest first."""
+    query = (
+        select(CalendarReminderEvent)
+        .where(CalendarReminderEvent.user_id == user_id, CalendarReminderEvent.tracker_id == tracker_id)
+        .order_by(CalendarReminderEvent.at.desc(), CalendarReminderEvent.id.desc())
+    )
+    return list(session.scalars(query))
+
+
+def _update_detail(sent: dict | None, current: dict) -> str:
+    """What changed since the delivered series, in words; ``Sent again`` when nothing did."""
+    sent = sent or {}
+    found = []
+    if sent.get("name") != current["name"]:
+        found.append("Tracker renamed")
+    if sent.get("first") != current["first"] or sent.get("last") != current["last"]:
+        found.append("Dates changed")
+    if sent.get("weekday") != current["weekday"]:
+        found.append("Week-ending day changed")
+    if sent.get("tz") != current["tz"]:
+        found.append("Time zone changed")
+    return "; ".join(found) or "Sent again"
+
+
+def _cancel_reason(session, row: CalendarReminder) -> str:
+    """Why the reminder is no longer wanted, in the order ``wanted`` checks."""
+    if not row.enabled:
+        return "Switched off"
+    if session.get(Tracker, row.tracker_id).status != "active":
+        return "Tracker archived"
+    if session.get(User, row.user_id).status != "active":
+        return "Account not active"
+    return "Edit rights removed"
 
 
 def email_set_up(session) -> bool:
@@ -77,6 +138,7 @@ def _record_failure(session, row: CalendarReminder, message: str) -> None:
     """Remember the error and commit, keeping the caller's other pending changes. Never raises."""
     try:
         row.last_error = message
+        record_event(session, row.user_id, row.tracker_id, "failed", message[:ERROR_DETAIL_LIMIT])
         session.commit()
     except Exception:
         logger.exception(
@@ -107,6 +169,12 @@ def sync_reminder(session, row: CalendarReminder, now_utc: datetime, force: bool
     if action is None or not email_set_up(session):
         return None
 
+    if action == "request":
+        kind, detail = "sent", describe_series(series)
+    elif action == "update":
+        kind, detail = "updated", _update_detail(row.sent_fingerprint, current)
+    else:
+        kind, detail = "cancelled", _cancel_reason(session, row)
     if action == "cancel" and row.sent_fingerprint:
         series = _sent_series(series, row.sent_fingerprint)  # cancel exactly what the calendar holds
     sequence = 0 if row.sent_at is None else row.sequence + 1
@@ -123,6 +191,7 @@ def sync_reminder(session, row: CalendarReminder, now_utc: datetime, force: bool
     row.sent_fingerprint = None if action == "cancel" else current
     row.sent_at = now_utc
     row.last_error = None
+    record_event(session, row.user_id, row.tracker_id, kind, detail)
     session.commit()
     return action
 

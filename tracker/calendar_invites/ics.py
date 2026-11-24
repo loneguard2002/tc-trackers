@@ -21,7 +21,8 @@ from flask import current_app
 START = time(8, 45)
 DURATION = timedelta(minutes=15)
 PRODID = "-//Tradition//tc-trackers calendar reminders//EN"
-METHODS = ("REQUEST", "CANCEL")
+METHODS = ("REQUEST", "CANCEL", "PUBLISH")
+WEEKDAYS = ("Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays")
 LINE_OCTETS = 75
 EXPLANATION = "Outlook adds this to your calendar; it is updated or removed automatically."
 
@@ -71,6 +72,16 @@ def fingerprint(series: Series) -> dict:
         "last": series.last.isoformat(),
         "tz": series.tz,
     }
+
+
+def describe_series(series: Series) -> str:
+    """The series in words, e.g. ``Fridays, 08:45 to 09:00 (London time), 2 Oct \u2013 18 Dec 2026``."""
+    place = series.tz.rsplit("/", 1)[-1].replace("_", " ")
+    end = (datetime.combine(series.first, START) + DURATION).time()
+    same_year = series.first.year == series.last.year
+    first = f"{series.first.day} {series.first:%b}" + ("" if same_year else f" {series.first.year}")
+    last = f"{series.last.day} {series.last:%b} {series.last.year}"
+    return f"{WEEKDAYS[series.weekday]}, {START:%H:%M} to {end:%H:%M} ({place} time), {first} \u2013 {last}"
 
 
 # --- iCalendar text ------------------------------------------------------------------------------------------
@@ -174,11 +185,12 @@ def build_calendar(
     series: Series,
     organizer: str,
     attendee: str,
-    method: Literal["REQUEST", "CANCEL"],
+    method: Literal["REQUEST", "CANCEL", "PUBLISH"],
     sequence: int,
     now_utc: datetime,
 ) -> str:
-    """The complete ``VCALENDAR`` text, with CRLF line endings, folded and escaped."""
+    """The complete ``VCALENDAR`` text, with CRLF line endings, folded and escaped. ``PUBLISH`` (the file a person
+    downloads) has no ``ATTENDEE``."""
     if method not in METHODS:
         raise ValueError(f"The method must be one of {', '.join(METHODS)}, not {method!r}.")
     zone = ZoneInfo(series.tz)
@@ -198,7 +210,11 @@ def build_calendar(
         f"DESCRIPTION:{_escape(description)}",
         f"URL:{series.url}",
         f"ORGANIZER:mailto:{parseaddr(organizer)[1] or organizer}",
-        f"ATTENDEE;RSVP=FALSE;PARTSTAT=NEEDS-ACTION;ROLE=REQ-PARTICIPANT:mailto:{attendee}",
+        *(
+            []
+            if method == "PUBLISH"
+            else [f"ATTENDEE;RSVP=FALSE;PARTSTAT=NEEDS-ACTION;ROLE=REQ-PARTICIPANT:mailto:{attendee}"]
+        ),
         f"STATUS:{'CANCELLED' if cancelled else 'CONFIRMED'}",
         "TRANSP:TRANSPARENT",
     ]
