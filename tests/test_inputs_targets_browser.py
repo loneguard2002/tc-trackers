@@ -207,6 +207,24 @@ def test_the_save_bar_stays_at_the_bottom_down_to_the_end_of_the_page(page, live
     assert page.evaluate("window.__errors") == []
 
 
+def test_headline_and_decisions_share_one_row_and_stack_when_narrow(page, live_server, editor):
+    page.add_init_script(RECORDER)
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.goto(inputs_url(live_server, editor))
+    headline = page.locator("#headline").bounding_box()
+    decisions = page.locator("#decisions").bounding_box()
+    assert abs(headline["y"] - decisions["y"]) < 2  # the same row
+    assert decisions["x"] > headline["x"] + headline["width"]  # decisions to the right
+    assert abs(headline["height"] - decisions["height"]) < 2
+    page.set_viewport_size({"width": 390, "height": 800})
+    headline = page.locator("#headline").bounding_box()
+    decisions = page.locator("#decisions").bounding_box()
+    assert decisions["y"] > headline["y"] + headline["height"]  # stacked on a phone
+    assert abs(headline["x"] - decisions["x"]) < 2
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
 def test_the_page_does_not_scroll_sideways_on_a_phone(page, live_server, editor):
     page.set_viewport_size({"width": 390, "height": 800})
     page.goto(inputs_url(live_server, editor))
