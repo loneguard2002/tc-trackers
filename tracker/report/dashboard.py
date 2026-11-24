@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
+from math import ceil
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..engine.calc import GroupPosition, Headline
+from ..engine.calc import COMPLETE, GroupPosition, Headline
 from ..formatting import fmt_num, fmt_pct, fmt_rate
 from ..models import ReportInput, User
-from ..trackers.targets import TargetEntry, moves, shows_history, target_as_of, target_history
+from ..trackers.targets import TargetEntry, moves, shows_history, target_history
 from .build import Report
 from .charts import unit_title
 
@@ -98,8 +99,15 @@ def answer_sentence(headline: Headline, target: date | None, behind_plan: int | 
     return f"On course to finish on {_short(forecast)}, {when}{behind}."
 
 
+def _complete_rows(report: Report) -> list:
+    """The completed weeks up to the report week: a week still in progress has only a part-week figure."""
+    return [r for r in report.rows if r.week_ending <= report.week_ending and r.state == COMPLETE]
+
+
 def _behind_plan(report: Report) -> int | None:
-    row = next((r for r in report.rows if r.week_ending == report.week_ending), None)
+    """Units behind plan at the last completed week on or before the report week (where the chart's Actual ends)."""
+    complete = _complete_rows(report)
+    row = complete[-1] if complete else None
     if row is None or row.cum_target is None or row.cum_actual is None:
         return None
     return row.cum_target - row.cum_actual
@@ -110,8 +118,8 @@ def _days(days: int) -> str:
 
 
 def _spark(report: Report) -> dict | None:
-    """The weekly actuals up to the report week as a 120 by 32 polyline, with the last point for a dot."""
-    values = [r.actual for r in report.rows if r.week_ending <= report.week_ending and r.actual is not None]
+    """The completed weeks' actuals up to the report week as a 120 by 32 polyline, with the last point for a dot."""
+    values = [r.actual for r in _complete_rows(report) if r.actual is not None]
     if not values:
         return None
     width, height, pad = 120, 32, 4
@@ -148,6 +156,29 @@ def _timeline(week_ending: date, forecast: date | None, target: date | None) -> 
     return {"forecast": at(forecast), "target": at(target), "start": at(week_ending), "end": at(last)}
 
 
+def _needed_rate(remaining: int, target: date | None, week_ending: date) -> float | None:
+    """The weekly rate needed to meet ``target`` from the report week, by the engine's formula (``required_rate``), but
+    for the target in force that week rather than today's."""
+    if target is None:
+        return None
+    weeks_left = max(0, ceil((target - week_ending).days / 7))
+    return remaining / weeks_left if weeks_left > 0 else None
+
+
+def _moved_text(targets: list[TargetEntry]) -> str | None:
+    """ "Target moved twice: 4 Dec → 11 Dec → 18 Dec" for the current target since it was last set; "Target set
+    again: 18 Dec" when it was set again after a removal and not moved since; nothing otherwise."""
+    if not targets or targets[-1].kind == "removed":
+        return None
+    removals = [i for i, e in enumerate(targets) if e.kind == "removed"]
+    run = targets[removals[-1] + 1 :] if removals else targets
+    count = moves(run)
+    if count == 0:
+        return f"Target set again: {_short(run[-1].date)}" if removals else None
+    times = {1: "once", 2: "twice"}.get(count, f"{count} times")
+    return f"Target moved {times}: {' → '.join(_short(e.date) for e in run)}"
+
+
 def build_tiles(report: Report, target: date | None, targets: list[TargetEntry]) -> dict:
     """The four figure tiles. Each is a dict of the display strings and the numbers for its small visual."""
     h = report.headline
@@ -160,22 +191,28 @@ def build_tiles(report: Report, target: date | None, targets: list[TargetEntry])
     }
 
     actual, planned = h.this_week_actual, h.this_week_target
+    # A week still in progress has a part-week figure: "28 so far of 40 target", and what is left is "to go", not short.
+    so_far = report.in_progress and actual is not None
+    unit = "" if planned is None else f"of {fmt_num(planned)} target"
     week = {
         "value": "–" if actual is None else fmt_num(actual),
-        "unit": "" if planned is None else f"of {fmt_num(planned)} target",
+        "unit": f"so far {unit}".strip() if so_far else unit,
         "tone": "",
         "spark": _spark(report),
     }
     if actual is not None and planned is not None:
         gap = actual - planned
-        week["tone"] = "danger" if gap < 0 else "success"
-        week["sub"] = "On target" if gap == 0 else f"{'+' if gap > 0 else '−'}{abs(gap)} against target"
+        if so_far and gap < 0:
+            week["sub"] = f"{fmt_num(-gap)} to go"
+        else:
+            week["tone"] = "danger" if gap < 0 else "success"
+            week["sub"] = "On target" if gap == 0 else f"{'+' if gap > 0 else '−'}{abs(gap)} against target"
         if h.next_week_target is not None:
             week["sub"] += f" · next week {fmt_num(h.next_week_target)}"
     else:
         week["sub"] = "No target for this week"
 
-    rate, needed = h.forecast_rate, h.required_rate
+    rate, needed = h.forecast_rate, _needed_rate(h.remaining, target, report.week_ending)
     fill, mark = _rate_bar(rate, needed)
     rate_tile = {
         "label": f"Rate ({report.tracker.moving_average_weeks} wk)",
@@ -201,15 +238,12 @@ def build_tiles(report: Report, target: date | None, targets: list[TargetEntry])
         sub = f"{_days(-days)} before the {_short(target)} target"
     else:
         sub = "On the target date"
-    count = moves(targets)
-    shown = [_short(e.date) for e in targets if e.kind in ("set", "moved") and e.date is not None]
-    times = {1: "once", 2: "twice"}.get(count, f"{count} times")
     forecast_tile = {
         "value": "–" if forecast is None else _short(forecast),
         "sub": sub,
         "tone": "" if days is None else ("danger" if days > 0 else "success"),
         "timeline": _timeline(report.week_ending, forecast, target),
-        "moved": f"Target moved {times}: {' → '.join(shown)}" if count >= 1 else None,
+        "moved": _moved_text(targets),
     }
     return {"completed": completed, "week": week, "rate": rate_tile, "forecast": forecast_tile}
 
@@ -250,16 +284,17 @@ def _status_weeks(session: Session, report: Report) -> list[StatusWeek]:
     return [StatusWeek(week, saved.get(week) or None) for week in shown]
 
 
-def _risk_lines(report: Report) -> list[RiskLine]:
+def _risk_lines(report: Report, on: date) -> list[RiskLine]:
+    """The top risks, with how far past due each is on ``on`` (the report week's end, or today while it runs)."""
     places = {g.group_id: g.name for g in report.groups}
     lines = []
     for risk in report.top_risks:
         due = risk.target_date
-        past = due is not None and due < report.week_ending
+        past = due is not None and due < on
         if due is None:
             text = "No due date"
         elif past:
-            text = f"{_days((report.week_ending - due).days)} past {_short(due)}"
+            text = f"{_days((on - due).days)} past {_short(due)}"
         else:
             text = f"Due {_short(due)}"
         lines.append(
@@ -290,8 +325,10 @@ def target_lines(targets: list[TargetEntry]) -> list[TargetLine]:
     """The "Target date changes" rows: what happened, when, by how many days, and why."""
     lines = []
     for entry in targets:
-        on = _short(entry.changed_on)
-        if entry.kind == "set":
+        on = _short(entry.changed_on) if entry.changed_on else ""
+        if not on:
+            text = "In place before changes were recorded."
+        elif entry.kind == "set":
             text = f"Set on {on}" + (f": {entry.reason}." if entry.reason else ".")
         else:
             if entry.kind == "removed":
@@ -323,7 +360,8 @@ def target_note(targets: list[TargetEntry]) -> str:
 
 def build_dashboard(session: Session, report: Report, today: date) -> Dashboard:
     tracker = report.tracker
-    target = target_as_of(session, tracker, report.week_ending)
+    targets = target_history(session, tracker, report.week_ending)
+    target = targets[-1].date if targets else None  # the target in force at the end of the report week
     inputs = report.inputs
     written_by = written_on = None
     if inputs is not None:
@@ -331,7 +369,6 @@ def build_dashboard(session: Session, report: Report, today: date) -> Dashboard:
         written_by = author.full_name if author else None
         written_on = inputs.updated_at.astimezone(ZoneInfo(tracker.send_timezone)).date()
     status = inputs.status if inputs else None
-    targets = target_history(session, tracker, report.week_ending)
     statuses = _status_weeks(session, report)
     return Dashboard(
         target=target,
@@ -345,7 +382,7 @@ def build_dashboard(session: Session, report: Report, today: date) -> Dashboard:
         statuses=statuses,
         status_summary=summarise_statuses(statuses),
         locations=_location_lines(report),
-        risks=_risk_lines(report),
+        risks=_risk_lines(report, min(today, report.week_ending)),
         chart_subtitle=unit_title(tracker.unit_label or "units", "left to do, by week ending"),
         target_lines=target_lines(targets) if shows_history(targets) else [],
         target_note=target_note(targets),

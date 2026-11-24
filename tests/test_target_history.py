@@ -189,6 +189,8 @@ def test_target_as_of(db, tracker_factory):
     assert target_as_of(db, tracker, date(2026, 9, 28)) == date(2026, 12, 18)
     assert target_as_of(db, tracker, date(2026, 10, 5)) == date(2026, 12, 25)
     assert target_as_of(db, tracker, date(2026, 11, 1)) == date(2027, 1, 8)
+    add(db, tracker, date(2027, 1, 8), None, utc(2026, 11, 2))
+    assert target_as_of(db, tracker, date(2026, 11, 6)) is None
 
 
 def test_target_as_of_without_changes_is_the_current_target(db, tracker_factory):
@@ -197,3 +199,40 @@ def test_target_as_of_without_changes_is_the_current_target(db, tracker_factory)
     )
     assert target_as_of(db, tracker_factory(), date(2026, 9, 1)) is None
     assert target_history(db, tracker_factory(), date(2026, 9, 1)) == []
+
+
+IN_PLACE = TargetEntry(1, date(2026, 12, 18), "set", None, None, "", None, True)
+
+
+def test_a_target_set_before_changes_were_recorded_is_one_set_entry(db, tracker_factory):
+    tracker = tracker_factory(target_completion=date(2026, 12, 18))
+    assert target_history(db, tracker, date(2026, 9, 1)) == [IN_PLACE]
+    assert changes(db, tracker) == []  # nothing is written back
+
+
+def test_the_first_move_of_an_existing_target_puts_the_old_date_in_front(db, tracker_factory):
+    tracker = tracker_factory(target_completion=date(2026, 12, 25))
+    add(db, tracker, date(2026, 12, 18), date(2026, 12, 25), utc(2026, 10, 5), reason="Kit late")
+    entries = target_history(db, tracker, date(2026, 10, 9))
+    assert [(e.number, e.date, e.kind, e.changed_on, e.days, e.current) for e in entries] == [
+        (1, date(2026, 12, 18), "set", None, None, False),
+        (2, date(2026, 12, 25), "moved", date(2026, 10, 5), 7, True),
+    ]
+    assert moves(entries) == 1
+    assert target_as_of(db, tracker, date(2026, 10, 9)) == date(2026, 12, 25)
+
+
+def test_a_week_before_the_first_recorded_change_has_the_old_date(db, tracker_factory):
+    tracker = tracker_factory(target_completion=date(2026, 12, 25))
+    add(db, tracker, date(2026, 12, 18), date(2026, 12, 25), utc(2026, 10, 5))
+    assert target_history(db, tracker, date(2026, 9, 25)) == [IN_PLACE]
+    assert target_as_of(db, tracker, date(2026, 9, 25)) == date(2026, 12, 18)
+
+
+def test_a_target_first_set_after_recording_began_has_nothing_in_front(db, tracker_factory):
+    tracker = tracker_factory(target_completion=date(2026, 12, 18))
+    add(db, tracker, None, date(2026, 12, 18), utc(2026, 10, 5))
+    assert target_history(db, tracker, date(2026, 9, 25)) == []
+    assert target_as_of(db, tracker, date(2026, 9, 25)) is None
+    [entry] = target_history(db, tracker, date(2026, 10, 9))
+    assert (entry.number, entry.kind, entry.changed_on) == (1, "set", date(2026, 10, 5))

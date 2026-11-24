@@ -69,11 +69,40 @@ def test_chart_data_leaves_out_a_removed_target_but_keeps_its_number(client, db,
     assert data["targets"] == [{"date": "2026-12-04", "number": 1, "current": False}]
 
 
-def test_chart_data_without_target_history_has_no_targets(client, viewer, small_tracker):
+def test_chart_data_without_a_target_has_no_targets(client, viewer, small_tracker):
     data = client.get(f"/trackers/{small_tracker.id}/report/data.json?week=2026-09-18").get_json()
     assert data["targets"] == [] and data["report_week"] == "2026-09-18"
     assert {"unit_label", "palette", "weeks", "series", "in_progress"} <= set(data)  # nothing removed
     assert "forecast_end" in data
+
+
+def test_chart_data_draws_a_target_set_before_changes_were_recorded(client, db, viewer, small_tracker):
+    small_tracker.target_completion = date(2026, 12, 18)
+    db.commit()
+    data = client.get(f"/trackers/{small_tracker.id}/report/data.json?week=2026-09-18").get_json()
+    assert data["targets"] == [{"date": "2026-12-18", "number": 1, "current": True}]
+    assert data["target_numbers"] is False
+
+
+def test_chart_data_before_the_first_recorded_change_has_the_date_it_replaced(client, db, viewer, small_tracker):
+    from datetime import datetime, timezone
+
+    from report_helpers import add_target_change
+
+    small_tracker.target_completion = date(2026, 12, 25)
+    db.commit()
+    add_target_change(
+        db, small_tracker, date(2026, 12, 18), date(2026, 12, 25), datetime(2026, 9, 14, 9, tzinfo=timezone.utc)
+    )
+    before = client.get(f"/trackers/{small_tracker.id}/report/data.json?week=2026-09-11").get_json()
+    assert before["targets"] == [{"date": "2026-12-18", "number": 1, "current": True}]
+    assert before["target_numbers"] is False
+    after = client.get(f"/trackers/{small_tracker.id}/report/data.json?week=2026-09-18").get_json()
+    assert after["targets"] == [
+        {"date": "2026-12-18", "number": 1, "current": False},
+        {"date": "2026-12-25", "number": 2, "current": True},
+    ]
+    assert after["target_numbers"] is True
 
 
 def test_chart_data_says_whether_to_number_the_targets_and_whether_the_week_is_in_progress(
