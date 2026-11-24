@@ -163,7 +163,7 @@ STATUS_FILTERS = {
     "disabled": "Disabled",
     "deleted": "Deleted",
 }
-ADMIN_FILTERS = {"yes": "Administrators", "no": "Not administrators"}
+ADMIN_FILTERS = {"yes": "Yes", "no": "No"}
 # The keys of the Users view (lists.js writes sort, page and size to the address; the server filters are the others)
 # that a row action sends the reader back to.
 USERS_VIEW_KEYS = ("q", "status", "sign_in", "admin", "team", "set", "sort", "page", "size")

@@ -20,6 +20,31 @@
 <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
 <span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
 {%- endmacro %}
+{# One filter per column, in the column it filters; Apply and Clear in the actions column. #}
+{% macro filter_row() -%}
+<tr class="user-filter-row">
+  <td class="user-filter-search"><label for="filter-q">Name or email</label>
+    <input id="filter-q" type="search" name="q" value="{{ filters.q }}" placeholder="Name or email" autocomplete="off" form="user-filters"></td>
+  <td><label for="filter-status">Status</label>
+    <select id="filter-status" name="status" form="user-filters"><option value="">Any</option>
+      {% for value, label in status_filters.items() %}<option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></td>
+  <td><label for="filter-admin">Admin</label>
+    <select id="filter-admin" name="admin" form="user-filters"><option value="">Any</option>
+      {% for value, label in admin_filters.items() %}<option value="{{ value }}"{% if filters.admin == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></td>
+  <td><label for="filter-sign-in">Sign-in</label>
+    <select id="filter-sign-in" name="sign_in" form="user-filters"><option value="">Any</option>
+      {% for value, label in sign_in_labels.items() %}<option value="{{ value }}"{% if filters.sign_in == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></td>
+  <td><label for="filter-team">Teams</label>
+    <select id="filter-team" name="team" form="user-filters"><option value="">Any</option>
+      {% for id, label in team_options %}<option value="{{ id }}"{% if filters.team == id %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></td>
+  <td class="hide-mid"><label for="filter-set">Permission sets</label>
+    <select id="filter-set" name="set" form="user-filters"><option value="">Any</option>
+      {% for id, name in set_options %}<option value="{{ id }}"{% if filters.set == id %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></td>
+  <td class="user-filter-buttons"><button class="button primary button-small" type="submit" form="user-filters">Apply</button>
+    {% if filtered %}<a class="button button-small" data-keeps-sort href="{{ url_for('admin.users', sort=request.args.get('sort') or none, size=request.args.get('size') or none) }}">Clear filters</a>{% endif %}</td>
+</tr>
+{%- endmacro %}
+
 {% block content %}
 <header class="list-head">
   <div>
@@ -116,40 +141,12 @@
   {% endif %}
 
   <section class="settings-section" id="section-users" aria-labelledby="users-title">
-    <form class="user-filters" method="get" action="{{ url_for('admin.users') }}" role="search" data-keeps-sort>
+    {# The filters sit in the table, each under the column it filters (a second heading row); the form itself only
+       holds the view keys, and every control joins it with form="user-filters". Where columns are hidden (narrower
+       screens) the filter row turns into a grid of labelled fields above the rows. #}
+    <form class="user-filters" id="user-filters" method="get" action="{{ url_for('admin.users') }}" role="search" data-keeps-sort>
       {% if request.args.get('sort') %}<input type="hidden" name="sort" value="{{ request.args.get('sort') }}">{% endif %}
       {% if request.args.get('size') %}<input type="hidden" name="size" value="{{ request.args.get('size') }}">{% endif %}
-      <div class="toolbar-field user-filter-search"><label for="filter-q">Search name or email</label>
-        <input id="filter-q" type="search" name="q" value="{{ filters.q }}" autocomplete="off"></div>
-      <div class="toolbar-field"><label for="filter-status">Status</label>
-        <select id="filter-status" name="status">
-          <option value="">Any status</option>
-          {% for value, label in status_filters.items() %}<option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
-        </select></div>
-      <div class="toolbar-field"><label for="filter-admin">Admin</label>
-        <select id="filter-admin" name="admin">
-          <option value="">Anyone</option>
-          {% for value, label in admin_filters.items() %}<option value="{{ value }}"{% if filters.admin == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
-        </select></div>
-      <div class="toolbar-field"><label for="filter-sign-in">Sign-in</label>
-        <select id="filter-sign-in" name="sign_in">
-          <option value="">Any sign-in</option>
-          {% for value, label in sign_in_labels.items() %}<option value="{{ value }}"{% if filters.sign_in == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
-        </select></div>
-      <div class="toolbar-field"><label for="filter-team">Team</label>
-        <select id="filter-team" name="team">
-          <option value="">Any team</option>
-          {% for id, label in team_options %}<option value="{{ id }}"{% if filters.team == id %} selected{% endif %}>{{ label }}</option>{% endfor %}
-        </select></div>
-      <div class="toolbar-field"><label for="filter-set">Permission set</label>
-        <select id="filter-set" name="set">
-          <option value="">Any set</option>
-          {% for id, name in set_options %}<option value="{{ id }}"{% if filters.set == id %} selected{% endif %}>{{ name }}</option>{% endfor %}
-        </select></div>
-      <div class="user-filter-buttons">
-        <button class="button primary button-small" type="submit">Apply</button>
-        {% if filtered %}<a class="button button-small" data-keeps-sort href="{{ url_for('admin.users', sort=request.args.get('sort') or none, size=request.args.get('size') or none) }}">Clear filters</a>{% endif %}
-      </div>
     </form>
     {# The total leaves deleted people out, so under the Deleted filter the line counts them on their own. #}
     {% if filtered %}<p class="section-foot-note user-count">{% if filters.status == 'deleted' %}Showing {{ users|length }} deleted {{ 'person' if users|length == 1 else 'people' }}.{% else %}Showing {{ users|length }} of {{ total }} people.{% endif %}</p>{% endif %}
@@ -158,7 +155,8 @@
       <table class="table user-table card-rows" id="people-table" data-sortable>
         <thead><tr>{{ sort_header('Name', 'name') }}{{ sort_header('Status', 'status') }}{{ sort_header('Admin', 'admin') }}{{ sort_header('Sign-in', 'sign-in') }}
           {{ sort_header('Teams', 'teams', 'hide-narrow') }}
-          {{ sort_header('Permission sets', 'sets', 'hide-narrow hide-mid') }}<th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          {{ sort_header('Permission sets', 'sets', 'hide-narrow hide-mid') }}<th scope="col"><span class="sr-only">Actions</span></th></tr>
+          {{ filter_row() }}</thead>
         <tbody>
         {% for u in users %}
         {% set can_do = actions[u.id] %}
@@ -186,6 +184,7 @@
     <p class="section-foot-note sign-in-legend">Sign-in: {% for value, label in sign_in_labels.items() %}<span class="badge badge-muted">{{ label }}</span> {{ sign_in_meanings[value] }}{{ '; ' if not loop.last else '.' }}{% endfor %}</p>
     <p class="section-foot-note row-actions-legend">Actions: {{ icon('key') }} Access; {{ icon('lock') }} Reset password (Local sign-in only); {{ icon('admin') }} Make or remove administrator; {{ icon('ban') }} Disable; {{ icon('restore') }} Re-enable. Point at a button to see its name.</p>
     {% else %}
+    <div class="section-table register"><table class="table user-table card-rows"><thead>{{ filter_row() }}</thead></table></div>
     <p class="section-foot-note">No one matches these filters. <a data-keeps-sort href="{{ url_for('admin.users', sort=request.args.get('sort') or none, size=request.args.get('size') or none) }}">Clear filters</a></p>
     {% endif %}
     {% if actions.values()|selectattr('password')|list %}

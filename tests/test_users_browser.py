@@ -59,13 +59,15 @@ def test_filtered_users_fit_with_clear_in_view(
     page.goto(f"{live_server}/admin/users")
     page.select_option("#filter-status", "active")
     page.get_by_role("button", name="Apply").click()
-    clear = page.locator(".user-filters").get_by_role("link", name="Clear")
+    clear = page.locator(".user-filter-row").get_by_role("link", name="Clear filters")
     expect(clear).to_be_visible()
-    form = page.locator(".user-filters").bounding_box()
+    frame = page.locator(".section-table").bounding_box()
     box, apply = clear.bounding_box(), page.get_by_role("button", name="Apply").bounding_box()
-    assert box["x"] + box["width"] <= form["x"] + form["width"], (box, form)  # Clear sits inside the box
-    assert abs(box["y"] - apply["y"]) < 4 and box["x"] > apply["x"]  # beside Apply
-    for selector in (".user-filters", ".section-table"):
+    assert box["x"] + box["width"] <= frame["x"] + frame["width"], (box, frame)  # Clear sits inside the box
+    beside = abs(box["y"] - apply["y"]) < 4 and box["x"] > apply["x"]
+    below = abs(box["x"] - apply["x"]) < 4 and box["y"] > apply["y"]  # medium screens stack them in the narrow column
+    assert beside or below, (box, apply)
+    for selector in (".section-table",):
         fit = page.locator(selector).evaluate("el => [el.scrollWidth, el.clientWidth]")
         assert fit[0] <= fit[1], (selector, fit)
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
@@ -130,18 +132,36 @@ def test_users_table_sorts_by_each_column(page, live_server, user_factory):
 
 
 @pytest.mark.parametrize("width", [1280, 1440, 1920])
-def test_users_filters_sit_on_one_row_ending_with_apply(page, live_server, user_factory, width):
+def test_users_filters_sit_under_the_columns_they_filter(page, live_server, user_factory, width):
     admin = user_factory(is_admin=True)
     page.set_viewport_size({"width": width, "height": 900})
     browser_sign_in(page, live_server, admin)
     page.goto(f"{live_server}/admin/users")
-    search = page.locator("#filter-q").bounding_box()
+    columns = ("Name", "Status", "Admin", "Sign-in", "Teams", "Permission sets")
+    controls = ("#filter-q", "#filter-status", "#filter-admin", "#filter-sign-in", "#filter-team", "#filter-set")
+    rows = set()
+    for heading, control in zip(columns, controls, strict=True):
+        th = page.locator("#people-table thead th", has_text=heading).first.bounding_box()
+        box = page.locator(control).bounding_box()
+        assert th["x"] - 1 <= box["x"] and box["x"] + box["width"] <= th["x"] + th["width"] + 1, (heading, th, box)
+        assert box["y"] > th["y"] + th["height"] - 1, heading  # under its heading
+        rows.add(round(box["y"]))
+    assert max(rows) - min(rows) <= 2  # one row
     apply = page.get_by_role("button", name="Apply").bounding_box()
-    for select in ("#filter-status", "#filter-admin", "#filter-sign-in", "#filter-team", "#filter-set"):
-        box = page.locator(select).bounding_box()
-        assert box["y"] > search["y"] + search["height"], select  # the search has the row above to itself
-        assert abs((apply["y"] + apply["height"]) - (box["y"] + box["height"])) < 4, (select, box, apply)
-        assert box["x"] + box["width"] <= apply["x"], select  # Apply ends the row
+    last = page.locator("#filter-set").bounding_box()
+    assert apply["x"] >= last["x"] + last["width"]  # Apply is in the actions column, after the last filter
+    assert page.locator("#filter-admin option").all_inner_texts() == ["Any", "Yes", "No"]
+
+
+def test_users_filters_stack_as_labelled_fields_on_a_phone(page, live_server, user_factory):
+    admin = user_factory(is_admin=True)
+    page.set_viewport_size({"width": 400, "height": 900})
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/admin/users")
+    for label in ("Name or email", "Status", "Admin", "Sign-in", "Teams", "Permission sets"):
+        expect(page.locator(".user-filter-row").get_by_text(label, exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Apply")).to_be_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
 
 def test_reset_password_opens_a_dialog_that_asks_twice(page, live_server, user_factory, db):

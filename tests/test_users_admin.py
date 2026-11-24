@@ -483,7 +483,7 @@ def people_rows(response) -> dict[str, str]:
     """Name to the HTML of its row in the People table."""
     body = text_of(response)
     table = body.split('id="section-users"', 1)[1]
-    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", table, flags=re.S)[1:]
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", table.split("<tbody>", 1)[1] if "<tbody>" in table else "", flags=re.S)
     return {re.search(r'class="member-name">([^<]*)', row).group(1).strip(): row for row in rows}
 
 
@@ -559,7 +559,7 @@ def test_users_list_shows_and_filters_how_each_person_signs_in(client, user_mana
     assert listed(client, "?admin=yes") == ["Local Person"]
     assert listed(client, "?admin=no") == ["Sso Person"]
     assert listed(client, "?admin=no&sign_in=local") == []
-    assert '<option value="yes" selected>Administrators</option>' in text_of(client.get("/admin/users?admin=yes"))
+    assert '<option value="yes" selected>Yes</option>' in text_of(client.get("/admin/users?admin=yes"))
     response = client.get("/admin/users?sign_in=sso")
     assert "Showing 1 of 3 people." in text_of(response)
     assert '<option value="sso" selected>SSO</option>' in text_of(response)
