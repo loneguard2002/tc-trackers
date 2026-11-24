@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import pytest
 from conftest import post, sign_in
 
+from tracker.calendar_invites import service
 from tracker.formatting import fmt_date
 from tracker.mail import smtp
 from tracker.models import CalendarReminder
@@ -224,3 +225,74 @@ def test_the_sent_date_is_the_trackers_local_date(client, db, setup, mail):
     row.sent_at = datetime(2026, 10, 1, 12, 30, tzinfo=timezone.utc)  # 01:30 on 2 October in Auckland (UTC+13)
     db.commit()
     assert "Sent 02 Oct 2026" in page_text(client, tracker)
+
+
+def event_list(db, tracker, person):
+    db.expire_all()
+    return [(e.kind, e.detail) for e in reversed(service.events_for(db, person.id, tracker.id))]
+
+
+def test_switching_on_and_off_records_events_by_you(client, db, setup, mail):
+    tracker, person = setup
+    post(client, url(tracker), {"enabled": "on"})
+    post(client, url(tracker), {})
+    kinds = [kind for kind, _ in event_list(db, tracker, person)]
+    assert kinds[0] == "switched_on" and "switched_off" in kinds
+    assert dict(event_list(db, tracker, person))["switched_on"] == "By you"
+    assert dict(event_list(db, tracker, person))["switched_off"] == "By you"
+
+
+def ics_url(tracker) -> str:
+    return f"/trackers/{tracker.id}/calendar-reminder.ics"
+
+
+def test_an_editor_downloads_the_calendar_file(client, db, setup, mail):
+    tracker, person = setup
+    tracker.name = "Laptop refresh!/"
+    db.commit()
+    post(client, url(tracker), {"enabled": "on"})
+    response = client.get(ics_url(tracker))
+    assert response.status_code == 200
+    assert response.headers["Content-Type"].startswith("text/calendar")
+    assert response.headers["Content-Disposition"] == 'attachment; filename="Laptop refresh reminder.ics"'
+    body = response.get_data(as_text=True)
+    assert "METHOD:PUBLISH" in body and "ATTENDEE" not in body
+    assert "ORGANIZER:mailto:reports@example.com" in body
+    assert "SEQUENCE:0" in body
+    assert re.search(r"^UID:(.*)$", body, flags=re.M).group(1).strip() == ics_field(mail[0], "UID")
+    assert event_list(db, tracker, person)[-1] == ("downloaded", "Laptop refresh reminder.ics")
+
+
+def test_the_download_uses_the_current_sequence_once_a_series_was_sent(client, db, setup, mail):
+    tracker, _ = setup
+    post(client, url(tracker), {"enabled": "on"})
+    post(client, url(tracker, "/resend"))
+    assert "SEQUENCE:1" in client.get(ics_url(tracker)).get_data(as_text=True)
+
+
+def test_the_download_works_without_email_set_up(client, db, setup, monkeypatch):
+    tracker, person = setup
+    monkeypatch.setattr(smtp, "get_smtp_config", lambda session=None: {})
+    response = client.get(ics_url(tracker))
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert f"ORGANIZER:mailto:{EMAIL}" in body and "SEQUENCE:0" in body
+    assert [kind for kind, _ in event_list(db, tracker, person)] == ["downloaded"]
+
+
+def test_a_viewer_cannot_download(client, db, setup, user_factory, grant):
+    tracker, _ = setup
+    viewer = user_factory()
+    grant(viewer, tracker, "viewer")
+    sign_in(client, viewer)
+    assert client.get(ics_url(tracker)).status_code == 404
+    assert service.events_for(db, viewer.id, tracker.id) == []
+
+
+def test_an_archived_tracker_refuses_the_download(client, db, setup):
+    tracker, person = setup
+    tracker.status = "archived"
+    db.commit()
+    response = client.get(ics_url(tracker))
+    assert response.status_code == 302
+    assert event_list(db, tracker, person) == []

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from datetime import date, datetime, timezone
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
@@ -14,11 +15,13 @@ from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import current_user, require_tracker_role
-from ..calendar_invites.service import email_set_up, sync_reminder
+from ..calendar_invites.ics import build_calendar, inputs_url, series_for
+from ..calendar_invites.service import email_set_up, record_event, sync_reminder
 from ..db import get_session
 from ..engine.calc import COMPLETE
 from ..engine.weeks import in_progress_week, week_endings
 from ..ids import parse_id
+from ..mail import smtp
 from ..models import CalendarReminder, CompletionEntry, Group, ReportInput, Risk, Tracker, User, Week
 from ..report.build import compute_position, default_report_week, select_top_risks
 from ..trackers.forms import RAG_VALUES, parse_date
@@ -518,6 +521,8 @@ def calendar_reminder(tracker_id: int):
         return refused
     enabled = request.form.get("enabled") == "on"
     row = _reminder_row(db, user.id, tracker.id)
+    if row.enabled != enabled:
+        record_event(db, user.id, tracker.id, "switched_on" if enabled else "switched_off", "By you")
     row.enabled = enabled
     row.last_error = None
     action = sync_reminder(db, row, datetime.now(timezone.utc))
@@ -561,6 +566,29 @@ def calendar_reminder_resend(tracker_id: int):
     else:
         flash(f"Calendar reminder sent again to {user.email}.", "success")
     return _back_to_inputs(tracker)
+
+
+@bp.get("/trackers/<int:tracker_id>/calendar-reminder.ics")
+@require_tracker_role("editor")
+def calendar_reminder_ics(tracker_id: int):
+    """The person's reminder as a file to open in any calendar (no attendee, so nothing is emailed or updated)."""
+    tracker, db, user = g.tracker, get_session(), current_user()
+    refused = _refuse_if_archived(tracker, "entries.inputs")
+    if refused:
+        return refused
+    row = db.get(CalendarReminder, (user.id, tracker.id))
+    sequence = row.sequence if row is not None and row.sent_state == "sent" else 0
+    organizer = smtp.get_smtp_config(db).get("from_") or user.email
+    series = series_for(tracker, user, inputs_url(tracker.id))
+    text = build_calendar(series, organizer, user.email, "PUBLISH", sequence, datetime.now(timezone.utc))
+    filename = f"{re.sub(r'[^A-Za-z0-9 _-]', '', tracker.name).strip()} reminder.ics".strip()
+    record_event(db, user.id, tracker.id, "downloaded", filename)
+    db.commit()
+    return Response(
+        text,
+        mimetype="text/calendar",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[str], status: int):

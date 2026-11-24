@@ -437,6 +437,26 @@ class CalendarReminder(Base):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class CalendarReminderEvent(Base):
+    """One thing that happened to a person's calendar reminder for a tracker: a switch, a delivery or a download."""
+
+    __tablename__ = "calendar_reminder_events"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('switched_on', 'switched_off', 'sent', 'updated', 'cancelled', 'failed', 'downloaded')",
+            name="kind",
+        ),
+        Index("ix_calendar_reminder_events_user_id_tracker_id_at", "user_id", "tracker_id", "at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    tracker_id: Mapped[int] = mapped_column(ForeignKey("trackers.id", ondelete="CASCADE"))
+    at: Mapped[datetime] = _now()
+    kind: Mapped[str] = mapped_column(Text)
+    detail: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+
 class ReportSend(Base):
     __tablename__ = "report_sends"
     __table_args__ = (
