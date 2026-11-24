@@ -386,11 +386,17 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .inputs-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; max-width: 1280px; container-type: inline-size; }
 .inputs-page > *, .inputs-layout > * { min-width: 0; }
 .inputs-page .settings-section { margin: 0; }
-.week-picker-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
-.week-picker-head h2 { margin: 0; font-size: 1.1rem; }
-.week-picker-head p { margin: 2px 0 0; font-size: .85rem; }
-.week-picker-steps { display: flex; flex-wrap: wrap; gap: 6px; }
-.week-picker-steps .button { display: inline-flex; align-items: center; gap: 4px; }
+.week-bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 20px; }
+.week-bar-row .week-steps { margin-left: auto; }
+.week-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 0; border: 0; background: none; color: var(--text); font: inherit; font-size: 1.1rem; font-weight: 700; cursor: pointer; }
+.week-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
+.week-toggle .icon { width: 18px; height: 18px; transition: transform .15s; }
+.week-toggle[aria-expanded="true"] .icon { transform: rotate(180deg); }
+.week-state, .week-deadline { display: inline-flex; align-items: center; gap: 6px; }
+.week-strip-panel { border-top: 1px solid var(--border); }
+.week-strip-panel[hidden] { display: none; }
+.week-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.week-steps .button { display: inline-flex; align-items: center; gap: 4px; }
 .week-strip { display: flex; gap: 4px; padding: 12px 20px 6px; overflow-x: auto; scrollbar-width: thin; }
 .week-chip { display: grid; flex: none; justify-items: center; gap: 3px; width: 52px; padding: 6px 2px; border: 1px solid transparent; border-radius: 8px; color: var(--text); font-size: .8rem; text-decoration: none; }
 .week-chip:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
@@ -400,33 +406,30 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .week-chip.is-future .rag-dot, .rag-dot-future { border-style: dashed; }
 .week-strip-key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0 20px 12px; color: var(--muted); font-size: .78rem; }
 .week-strip-key > span { display: inline-flex; align-items: center; gap: 6px; }
-.inputs-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; }
-.inputs-layout > :is(.form-alert, .settings-actions) { grid-column: 1 / -1; margin: 0; }
+.inputs-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+.inputs-form { display: contents; }
+.inputs-layout > .reminder-card, .inputs-form > .settings-section { min-width: 0; }
+.inputs-form > .settings-actions { grid-column: 1 / -1; grid-row: 3; margin: 0; }
+.inputs-form > .settings-section { grid-row: 1; }
+.reminder-card { grid-row: 2; }
+@media (min-width: 1000px) {
+  .inputs-layout { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  .reminder-card { grid-row: 1; grid-column: 2; }
+  .inputs-form > .settings-section { grid-column: 1; }
+  .inputs-form > .settings-actions { grid-row: 2; }
+}
 .field-counter { display: block; margin-top: 4px; color: var(--muted); font-size: .75rem; text-align: right; }
 .field-counter.is-long { color: var(--warning); font-weight: 600; }
 .copy-last { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 20px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); color: var(--muted); font-size: .85rem; }
 .copy-last .button { margin-left: auto; }
 .copy-last .rag-dot { vertical-align: 0; }
-.band-preview { padding: 14px 20px 18px; border-top: 1px solid var(--border); }
+.band-preview { padding: 14px 20px 18px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--surface)); border-radius: 0 0 var(--radius) var(--radius); }
 .band-preview-label { margin: 0 0 8px; color: var(--muted); font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
-.figure-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
-.figure-grid > div { min-width: 0; padding: 12px 18px; border-top: 1px solid var(--border); }
-.figure-grid > div:nth-child(-n+2) { border-top: 0; }
-.figure-grid > div:nth-child(even) { border-left: 1px solid var(--border); }
-.figure-grid dt { color: var(--muted); font-size: .72rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
-.figure-grid dd { display: grid; gap: 1px; margin: 0; }
-.figure-value { font-size: 1.15rem; font-weight: 700; }
-.figure-value small { color: var(--muted); font-size: .8rem; font-weight: 600; }
-.figure-status { display: inline-flex; align-items: center; gap: 8px; }
 .figure-sub { color: var(--muted); font-size: .8rem; }
 .figure-sub.tone-success { color: var(--success); } .figure-sub.tone-danger { color: var(--danger); }
-.figure-verdict { margin: 0; padding: 12px 18px; border-top: 1px solid var(--border); font-weight: 700; }
-.figure-risks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; padding: 12px 18px; border-top: 1px solid var(--border); font-size: .875rem; }
-.figure-risks a { margin-left: auto; font-weight: 600; }
+.inputs-page .access-card-head { background: none; }
+.inputs-form .form-alert { margin: 16px 20px 0; }
 .settings-actions-note.is-dirty { color: var(--primary); font-weight: 600; }
-@container (max-width: 860px) {
-  .inputs-layout { grid-template-columns: minmax(0, 1fr); }
-}
 
 /* Weekly targets: summary, live charts, and one small table per month. */
 .targets-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; max-width: 1280px; }
@@ -1528,15 +1531,21 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
   .wizard-holders .muted { display: none; }
 }
 
-/* Calendar reminder: one line in the week header; it covers every week, not the one shown. */
-.reminder-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 10px 20px; border-bottom: 1px solid var(--border); font-size: .9rem; }
-.reminder-form, .reminder-resend { display: inline-flex; align-items: center; gap: 10px; margin: 0; }
-.reminder-check { display: inline-flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; }
-.reminder-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); cursor: pointer; }
-.reminder-status:empty { display: none; }
+/* Calendar reminder: a card beside the Commentary card; it covers every week, not the one shown. */
+.reminder-body { display: grid; gap: 12px; padding: 16px 20px 18px; }
+.reminder-form, .reminder-resend { display: flex; align-items: center; gap: 10px; margin: 0; }
+.reminder-check { display: flex; align-items: flex-start; gap: 10px; margin: 0; cursor: pointer; }
+.reminder-check input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--primary); cursor: pointer; }
+.reminder-check-title { display: block; font-weight: 600; }
+.reminder-check-help { display: block; font-size: .85rem; }
+.reminder-lines { font-size: .9rem; }
+.reminder-lines p { margin: 0; }
+.reminder-lines:empty { display: none; }
+.reminder-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.reminder-actions .icon { width: 16px; height: 16px; margin: -2px 6px -2px -2px; vertical-align: middle; }
 .link-button { padding: 0; border: 0; background: none; color: var(--primary); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .link-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
-.reminder-line [hidden] { display: none; }
+.reminder-card [hidden] { display: none; }
 
 /* The calendar reminder history panel reuses the drawer and the holders panel; this is only what they lack. */
 .reminder-history { white-space: nowrap; }

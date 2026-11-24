@@ -2,6 +2,7 @@
 
 import re
 from datetime import date, timedelta
+from html import unescape
 
 from sqlalchemy import select
 
@@ -384,13 +385,49 @@ def test_targets_page_summarises_the_plan(client, db, tracker_factory, user_fact
 def test_inputs_page_shows_the_week_figures_and_previous_week(client, db, tracker_factory, user_factory, grant):
     tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
     db.add(ReportInput(tracker_id=tracker.id, week_ending=date(2026, 10, 9), status="Green", headline="Good week"))
-    db.add(Risk(tracker_id=tracker.id, ref="R1", description="d", rag="Red"))
+    db.add(Risk(tracker_id=tracker.id, ref="R1", description="d", rag="Red", target_date=date(2026, 10, 1)))
     db.commit()
     html = client.get(f"/trackers/{tracker.id}/inputs?week=2026-10-16").get_data(as_text=True)
-    assert "Nobody has written this week up yet." in html
+    assert "Nobody has written this week up yet." not in html
     assert "data-copy-last hidden" in html and 'data-headline="Good week"' in html
-    assert "1 Red</span>" in html and "Week ending 09 Oct 2026" in html
     assert f'href="/trackers/{tracker.id}/inputs?week=2026-10-09" rel="prev"' in html
+    # The figures are tiles under the week bar; the old panel is gone.
+    assert "This week's figures" not in html and "figure-grid" not in html
+    page = unescape(html)
+    assert page.count('class="access-tile"') == 6 and 'class="access-tiles"' in page
+    for label in ("Done this week", "Completed", "Rate (3 weeks)", "Forecast", "Next week's target", "Red risks"):
+        assert f'<span class="access-tile-label">{label}</span>' in page
+    assert "Week ending 23 Oct" in page
+    assert "1 past its target date" in page
+    assert f'href="/trackers/{tracker.id}/risks"' in page
+
+
+def test_inputs_page_week_bar(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    db.add(ReportInput(tracker_id=tracker.id, week_ending=date(2026, 10, 16), status="Amber", headline="Slow"))
+    db.commit()
+    html = client.get(f"/trackers/{tracker.id}/inputs?week=2026-10-16").get_data(as_text=True)
+    bar = html[html.index('class="week-bar') : html.index("access-tiles")]
+    assert 'aria-controls="week-strip-panel"' in bar and "aria-expanded=" in bar
+    assert "Week ending 16 Oct 2026" in bar
+    assert "Written \u00b7 Amber" in bar
+    assert "Automatic sending is off" in bar
+    assert "Latest week" in bar and 'rel="prev"' in bar and 'rel="next"' in bar
+    assert 'id="week-strip-panel"' in html and "data-week-strip" in html
+    # Not the week bar's old header copy.
+    assert "This week is still in progress." not in html
+
+
+def test_inputs_page_cards(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    html = client.get(f"/trackers/{tracker.id}/inputs?week=2026-10-16").get_data(as_text=True)
+    assert html.count('class="access-card-head"') == 2
+    commentary, reminder = html.split('class="access-card-head"')[1:]
+    assert "Commentary" in commentary[:200] and "Calendar reminder" in reminder[:200]
+    # The preview sits inside the Commentary card, above the Save bar.
+    assert commentary.index("data-band") < commentary.index("settings-actions")
+    assert "Preview: top of the report" in commentary
+    assert "Use last week" not in html or html.index("Use last week") < html.index("data-band")
 
 
 def test_inputs_week_outside_tracker_is_404(client, db, tracker_factory, user_factory, grant):
