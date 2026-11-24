@@ -30,12 +30,12 @@
 {{ 'No open risks' if not open else ('1 open risk' if open == 1 else open ~ ' open risks') }}
 {%- endmacro %}
 
-{# Red risks and the open count. With open risks it links to them: editors and owners to the Risks tab (only the Red
-   ones when there are any), everyone else to the report's Top risks, as the Risks tab is for editors. #}
+{# Red risks and the open count. With open risks it links to all of them: editors and owners to the Risks tab (on All
+   open), everyone else to the report's Top risks, as the Risks tab is for editors. #}
 {% macro risks_fact(c) -%}
 {% set inner %}<span class="fact-value{{ ' tone-danger' if c.red_risks }}">{{ c.red_risks }}</span><span class="fact-sub">{{ risks_text(c.open_risks) }}</span>{% endset %}
 {% if not c.open_risks %}{{ inner }}
-{% elif c.role in ('editor', 'owner') %}<a class="fact-link" href="{{ url_for('entries.risks', tracker_id=c.tracker.id, filter='red') if c.red_risks else url_for('entries.risks', tracker_id=c.tracker.id) }}">{{ inner }}</a>
+{% elif c.role in ('editor', 'owner') %}<a class="fact-link" href="{{ url_for('entries.risks', tracker_id=c.tracker.id) }}">{{ inner }}</a>
 {% else %}<a class="fact-link" href="{{ url_for('report.view', tracker_id=c.tracker.id, _anchor='risks') }}">{{ inner }}</a>
 {% endif %}
 {%- endmacro %}
