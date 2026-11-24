@@ -291,8 +291,8 @@ def test_home_card_links_open_risks_where_each_person_can_see_them(client, logge
     )
     db.commit()
     by_name = cards_by_name(client.get("/").get_data(as_text=True))
-    # An editor goes to the Risks tab, showing only the Red ones when there are any.
-    assert f'<a class="fact-link" href="/trackers/{edited.id}/risks?filter=red">' in by_name["Edited"]
+    # An editor goes to the Risks tab on All open, even when some are Red.
+    assert f'<a class="fact-link" href="/trackers/{edited.id}/risks">' in by_name["Edited"]
     # A viewer cannot open the Risks tab, so the link goes to the report's Top risks.
     assert f'<a class="fact-link" href="/trackers/{read.id}/report#risks">' in by_name["Read"]
     assert "No open risks" in by_name["Calm"] and "fact-link" not in by_name["Calm"]
