@@ -27,7 +27,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import current_user, require_tracker_role
-from ..calendar_invites.ics import build_calendar, describe_series, fingerprint, inputs_url, series_for
+from ..calendar_invites.ics import START, build_calendar, describe_series, fingerprint, inputs_url, series_for
 from ..calendar_invites.service import (
     EVENT_GROUPS,
     EVENT_LABELS,
@@ -41,7 +41,7 @@ from ..engine.calc import COMPLETE
 from ..engine.weeks import in_progress_week, week_endings
 from ..ids import parse_id
 from ..mail import smtp
-from ..models import CalendarReminder, CompletionEntry, Group, ReportInput, Risk, Tracker, User, Week
+from ..models import CalendarReminder, CompletionEntry, Group, ReportInput, ReportSend, Risk, Tracker, User, Week
 from ..report.build import compute_position, default_report_week, select_top_risks
 from ..trackers.forms import RAG_VALUES, parse_date
 from ..trackers.views import _jsonable, _ordered_groups, _refuse_if_archived
@@ -56,6 +56,7 @@ from .forms import (
     validate_inputs_form,
     validate_risk_form,
 )
+from .week_bar import deadline, short_date, week_state
 
 LIST_LIMIT = 500
 
@@ -619,6 +620,12 @@ def calendar_reminder_ics(tracker_id: int):
     )
 
 
+def _upcoming_week_ending(tracker: Tracker) -> date | None:
+    """The next week-ending day, today included, in the tracker's time zone; ``None`` after the last."""
+    today = datetime.now(ZoneInfo(tracker.send_timezone)).date()
+    return next((w for w in week_endings(tracker.first_week_ending, tracker.last_week_ending) if w >= today), None)
+
+
 def _history_context(tracker: Tracker, db, user: User) -> dict:
     """What the history shows: the reminder in a line and the person's own events, newest first."""
     zone = ZoneInfo(tracker.send_timezone)
@@ -632,8 +639,7 @@ def _history_context(tracker: Tracker, db, user: User) -> dict:
         state = "On \u00b7 up to date" if up_to_date else "On \u00b7 update not sent yet"
     else:
         state = "On \u00b7 not sent yet"
-    today = datetime.now(zone).date()
-    upcoming = next((w for w in week_endings(tracker.first_week_ending, tracker.last_week_ending) if w >= today), None)
+    upcoming = _upcoming_week_ending(tracker)
     events = []
     for event in events_for(db, user.id, tracker.id):
         local = event.at.astimezone(zone)
@@ -694,9 +700,23 @@ def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[
     index = weeks.index(week)
     previous = saved.get(weeks[index - 1]) if index else None
     risks = list(db.scalars(select(Risk).where(Risk.tracker_id == tracker.id, Risk.status != "Closed")))
+    sent_at = db.scalar(
+        select(func.max(ReportSend.sent_at)).where(
+            ReportSend.tracker_id == tracker.id, ReportSend.week_ending == week, ReportSend.status == "sent"
+        )
+    )
+    deadline_text, deadline_tone = deadline(tracker, week, sent_at, datetime.now(timezone.utc))
+    upcoming = _upcoming_week_ending(tracker)
     return (
         render_template(
             "entries/inputs.html",
+            week_state_text=week_state(row),
+            deadline_text=deadline_text,
+            deadline_tone=deadline_tone,
+            short_date=short_date,
+            reminder_time=f"{START:%H:%M}",
+            reminder_next=f"{upcoming:%a} {upcoming.day} {upcoming:%b}, {START:%H:%M}" if upcoming else None,
+            email_ready=email_set_up(db),
             weeks=weeks,
             week=week,
             row=row,

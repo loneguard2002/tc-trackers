@@ -10,71 +10,70 @@
 {% include "trackers/_nav.html" %}
 {% set h = headline %}
 <div class="inputs-page">
-  <section class="settings-section week-picker" aria-labelledby="week-title">
-    <header class="week-picker-head">
-      <div>
-        <h2 id="week-title">Week ending {{ format_date(week) }}</h2>
-        <p class="muted">
-          {%- if week == current_week %}This week is still in progress.
-          {%- elif week > today %}A future week; figures appear once entries arrive.
-          {%- elif row and row.prepared_by %}Last prepared by {{ preparer.full_name if preparer else 'a former user' }}.
-          {%- else %}Nobody has written this week up yet.{% endif %}</p>
-      </div>
-      <nav class="week-picker-steps" aria-label="Step through weeks">
-        {% if prev_week %}<a class="button button-small" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=prev_week.isoformat()) }}" rel="prev">{{ icon('chevron-left') }}Previous</a>
-        {% else %}<span class="button button-small is-disabled" aria-disabled="true">{{ icon('chevron-left') }}Previous</span>{% endif %}
+  <section class="settings-section week-bar" aria-label="Week">
+    <div class="week-bar-row">
+      <button class="week-toggle" type="button" aria-expanded="true" aria-controls="week-strip-panel" data-week-toggle>
+        <span id="week-title">Week ending {{ format_date(week) }}</span>{{ icon('chevron-down') }}
+      </button>
+      <span class="badge badge-muted week-state">{% if row and (row.status or row.headline) %}{{ rag_dot(row.status) }}{% endif %}{{ week_state_text }}</span>
+      <span class="badge badge-{{ deadline_tone }} week-deadline">{{ deadline_text }}</span>
+      <nav class="week-steps" aria-label="Step through weeks">
+        {% if prev_week %}<a class="button button-small" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=prev_week.isoformat()) }}" rel="prev" aria-label="Previous week" title="Previous week">{{ icon('chevron-left') }}</a>
+        {% else %}<span class="button button-small is-disabled" aria-disabled="true" aria-label="Previous week">{{ icon('chevron-left') }}</span>{% endif %}
         <a class="button button-small" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=latest_week.isoformat()) }}">Latest week</a>
-        {% if next_week %}<a class="button button-small" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=next_week.isoformat()) }}" rel="next">Next{{ icon('chevron-right') }}</a>
-        {% else %}<span class="button button-small is-disabled" aria-disabled="true">Next{{ icon('chevron-right') }}</span>{% endif %}
+        {% if next_week %}<a class="button button-small" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=next_week.isoformat()) }}" rel="next" aria-label="Next week" title="Next week">{{ icon('chevron-right') }}</a>
+        {% else %}<span class="button button-small is-disabled" aria-disabled="true" aria-label="Next week">{{ icon('chevron-right') }}</span>{% endif %}
       </nav>
-    </header>
-    {% if tracker.status != 'archived' %}
-    <div class="reminder-line">
-      <form class="reminder-form" method="post" action="{{ url_for('entries.calendar_reminder', tracker_id=tracker.id) }}" data-reminder-form>
-        {{ csrf_field(csrf_token()) }}
-        <input type="hidden" name="week" value="{{ week.isoformat() }}">
-        <label class="reminder-check" for="calendar-reminder">
-          <input id="calendar-reminder" name="enabled" type="checkbox" value="on" {{ 'checked' if reminder and reminder.enabled }} aria-describedby="reminder-status">
-          Email me a calendar reminder at 08:45 on each week-ending day
-        </label>
-        <button class="link-button" type="submit" data-reminder-save>Save</button>
-      </form>
-      <span class="muted reminder-status" id="reminder-status" title="Sent to {{ current_user.email }}; a free 15-minute event each week-ending day until the tracker ends">
-        {%- if reminder and reminder.enabled and reminder.sent_state == 'sent' and reminder.sent_at %}Sent {{ reminder_sent_on|fdate }}
-        {%- elif reminder and reminder.enabled %}Not sent yet{% endif %}</span>
-      {% if reminder and reminder.enabled and reminder.sent_state == 'sent' %}
-      <form class="reminder-resend" method="post" action="{{ url_for('entries.calendar_reminder_resend', tracker_id=tracker.id) }}" data-reminder-resend>
-        {{ csrf_field(csrf_token()) }}
-        <input type="hidden" name="week" value="{{ week.isoformat() }}">
-        <button class="link-button" type="submit">Send again</button>
-      </form>
-      {% endif %}
-      <a class="reminder-history" href="{{ url_for('entries.calendar_reminder_history', tracker_id=tracker.id) }}" data-history-url="{{ url_for('entries.calendar_reminder_history_panel', tracker_id=tracker.id) }}">History</a>
-      <span class="reminder-guard tone-danger" role="alert" data-reminder-guard hidden>Save your weekly update first.</span>
     </div>
-    {% endif %}
-    <nav class="week-strip" aria-label="Choose a week" data-week-strip>
-      {% for w in weeks %}
-      {% set entry = saved.get(w) %}{% set written = entry and (entry.status or entry.headline) %}
-      {% set future = w > today and w != current_week %}
-      <a class="week-chip{{ ' is-future' if future }}" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=w.isoformat()) }}"{% if w == week %} aria-current="page"{% endif %}
-        aria-label="Week ending {{ format_date(w) }}: {{ (entry.status or 'written, status not set') if written else 'not written yet' }}">
-        <span class="week-chip-month">{{ w.strftime('%b') if loop.first or weeks[loop.index0 - 1].month != w.month else '' }}</span>
-        <span class="week-chip-day">{{ w.day }}</span>
-        {{ rag_dot(entry.status if written else none) }}
-      </a>
-      {% endfor %}
-    </nav>
-    <p class="week-strip-key"><span>{{ rag_dot('Green') }}Status set</span><span>{{ rag_dot(none) }}Not written yet</span><span><span class="rag-dot rag-dot-future" aria-hidden="true"></span>Future week</span></p>
+    <div class="week-strip-panel" id="week-strip-panel" data-week-panel>
+      <nav class="week-strip" aria-label="Choose a week" data-week-strip>
+        {% for w in weeks %}
+        {% set entry = saved.get(w) %}{% set written = entry and (entry.status or entry.headline) %}
+        {% set future = w > today and w != current_week %}
+        <a class="week-chip{{ ' is-future' if future }}" href="{{ url_for('entries.inputs', tracker_id=tracker.id, week=w.isoformat()) }}"{% if w == week %} aria-current="page"{% endif %}
+          aria-label="Week ending {{ format_date(w) }}: {{ (entry.status or 'written, status not set') if written else 'not written yet' }}">
+          <span class="week-chip-month">{{ w.strftime('%b') if loop.first or weeks[loop.index0 - 1].month != w.month else '' }}</span>
+          <span class="week-chip-day">{{ w.day }}</span>
+          {{ rag_dot(entry.status if written else none) }}
+        </a>
+        {% endfor %}
+      </nav>
+      <p class="week-strip-key"><span>{{ rag_dot('Green') }}Status set</span><span>{{ rag_dot(none) }}Not written yet</span><span><span class="rag-dot rag-dot-future" aria-hidden="true"></span>Future week</span></p>
+    </div>
   </section>
 
-  <form class="inputs-layout" method="post" action="{{ url_for('entries.inputs', tracker_id=tracker.id, week=week.isoformat()) }}" data-inputs-form>
-    {% include "entries/_errors.html" %}
+  {% set dvt = h.forecast_vs_target_days %}
+  {% set gap = (h.this_week_actual - h.this_week_target) if h.this_week_actual is not none and h.this_week_target is not none else none %}
+  {% set ahead = h.forecast_rate - h.required_rate if h.forecast_rate is not none and h.required_rate is not none else none %}
+  <div class="access-tiles">
+    <div class="access-tile"><span class="access-tile-label">Done this week</span>
+      <span class="access-tile-count">{{ h.this_week_actual|dash }}</span>
+      <span class="figure-sub{{ ' tone-danger' if gap is not none and gap < 0 }}{{ ' tone-success' if gap is not none and gap > 0 }}">of {{ h.this_week_target|dash }}{% if gap is not none %} · {% if gap == 0 %}on target{% else %}{{ '+' if gap > 0 else '−' }}{{ gap|abs }} against target{% endif %}{% endif %}</span></div>
+    <div class="access-tile"><span class="access-tile-label">Completed</span>
+      <span class="access-tile-count">{{ h.completed|num }}</span>
+      <span class="figure-sub">{{ h.pct_complete|pct }} · {{ h.remaining|num }} left</span></div>
+    <div class="access-tile"><span class="access-tile-label">Rate ({{ tracker.moving_average_weeks }} week{{ '' if tracker.moving_average_weeks == 1 else 's' }})</span>
+      <span class="access-tile-count">{{ h.forecast_rate|rate }}</span>
+      <span class="figure-sub{{ ' tone-danger' if ahead is not none and ahead < 0 }}{{ ' tone-success' if ahead is not none and ahead >= 0 }}">a week · {{ h.required_rate|rate }} needed</span></div>
+    <div class="access-tile"><span class="access-tile-label">Forecast</span>
+      <span class="access-tile-count">{{ short_date(h.forecast_completion) }}</span>
+      <span class="figure-sub{{ ' tone-danger' if dvt is not none and dvt > 0 }}{{ ' tone-success' if dvt is not none and dvt <= 0 }}">{% if h.target_completion %}Target {{ short_date(h.target_completion) }}{% if dvt is not none %} · {% if dvt == 0 %}on target{% else %}{{ dvt|abs }} day{{ '' if dvt|abs == 1 else 's' }} {{ 'late' if dvt > 0 else 'early' }}{% endif %}{% endif %}{% else %}No target date{% endif %}</span></div>
+    <div class="access-tile"><span class="access-tile-label">Next week's target</span>
+      <span class="access-tile-count">{{ h.next_week_target|dash }}</span>
+      <span class="figure-sub">{{ ('Week ending ' ~ short_date(next_week)) if next_week else 'Last week of the tracker' }}</span></div>
+    <a class="access-tile" href="{{ url_for('entries.risks', tracker_id=tracker.id) }}"><span class="access-tile-label">Red risks</span>
+      <span class="access-tile-count">{{ red_risks }}</span>
+      <span class="figure-sub{{ ' tone-danger' if overdue_risks }}">{{ ('%d past %s target date' % (overdue_risks, 'its' if overdue_risks == 1 else 'their')) if overdue_risks else 'None past their target date' }}</span></a>
+  </div>
+
+  <div class="inputs-layout">
+  <form class="inputs-form" method="post" action="{{ url_for('entries.inputs', tracker_id=tracker.id, week=week.isoformat()) }}" data-inputs-form>
     {{ csrf_field(csrf_token()) }}
     <section class="settings-section" aria-labelledby="section-inputs">
-      <header class="settings-section-head">
+      {% include "entries/_errors.html" %}
+      <header class="access-card-head">
         <h2 id="section-inputs">Commentary</h2>
-        <p>Shown at the top of this week's report and email. The figures are calculated from the entries.</p>
+        <p class="access-card-note">Shown at the top of this week's report and email. The figures are calculated from the entries.</p>
       </header>
       <div class="setting-row is-wide" role="radiogroup" aria-labelledby="status-label" aria-describedby="status-help">
         <div class="setting-label">
@@ -105,7 +104,7 @@
       </div>
       {% endif %}
       <div class="band-preview" aria-live="polite">
-        <p class="band-preview-label">At the top of the report</p>
+        <p class="band-preview-label">Preview: top of the report</p>
         {% set status = form.get('status') or none %}
         <div class="report-band report-band-{{ rag_tone(status) }}" data-band>
           <p class="report-status"><span class="rag-dot rag-dot-{{ rag_tone(status) }}" aria-hidden="true" data-band-dot></span><span><span class="report-status-word" data-band-word>{{ status or 'Not set' }}</span>: {{ h.verdict }}</span></p>
@@ -116,43 +115,55 @@
       </div>
     </section>
 
-    <aside class="settings-section inputs-figures" aria-labelledby="figures-title">
-      <header class="settings-section-head">
-        <h2 id="figures-title">This week's figures</h2>
-        <p>From the entries, as the report will show them.</p>
-      </header>
-      {% set dvt = h.forecast_vs_target_days %}
-      <dl class="figure-grid">
-        <div><dt>Done this week</dt>
-          <dd><span class="figure-value">{{ h.this_week_actual|dash }} <small>of {{ h.this_week_target|dash }} target</small></span>
-          {% if h.this_week_actual is not none and h.this_week_target is not none %}{% set gap = h.this_week_actual - h.this_week_target %}
-          <span class="figure-sub {{ 'tone-danger' if gap < 0 else 'tone-success' }}">{% if gap == 0 %}On target{% else %}{{ '+' if gap > 0 else '−' }}{{ gap|abs }} against target{% endif %}</span>
-          {% else %}<span class="figure-sub">No actual or target yet</span>{% endif %}</dd></div>
-        <div><dt>Completed</dt>
-          <dd><span class="figure-value">{{ h.completed|num }} <small>{{ h.pct_complete|pct }}</small></span><span class="figure-sub">{{ h.remaining|num }} of {{ h.total_scope|num }} left</span></dd></div>
-        <div><dt>Rate ({{ tracker.moving_average_weeks }} wk)</dt>
-          <dd><span class="figure-value">{{ h.forecast_rate|rate }} <small>a week</small></span><span class="figure-sub">{{ (h.required_rate|rate ~ ' a week needed') if h.required_rate is not none else 'No required rate' }}</span></dd></div>
-        <div><dt>Forecast</dt>
-          <dd><span class="figure-value">{{ format_date(h.forecast_completion) if h.forecast_completion else '–' }}</span><span class="figure-sub">{{ ('Target ' ~ format_date(h.target_completion)) if h.target_completion else 'No target date' }}</span></dd></div>
-        <div><dt>Next week's target</dt>
-          <dd><span class="figure-value">{{ h.next_week_target|dash }}</span><span class="figure-sub">{{ ('Week ending ' ~ format_date(next_week)) if next_week else 'Last week of the tracker' }}</span></dd></div>
-        <div><dt>Last week's status</dt>
-          <dd><span class="figure-value figure-status">{% if prev_week and saved.get(prev_week) and saved.get(prev_week).status %}{{ rag_dot(saved.get(prev_week).status) }}{{ saved.get(prev_week).status }}{% else %}–{% endif %}</span>
-          <span class="figure-sub">{{ ('Week ending ' ~ format_date(prev_week)) if prev_week else 'First week of the tracker' }}</span></dd></div>
-      </dl>
-      <p class="figure-verdict {{ '' if dvt is none else ('tone-danger' if dvt > 0 else 'tone-success') }}">{{ h.verdict }}</p>
-      <p class="figure-risks">
-        <span class="rag-pill">{{ rag_dot('Red' if red_risks else none) }}{{ red_risks }} Red</span>
-        {% if overdue_risks %}<span class="rag-pill tone-danger">{{ overdue_risks }} past target date</span>{% endif %}
-        <a href="{{ url_for('entries.risks', tracker_id=tracker.id) }}">Open risks</a>
-      </p>
-    </aside>
-
     <div class="settings-actions">
       <span class="settings-actions-note" data-dirty-note>{% if row and row.prepared_by %}Last prepared by {{ preparer.full_name if preparer else 'a former user' }}.{% endif %}</span>
       <button class="button primary" type="submit">Save</button>
     </div>
   </form>
+  {% if tracker.status != 'archived' %}
+  {% set on = reminder and reminder.enabled %}
+  <section class="settings-section reminder-card" aria-labelledby="reminder-title">
+    <header class="access-card-head">
+      <h2 id="reminder-title">Calendar reminder</h2>
+      <span class="badge badge-{{ 'success' if on else 'muted' }}">{{ 'On' if on else 'Off' }}</span>
+      <p class="access-card-note">Sent to {{ current_user.email }}</p>
+    </header>
+    <div class="reminder-body">
+      <form class="reminder-form" method="post" action="{{ url_for('entries.calendar_reminder', tracker_id=tracker.id) }}" data-reminder-form>
+        {{ csrf_field(csrf_token()) }}
+        <input type="hidden" name="week" value="{{ week.isoformat() }}">
+        <label class="reminder-check" for="calendar-reminder">
+          <input id="calendar-reminder" name="enabled" type="checkbox" value="on" {{ 'checked' if on }} aria-describedby="reminder-when reminder-status">
+          <span><span class="reminder-check-title">Email me an Outlook reminder</span>
+          <span class="reminder-check-help muted" id="reminder-when">{{ reminder_time }} on each week-ending day</span></span>
+        </label>
+        <button class="link-button" type="submit" data-reminder-save>Save</button>
+      </form>
+      <div class="reminder-lines muted" id="reminder-status">
+        {%- if on %}
+        {% if reminder_next %}<p>Next: {{ reminder_next }}</p>{% endif %}
+        <p>
+          {%- if reminder.sent_state == 'sent' and reminder.sent_at %}Last sent: {{ reminder_sent_on|fdate }}
+          {%- elif email_ready %}Not sent yet
+          {%- else %}Email is not set up in this application yet{% endif %}</p>
+        {% endif -%}
+      </div>
+      <span class="reminder-guard tone-danger" role="alert" data-reminder-guard hidden>Save your weekly update first.</span>
+      <div class="reminder-actions">
+        <a class="button button-small" href="{{ url_for('entries.calendar_reminder_ics', tracker_id=tracker.id) }}">{{ icon('download') }}Download .ics</a>
+        {% if on and reminder.sent_state == 'sent' %}
+        <form class="reminder-resend" method="post" action="{{ url_for('entries.calendar_reminder_resend', tracker_id=tracker.id) }}" data-reminder-resend>
+          {{ csrf_field(csrf_token()) }}
+          <input type="hidden" name="week" value="{{ week.isoformat() }}">
+          <button class="button button-small" type="submit">Email it again</button>
+        </form>
+        {% endif %}
+        <a class="reminder-history" href="{{ url_for('entries.calendar_reminder_history', tracker_id=tracker.id) }}" data-history-url="{{ url_for('entries.calendar_reminder_history_panel', tracker_id=tracker.id) }}">History</a>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+  </div>
 </div>
 {% if tracker.status != 'archived' %}<dialog class="perm-drawer" id="history-panel"></dialog>{% endif %}
 {% endblock %}

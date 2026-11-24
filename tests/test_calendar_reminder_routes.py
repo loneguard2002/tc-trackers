@@ -15,7 +15,7 @@ from tracker.mail import smtp
 from tracker.models import CalendarReminder
 
 EMAIL = "person@example.com"
-COPY = "Email me a calendar reminder at 08:45 on each week-ending day"
+COPY = "Email me an Outlook reminder"
 
 
 @pytest.fixture(autouse=True)
@@ -71,13 +71,14 @@ def flashes(client) -> list[str]:
 def test_an_editor_sees_the_panel_with_the_switch_off(client, setup):
     tracker, _ = setup
     html = page_text(client, tracker)
-    assert COPY in html
+    assert COPY in html and "08:45 on each week-ending day" in html
     assert 'name="enabled"' in html
     assert re.search(r'name="enabled"[^>]*checked', html) is None
-    assert "Send again" not in html
-    # One checkbox line in the week header (it covers every week), above this week's update form.
+    assert "Email it again" not in html
+    # The card sits beside the Commentary card (it covers every week), after the week bar.
     assert 'role="switch"' not in html
-    assert html.index("week-picker") < html.index("data-reminder-form") < html.index("data-inputs-form")
+    assert html.index("week-bar") < html.index("data-inputs-form") < html.index("data-reminder-form")
+    assert "week-picker" not in html and 'class="reminder-line"' not in html
 
 
 def test_a_viewer_cannot_reach_either_route(client, db, setup, user_factory, grant):
@@ -105,8 +106,8 @@ def test_switching_on_sends_one_request_and_the_panel_reports_it(client, db, set
     assert flashes(client) == [f"Calendar reminder sent to {EMAIL}."]
     html = page_text(client, tracker)
     today = fmt_date(datetime.now(timezone.utc).date())
-    assert f"Sent {today}" in html
-    assert "Send again" in html
+    assert f"Last sent: {today}" in html
+    assert "Email it again" in html
     assert re.search(r'name="enabled"[^>]*checked', html)
 
 
@@ -127,7 +128,7 @@ def test_switching_off_sends_one_cancellation(client, db, setup, mail):
     assert flashes(client)[-1] == f"Calendar reminder switched off. A cancellation was sent to {EMAIL}."
     db.expire_all()
     assert db.get(CalendarReminder, (person.id, tracker.id)).enabled is False
-    assert "Send again" not in page_text(client, tracker)
+    assert "Email it again" not in page_text(client, tracker)
 
 
 def test_switching_off_a_reminder_that_was_never_sent_sends_nothing(client, setup, mail):
@@ -214,7 +215,8 @@ def test_without_email_set_up_the_switch_saves_and_says_so(client, db, setup, ma
     db.expire_all()
     row = db.get(CalendarReminder, (person.id, tracker.id))
     assert row.enabled is True and row.last_error is None
-    assert "Not sent yet" in page_text(client, tracker)
+    html = page_text(client, tracker)
+    assert "Email is not set up in this application yet" in html and "Not sent yet" not in html
 
 
 def test_the_sent_date_is_the_trackers_local_date(client, db, setup, mail):
@@ -225,7 +227,7 @@ def test_the_sent_date_is_the_trackers_local_date(client, db, setup, mail):
     row = db.get(CalendarReminder, (person.id, tracker.id))
     row.sent_at = datetime(2026, 10, 1, 12, 30, tzinfo=timezone.utc)  # 01:30 on 2 October in Auckland (UTC+13)
     db.commit()
-    assert "Sent 02 Oct 2026" in page_text(client, tracker)
+    assert "Last sent: 02 Oct 2026" in page_text(client, tracker)
 
 
 def event_list(db, tracker, person):
@@ -468,3 +470,51 @@ def test_a_sent_series_with_an_update_waiting_says_so(client, db, setup, mail):
     html = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
     assert "On · update not sent yet" in summary_of(html)
     assert "not sent yet" in summary_of(html) and "On · not sent yet" not in summary_of(html)
+
+
+def card_of(html: str) -> str:
+    return html[
+        html.index('class="settings-section reminder-card"') : html.index("</section>", html.index("reminder-card"))
+    ]
+
+
+def test_the_card_shows_off_and_nothing_under_the_switch(client, setup):
+    tracker, _ = setup
+    card = card_of(page_text(client, tracker))
+    assert re.search(r'badge-muted">Off</span>', card)
+    assert "Next:" not in card and "Last sent:" not in card and "Not sent yet" not in card
+    assert f'href="/trackers/{tracker.id}/calendar-reminder.ics"' in card and "Download .ics" in card
+    assert "Email it again" not in card
+    assert "data-history-url" in card and ">History</a>" in card
+    assert "Save your weekly update first." in card and "data-reminder-guard" in card
+
+
+def test_the_card_shows_on_next_and_last_sent(client, db, setup, mail):
+    tracker, _ = setup
+    friday = date.today()
+    while friday.weekday() != 4:
+        friday += timedelta(days=1)
+    tracker.first_week_ending, tracker.last_week_ending = friday - timedelta(days=14), friday + timedelta(days=14)
+    db.commit()
+    post(client, url(tracker), {"enabled": "on"})
+    card = card_of(page_text(client, tracker))
+    assert re.search(r'badge-success">On</span>', card)
+    assert f"Next: Fri {friday.day} {friday:%b}, 08:45" in card
+    assert f"Last sent: {fmt_date(datetime.now(timezone.utc).date())}" in card
+    assert "Email it again" in card
+
+
+def test_the_card_says_when_email_is_not_set_up(client, setup, mail, monkeypatch):
+    tracker, _ = setup
+    monkeypatch.setattr(smtp, "get_smtp_config", lambda session=None: {})
+    post(client, url(tracker), {"enabled": "on"})
+    card = card_of(page_text(client, tracker))
+    assert "Email is not set up in this application yet" in card and "Last sent:" not in card
+
+
+def test_the_card_names_no_next_date_after_the_last_week(client, db, setup, mail):
+    tracker, _ = setup
+    tracker.first_week_ending, tracker.last_week_ending = date(2026, 1, 2), date(2026, 3, 27)
+    db.commit()
+    post(client, url(tracker), {"enabled": "on"})
+    assert "Next:" not in card_of(page_text(client, tracker))

@@ -13,6 +13,13 @@ from tracker.models import CompletionEntry, Group, ReportInput, Week
 
 pytestmark = pytest.mark.browser
 
+RECORDER = (
+    "window.__csp = []; window.__errors = [];"
+    "document.addEventListener('securitypolicyviolation',"
+    " e => window.__csp.push(e.violatedDirective + ' ' + e.blockedURI));"
+    "window.addEventListener('error', e => window.__errors.push(String(e.message)));"
+)
+
 # Three weeks in the past and five to come, so some weeks have actuals and some are still blank and upcoming.
 FIRST = week_ending_for(date.today() - timedelta(days=21), 4)
 WEEKS = [FIRST + timedelta(weeks=k) for k in range(8)]
@@ -92,3 +99,93 @@ def test_inputs_week_strip_marks_written_weeks(page, live_server, editor):
     expect(chips).to_have_count(len(WEEKS))
     expect(chips.nth(0).locator(".rag-dot")).to_have_class("rag-dot rag-dot-amber")
     expect(chips.nth(1)).to_have_attribute("aria-current", "page")
+
+
+def inputs_url(live_server, tracker, week=None):
+    return f"{live_server}/trackers/{tracker.id}/inputs?week={(week or WEEKS[0]).isoformat()}"
+
+
+def test_the_week_strip_starts_closed_and_the_week_button_opens_it(page, live_server, editor):
+    page.add_init_script(RECORDER)
+    page.goto(inputs_url(live_server, editor, WEEKS[1]))
+    button = page.locator("[data-week-toggle]")
+    strip = page.locator("[data-week-strip]")
+    expect(button).to_have_attribute("aria-expanded", "false")
+    expect(button).to_contain_text("Week ending")
+    expect(strip).to_be_hidden()
+    button.click()
+    expect(button).to_have_attribute("aria-expanded", "true")
+    expect(strip).to_be_visible()
+    expect(strip.locator(".week-chip")).to_have_count(len(WEEKS))
+    page.keyboard.press("Tab")
+    button.focus()
+    page.keyboard.press("Enter")
+    expect(strip).to_be_hidden()
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+def test_the_week_strip_shows_without_javascript(browser, live_server, editor, page):
+    context = browser.new_context(java_script_enabled=False)
+    try:
+        bare = context.new_page()
+        cookies = page.context.cookies()
+        context.add_cookies(cookies)
+        bare.goto(inputs_url(live_server, editor))
+        expect(bare.locator("[data-week-strip]")).to_be_visible()
+    finally:
+        context.close()
+
+
+def test_the_week_bar_and_tiles_show_the_weeks_figures(page, live_server, editor):
+    page.goto(inputs_url(live_server, editor))
+    bar = page.locator(".week-bar")
+    expect(bar.locator(".week-state")).to_have_text("Written \u00b7 Amber")
+    expect(bar.locator(".week-deadline")).to_have_text("Automatic sending is off")
+    expect(bar.get_by_role("link", name="Latest week")).to_be_visible()
+    tiles = page.locator(".access-tiles .access-tile")
+    expect(tiles).to_have_count(6)
+    expect(tiles.nth(0).locator(".access-tile-label")).to_have_text("Done this week")
+    expect(tiles.nth(0).locator(".access-tile-count")).to_have_text("8")
+    expect(tiles.nth(0).locator(".figure-sub")).to_have_text("of 10 \u00b7 \u22122 against target")
+    expect(tiles.nth(0).locator(".figure-sub")).to_have_class("figure-sub tone-danger")
+    expect(tiles.nth(1).locator(".figure-sub")).to_contain_text("left")
+    expect(tiles.nth(5).locator(".access-tile-label")).to_have_text("Red risks")
+    expect(page.get_by_text("This week's figures")).to_have_count(0)
+
+
+def test_the_cards_sit_side_by_side_from_1000_pixels_and_stack_below(page, live_server, editor):
+    url = inputs_url(live_server, editor)
+    page.set_viewport_size({"width": 1000, "height": 900})
+    page.goto(url)
+    commentary = page.locator("[data-inputs-form] section").first.bounding_box()
+    reminder = page.locator(".reminder-card").bounding_box()
+    assert reminder["x"] > commentary["x"] + commentary["width"] - 1
+    assert abs(reminder["y"] - commentary["y"]) < 2
+    assert commentary["width"] > reminder["width"]
+    # The preview sits inside the Commentary card.
+    inside = page.locator("[data-inputs-form] section").first.locator("[data-band]")
+    expect(inside).to_have_count(1)
+    page.set_viewport_size({"width": 999, "height": 900})
+    commentary = page.locator("[data-inputs-form] section").first.bounding_box()
+    reminder = page.locator(".reminder-card").bounding_box()
+    assert reminder["y"] >= commentary["y"] + commentary["height"] - 1
+    assert abs(reminder["x"] - commentary["x"]) < 2
+
+
+def test_nothing_on_the_page_follows_the_scroll_except_the_save_bar(page, live_server, editor):
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.goto(inputs_url(live_server, editor))
+    sticky = page.evaluate(
+        """() => Array.from(document.querySelectorAll('.inputs-page, .inputs-page *'))
+            .filter(e => ['sticky', 'fixed'].includes(getComputedStyle(e).position))
+            .map(e => e.className)"""
+    )
+    assert [c for c in sticky if "settings-actions" not in c] == []
+
+
+def test_the_page_does_not_scroll_sideways_on_a_phone(page, live_server, editor):
+    page.set_viewport_size({"width": 390, "height": 800})
+    page.goto(inputs_url(live_server, editor))
+    page.click("[data-week-toggle]")
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

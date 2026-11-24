@@ -115,3 +115,21 @@
     });
   }
 })();
+
+// The week strip: shown without JavaScript; with it the strip starts closed and the week button opens it.
+(function () {
+  "use strict";
+
+  var button = document.querySelector("[data-week-toggle]");
+  var panel = document.querySelector("[data-week-panel]");
+  if (!button || !panel) return;
+
+  function show(open) {
+    panel.hidden = !open;
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+    // The strip fades the edge with more weeks behind it; it can only measure itself once it is showing.
+    if (open) window.dispatchEvent(new Event("resize"));
+  }
+  button.addEventListener("click", function () { show(panel.hidden); });
+  show(false);
+})();
