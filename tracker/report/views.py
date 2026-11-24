@@ -16,7 +16,7 @@ from .build import build_report, compute_position, current_report_week
 from .chart_data import chart_payload
 from .charts import cumulative_chart, remaining_chart, remaining_glance_chart, weekly_chart
 from .dashboard import build_dashboard
-from .render import html_to_pdf, html_to_png, render_print_html
+from .render import html_to_pdf, html_to_png, render_print_dashboard_html, render_print_html
 
 
 def today() -> date:
@@ -126,11 +126,26 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "tracker"
 
 
+def _print_html(tracker) -> tuple[str, date]:
+    """The document to convert: the new view's layout with ``?view=new`` (its Download buttons ask for it), else the
+    classic one. The choice kept for the live page is not used: a download link always says what it gives."""
+    if request.args.get("view") == "new":
+        session_ = get_session()
+        report = build_report(session_, tracker, _report_week(tracker), today(), with_charts=False)
+        dashboard = build_dashboard(session_, report, today())
+        picture = remaining_glance_chart(
+            report.rows, tracker.unit_label, report.week_ending, dashboard.targets, report.headline.forecast_completion
+        )
+        return render_print_dashboard_html(report, dashboard, picture), report.week_ending
+    report = build_report(get_session(), tracker, _report_week(tracker), today())
+    return render_print_html(report), report.week_ending
+
+
 def _export(tracker_id: int, extension: str, convert, mimetype: str) -> Response:
     tracker = g.tracker
-    report = build_report(get_session(), tracker, _report_week(tracker), today())
-    data = convert(render_print_html(report))
-    filename = f"{_slug(tracker.name)}-week-ending-{report.week_ending.isoformat()}.{extension}"
+    html, week_ending = _print_html(tracker)
+    data = convert(html)
+    filename = f"{_slug(tracker.name)}-week-ending-{week_ending.isoformat()}.{extension}"
     response = Response(data, mimetype=mimetype)
     response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response

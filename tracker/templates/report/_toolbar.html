@@ -2,6 +2,8 @@
     ``active_view`` ("new" or "classic"). -#}
 {% from "macros.html" import icon %}
 {% set tid = report.tracker.id %}{% set wk = report.week_ending %}
+{#- The new view's downloads ask for its layout; the classic ones keep their plain links (as the email's). -#}
+{% set download_view = {'view': 'new'} if active_view == 'new' else {} %}
 {% set ns = namespace(prev=none, next=none) %}
 {% for w in weeks %}{% if w < wk %}{% set ns.prev = w %}{% elif w > wk and ns.next is none %}{% set ns.next = w %}{% endif %}{% endfor %}
 <form method="get" action="{{ url_for('report.view', tracker_id=tid) }}" class="report-week">
@@ -22,7 +24,7 @@
       <button type="button" data-view="pdf" aria-pressed="false">PDF</button>
       <button type="button" data-view="png" aria-pressed="false">PNG</button>
     </span>
-    <a class="button button-small" href="{{ url_for('report.export_pdf', tracker_id=tid, week=wk.isoformat()) }}">{{ icon('download') }}Download PDF</a>
-    <a class="button button-small" href="{{ url_for('report.export_png', tracker_id=tid, week=wk.isoformat()) }}">{{ icon('download') }}Download PNG</a>
+    <a class="button button-small" href="{{ url_for('report.export_pdf', tracker_id=tid, week=wk.isoformat(), **download_view) }}">{{ icon('download') }}Download PDF</a>
+    <a class="button button-small" href="{{ url_for('report.export_png', tracker_id=tid, week=wk.isoformat(), **download_view) }}">{{ icon('download') }}Download PNG</a>
   </span>
 </form>

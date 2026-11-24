@@ -20,6 +20,20 @@ def render_print_html(report: Report) -> str:
     return render_template("report/print.html", report=report, css=css, chart_mime="image/svg+xml")
 
 
+def render_print_dashboard_html(report: Report, dashboard, glance_chart: bytes) -> str:
+    """The "Status at a glance" report as one self-contained document, its Remaining chart drawn in as a picture."""
+    css = (Path(current_app.static_folder) / "tracker.css").read_text(encoding="utf-8")
+    return render_template(
+        "report/print_dashboard.html",
+        tracker=report.tracker,
+        report=report,
+        dashboard=dashboard,
+        glance_chart=glance_chart,
+        print_page=True,
+        css=css,
+    )
+
+
 def _launch_args() -> list[str]:
     """``--no-sandbox`` as root, or when TRACKER_CHROMIUM_NO_SANDBOX=1 (containers often lack the user namespaces).
 

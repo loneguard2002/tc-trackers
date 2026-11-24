@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <title>{{ tracker.name }}: week ending {{ report.week_ending|fdate }}</title>
+  <style>
+{{ css|safe }}
+@page { size: A4 portrait; margin: 14mm; }
+body { background: #fff; margin: 0; padding: 20px; }
+@media print { body { padding: 0; } }
+/* The screen layout at any width: an A4 page is narrower than the points where the page stacks its columns. */
+.report-glance { max-width: none; }
+.report-glance .glance-title h1 { margin: 0; font-size: 1.4rem; }
+.report-glance .answer-card { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); padding: 20px; }
+.report-glance .answer-sentence { font-size: 1.35rem; }
+.report-glance .glance-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.report-glance .glance-tile-value { font-size: 1.6rem; }
+.report-glance .glance-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.report-glance .glance-locations-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* The PDF's A4 page: smaller tile figures so four fit across, and Status above Top risks so the table has the width. */
+@media print {
+  .report-glance .glance-tile { padding: 14px; }
+  .report-glance .glance-tile-value { font-size: 1.3rem; }
+  .report-glance .glance-tile-value small { font-size: .75rem; }
+  .report-glance .glance-tile-sub { font-size: .8rem; }
+  .report-glance .glance-side { grid-template-columns: 1fr; }
+}
+.report-glance .answer-card, .report-glance .glance-tile, .report-glance .glance-card, .report-glance .glance-location,
+.report-glance tr, .report-glance img { break-inside: avoid; }
+  </style>
+</head>
+<body>
+{% include "report/_dashboard_body.html" %}
+</body>
+</html>

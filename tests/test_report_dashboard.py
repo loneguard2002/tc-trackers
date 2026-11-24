@@ -181,7 +181,7 @@ def test_the_downloads_and_data_ignore_the_session(client, db, small_tracker, vi
         assert svg.status_code == 200 and svg.mimetype == "image/svg+xml"
 
 
-def test_the_export_routes_do_not_read_the_view(client, db, small_tracker, viewer, monkeypatch):
+def test_the_export_routes_ignore_the_view_kept_for_the_page(client, db, small_tracker, viewer, monkeypatch):
     seen = []
     monkeypatch.setattr("tracker.report.views.html_to_pdf", lambda html: seen.append(html) or b"%PDF")
     monkeypatch.setattr("tracker.report.views.html_to_png", lambda html: seen.append(html) or b"PNG")
@@ -196,7 +196,8 @@ def test_the_export_routes_do_not_read_the_view(client, db, small_tracker, viewe
     # The chart pictures carry a drawing timestamp, so compare the pages without them.
     plain = [re.sub(r"data:[^\"']+", "", html) for html in seen]
     assert len(seen) == 4 and plain[0] == plain[2] and plain[1] == plain[3]  # the same whichever view is kept
-    assert all('class="answer-card' not in html for html in seen)
+    # Only the link's own ?view=new asks for the new layout (the owner's call, after #81).
+    assert 'class="answer-card' not in seen[0] and 'class="answer-card' in seen[1]
 
 
 def test_a_viewer_sees_both_views(client, small_tracker, viewer):
@@ -823,3 +824,48 @@ def test_a_reason_is_shown_as_text(client, db, small_tracker, viewer):
     html = page(client, small_tracker)
     assert "<img src=x" not in html and "<b>late</b>" not in html
     assert "&lt;img src=x onerror=&#34;alert(1)&#34;&gt; &amp; &lt;b&gt;late&lt;/b&gt;" in html
+
+
+# --- The PDF and PNG in the new layout ------------------------------------------------------------------------------
+
+
+def exported(client, monkeypatch, tracker, extension, query=""):
+    """The document the PDF or PNG route would convert, caught before Chromium runs."""
+    seen = {}
+    name = "html_to_pdf" if extension == "pdf" else "html_to_png"
+    monkeypatch.setattr(f"tracker.report.views.{name}", lambda html: seen.setdefault("html", html) and b"x")
+    response = client.get(f"/trackers/{tracker.id}/report.{extension}?week={WEEKS[1].isoformat()}{query}")
+    assert response.status_code == 200
+    return seen["html"]
+
+
+@pytest.mark.parametrize("extension", ["pdf", "png"])
+def test_the_new_view_downloads_its_own_layout(client, db, small_tracker, viewer, monkeypatch, extension):
+    seed(db, small_tracker)
+    html = exported(client, monkeypatch, small_tracker, extension, "&view=new")
+    assert '<div class="report-glance report-dashboard">' in html and '<section class="report-band' not in html
+    assert f"<h1>{small_tracker.name}: week ending 11 Sep 2026</h1>" in html
+    # Self-contained: the Remaining chart drawn in, no scripts, no live chart data, nothing fetched.
+    assert 'data-chart="remaining-glance"' in html and "data:image/svg+xml" in html
+    assert "<script" not in html and "data-chart-data=" not in html and "report.chart_image" not in html
+    assert not re.search(r'(?:src|href)\s*=\s*["\'](?:https?:)?/', html)
+    assert "Hover a week" not in html  # nothing to hover on paper
+
+
+def test_downloads_without_the_view_stay_classic_whatever_the_page_shows(
+    client, db, small_tracker, viewer, monkeypatch
+):
+    seed(db, small_tracker)
+    page(client, small_tracker)  # the person's report view is now the new one
+    html = exported(client, monkeypatch, small_tracker, "pdf")
+    assert '<section class="report-band' in html and '<div class="report-glance' not in html
+    assert '<div class="report-glance' not in exported(client, monkeypatch, small_tracker, "pdf", "&view=classic")
+
+
+def test_each_view_links_its_downloads_to_its_layout(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    week = WEEKS[1].isoformat()
+    new = page(client, small_tracker)
+    assert f"report.pdf?week={week}&amp;view=new" in new and f"report.png?week={week}&amp;view=new" in new
+    classic = client.get(url(small_tracker, f"?view=classic&week={week}")).get_data(as_text=True)
+    assert f'report.pdf?week={week}"' in classic and f'report.png?week={week}"' in classic
