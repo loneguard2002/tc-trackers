@@ -56,7 +56,7 @@ from .forms import (
     validate_inputs_form,
     validate_risk_form,
 )
-from .week_bar import deadline, short_date, week_state
+from .week_bar import deadline, next_reminder, short_date, week_state
 
 LIST_LIMIT = 500
 
@@ -621,9 +621,8 @@ def calendar_reminder_ics(tracker_id: int):
 
 
 def _upcoming_week_ending(tracker: Tracker) -> date | None:
-    """The next week-ending day, today included, in the tracker's time zone; ``None`` after the last."""
-    today = datetime.now(ZoneInfo(tracker.send_timezone)).date()
-    return next((w for w in week_endings(tracker.first_week_ending, tracker.last_week_ending) if w >= today), None)
+    """The week-ending day of the next reminder that has not gone yet; ``None`` after the last."""
+    return next_reminder(tracker, datetime.now(timezone.utc))
 
 
 def _history_context(tracker: Tracker, db, user: User) -> dict:

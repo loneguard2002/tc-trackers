@@ -5,11 +5,14 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
+from ..calendar_invites.ics import START
+from ..engine.weeks import week_endings
 from ..models import ReportInput, Tracker
 
 
 def week_state(row: ReportInput | None) -> str:
     """``Not written yet``, or ``Written`` and the saved status (written means a status or a headline is saved)."""
+    # A week with only a decisions text counts as not written, as the week strip always has.
     if row is None or not (row.status or row.headline):
         return "Not written yet"
     return f"Written · {row.status or 'status not set'}"
@@ -44,3 +47,13 @@ def deadline(tracker: Tracker, week, sent_at: datetime | None, now_utc: datetime
     days = (week - now.astimezone(zone).date()).days
     when = {0: "today", 1: "tomorrow"}.get(days)
     return (f"Report goes out {when} at {fires:%H:%M}" if when else f"Report goes out on {at}"), "warning"
+
+
+def next_reminder(tracker: Tracker, now_utc: datetime) -> date | None:
+    """The week-ending day of the next reminder not yet gone, in the tracker's zone; ``None`` after the last."""
+    now = now_utc.astimezone(ZoneInfo(tracker.send_timezone))
+    today = now.date()
+    for w in week_endings(tracker.first_week_ending, tracker.last_week_ending):
+        if w > today or (w == today and now.time().replace(tzinfo=None) < START):
+            return w
+    return None
