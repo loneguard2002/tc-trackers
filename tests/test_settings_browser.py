@@ -250,3 +250,21 @@ def test_new_tracker_region_tick_follows_the_team_until_a_box_is_changed(
     page.select_option("#team_id", str(network.id))
     expect(emea_box).to_be_checked()
     expect(apac_box).not_to_be_checked()
+
+
+def test_the_reason_for_moving_the_target_shows_only_once_the_date_differs(
+    page, live_server, tracker_factory, user_factory, grant
+):
+    from datetime import date
+
+    tracker = tracker_factory(name="Target tracker", target_completion=date(2026, 12, 18))
+    owner = user_factory()
+    grant(owner, tracker, "owner")
+    browser_sign_in(page, live_server, owner)
+    page.goto(f"{live_server}/trackers/{tracker.id}/settings")
+    reason = page.locator("[data-target-reason]")
+    expect(reason).to_be_hidden()
+    page.fill("#target_completion", "2026-12-25")
+    expect(reason).to_be_visible()
+    page.fill("#target_completion", "2026-12-18")
+    expect(reason).to_be_hidden()

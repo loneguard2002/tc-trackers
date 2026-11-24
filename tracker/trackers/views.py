@@ -70,8 +70,10 @@ from .forms import (
     validate_group_form,
     validate_schedule_form,
     validate_snapshot_form,
+    validate_target_reason,
     validate_tracker_form,
 )
+from .targets import record_target_change
 
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 ARCHIVED_MESSAGE = "This tracker is archived."
@@ -447,6 +449,7 @@ def new():
                     },
                 )
                 give_creator_ownership(db, tracker, actor)
+                record_target_change(db, tracker.id, None, tracker.target_completion, actor.id)
                 db.commit()
             except IntegrityError:  # the team was deleted at the same moment
                 db.rollback()
@@ -678,6 +681,9 @@ def settings(tracker_id: int):
     )
     errors += schedule_errors
     values.update(schedule)
+    target_reason, reason_error = validate_target_reason(request.form)
+    if reason_error:
+        errors.append(reason_error)
     if not errors:
         low, high = _data_range(db, tracker)
         if low is not None and (low < values["first_week_ending"] or high > values["last_week_ending"]):
@@ -691,11 +697,13 @@ def settings(tracker_id: int):
         return _render_settings(tracker, request.form, errors, status=400)
     before = tracker_labels(db, [tracker.id])[tracker.id]
     changed = {}
+    old_target = tracker.target_completion
     for field, new_value in values.items():
         old_value = getattr(tracker, field)
         if old_value != new_value:
             changed[field] = [_jsonable(old_value), _jsonable(new_value)]
             setattr(tracker, field, new_value)
+    record_target_change(db, tracker.id, old_target, tracker.target_completion, current_user().id, target_reason)
     if line.id != tracker.business_line_id:
         changed["business_line"] = [before.business_line, line.name]
         tracker.business_line_id = line.id

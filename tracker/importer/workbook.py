@@ -26,6 +26,7 @@ from ..auth.roles import give_creator_ownership
 from ..engine.weeks import max_last_week_ending, report_date_to_week_ending, week_endings
 from ..lists.catalogue import set_tracker_regions, tracker_labels
 from ..models import Group, ReportInput, Risk, Tracker, User, Week
+from ..trackers.targets import record_target_change
 
 SHEET_SETTINGS = "Settings"
 SHEET_GROUPS = "By Location"
@@ -468,6 +469,7 @@ def create_tracker_from_preview(
     session.add(tracker)
     session.flush()
     set_tracker_regions(session, tracker.id, region_ids)
+    record_target_change(session, tracker.id, None, tracker.target_completion, user_id)
     labels = tracker_labels(session, [tracker.id])[tracker.id]
 
     group_ids: dict[str, int] = {}

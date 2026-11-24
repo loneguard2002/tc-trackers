@@ -94,6 +94,15 @@ def validate_tracker_form(form: Mapping[str, str], *, locked_weekday: int | None
     return values, errors
 
 
+TARGET_REASON_ERROR = "Keep the reason under 500 characters."
+
+
+def validate_target_reason(form: Mapping[str, str]) -> tuple[str, str | None]:
+    """The optional reason for moving the target posted on Settings, with its error."""
+    reason = _text(form, "target_reason")
+    return reason, (TARGET_REASON_ERROR if len(reason) > 500 else None)
+
+
 _SEND_TIME_RE = re.compile(r"([01]\d|2[0-3]):([0-5]\d)")
 
 
