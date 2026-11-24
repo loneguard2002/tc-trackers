@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -373,9 +373,69 @@ def test_glance_chart_draws_every_target(page, live_server, seeded, db):
     assert axis["max"] >= (date(2026, 12, 18) - date(1970, 1, 1)).days
 
 
-def test_glance_chart_without_targets_draws_no_target_lines(page, live_server, seeded):
-    open_glance(page, live_server, seeded)
+def test_glance_chart_without_a_target_draws_no_target_lines(page, live_server, seeded):
+    open_glance(page, live_server, seeded)  # the seeded tracker has no target date
     assert [s for s in glance_option(page)["series"] if s["id"] == "targets"] == []
+
+
+def test_glance_chart_draws_a_target_set_before_changes_were_recorded(page, live_server, seeded, db):
+    seeded.tracker.target_completion = date(2026, 12, 18)
+    db.commit()
+    open_glance(page, live_server, seeded)
+    host = page.locator(".chart-host-remaining-glance")
+    expect(host.locator("svg text", has_text="Target 18 Dec").first).to_be_visible()
+    lines = [s for s in glance_option(page)["series"] if s["id"] == "targets"][0]["markLine"]["data"]
+    assert len(lines) == 1 and lines[0]["label"]["show"] is False  # unnumbered
+    expect(host.locator("svg text", has_text=re.compile(r"^1$"))).to_have_count(0)
+    assert glance_option(page)["xAxis"][0]["max"] >= (date(2026, 12, 18) - date(1970, 1, 1)).days
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
+
+
+ACTUAL_LABEL_IS = (
+    "expected => { const c = echarts.getInstanceByDom(document.querySelector('.chart-host-remaining-glance'));"
+    " const d = c.getOption().series.find(s => s.id === 'actual').data;"
+    " return d[d.length - 1].label.formatter === expected; }"
+)
+
+
+def test_glance_labels_reflow_when_the_chart_crosses_the_narrow_width(page, live_server, seeded):
+    page.set_viewport_size({"width": 1440, "height": 900})
+    open_glance(page, live_server, seeded)
+    assert page.evaluate(ACTUAL_LABEL_IS, "Actual: 80 left")
+    page.set_viewport_size({"width": 420, "height": 900})
+    page.wait_for_function(ACTUAL_LABEL_IS, arg="Actual:\n80 left", timeout=5000)
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.wait_for_function(ACTUAL_LABEL_IS, arg="Actual: 80 left", timeout=5000)
+    expect(page.locator(".chart-host-remaining-glance svg text", has_text="Actual: 80 left").first).to_be_visible()
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
+
+
+def glance_tip_at(page, iso):
+    """The tooltip shown with the pointer on ``iso`` (a day on the x-axis), at the foot of the plot."""
+    day = (date.fromisoformat(iso) - date(1970, 1, 1)).days
+    return page.evaluate(
+        "day => { const c = echarts.getInstanceByDom(document.querySelector('.chart-host-remaining-glance'));"
+        " const at = c.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [day, 0]);"
+        " c.dispatchAction({ type: 'showTip', x: at[0], y: at[1] - 2 });"
+        " const tip = document.querySelector('.chart-host-remaining-glance .chart-tooltip');"
+        " return tip ? tip.innerText : ''; }",
+        day,
+    )
+
+
+def test_glance_tooltip_past_the_last_week_shows_the_forecast_or_nothing(page, live_server, seeded, db):
+    seeded.tracker.target_completion = date(2026, 12, 18)
+    db.commit()
+    open_glance(page, live_server, seeded)
+    end = glance_option(page)["series"][2]["data"][-1]["value"][0]  # the forecast end, after the last week (25 Sep)
+    end_iso = (date(1970, 1, 1) + timedelta(days=end)).isoformat()
+    assert end_iso > "2026-09-25"
+    tip = glance_tip_at(page, end_iso)
+    assert "Forecast" in tip and "Week ending" in tip
+    for iso in ("2026-10-16", "2026-12-18"):  # between the last week and the forecast end; the target
+        tip = glance_tip_at(page, iso)
+        assert tip.strip() == "" or "Forecast" in tip or "Plan" in tip or "Actual" in tip, tip
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
 
 
 def test_glance_chart_tooltip_on_hover(page, live_server, seeded):
