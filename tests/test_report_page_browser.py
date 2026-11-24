@@ -532,3 +532,14 @@ def test_glance_direct_labels_sit_clear_of_the_lines(page, live_server, seeded):
     assert plan["align"] == "right" and plan["distance"] >= 12  # below the ring, to the side the line has left
     forecast = [d for d in series["forecast"]["data"] if isinstance(d, dict) and "label" in d][0]["label"]
     assert forecast["position"] == "top" and forecast["distance"] > 10
+
+
+def test_glance_dots_appear_along_the_line_and_match_the_classic_size(page, live_server, seeded):
+    open_glance(page, live_server, seeded)
+    series = {s["id"]: s for s in glance_option(page)["series"]}
+    for name in ("actual", "plan", "forecast"):
+        # Clipped lines are revealed left to right, each dot showing as the line reaches it, as on the classic charts.
+        assert series[name]["clip"] is True
+        assert series[name]["symbolSize"] == 6
+    forecast_end = [d for d in series["forecast"]["data"] if isinstance(d, dict) and "label" in d][0]
+    assert forecast_end["symbolSize"] == 6
