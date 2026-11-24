@@ -627,8 +627,9 @@ def _history_context(tracker: Tracker, db, user: User) -> dict:
     enabled = bool(row and row.enabled)
     if not enabled:
         state = "Off"
-    elif row.sent_state == "sent" and row.sent_fingerprint == fingerprint(series):
-        state = "On \u00b7 up to date"
+    elif row.sent_state == "sent":
+        up_to_date = row.sent_fingerprint == fingerprint(series)
+        state = "On \u00b7 up to date" if up_to_date else "On \u00b7 update not sent yet"
     else:
         state = "On \u00b7 not sent yet"
     today = datetime.now(zone).date()

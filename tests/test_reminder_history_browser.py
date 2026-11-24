@@ -173,3 +173,38 @@ def test_the_link_goes_to_the_history_page_without_javascript(browser, live_serv
         expect(page.locator("#history-table tbody tr")).to_have_count(4)
     finally:
         context.close()
+
+
+def test_unsaved_text_blocks_the_panel_actions_with_a_message_in_the_panel(page, live_server, editor, mail, db):
+    tracker, user = editor
+    page.add_init_script(RECORDER)
+    page.goto(f"{live_server}/trackers/{tracker.id}/inputs")
+    page.fill("#headline", "Typed but not saved")
+    expect(page.locator("[data-dirty-note]")).to_have_class("settings-actions-note is-dirty")
+    page.click("[data-history-url]")
+    panel = page.locator("dialog.perm-drawer")
+    expect(panel.locator("#history-table[data-table-ready]")).to_be_attached()
+    asked: list[str] = []
+    page.on("dialog", lambda d: (asked.append(d.message), d.dismiss()))
+    message = panel.get_by_role("alert").filter(has_text="Save your weekly update first.")
+    expect(message).to_be_hidden()
+    for name in ("Email it again", "Switch the reminder off…"):
+        panel.get_by_role("button", name="More for the calendar reminder").click()
+        panel.get_by_role("menuitem", name=name).click()
+        expect(message).to_have_text("Save your weekly update first. Close this panel to save it.")
+    assert asked == []
+    assert mail == []
+    assert page.url == f"{live_server}/trackers/{tracker.id}/inputs"
+    assert page.input_value("#headline") == "Typed but not saved"
+
+    page.keyboard.press("Escape")
+    page.click("[data-inputs-form] button[type=submit]")
+    expect(page.locator("#headline")).to_have_value("Typed but not saved")
+    page.click("[data-history-url]")
+    expect(panel.locator("#history-table[data-table-ready]")).to_be_attached()
+    expect(message).to_be_hidden()
+    panel.get_by_role("button", name="More for the calendar reminder").click()
+    panel.get_by_role("menuitem", name="Email it again").click()
+    expect(page.locator(".flash")).to_have_text("Calendar reminder sent again to person@example.com.")
+    assert len(mail) == 1
+    assert asked == []

@@ -7,7 +7,8 @@
 {% set table_id = 'history-table' %}
 {% set counts = {'all': events|length, 'sent': events|selectattr('group', 'equalto', 'sent')|list|length, 'failed': events|selectattr('group', 'equalto', 'failed')|list|length, 'download': events|selectattr('group', 'equalto', 'download')|list|length} %}
 <section aria-labelledby="history-reminder-title">
-  <h3 id="history-reminder-title">Reminder</h3>
+  <h3 id="history-reminder-title">In your calendar</h3>
+  {% if panel %}<p class="history-guard tone-danger" role="alert" data-history-guard hidden>Save your weekly update first. Close this panel to save it.</p>{% endif %}
   <p class="history-state"><strong>{{ state }}</strong></p>
   <p class="history-line muted">{{ description }}</p>
   {% if next_date %}<p class="history-line muted">Next: {{ next_date }}</p>{% endif %}

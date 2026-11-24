@@ -55,14 +55,13 @@
     host.appendChild(menu);
   }
 
-  // Posting leaves the page, so while the update form has unsaved changes the panel's forms do not post (inputs.js
-  // does the same for the page's own switch and "Send it again").
-  function unsaved() {
-    var note = document.querySelector("[data-dirty-note]");
-    var blocked = !!note && note.classList.contains("is-dirty");
-    var guard = document.querySelector("[data-reminder-guard]");
-    if (guard) guard.hidden = !blocked;
-    return blocked;
+  // Posting leaves the page, so while the update form has unsaved changes the panel's forms do not post. inputs.js owns
+  // the question; the answer is shown in the panel, because the page behind the modal is inert.
+  function blocked(message) {
+    var guard = window.trackerReminderGuard;
+    var stop = !!guard && guard.blocked();
+    if (message) message.hidden = !stop;
+    return stop;
   }
 
   var opening = 0;
@@ -125,8 +124,14 @@
           head.insertBefore(head.querySelector(".perm-more"), cross);
           head.insertBefore(head.querySelector(".perm-menu"), cross);
           holder.remove();
+          // On the form itself, so it runs before tracker.js asks "Are you sure?" and stops the event reaching it.
+          var message = body.querySelector("[data-history-guard]");
           Array.prototype.forEach.call(head.querySelectorAll("[data-history-form]"), function (form) {
-            form.addEventListener("submit", function (event) { if (unsaved()) event.preventDefault(); });
+            form.addEventListener("submit", function (event) {
+              if (!blocked(message)) return;
+              event.preventDefault();
+              event.stopPropagation();
+            });
           });
         }
         if (window.trackerLists) {

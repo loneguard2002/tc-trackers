@@ -1549,3 +1549,4 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .history-panel section > .history-line:last-child { padding-bottom: 12px; }
 .history-panel .section-table[data-table-frame] { overflow-x: auto; }
 .history-page { max-width: 760px; }
+.history-panel section > .history-guard { padding-top: 12px; font-weight: 600; }
