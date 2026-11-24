@@ -295,19 +295,20 @@
       var label = pointLabel(text, true, c.forecast);
       label.align = "right";
       label.distance = Math.round(rise * perUnit) + 10;
-      return { value: p, symbol: "circle", symbolSize: 8, label: label };
+      return { value: p, symbol: "circle", symbolSize: 6, label: label };
     });
 
+    // Clipped, as the classic charts are: ECharts then shows each dot as the line reaches it, not all at once. Every
+    // point lies inside the axes, so nothing is cut off. Dots are the classic charts' size.
     function line(id, name, points, colour, type, width) {
-      return { id: id, name: name, type: "line", data: points, clip: false, connectNulls: false, symbol: "circle",
-        symbolSize: 8, lineStyle: { color: colour, type: type, width: width }, itemStyle: { color: colour } };
+      return { id: id, name: name, type: "line", data: points, clip: true, connectNulls: false, symbol: "circle",
+        symbolSize: 6, lineStyle: { color: colour, type: type, width: width }, itemStyle: { color: colour } };
     }
     var actualSeries = line("actual", "Actual", actualData, c.actual, "solid", 2.6);
-    actualSeries.symbolSize = 7;
     var planSeries = line("plan", "Plan", planData, c.plan, "dashed", 2);
-    planSeries.itemStyle = { color: surface, borderColor: c.plan, borderWidth: 2 };
+    planSeries.itemStyle = { color: surface, borderColor: c.plan, borderWidth: 1.5 };
     var forecastSeries = line("forecast", "Forecast", forecastData, c.forecast, "dotted", 2.6);
-    forecastSeries.itemStyle = { color: surface, borderColor: c.forecast, borderWidth: 2 };
+    forecastSeries.itemStyle = { color: surface, borderColor: c.forecast, borderWidth: 1.5 };
     actualSeries.markLine = {
       silent: true, symbol: "none", animation: false,
       data: [{ xAxis: reportDay, lineStyle: { color: muted, type: "solid", width: 1.4 }, label: { show: false } }]
