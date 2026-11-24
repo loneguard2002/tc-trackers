@@ -8,6 +8,7 @@ from datetime import date
 from flask import Response, abort, g, jsonify, render_template, request, session
 
 from ..auth import require_tracker_role
+from ..auth.roles import ROLE_ORDER
 from ..db import get_session
 from ..engine.weeks import week_endings
 from ..trackers.targets import target_history
@@ -71,6 +72,8 @@ def view(tracker_id: int):
             tracker=tracker,
             report=report,
             dashboard=build_dashboard(get_session(), report, today()),
+            # Editors of an active tracker set a location's status from the report (the location pop-up).
+            can_set_locations=ROLE_ORDER[g.role] >= ROLE_ORDER["editor"] and tracker.status == "active",
             weeks=weeks,
             page_title=f"{tracker.name} report",
             current_page="trackers",
