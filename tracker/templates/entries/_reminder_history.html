@@ -1,0 +1,67 @@
+{% from "macros.html" import csrf_field, icon %}
+{% from "lists/_table.html" import search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
+{# The person's calendar reminder history: the reminder in a line, then every event as a standard table. The side panel
+   (``panel``) keeps the table's keys out of the address (data-no-address) because the page under it owns the address;
+   the full page uses them. Rows arrive newest first, so the When heading carries no default marker. #}
+{% macro history_body(tracker, state, description, next_date, events, panel=False) -%}
+{% set table_id = 'history-table' %}
+{% set counts = {'all': events|length, 'sent': events|selectattr('group', 'equalto', 'sent')|list|length, 'failed': events|selectattr('group', 'equalto', 'failed')|list|length, 'download': events|selectattr('group', 'equalto', 'download')|list|length} %}
+<section aria-labelledby="history-reminder-title">
+  <h3 id="history-reminder-title">Reminder</h3>
+  <p class="history-state"><strong>{{ state }}</strong></p>
+  <p class="history-line muted">{{ description }}</p>
+  {% if next_date %}<p class="history-line muted">Next: {{ next_date }}</p>{% endif %}
+</section>
+<section aria-labelledby="history-events-title">
+  <h3 id="history-events-title">History</h3>
+  {% if events %}
+  <div class="list-tools">
+    {{ search_box(table_id, 'Search history') }}
+    {{ status_filters(table_id, 'events', (('all', 'All'), ('sent', 'Sent'), ('failed', 'Failed'), ('download', 'Downloads')), counts) }}
+    {{ clear_filters(table_id) }}
+  </div>
+  <div class="section-table" data-table-frame>
+    <table id="{{ table_id }}" class="table card-rows" data-sortable{% if panel %} data-state-prefix="history-" data-no-address{% endif %}>
+      <thead><tr>{{ sort_header('When', 'when', type='date') }}{{ sort_header('What', 'what') }}<th scope="col">Detail</th></tr></thead>
+      <tbody>
+      {% for e in events %}
+      <tr data-status="{{ e.group }}" data-search="{{ e.search }}" data-sort-when="{{ e.iso }}" data-sort-what="{{ e.label }}">
+        <td>{{ e.when }}</td>
+        <td data-label="What:">{{ e.label }}</td>
+        <td data-label="Detail:">{{ e.detail }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {{ no_match('No events match.', table_id) }}
+  </div>
+  {{ table_pager(table_id, 'events', 'event', events|length) }}
+  {% else %}
+  <p class="empty-note">Nothing has happened to this reminder yet.</p>
+  {% endif %}
+</section>
+{%- endmacro %}
+
+{# The fragment for the side panel. The ⋯ menu arrives with it, hidden; reminder-history.js moves it into the panel's
+   header. Its two forms post the existing routes. #}
+{% macro history_panel(tracker, enabled, state, description, next_date, events, email) -%}
+<div class="set-panel history-panel" data-panel-history data-subtitle="{{ tracker.name }} · sent to {{ email }}">
+  <div data-history-menu hidden>
+    <button class="perm-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="More for the calendar reminder">{{ icon('more') }}</button>
+    <div class="perm-menu" role="menu" hidden>
+      <a role="menuitem" href="{{ url_for('entries.calendar_reminder_ics', tracker_id=tracker.id) }}">{{ icon('download') }}Download invite (.ics)</a>
+      {% if enabled %}
+      <form method="post" action="{{ url_for('entries.calendar_reminder_resend', tracker_id=tracker.id) }}" data-history-form>
+        {{ csrf_field(csrf_token()) }}
+        <button type="submit" role="menuitem">{{ icon('mail') }}Email it again</button>
+      </form>
+      <form method="post" action="{{ url_for('entries.calendar_reminder', tracker_id=tracker.id) }}" data-history-form data-confirm="Switch the calendar reminder off? A cancellation is sent to Outlook.">
+        {{ csrf_field(csrf_token()) }}
+        <button type="submit" role="menuitem" class="is-danger">{{ icon('trash') }}Switch the reminder off…</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {{ history_body(tracker, state, description, next_date, events, panel=True) }}
+</div>
+{%- endmacro %}
