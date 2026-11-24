@@ -1,0 +1,7 @@
+{#- The segmented switch between the two report views; the choice is kept in the session. Expects ``tid``, ``wk``
+    and ``active_view``. -#}
+<nav class="view-switch" aria-label="Report view">
+  {% for key, label in (('new', 'New view'), ('classic', 'Classic view')) %}
+  <a href="{{ url_for('report.view', tracker_id=tid, view=key, week=wk.isoformat()) }}"{% if active_view == key %} aria-current="page"{% endif %}>{{ label }}</a>
+  {%- endfor %}
+</nav>

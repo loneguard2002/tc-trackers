@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, rag_tone %}
+{% block content %}
+<h1>{{ tracker.name }}</h1>
+{% include "trackers/_nav.html" %}
+{% set active_view = 'new' %}
+{% include "report/_toolbar.html" %}
+{% set d = dashboard %}
+{% set status = report.inputs.status if report.inputs and report.inputs.status else None %}
+{% set icons = {'green': 'check', 'amber': 'warning', 'red': 'ban', 'none': 'info'} %}
+<div class="report-dashboard">
+  <section class="answer-card answer-card-{{ d.tone }}" aria-label="Status at a glance">
+    <div class="answer-main">
+      <span class="status-badge status-badge-{{ d.tone }}">{{ icon(icons[d.tone]) }}{{ status or 'Not set' }}</span>
+      <p class="answer-sentence">{{ d.answer }}</p>
+      {% if report.inputs and report.inputs.headline %}<p class="answer-headline">{{ report.inputs.headline }}</p>{% endif %}
+    </div>
+    <aside class="answer-needed">
+      {% if report.inputs %}
+      <h2 class="answer-needed-label">Needed from you</h2>
+      <p class="answer-needed-text">{{ d.needed or 'None' }}</p>
+      {% if d.written_by and d.written_on %}<p class="answer-written">Written by {{ d.written_by }} on {{ d.written_on|fdate }}</p>{% endif %}
+      {% else %}
+      <h2 class="answer-needed-label">Needed from you</h2>
+      <p class="answer-needed-text">None</p>
+      <p class="answer-written">No weekly update written for this week.</p>
+      {% endif %}
+    </aside>
+  </section>
+</div>
+{% endblock %}
