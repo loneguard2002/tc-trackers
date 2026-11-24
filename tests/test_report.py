@@ -264,6 +264,8 @@ def test_build_report_risk_counts_and_inputs(db, small_tracker):
 @pytest.fixture
 def viewer(client, logged_in_user, grant, small_tracker):
     grant(logged_in_user, small_tracker, "viewer")
+    with client.session_transaction() as session:
+        session["report_view"] = "classic"  # these tests read the classic page; the new view is the default
     return logged_in_user
 
 
@@ -412,13 +414,13 @@ def test_report_header_shows_business_line_and_regions(
     tracker = tracker_factory(name="Reported", business_line_id=business_line_factory().id)
     set_tracker_regions(db, tracker.id, [region.id])
     db.commit()
-    page = text_of(client.get(f"/trackers/{tracker.id}/report"))
+    page = text_of(client.get(f"/trackers/{tracker.id}/report?view=classic"))
     assert '<p class="report-meta">Tradition brokerage · EMEA</p>' in page
 
 
 def test_report_header_says_when_business_line_and_regions_are_not_set(client, logged_in_admin, tracker_factory):
     tracker = tracker_factory(name="Bare report")
-    page = text_of(client.get(f"/trackers/{tracker.id}/report"))
+    page = text_of(client.get(f"/trackers/{tracker.id}/report?view=classic"))
     assert '<p class="report-meta">Business line not set · Regions not set</p>' in page
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from flask import Response, abort, g, jsonify, render_template, request
+from flask import Response, abort, g, jsonify, render_template, request, session
 
 from ..auth import require_tracker_role
 from ..db import get_session
@@ -14,6 +14,7 @@ from . import bp
 from .build import build_report, compute_position, current_report_week
 from .chart_data import chart_payload
 from .charts import cumulative_chart, remaining_chart, weekly_chart
+from .dashboard import build_dashboard
 from .render import html_to_pdf, html_to_png, render_print_html
 
 
@@ -40,13 +41,38 @@ def _report_week(tracker) -> date:
     return _requested_week(tracker) or current_report_week(tracker, today())
 
 
+VIEWS = ("new", "classic")
+VIEW_KEY = "report_view"
+
+
+def _chosen_view() -> str:
+    """The view asked for with ``?view=`` (kept in the session for the next report), else the one kept, else new."""
+    asked = request.args.get("view")
+    if asked in VIEWS:
+        session[VIEW_KEY] = asked
+    kept = session.get(VIEW_KEY)
+    session[VIEW_KEY] = kept if kept in VIEWS else "new"
+    return session[VIEW_KEY]
+
+
 @bp.get("/trackers/<int:tracker_id>/report")
 @require_tracker_role("viewer")
 def view(tracker_id: int):
     tracker = g.tracker
+    chosen = _chosen_view()
     # The charts come as separate images (``chart_image``), so the page does not wait for them to be drawn.
     report = build_report(get_session(), tracker, _report_week(tracker), today(), with_charts=False)
     weeks = week_endings(tracker.first_week_ending, tracker.last_week_ending)
+    if chosen == "new":
+        return render_template(
+            "report/dashboard.html",
+            tracker=tracker,
+            report=report,
+            dashboard=build_dashboard(get_session(), report, today()),
+            weeks=weeks,
+            page_title=f"{tracker.name} report",
+            current_page="trackers",
+        )
     return render_template(
         "report/page.html",
         tracker=tracker,

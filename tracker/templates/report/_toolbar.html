@@ -1,0 +1,28 @@
+{#- The report toolbar shared by both views: view switch, week picker and downloads. Expects ``report``, ``weeks`` and
+    ``active_view`` ("new" or "classic"). -#}
+{% from "macros.html" import icon %}
+{% set tid = report.tracker.id %}{% set wk = report.week_ending %}
+{% set ns = namespace(prev=none, next=none) %}
+{% for w in weeks %}{% if w < wk %}{% set ns.prev = w %}{% elif w > wk and ns.next is none %}{% set ns.next = w %}{% endif %}{% endfor %}
+<form method="get" action="{{ url_for('report.view', tracker_id=tid) }}" class="report-week">
+  {% include "report/_view_switch.html" %}
+  {% if ns.prev %}<a class="button button-small" href="{{ url_for('report.view', tracker_id=tid, week=ns.prev.isoformat()) }}" rel="prev">{{ icon('chevron-left') }}Previous</a>
+  {% else %}<span class="button button-small is-disabled" aria-disabled="true">{{ icon('chevron-left') }}Previous</span>{% endif %}
+  <label class="sr-only" for="report-week">Week ending</label>
+  <select id="report-week" name="week" data-autosubmit>
+    {% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if w == wk }}>{{ w|fdate }}</option>{% endfor %}
+  </select>
+  <button class="button button-small" type="submit" data-autosubmit-fallback>Show</button>
+  {% if ns.next %}<a class="button button-small" href="{{ url_for('report.view', tracker_id=tid, week=ns.next.isoformat()) }}" rel="next">Next{{ icon('chevron-right') }}</a>
+  {% else %}<span class="button button-small is-disabled" aria-disabled="true">Next{{ icon('chevron-right') }}</span>{% endif %}
+  <span class="report-week-downloads">
+    {#- Shown by report-view.js: previews the report as the PDF (an A4 page) or the PNG will lay it out. -#}
+    <span class="toggle" role="group" aria-label="Preview" data-report-view hidden>
+      <button type="button" data-view="screen" aria-pressed="true">Screen</button>
+      <button type="button" data-view="pdf" aria-pressed="false">PDF</button>
+      <button type="button" data-view="png" aria-pressed="false">PNG</button>
+    </span>
+    <a class="button button-small" href="{{ url_for('report.export_pdf', tracker_id=tid, week=wk.isoformat()) }}">{{ icon('download') }}Download PDF</a>
+    <a class="button button-small" href="{{ url_for('report.export_png', tracker_id=tid, week=wk.isoformat()) }}">{{ icon('download') }}Download PNG</a>
+  </span>
+</form>

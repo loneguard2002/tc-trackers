@@ -59,7 +59,7 @@ def seeded_empty(db, tracker_factory, user_factory, grant):
 def open_report(page, base_url, seeded, wait=True):
     page.add_init_script(RECORDER)
     browser_sign_in(page, base_url, seeded.viewer)
-    page.goto(f"{base_url}/trackers/{seeded.tracker.id}/report")
+    page.goto(f"{base_url}/trackers/{seeded.tracker.id}/report?view=classic")
     if wait:
         page.wait_for_selector(".chart-host-cumulative :is(svg, canvas)")
 
@@ -220,7 +220,7 @@ def test_page_without_javascript_keeps_the_pictures(browser, live_server, seeded
     try:
         page = context.new_page()
         browser_sign_in(page, live_server, seeded.viewer)
-        page.goto(f"{live_server}/trackers/{seeded.tracker.id}/report")
+        page.goto(f"{live_server}/trackers/{seeded.tracker.id}/report?view=classic")
         expect(page.locator("img[data-chart]")).to_have_count(3)
     finally:
         context.close()
