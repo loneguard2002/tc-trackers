@@ -318,3 +318,11 @@ def test_a_first_off_submit_on_a_new_row_records_nothing(client, db, setup, mail
     tracker, person = setup
     post(client, url(tracker), {})
     assert event_list(db, tracker, person) == []
+
+
+def test_letters_without_a_decomposition_are_mapped_in_the_file_name(client, db, setup):
+    tracker, _ = setup
+    tracker.name = "Straße Ø"
+    db.commit()
+    response = client.get(ics_url(tracker))
+    assert response.headers["Content-Disposition"] == 'attachment; filename="Strasse O reminder.ics"'

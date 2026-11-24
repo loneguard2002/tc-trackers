@@ -54,14 +54,18 @@ def record_event(session, user_id: int, tracker_id: int, kind: str, detail: str 
     session.add(CalendarReminderEvent(user_id=user_id, tracker_id=tracker_id, kind=kind, detail=detail))
 
 
-def events_for(session, user_id: int, tracker_id: int) -> list[CalendarReminderEvent]:
-    """One person's events for one tracker, newest first."""
-    query = (
+def _events_query(user_id: int, tracker_id: int):
+    """Newest first by insert order: ``at`` is the transaction start, so overlapping transactions can invert it."""
+    return (
         select(CalendarReminderEvent)
         .where(CalendarReminderEvent.user_id == user_id, CalendarReminderEvent.tracker_id == tracker_id)
-        .order_by(CalendarReminderEvent.at.desc(), CalendarReminderEvent.id.desc())
+        .order_by(CalendarReminderEvent.id.desc())
     )
-    return list(session.scalars(query))
+
+
+def events_for(session, user_id: int, tracker_id: int) -> list[CalendarReminderEvent]:
+    """One person's events for one tracker, newest first."""
+    return list(session.scalars(_events_query(user_id, tracker_id)))
 
 
 def _update_detail(sent: dict | None, current: dict) -> str:
@@ -139,8 +143,8 @@ def _record_failure(session, row: CalendarReminder, message: str) -> None:
     try:
         row.last_error = message
         detail = message[:ERROR_DETAIL_LIMIT]
-        newest = events_for(session, row.user_id, row.tracker_id)[:1]
-        if not (newest and newest[0].kind == "failed" and newest[0].detail == detail):  # one event per outage
+        newest = session.scalars(_events_query(row.user_id, row.tracker_id).limit(1)).first()
+        if not (newest and newest.kind == "failed" and newest.detail == detail):  # one event per outage
             record_event(session, row.user_id, row.tracker_id, "failed", detail)
         session.commit()
     except Exception:
