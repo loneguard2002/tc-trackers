@@ -543,3 +543,42 @@ def test_glance_dots_appear_along_the_line_and_match_the_classic_size(page, live
         assert series[name]["symbolSize"] == 6
     forecast_end = [d for d in series["forecast"]["data"] if isinstance(d, dict) and "label" in d][0]
     assert forecast_end["symbolSize"] == 6
+
+
+def test_glance_lines_reach_their_last_point_in_one_and_a_half_seconds(page, live_server, seeded, db):
+    add_targets(db, seeded.tracker)  # the axis runs on to 18 Dec, well past the last point
+    db.commit()
+    open_glance(page, live_server, seeded)
+    option = glance_option(page)
+    low, high = option["xAxis"][0]["min"], option["xAxis"][0]["max"]
+    lines = [s for s in option["series"] if s["id"] in ("actual", "plan", "forecast")]
+    last = max((d["value"] if isinstance(d, dict) else d)[0] for s in lines for d in s["data"])
+    for s in lines:
+        # The reveal is steady (linear) across the plot, so the last point shows at this share of the duration.
+        assert abs(s["animationDuration"] * (last - low) / (high - low) - 1500) <= 1
+
+
+def test_glance_status_and_risks_sit_side_by_side_under_the_chart(page, live_server, seeded):
+    page.set_viewport_size({"width": 1440, "height": 1200})
+    open_glance(page, live_server, seeded)
+    chart = page.locator("#glance-chart").bounding_box()
+    status, risks = (
+        page.locator(f"section[aria-labelledby='{n}']").bounding_box()
+        for n in ("glance-status-title", "glance-risks-title")
+    )
+    tiles = page.locator(".glance-tile").all()
+    first, second, third, fourth = (t.bounding_box() for t in tiles)
+    assert chart["width"] == pytest.approx(fourth["x"] + fourth["width"] - first["x"], abs=1)  # full width
+    assert status["y"] > chart["y"] + chart["height"] and risks["y"] == pytest.approx(status["y"], abs=1)
+    # Each two tile columns wide.
+    assert status["x"] == pytest.approx(first["x"], abs=1)
+    assert status["x"] + status["width"] == pytest.approx(second["x"] + second["width"], abs=1)
+    assert risks["x"] == pytest.approx(third["x"], abs=1)
+    assert risks["x"] + risks["width"] == pytest.approx(fourth["x"] + fourth["width"], abs=1)
+    page.set_viewport_size({"width": 390, "height": 900})
+    status, risks = (
+        page.locator(f"section[aria-labelledby='{n}']").bounding_box()
+        for n in ("glance-status-title", "glance-risks-title")
+    )
+    assert risks["y"] > status["y"] + status["height"]  # stacked on a phone
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

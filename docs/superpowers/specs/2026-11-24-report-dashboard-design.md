@@ -23,8 +23,8 @@ finishes, and whether the goalposts moved.
    before the 18 Dec target, though 30 behind plan." or "Forecast to finish on 8 Jan, 21 days after the 18 Dec target.".
 3. **Four figure tiles with a small visual each:** Completed (progress bar, "75% · 125 left"); This week (sparkline of
    the weekly actuals so far, "+2 against target · next week 40"); Rate over the moving-average weeks (bar with a mark
-   for the rate needed); Forecast finish (mini timeline with the forecast dot and the target mark, plus "Target moved
-   twice: 4 Dec → 11 Dec → 18 Dec" when it has moved). Tones follow today's rules (success when ahead, danger when
+   for the rate needed); Forecast finish (mini timeline with the forecast dot and the target mark; the moves are shown on the chart
+   and in "Target date changes", not on the tile). Tones follow today's rules (success when ahead, danger when
    behind).
 4. **One "Remaining" chart** (counting down to none left) replacing Remaining + Cumulative in the new view: actual
    (solid, dots per week), plan (dashed, rings per week), forecast (dotted) from the report week to none left; the

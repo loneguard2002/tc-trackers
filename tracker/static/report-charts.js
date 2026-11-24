@@ -211,6 +211,9 @@
     return (host.clientWidth || 600) < NARROW;
   }
 
+  // How long the Remaining chart (new view) takes to draw its lines up to the last point.
+  var GLANCE_REVEAL_MS = 1500;
+
   function buildGlance(data, entry) {
     var theme = currentTheme(entry.host);
     var c = GLANCE_COLOURS[theme];
@@ -300,9 +303,15 @@
 
     // Clipped, as the classic charts are: ECharts then shows each dot as the line reaches it, not all at once. Every
     // point lies inside the axes, so nothing is cut off. Dots are the classic charts' size.
+    // The lines are revealed left to right at a steady speed across the whole plot, but they often end well short of
+    // its right edge (the axis runs on to the target), so the sweep is stretched for the last point to show at 1.5 s.
+    var lastDay = low;
+    plan.concat(actual, forecast).forEach(function (p) { if (p[0] > lastDay) lastDay = p[0]; });
+    var reveal = Math.round(GLANCE_REVEAL_MS * (high - low) / Math.max(lastDay - low, (high - low) / 10));
     function line(id, name, points, colour, type, width) {
       return { id: id, name: name, type: "line", data: points, clip: true, connectNulls: false, symbol: "circle",
-        symbolSize: 6, lineStyle: { color: colour, type: type, width: width }, itemStyle: { color: colour } };
+        symbolSize: 6, animationDuration: reveal, lineStyle: { color: colour, type: type, width: width },
+        itemStyle: { color: colour } };
     }
     var actualSeries = line("actual", "Actual", actualData, c.actual, "solid", 2.6);
     var planSeries = line("plan", "Plan", planData, c.plan, "dashed", 2);

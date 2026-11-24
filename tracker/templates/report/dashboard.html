@@ -68,7 +68,6 @@
       <div class="glance-tile-visual">{% if t.forecast.timeline %}{% set tl = t.forecast.timeline %}
         <svg class="glance-timeline" viewBox="0 0 240 24" role="img" aria-label="Forecast finish and target date on a timeline"><line class="glance-timeline-line" x1="{{ '%.1f'|format(tl.start|float * 2.4) }}" x2="{{ '%.1f'|format(tl.end|float * 2.4) }}" y1="12" y2="12" stroke-width="2"/>{% if tl.target %}<rect class="glance-timeline-target" x="{{ '%.1f'|format(tl.target|float * 2.4 - 1) }}" y="3" width="2" height="18"/>{% endif %}{% if tl.forecast %}<circle class="glance-timeline-forecast" cx="{{ '%.1f'|format(tl.forecast|float * 2.4) }}" cy="12" r="5"/>{% endif %}</svg>{% endif %}</div>
       <p class="glance-tile-sub{{ ' tone-' ~ t.forecast.tone if t.forecast.tone }}">{{ t.forecast.sub }}</p>
-      {% if t.forecast.moved %}<p class="glance-tile-sub glance-tile-moved">{{ t.forecast.moved }}</p>{% endif %}
     </article>
   </section>
 
