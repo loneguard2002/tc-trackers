@@ -810,6 +810,7 @@ def test_glance_picture_draws_a_line_per_target_earlier_ones_faint():
     second = svg[svg.index('id="glance-target-2"') :].split("</g>")[0]
     assert "stroke-opacity: 0.35" in first and "stroke-opacity: 0.9" in second
     assert 'id="glance-target-label-1"' in svg and 'id="glance-target-label-2"' in svg
+    assert 'id="glance-target-title"' in svg
 
 
 def test_glance_picture_x_axis_covers_every_target():
@@ -852,7 +853,7 @@ def test_glance_picture_wording_and_helpers():
     assert week_label(date(2026, 10, 16), True) == "This week, ending 16 Oct"
     assert week_label(date(2026, 10, 16), False) == "Week ending 16 Oct"
     entry = _entry(2, date(2026, 12, 18), current=True)
-    assert target_label_text(entry, True) == "2  Target 18 Dec"
+    assert target_label_text(entry, True) == "2"  # "Target 18 Dec" is drawn above the rings
     assert target_label_text(entry, False) == "Target 18 Dec"
     assert target_label_text(_entry(1, date(2026, 12, 4)), True) == "1"
     assert [nice_step(top) for top in (0, 60, 90, 100, 130, 240, 500, 700, 1500, 12000)] == [

@@ -335,8 +335,10 @@ def test_glance_chart_draws_with_direct_labels(page, live_server, seeded):
     for text in ("Actual: 80 left", "Plan: 80 left"):
         expect(host.locator("svg text", has_text=text).first).to_be_visible()
     expect(host.locator("svg text", has_text=re.compile(r"Forecast: none left on \d+ \w{3}")).first).to_be_visible()
-    for legend in ("Actual", "Plan", "Forecast"):
-        expect(host.locator("svg text", has_text=re.compile(rf"^{legend}$")).first).to_be_visible()
+    # The key sits under the chart, in the page, not inside the chart.
+    expect(page.locator(".glance-legend li")).to_have_text(["Actual", "Plan", "Forecast"])
+    expect(page.locator(".glance-legend")).to_be_visible()
+    expect(host.locator("svg text", has_text=re.compile(r"^Plan$"))).to_have_count(0)
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
 
@@ -582,3 +584,73 @@ def test_glance_status_and_risks_sit_side_by_side_under_the_chart(page, live_ser
     )
     assert risks["y"] > status["y"] + status["height"]  # stacked on a phone
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+
+def test_glance_key_sits_to_the_right_of_the_target_date_changes(page, live_server, seeded, db):
+    add_targets(db, seeded.tracker)
+    db.commit()
+    page.set_viewport_size({"width": 1440, "height": 1200})
+    open_glance(page, live_server, seeded)
+    targets = page.locator(".glance-targets").bounding_box()
+    key = page.locator(".glance-legend").bounding_box()
+    card = page.locator("#glance-chart").bounding_box()
+    assert key["x"] >= targets["x"] + targets["width"]  # beside the list, not under it
+    assert key["y"] == pytest.approx(targets["y"], abs=4)  # level with its heading
+    assert key["x"] + key["width"] == pytest.approx(card["x"] + card["width"] - 18, abs=2)  # against the right edge
+    assert page.evaluate("window.__csp") == []
+
+
+def test_glance_key_without_target_changes_sits_on_the_right(page, live_server, seeded):
+    page.set_viewport_size({"width": 1440, "height": 1200})
+    open_glance(page, live_server, seeded)
+    expect(page.locator(".glance-targets")).to_have_count(0)
+    key = page.locator(".glance-legend").bounding_box()
+    card = page.locator("#glance-chart").bounding_box()
+    assert key["x"] > card["x"] + card["width"] / 2
+
+
+def test_answer_card_in_progress_pill_lines_up_with_the_status(page, live_server, seeded):
+    open_glance(page, live_server, seeded)
+    # The fixture's week is finished, so add the pill the server draws for a week in progress.
+    page.evaluate(
+        """() => document.querySelector('.answer-badges').insertAdjacentHTML('beforeend',
+        '<span class="status-badge status-badge-progress">In progress</span>')"""
+    )
+    status = page.locator(".answer-badges .status-badge").first.bounding_box()
+    pill = page.locator(".status-badge-progress").bounding_box()
+    assert pill["height"] == pytest.approx(status["height"], abs=1)
+    assert pill["y"] == pytest.approx(status["y"], abs=1)
+    assert pill["x"] - (status["x"] + status["width"]) == pytest.approx(8, abs=1)
+
+
+def test_glance_locations_sit_three_to_a_row(page, live_server, seeded, db):
+    for number in range(2, 5):
+        db.add(Group(tracker_id=seeded.tracker.id, name=f"Site {number}", baseline=50, sort_order=number))
+    db.commit()
+    page.set_viewport_size({"width": 1440, "height": 1200})
+    open_glance(page, live_server, seeded)
+    boxes = [item.bounding_box() for item in page.locator(".glance-location").all()]
+    assert len(boxes) == 4
+    assert boxes[0]["y"] == boxes[1]["y"] == boxes[2]["y"] < boxes[3]["y"]
+    assert boxes[3]["x"] == pytest.approx(boxes[0]["x"], abs=1)
+    page.set_viewport_size({"width": 390, "height": 900})
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+
+def test_glance_top_risks_table_sorts_by_its_headings(page, live_server, seeded, db):
+    from tracker.models import Risk
+
+    for ref, rag, due in (("R1", "Red", date(2026, 9, 30)), ("R2", "Amber", date(2026, 9, 1)), ("R3", "Green", None)):
+        db.add(Risk(tracker_id=seeded.tracker.id, ref=ref, description=f"Risk {ref}", rag=rag, target_date=due))
+    db.commit()
+    open_glance(page, live_server, seeded)
+    table = page.locator("#glance-risks-table")
+    first_cells = table.locator("tbody tr td:nth-child(2) strong")
+    expect(first_cells).to_have_text(["R1", "R2", "R3"])  # worst first, as the server orders them
+    table.get_by_role("button", name="Due").click()
+    expect(first_cells).to_have_text(["R2", "R1", "R3"])  # earliest first, no date last
+    expect(table.locator("th").nth(2)).to_have_attribute("aria-sort", "ascending")
+    table.get_by_role("button", name="Due").click()
+    expect(first_cells).to_have_text(["R1", "R2", "R3"])  # latest first, no date still last
+    assert "sort" not in page.url  # the address keeps only the week and the view
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []

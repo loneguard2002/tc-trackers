@@ -325,7 +325,11 @@ def test_the_page_marks_a_week_in_progress(client, db, small_tracker, viewer, mo
     db.commit()
     html = page(client, small_tracker)
     assert re.search(
-        r'<section class="answer-card[^"]*".*?<span class="badge badge-info">In progress</span>', html, re.S
+        r'<section class="answer-card[^"]*".*?<div class="answer-badges">\s*'
+        r'<span class="status-badge status-badge-\w+">.*?</span>'
+        r'<span class="status-badge status-badge-progress">In progress</span>',
+        html,
+        re.S,
     )
     assert "3 so far of 10 target" in text_of(html)
     assert "In progress" not in page(client, small_tracker, WEEKS[0])
@@ -612,8 +616,25 @@ def test_top_risks_card(client, db, small_tracker, viewer):
     assert "Top risks 3 of 4 open" in flat
     assert "R1 Power cut" in flat and "R2 Late kit" in flat and "R4 Extra one" not in flat
     assert re.search(r'<span class="tone-danger">3 days past 8 Sep</span>', html)
-    assert "Due 30 Sep" in flat and "Site A · Programme Lead" in flat
+    assert "Due 30 Sep" in flat
     assert re.search(r'glance-chip glance-chip-red">\s*<svg[^>]*>.*?</svg>\s*Red', html, re.S)
+    # A standard table: sortable headings, a row per risk with its location and owner in their own cells.
+    table = re.search(r'<table id="glance-risks-table"[^>]*data-sortable[^>]*>(.*?)</table>', html, re.S).group(1)
+    headings = re.findall(r'data-sort="(\w+)"', table)
+    assert headings == ["rag", "risk", "due", "location", "owner"]
+    rows = re.findall(r"<tr data-sort-rag[^>]*>(.*?)</tr>", table, re.S)
+    assert len(rows) == 3
+    assert '<td data-label="Location:">Site A</td>' in rows[0]
+    assert '<td data-label="Owner:">Programme Lead</td>' in rows[0]
+    assert re.search(r'<tr data-sort-rag="3" data-sort-risk="R1" data-sort-due="2026-09-08"', table)
+
+
+def test_the_new_view_heads_the_report_with_the_week_and_the_labels(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    html = page(client, small_tracker)
+    title = re.search(r'<div class="report-title glance-title">(.*?)</div>', html, re.S).group(1)
+    assert "<h2>Week ending 11 Sep 2026</h2>" in title
+    assert re.search(r'<p class="report-meta">[^<]+ · [^<]+</p>', title)
 
 
 def test_top_risks_card_without_risks(client, db, small_tracker, viewer):
