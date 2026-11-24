@@ -6,14 +6,17 @@ data and then shows a "No data yet" note.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date, timedelta
 from io import BytesIO
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.dates import DateFormatter
 from matplotlib.figure import Figure
+from matplotlib.ticker import MultipleLocator
 
 from ..engine.calc import COMPLETE, IN_PROGRESS, WeekRow
+from ..trackers.targets import TargetEntry
 
 PLAN = "#888888"
 ACTUAL = "#2c7be5"
@@ -21,6 +24,11 @@ FORECAST = "#d39e00"
 TARGET_BAR = "#b9c3d3"
 DONE_BAR = "#2f9e76"
 PALETTE = {"plan": PLAN, "actual": ACTUAL, "forecast": FORECAST}
+# The Status at a glance chart's lines (always light: the picture is white; the live chart has a dark set too).
+GLANCE_ACTUAL = "#1260d0"
+GLANCE_PLAN = "#008f82"
+GLANCE_FORECAST = "#c27a00"
+GLANCE_INK = "#14213d"
 FORMATS = {"svg": "svg", "png": "png"}
 SIZE = (7.0, 3.2)
 
@@ -37,9 +45,9 @@ def _series(rows: list[WeekRow], attr: str, include=None) -> tuple[list[date], l
     return xs, ys
 
 
-def actual_series(rows: list[WeekRow], attr: str) -> tuple[list[date], list[float]]:
+def actual_series(rows: list[WeekRow], attr: str, upto: date | None = None) -> tuple[list[date], list[float]]:
     """The actual line: completed weeks only, so that a part-week figure never draws a flat segment."""
-    return _series(rows, attr, include=lambda r: r.state == COMPLETE)
+    return _series(rows, attr, include=lambda r: r.state == COMPLETE and (upto is None or r.week_ending <= upto))
 
 
 def chart_series(rows: list[WeekRow]) -> dict[str, list[float | None]]:
@@ -123,6 +131,128 @@ def remaining_chart(rows: list[WeekRow], unit_label: str, fmt: str = "svg") -> b
     if len(fx) > 1:
         ax.plot(fx, fy, color=FORECAST, linestyle=":", linewidth=2.2, label="Forecast")
     return _finish(fig, ax, bool(px or ax_ or len(fx) > 1), fmt)
+
+
+def glance_x_range(weeks: Sequence[date], targets: Sequence[date], forecast_end: date | None) -> tuple[date, date]:
+    """The x-axis span, on the weekly grid, from the first week to the latest of the last week, the forecast end and
+    every target (and back to the earliest target if that is before the first week), so no target line is clipped."""
+    dates = [*weeks, *targets, *([forecast_end] if forecast_end else [])]
+    anchor = weeks[0] if weeks else min(dates)
+    before = -(-(anchor - min(dates)).days // 7)  # whole weeks, rounded up
+    after = -(-(max(dates) - anchor).days // 7)
+    return anchor - timedelta(days=7 * before), anchor + timedelta(days=7 * after)
+
+
+def _day_label(day: date, first_of_month: bool) -> str:
+    return f"{day.day}\n{day:%b}" if first_of_month else str(day.day)
+
+
+def remaining_glance_chart(
+    rows: list[WeekRow],
+    unit_label: str,
+    report_week: date,
+    targets: Sequence[TargetEntry],
+    forecast_end: date | None,
+    fmt: str = "svg",
+) -> bytes:
+    """The Status at a glance Remaining chart: actual (solid, a dot per week), plan (dashed, a ring per week) and
+    forecast (dotted) down to none left, the report week, and a dashed line per target (earlier ones faint, numbered).
+
+    Every artist has a ``gid`` (``glance-actual``, ``glance-target-2``, ...) so the SVG can be inspected."""
+    fig, ax = _new_figure("", unit_label)
+    px, py = _series(rows, "planned_remaining")
+    ax_, ay = actual_series(rows, "actual_remaining", report_week)
+    if not (px or ax_):
+        return _finish(fig, ax, False, fmt)
+    dated = [t for t in targets if t.date is not None]
+    low, high = glance_x_range([r.week_ending for r in rows], [t.date for t in dated], forecast_end)
+    ax.set_xlim(low - timedelta(days=2), high + timedelta(days=2))
+    if px:
+        ax.plot(
+            px,
+            py,
+            color=GLANCE_PLAN,
+            linestyle="--",
+            linewidth=1.6,
+            marker="o",
+            markersize=5,
+            markerfacecolor="white",
+            markeredgewidth=1.4,
+            label="Plan",
+            gid="glance-plan",
+        )
+    if ax_:
+        ax.plot(
+            ax_,
+            ay,
+            color=GLANCE_ACTUAL,
+            linestyle="-",
+            linewidth=2.2,
+            marker="o",
+            markersize=4.5,
+            label="Actual",
+            gid="glance-actual",
+        )
+        if forecast_end and ay[-1] > 0:
+            ax.plot(
+                [ax_[-1], forecast_end],
+                [ay[-1], 0],
+                color=GLANCE_FORECAST,
+                linestyle=":",
+                linewidth=2.2,
+                label="Forecast",
+                gid="glance-forecast",
+            )
+    top = max([*py, *ay, 1])
+    ax.set_ylim(0, top * 1.12)
+    if top <= 1200:
+        ax.yaxis.set_major_locator(MultipleLocator(100))
+    ax.axvline(report_week, color=GLANCE_INK, linewidth=1, alpha=0.6, gid="glance-report-week")
+    ax.annotate(
+        f"Report week {report_week.day} {report_week:%b}",
+        (report_week, top * 1.12),
+        fontsize=7,
+        ha="center",
+        va="bottom",
+        annotation_clip=False,
+        color=GLANCE_INK,
+    )
+    for entry in dated:
+        faint = not entry.current
+        ax.axvline(
+            entry.date,
+            color=GLANCE_INK,
+            linestyle="--",
+            linewidth=1.2,
+            alpha=0.35 if faint else 0.9,
+            gid=f"glance-target-{entry.number}",
+        )
+        text = str(entry.number) if faint else f"{entry.number}  Target {entry.date.day} {entry.date:%b}"
+        label = ax.annotate(
+            text,
+            (entry.date, top * 1.12),
+            fontsize=7,
+            ha="center",
+            va="bottom",
+            annotation_clip=False,
+            color=GLANCE_INK if entry.current else "#5d6b83",
+            bbox={
+                "boxstyle": "circle,pad=0.25" if faint else "round,pad=0.25",
+                "fc": "white",
+                "ec": GLANCE_INK,
+                "alpha": 1,
+            },
+        )
+        label.set_gid(f"glance-target-label-{entry.number}")
+    weeks = [low + timedelta(days=7 * i) for i in range(((high - low).days // 7) + 1)]
+    ticks, labels, last_month = [], [], None
+    for week in weeks:
+        ticks.append(week)
+        labels.append(_day_label(week, week.month != last_month))
+        last_month = week.month
+    ax.set_xticks(ticks, labels, fontsize=7)
+    ax.legend(fontsize=8, frameon=False, loc="upper right", ncols=3)
+    return _render(fig, fmt)
 
 
 def weekly_chart(rows: list[WeekRow], fmt: str = "svg") -> bytes:

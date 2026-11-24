@@ -778,3 +778,69 @@ def test_each_group_shows_its_amount_done_before_the_first_week(app):
     assert 'class="bar-start" width="10.00"' in first and 'class="bar-fill" width="20.00"' in first
     assert "10 done before the first week" in flat_text(first)
     assert "bar-start" not in second and "before the first week" not in flat_text(second)
+
+
+# --- The Status at a glance Remaining picture ------------------------------------------------------------------
+
+
+def _entry(number, day, current=False, kind="moved"):
+    from tracker.trackers.targets import TargetEntry
+
+    return TargetEntry(number, day, kind, date(2026, 9, 1), None, "", None, current)
+
+
+def _glance(targets=(), forecast_end=date(2026, 10, 2), rows=None):
+    from tracker.report.charts import remaining_glance_chart
+
+    return remaining_glance_chart(
+        sample_rows() if rows is None else rows, "devices", WEEKS[1], list(targets), forecast_end, "svg"
+    ).decode()
+
+
+def test_glance_picture_draws_the_three_lines_and_the_report_week():
+    svg = _glance()
+    for gid in ("glance-actual", "glance-plan", "glance-forecast", "glance-report-week"):
+        assert f'id="{gid}"' in svg
+    assert "glance-target-" not in svg
+
+
+def test_glance_picture_draws_a_line_per_target_earlier_ones_faint():
+    svg = _glance([_entry(1, date(2026, 10, 9)), _entry(2, date(2026, 10, 23), current=True)])
+    first = svg[svg.index('id="glance-target-1"') :].split("</g>")[0]
+    second = svg[svg.index('id="glance-target-2"') :].split("</g>")[0]
+    assert "stroke-opacity: 0.35" in first and "stroke-opacity: 0.9" in second
+    assert 'id="glance-target-label-1"' in svg and 'id="glance-target-label-2"' in svg
+
+
+def test_glance_picture_x_axis_covers_every_target():
+    from tracker.report.charts import glance_x_range
+
+    weeks = [r.week_ending for r in sample_rows()]
+    early, late = date(2026, 8, 7), date(2026, 12, 25)
+    low, high = glance_x_range(weeks, [early, late], date(2026, 10, 2))
+    assert low <= early and high >= late
+    low, high = glance_x_range(weeks, [], None)
+    assert low <= weeks[0] and high >= weeks[-1]
+    assert glance_x_range(weeks, [], date(2027, 2, 5))[1] >= date(2027, 2, 5)
+
+
+def test_glance_picture_skips_removed_targets_and_renders_empty_data():
+    assert 'id="glance-target-1"' not in _glance([_entry(1, None, kind="removed", current=True)])
+    empty = [WeekRow(w, None, None, None, None, None, None, None, None, None, None, "future") for w in WEEKS]
+    for rows in ([], empty):
+        assert "<svg" in _glance(rows=rows)
+    from tracker.report.charts import remaining_glance_chart
+
+    assert remaining_glance_chart([], "", WEEKS[1], [], None, "png").startswith(b"\x89PNG")
+
+
+def test_glance_picture_is_served_to_viewers_and_the_classic_pictures_stay(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    from tracker.report.views import CHARTS
+
+    assert set(CHARTS) == {"remaining", "weekly", "cumulative", "remaining-glance"}
+    base = f"/trackers/{small_tracker.id}/report/chart"
+    response = client.get(f"{base}/remaining-glance.svg?week={WEEKS[1].isoformat()}")
+    assert response.status_code == 200 and response.mimetype == "image/svg+xml"
+    assert b'id="glance-actual"' in response.data
+    assert b'id="glance-actual"' not in client.get(f"{base}/remaining.svg?week={WEEKS[1].isoformat()}").data

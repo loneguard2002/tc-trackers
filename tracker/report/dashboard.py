@@ -14,6 +14,7 @@ from ..formatting import fmt_num, fmt_pct, fmt_rate
 from ..models import ReportInput, User
 from ..trackers.targets import TargetEntry, moves, target_as_of, target_history
 from .build import Report
+from .charts import unit_title
 
 TONES = {"Red": "red", "Amber": "amber", "Green": "green"}
 STRIP_WEEKS = 12
@@ -43,6 +44,16 @@ class LocationLine:
     note: str
 
 
+@dataclass(frozen=True)
+class TargetLine:
+    """One row of "Target date changes"."""
+
+    number: int
+    current: bool
+    date_text: str  # "18 Dec", or "No target" once removed
+    text: str  # "Moved on 12 Oct, 7 days later: Kit delayed."
+
+
 @dataclass
 class Dashboard:
     target: date | None
@@ -57,6 +68,9 @@ class Dashboard:
     status_summary: str = ""
     locations: list[LocationLine] = field(default_factory=list)
     risks: list[RiskLine] = field(default_factory=list)
+    chart_subtitle: str = ""
+    target_lines: list[TargetLine] = field(default_factory=list)
+    target_note: str = ""  # "moved twice, 14 days later than first set"
 
 
 def _short(day: date) -> str:
@@ -272,6 +286,41 @@ def _location_lines(report: Report) -> list[LocationLine]:
     return lines
 
 
+def target_lines(targets: list[TargetEntry]) -> list[TargetLine]:
+    """The "Target date changes" rows: what happened, when, by how many days, and why."""
+    lines = []
+    for entry in targets:
+        on = _short(entry.changed_on)
+        if entry.kind == "set":
+            text = f"Set on {on}" + (f": {entry.reason}." if entry.reason else ".")
+        else:
+            if entry.kind == "removed":
+                text = f"Target removed on {on}"
+            else:
+                days = entry.days or 0
+                text = f"Moved on {on}, {_days(abs(days))} {'later' if days > 0 else 'earlier'}"
+            text += f": {entry.reason}." if entry.reason else ". No reason given."
+        date_text = _short(entry.date) if entry.date else "No target"
+        lines.append(TargetLine(entry.number, entry.current, date_text, text))
+    return lines
+
+
+def target_note(targets: list[TargetEntry]) -> str:
+    """ "moved twice, 14 days later than first set"; empty when the date never moved from one date to another."""
+    count = moves(targets)
+    dated = [e for e in targets if e.date is not None]
+    if count == 0 or not dated:
+        return ""
+    times = {1: "once", 2: "twice"}.get(count, f"{count} times")
+    note = f"moved {times}"
+    if targets[-1].date is None:
+        return note
+    shift = (dated[-1].date - dated[0].date).days
+    if shift == 0:
+        return f"{note}, back to the date first set"
+    return f"{note}, {_days(abs(shift))} {'later' if shift > 0 else 'earlier'} than first set"
+
+
 def build_dashboard(session: Session, report: Report, today: date) -> Dashboard:
     tracker = report.tracker
     target = target_as_of(session, tracker, report.week_ending)
@@ -297,4 +346,7 @@ def build_dashboard(session: Session, report: Report, today: date) -> Dashboard:
         status_summary=summarise_statuses(statuses),
         locations=_location_lines(report),
         risks=_risk_lines(report),
+        chart_subtitle=unit_title(tracker.unit_label or "units", "left to do, by week ending"),
+        target_lines=target_lines(targets),
+        target_note=target_note(targets),
     )

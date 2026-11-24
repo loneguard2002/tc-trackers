@@ -524,11 +524,79 @@ def test_locations_with_none(client, db, small_tracker, viewer):
     assert "Locations, furthest behind first" in flat and "No locations yet." in flat
 
 
-def test_the_chart_placeholder_is_there_for_the_next_task(client, db, small_tracker, viewer):
+def test_the_chart_section_has_its_title_subtitle_and_picture(client, db, small_tracker, viewer):
     seed(db, small_tracker)
+    small_tracker.unit_label = "devices"
+    db.commit()
     html = page(client, small_tracker)
     assert re.search(r'<section[^>]*id="glance-chart"[^>]*>.*?<h2[^>]*>Remaining</h2>', html, re.S)
     assert 'class="report-glance' in html
+    assert "Devices left to do, by week ending" in text_of(html)
+    week = WEEKS[1].isoformat()
+    assert re.search(
+        rf'<img[^>]*data-chart="remaining-glance"[^>]*src="/trackers/{small_tracker.id}/report/chart/remaining-glance.svg\?week={week}"',
+        html,
+    )
+    assert f'data-chart-data="/trackers/{small_tracker.id}/report/data.json?week={week}"' in html
+    assert "report-charts.js" in html and "echarts-6.1.0.min.js" in html
+
+
+def test_the_chart_subtitle_falls_back_to_units(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    small_tracker.unit_label = ""
+    db.commit()
+    assert "Units left to do, by week ending" in text_of(page(client, small_tracker))
+
+
+def _history(db, tracker):
+    from report_helpers import add_target_change
+
+    first, second, third = date(2026, 12, 4), date(2026, 12, 11), date(2026, 12, 18)
+    add_target_change(db, tracker, None, first, datetime(2026, 9, 1, 9, tzinfo=timezone.utc))
+    add_target_change(db, tracker, first, second, datetime(2026, 9, 3, 9, tzinfo=timezone.utc), "Kit delayed")
+    add_target_change(db, tracker, second, third, datetime(2026, 9, 10, 9, tzinfo=timezone.utc))
+
+
+def test_the_target_changes_list(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    _history(db, small_tracker)
+    html = page(client, small_tracker)
+    assert "Target date changes" in html
+    flat = text_of(html)
+    assert "moved twice, 14 days later than first set" in flat
+    assert "Set on 1 Sep." in flat
+    assert "Moved on 3 Sep, 7 days later: Kit delayed." in flat
+    assert "Moved on 10 Sep, 7 days later. No reason given." in flat
+    assert "Earlier targets are the faint numbered lines. Hover a week for its figures." in flat
+    items = re.findall(r'<li class="glance-target(?: is-current)?">(.*?)</li>', html, re.S)
+    assert len(items) == 3
+    assert "<s>" in items[0] and "<s>" in items[1] and "<s>" not in items[2]  # earlier dates are struck through
+    assert "glance-target-badge is-current" in html and html.count("glance-target-badge") >= 3
+
+
+def test_the_target_changes_list_for_a_past_week_stops_at_that_week(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    _history(db, small_tracker)
+    html = page(client, small_tracker, WEEKS[0])  # 4 Sep: only the first two changes were made
+    flat = text_of(html)
+    assert "moved once, 7 days later than first set" in flat
+    assert len(re.findall(r'<li class="glance-target(?: is-current)?">', html)) == 2
+
+
+def test_no_target_history_means_no_list(client, db, small_tracker, viewer):
+    seed(db, small_tracker)
+    flat = text_of(page(client, small_tracker))
+    assert "Target date changes" not in flat and "Earlier targets" not in flat
+
+
+def test_a_removed_target_is_listed(client, db, small_tracker, viewer):
+    from report_helpers import add_target_change
+
+    seed(db, small_tracker)
+    add_target_change(db, small_tracker, None, date(2026, 12, 4), datetime(2026, 9, 1, 9, tzinfo=timezone.utc))
+    add_target_change(db, small_tracker, date(2026, 12, 4), None, datetime(2026, 9, 2, 9, tzinfo=timezone.utc))
+    flat = text_of(page(client, small_tracker))
+    assert "Target removed on 2 Sep." in flat and "moved once" not in flat and "moved twice" not in flat
 
 
 def test_a_tracker_without_a_target_has_no_forecast_target_text(client, db, tracker_factory, grant, logged_in_user):

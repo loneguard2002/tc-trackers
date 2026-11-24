@@ -51,3 +51,11 @@ def synthetic_report(in_progress: bool = False):
     }
     report = Report(tracker, WEEKS[1], WEEKS[1], in_progress, rows, headline, positions, [risk], 1, 1, None, charts)
     return report, tracker
+
+
+def add_target_change(db, tracker, old, new, changed_at, reason: str = ""):
+    """Record a change of the target as made at ``changed_at`` (a datetime), so a test can place it in the past."""
+    from tracker.models import TargetChange
+
+    db.add(TargetChange(tracker_id=tracker.id, old_date=old, new_date=new, changed_at=changed_at, reason=reason))
+    db.commit()
