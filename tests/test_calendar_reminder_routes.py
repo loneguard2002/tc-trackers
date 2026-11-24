@@ -457,3 +457,14 @@ def test_the_inputs_page_links_to_the_history(client, setup):
     html = page_text(client, tracker)
     assert f'href="{history_url(tracker)}" data-history-url="{history_url(tracker, panel=True)}"' in html
     assert 'id="history-panel"' in html and "reminder-history.js" in html and "lists.js" in html
+
+
+def test_a_sent_series_with_an_update_waiting_says_so(client, db, setup, mail):
+    tracker, _ = setup
+    post(client, url(tracker), {"enabled": "on"})
+    assert "On · up to date" in summary_of(client.get(history_url(tracker, panel=True)).get_data(as_text=True))
+    tracker.last_week_ending = tracker.last_week_ending - timedelta(days=7)
+    db.commit()
+    html = client.get(history_url(tracker, panel=True)).get_data(as_text=True)
+    assert "On · update not sent yet" in summary_of(html)
+    assert "not sent yet" in summary_of(html) and "On · not sent yet" not in summary_of(html)

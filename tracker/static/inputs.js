@@ -91,6 +91,8 @@
     if (guard) guard.hidden = !blocked;
     return blocked;
   }
+  // The history side panel asks the same question before it posts (reminder-history.js).
+  window.trackerReminderGuard = { blocked: unsaved };
 
   // Undoing the edit takes the note away again. The update form's own listeners run first and refresh the dirty note.
   var inputsForm = document.querySelector("[data-inputs-form]");
