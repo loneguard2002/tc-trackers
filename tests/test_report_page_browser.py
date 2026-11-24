@@ -301,3 +301,120 @@ def test_the_pictures_come_back_when_the_chart_data_fails(page, live_server, see
     assert picture.evaluate("e => getComputedStyle(e).visibility") == "visible"
     assert picture.evaluate("e => e.naturalWidth") > 0
     assert page.evaluate("window.__csp") == []
+
+
+# --- The Status at a glance view's Remaining chart -------------------------------------------------------------
+
+
+def open_glance(page, base_url, seeded, week="2026-09-11"):
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, base_url, seeded.viewer)
+    page.goto(f"{base_url}/trackers/{seeded.tracker.id}/report?view=new&week={week}")
+    page.wait_for_selector(".chart-host-remaining-glance :is(svg, canvas)")
+
+
+def add_targets(db, tracker):
+    from datetime import datetime, timezone
+
+    from report_helpers import add_target_change
+
+    first, second, third = date(2026, 12, 4), date(2026, 12, 11), date(2026, 12, 18)
+    add_target_change(db, tracker, None, first, datetime(2026, 9, 1, 9, tzinfo=timezone.utc))
+    add_target_change(db, tracker, first, second, datetime(2026, 9, 3, 9, tzinfo=timezone.utc), "Kit delayed")
+    add_target_change(db, tracker, second, third, datetime(2026, 9, 9, 9, tzinfo=timezone.utc))
+
+
+def glance_option(page):
+    return page.evaluate("echarts.getInstanceByDom(document.querySelector('.chart-host-remaining-glance')).getOption()")
+
+
+def test_glance_chart_draws_with_direct_labels(page, live_server, seeded):
+    open_glance(page, live_server, seeded)
+    host = page.locator(".chart-host-remaining-glance")
+    expect(page.locator("img[data-chart]")).to_have_count(0)
+    for text in ("Actual: 80 left", "Plan: 80 left"):
+        expect(host.locator("svg text", has_text=text).first).to_be_visible()
+    expect(host.locator("svg text", has_text=re.compile(r"Forecast: none left on \d+ \w{3}")).first).to_be_visible()
+    for legend in ("Actual", "Plan", "Forecast"):
+        expect(host.locator("svg text", has_text=re.compile(rf"^{legend}$")).first).to_be_visible()
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+def test_glance_chart_marks_the_report_week_and_every_week(page, live_server, seeded):
+    open_glance(page, live_server, seeded)
+    host = page.locator(".chart-host-remaining-glance")
+    expect(host.locator("svg text", has_text=re.compile(r"(Today|Report week) 11 Sep")).first).to_be_visible()
+    series = {s["id"]: s for s in glance_option(page)["series"]}
+    assert len(series["actual"]["data"]) == 2  # the weeks drawn so far; a dot each
+    assert len(series["plan"]["data"]) == len(WEEKS)
+    assert series["actual"]["lineStyle"]["type"] == "solid"
+    assert series["plan"]["lineStyle"]["type"] == "dashed"
+    assert series["forecast"]["lineStyle"]["type"] == "dotted"
+    # Every week ending is a tick, with the month named under the first week of each month.
+    expect(host.locator("svg text", has_text="Sep").first).to_be_visible()
+    expect(host.locator("svg text", has_text=re.compile(r"^25$")).first).to_be_visible()
+
+
+def test_glance_chart_draws_every_target(page, live_server, seeded, db):
+    add_targets(db, seeded.tracker)
+    open_glance(page, live_server, seeded, week="2026-09-11")
+    host = page.locator(".chart-host-remaining-glance")
+    expect(host.locator("svg text", has_text="Target 18 Dec").first).to_be_visible()
+    lines = [s for s in glance_option(page)["series"] if s["id"] == "targets"][0]["markLine"]["data"]
+    assert len(lines) == 3
+    current, earlier = lines[-1], lines[:-1]
+    assert current["lineStyle"]["opacity"] > max(e["lineStyle"]["opacity"] for e in earlier)
+    assert all(line["lineStyle"]["type"] == "dashed" for line in lines)
+    for number in ("1", "2", "3"):
+        expect(host.locator("svg text", has_text=re.compile(rf"^{number}$")).first).to_be_visible()
+    # The x-axis reaches the furthest target (18 Dec) even though the weeks end on 25 Sep.
+    axis = glance_option(page)["xAxis"][0]
+    assert axis["max"] >= (date(2026, 12, 18) - date(1970, 1, 1)).days
+
+
+def test_glance_chart_without_targets_draws_no_target_lines(page, live_server, seeded):
+    open_glance(page, live_server, seeded)
+    assert [s for s in glance_option(page)["series"] if s["id"] == "targets"] == []
+
+
+def test_glance_chart_tooltip_on_hover(page, live_server, seeded):
+    open_glance(page, live_server, seeded)
+    page.locator(".chart-host-remaining-glance").hover()
+    tooltip = page.locator(".chart-host-remaining-glance .chart-tooltip")
+    expect(tooltip).to_be_visible()
+    expect(tooltip).to_contain_text("Week ending")
+    expect(tooltip).to_contain_text("Plan")
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_glance_chart_uses_the_agreed_colours(page, live_server, seeded, theme):
+    page.add_init_script(f"localStorage.setItem('tracker-theme', '{theme}')")
+    open_glance(page, live_server, seeded)
+    expect(page.locator(".chart-host-remaining-glance")).to_have_attribute("data-chart-theme", theme)
+    colours = {"light": ("#1260d0", "#008f82", "#c27a00"), "dark": ("#5b8ff0", "#22a596", "#b8801c")}[theme]
+    series = {s["id"]: s for s in glance_option(page)["series"]}
+    assert (
+        series["actual"]["lineStyle"]["color"],
+        series["plan"]["lineStyle"]["color"],
+        series["forecast"]["lineStyle"]["color"],
+    ) == colours
+
+
+def test_glance_chart_follows_the_theme_toggle(page, live_server, seeded):
+    open_glance(page, live_server, seeded)
+    start = page.evaluate("document.documentElement.getAttribute('data-theme')")
+    other = "dark" if start == "light" else "light"
+    page.click("[data-theme-toggle]")
+    expect(page.locator(".chart-host-remaining-glance")).to_have_attribute("data-chart-theme", other)
+
+
+def test_glance_picture_stays_when_the_chart_data_fails(page, live_server, seeded):
+    page.route("**/report/data.json*", lambda route: route.fulfill(status=500, body="error"))
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, seeded.viewer)
+    page.goto(f"{live_server}/trackers/{seeded.tracker.id}/report?view=new&week=2026-09-11")
+    page.wait_for_load_state("networkidle")
+    expect(page.locator("img[data-chart='remaining-glance']")).to_be_visible()
+    assert page.evaluate("window.__errors") == []

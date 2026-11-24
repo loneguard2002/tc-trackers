@@ -1662,3 +1662,16 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .glance-location-num { margin-left: auto; font-size: .85rem; }
 .glance-location-note { margin: 4px 0 0; color: var(--muted); font-size: .8rem; }
 @media (max-width: 900px) { .glance-main { grid-template-columns: 1fr; } .glance-locations-grid { grid-template-columns: 1fr; } }
+.glance-chart .chart-host { margin: 8px 0 0; }
+.glance-targets { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.glance-card .glance-targets-title { margin: 0; font-size: .95rem; }
+.glance-targets-title .glance-note { margin: 0 0 0 6px; font-weight: 400; }
+.glance-target-list { display: grid; gap: 8px; margin: 10px 0; padding: 0; list-style: none; }
+.glance-target { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 4px 10px; align-items: baseline; }
+.glance-target-badge { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1.5px solid var(--text); border-radius: 50%; font-size: .75rem; font-weight: 700; line-height: 1; }
+.glance-target-badge.is-current { background: var(--text); color: var(--surface); }
+.glance-target-date { min-width: 3.5rem; font-weight: 700; }
+.glance-target:not(.is-current) .glance-target-date { color: var(--muted); font-weight: 400; }
+.glance-target-text { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+@media (max-width: 520px) { .glance-target { grid-template-columns: auto 1fr; } .glance-target-text { grid-column: 2; } }
+.report-glance .chart-swatch-actual { background: var(--g-actual); } .report-glance .chart-swatch-plan { background: var(--g-plan); } .report-glance .chart-swatch-forecast { background: var(--g-forecast); }

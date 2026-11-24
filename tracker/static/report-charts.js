@@ -134,7 +134,238 @@
     document.body.removeChild(link);
   }
 
+
+  // ---- The Status at a glance view's Remaining chart ------------------------------------------------------------
+  // A numeric day axis (days since 1970), one tick per week ending, so a target that is not a week ending still sits at
+  // its true place. Colours follow the agreed light and dark sets rather than the classic palette.
+  var DAY_MS = 86400000;
+  var GLANCE_COLOURS = {
+    light: { actual: "#1260d0", plan: "#008f82", forecast: "#c27a00" },
+    dark: { actual: "#5b8ff0", plan: "#22a596", forecast: "#b8801c" }
+  };
+
+  function dayNumber(iso) {
+    var p = iso.split("-");
+    return Math.round(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])) / DAY_MS);
+  }
+
+  function dayIso(day) {
+    var d = new Date(day * DAY_MS);
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    return d.getUTCFullYear() + "-" + two(d.getUTCMonth() + 1) + "-" + two(d.getUTCDate());
+  }
+
+  function cssVar(host, name, fallback) {
+    return getComputedStyle(host).getPropertyValue(name).trim() || fallback;
+  }
+
+  function leftText(value) {
+    return Math.round(value).toLocaleString("en-GB") + " left";
+  }
+
+  // The tick label: the day number, with the month name under the first week ending of each month.
+  function weekTick(first) {
+    return function (value) {
+      var d = dateParts(dayIso(value));
+      var before = dateParts(dayIso(value - 7));
+      return value === first || before.month !== d.month ? d.day.replace(/^0/, "") + "\n" + d.month : d.day.replace(/^0/, "");
+    };
+  }
+
+  function glanceTooltip(days, s, actualAt, lastActualDay) {
+    return function (params) {
+      if (!params || !params.length) return "";
+      var day = params[0].value[0];
+      var index = days.indexOf(day);
+      var html = '<div class="chart-tooltip-title">Week ending ' + longDate(dayIso(day)) + "</div>";
+      function row(id, name, value) {
+        return '<div class="chart-tooltip-row"><span><span class="chart-swatch chart-swatch-' + id + '"></span>' + name +
+          "</span><strong>" + value + "</strong></div>";
+      }
+      var plan = index >= 0 ? s.planned_remaining[index] : null;
+      var actual = actualAt[day];
+      var forecast = index >= 0 && day >= lastActualDay ? s.forecast_remaining[index] : null;
+      if (actual !== undefined) html += row("actual", "Actual", formatValue("actual", actual));
+      if (plan !== null && plan !== undefined) html += row("plan", "Plan", formatValue("plan", plan));
+      if (forecast !== null && forecast !== undefined && actual === undefined) {
+        html += row("forecast", "Forecast", formatValue("forecast", forecast));
+      }
+      var gap = actual !== undefined ? gapText(plan, actual, true) : "";
+      if (gap) html += '<div class="chart-tooltip-gap">' + gap + "</div>";
+      return html;
+    };
+  }
+
+  function buildGlance(data, entry) {
+    var theme = currentTheme(entry.host);
+    var c = GLANCE_COLOURS[theme];
+    var ink = cssVar(entry.host, "--text", theme === "dark" ? "#e6ebf5" : "#14213d");
+    var muted = cssVar(entry.host, "--muted", "#5d6b83");
+    var surface = surfaceColour(entry.host);
+    var s = data.series;
+    var days = data.weeks.map(dayNumber);
+    var reportDay = data.report_week ? dayNumber(data.report_week) : days[days.length - 1];
+    var plan = [];
+    var actual = [];
+    var actualAt = {};
+    days.forEach(function (day, i) {
+      var p = s.planned_remaining[i];
+      // Plan past "none left" is not drawn: it stops at the first week it reaches zero.
+      if (p !== null && p !== undefined && !(plan.length && plan[plan.length - 1][1] <= 0)) plan.push([day, Math.max(0, p)]);
+      var a = s.actual_remaining[i];
+      if (a !== null && a !== undefined && day <= reportDay) {
+        actual.push([day, a]);
+        actualAt[day] = a;
+      }
+    });
+    var last = actual.length ? actual[actual.length - 1] : null;
+    var forecastEnd = data.forecast_end ? dayNumber(data.forecast_end) : null;
+    var forecast = last && forecastEnd !== null && last[1] > 0 ? [last, [forecastEnd, 0]] : [];
+    var targets = (data.targets || []).map(function (t) {
+      return { day: dayNumber(t.date), number: t.number, current: t.current, date: t.date };
+    });
+    var empty = !plan.length && !actual.length;
+
+    // The span: first week to the latest of the last week, the forecast end and every target (and back to an earlier
+    // target), on the weekly grid.
+    var all = days.concat(targets.map(function (t) { return t.day; }));
+    if (forecastEnd !== null) all.push(forecastEnd);
+    if (!all.length) all.push(reportDay);
+    var anchor = days.length ? days[0] : Math.min.apply(null, all);
+    var low = anchor - 7 * Math.ceil((anchor - Math.min.apply(null, all)) / 7);
+    var high = anchor + 7 * Math.ceil((Math.max.apply(null, all) - anchor) / 7);
+    if (high === low) high = low + 7;
+
+    var top = 0;
+    plan.concat(actual).forEach(function (p) { if (p[1] > top) top = p[1]; });
+    var step = 100;
+    var ticks = Math.ceil(top / 100);
+    if (ticks > 12) step = 100 * Math.ceil(ticks / 10);
+    var yMax = Math.max(step, Math.ceil(top / step) * step);
+
+    // Direct labels at the report week: the higher line's label above, the lower one's below, so they never collide.
+    var planAtReport = null;
+    plan.forEach(function (p) { if (p[0] === reportDay) planAtReport = p[1]; });
+    var actualAbove = last === null || planAtReport === null || last[1] >= planAtReport;
+    function pointLabel(text, position, colour) {
+      return { show: true, formatter: text, position: position, color: colour, fontWeight: 700, fontSize: 12,
+        align: "left", textBorderColor: surface, textBorderWidth: 3, distance: 8 };
+    }
+    var actualData = actual.map(function (p, i) {
+      if (i !== actual.length - 1) return p;
+      return { value: p, label: pointLabel("Actual: " + leftText(p[1]), actualAbove ? "top" : "bottom", c.actual) };
+    });
+    var planData = plan.map(function (p) {
+      if (p[0] !== reportDay) return p;
+      return { value: p, label: pointLabel("Plan: " + leftText(p[1]), actualAbove ? "bottom" : "top", c.plan) };
+    });
+    var forecastData = forecast.map(function (p, i) {
+      if (i === 0) return { value: p, symbol: "none" };
+      var text = data.forecast_end ? "Forecast: none left on " + shortDate(data.forecast_end) : "";
+      var label = pointLabel(text, "top", c.forecast);
+      label.align = "right";
+      return { value: p, symbol: "circle", symbolSize: 8, label: label };
+    });
+
+    function line(id, name, points, colour, type, width) {
+      return { id: id, name: name, type: "line", data: points, clip: false, connectNulls: false, symbol: "circle",
+        symbolSize: 8, lineStyle: { color: colour, type: type, width: width }, itemStyle: { color: colour } };
+    }
+    var actualSeries = line("actual", "Actual", actualData, c.actual, "solid", 2.6);
+    actualSeries.symbolSize = 7;
+    var planSeries = line("plan", "Plan", planData, c.plan, "dashed", 2);
+    planSeries.itemStyle = { color: surface, borderColor: c.plan, borderWidth: 2 };
+    var forecastSeries = line("forecast", "Forecast", forecastData, c.forecast, "dotted", 2.6);
+    forecastSeries.itemStyle = { color: surface, borderColor: c.forecast, borderWidth: 2 };
+    actualSeries.markLine = {
+      silent: true, symbol: "none", animation: false,
+      data: [{ xAxis: reportDay, lineStyle: { color: muted, type: "solid", width: 1.4 }, label: { show: false } }]
+    };
+    // "Today 16 Oct" beside the line at the head of the plot, or at its foot when the lines are still high there (the
+    // forecast label sits at the foot, near the end, and the two never meet that way).
+    var low_ = last !== null && last[1] > yMax * 0.8;
+    actualSeries.markPoint = {
+      silent: true, symbol: "circle", symbolSize: 1, itemStyle: { color: "transparent" }, animation: false,
+      data: [{
+        coord: [reportDay, low_ ? 0 : yMax],
+        label: { show: true, position: "right", offset: [4, low_ ? -10 : 10], color: muted, fontSize: 11, fontWeight: 600,
+          backgroundColor: surface, padding: [1, 3],
+          formatter: (todayIsReportWeek(reportDay) ? "Today " : "Report week ") + shortDate(dayIso(reportDay)) }
+      }]
+    };
+    var series = [actualSeries, planSeries, forecastSeries];
+    if (targets.length) {
+      var current = targets.filter(function (t) { return t.current; })[0];
+      var targetSeries = {
+        id: "targets", name: "Target", type: "line", data: [], silent: true,
+        markLine: {
+          silent: true, symbol: "none", animation: false,
+          data: targets.map(function (t) {
+            return {
+              xAxis: t.day,
+              lineStyle: { color: ink, type: "dashed", width: t.current ? 1.8 : 1.2, opacity: t.current ? 0.85 : 0.3 },
+              label: {
+                show: true, position: "end", distance: 4, color: ink,
+                formatter: "{" + (t.current ? "c" : "r") + "|" + t.number + "}",
+                rich: {
+                  c: { backgroundColor: ink, color: surface, width: 20, height: 20, borderRadius: 10, align: "center",
+                    fontWeight: 700, fontSize: 11 },
+                  r: { borderColor: muted, borderWidth: 1.5, color: muted, backgroundColor: surface, width: 20, height: 20,
+                    borderRadius: 10, align: "center", fontWeight: 700, fontSize: 11 }
+                }
+              }
+            };
+          })
+        }
+      };
+      // The current target's words sit in a row of their own above the numbered badges, so no label covers another.
+      if (current) {
+        var right = (current.day - low) / (high - low) > 0.5;
+        targetSeries.markPoint = {
+          silent: true, symbol: "circle", symbolSize: 1, itemStyle: { color: "transparent" }, animation: false,
+          data: [{
+            coord: [current.day, yMax],
+            label: { show: true, position: "top", offset: [right ? 10 : -10, -26], align: right ? "right" : "left",
+              color: ink, fontSize: 12, fontWeight: 700, formatter: "Target " + shortDate(current.date) }
+          }]
+        };
+      }
+      series.push(targetSeries);
+    }
+    var titles = empty ? [{ text: "No data yet", left: "center", top: "middle" }] : [];
+    return {
+      empty: empty,
+      option: {
+        title: titles,
+        grid: { left: 8, right: 28, top: 80, bottom: 12, containLabel: true },
+        legend: { left: 8, top: 4, itemWidth: 30, itemHeight: 10, data: ["Actual", "Plan", "Forecast"], textStyle: { color: ink } },
+        tooltip: {
+          trigger: "axis", className: "chart-tooltip", axisPointer: { type: "line", snap: true },
+          formatter: glanceTooltip(days, s, actualAt, last ? last[0] : reportDay)
+        },
+        xAxis: {
+          type: "value", min: low, max: high, interval: 7,
+          axisLabel: { formatter: weekTick(low), color: ink, hideOverlap: true, lineHeight: 15, fontSize: 12, showMinLabel: true, showMaxLabel: true },
+          axisTick: { show: true }, splitLine: { show: false }
+        },
+        yAxis: {
+          type: "value", min: 0, max: yMax, interval: step,
+          axisLabel: { color: ink, fontSize: 12, formatter: function (v) { return Math.round(v).toLocaleString("en-GB"); } }
+        },
+        series: series
+      }
+    };
+  }
+
+  // Whether the report week is the week in progress now, so its marker can say "Today"; for a past week it says
+  // "Report week" instead of claiming the report week is today.
+  function todayIsReportWeek(reportDay) {
+    var now = Math.floor(Date.now() / DAY_MS);
+    return now <= reportDay && now > reportDay - 7;
+  }
+
   function buildOption(name, data, entry) {
+    if (name === "remaining-glance") return buildGlance(data, entry);
     var spec = chartSpec(name, data);
     var empty = spec.series.every(function (series) { return isEmpty(series.data); });
     var titles = [{ text: spec.title, left: 8, top: 6, textStyle: { fontSize: 13, fontWeight: 600 } }];
@@ -207,6 +438,7 @@
     function redraw() {
       charts.forEach(function (entry) {
         entry.chart.dispose();
+        entry.built = buildOption(entry.name, data, entry);
         draw(entry);
       });
       window.echarts.connect("report");

@@ -10,10 +10,11 @@ from flask import Response, abort, g, jsonify, render_template, request, session
 from ..auth import require_tracker_role
 from ..db import get_session
 from ..engine.weeks import week_endings
+from ..trackers.targets import target_history
 from . import bp
 from .build import build_report, compute_position, current_report_week
 from .chart_data import chart_payload
-from .charts import cumulative_chart, remaining_chart, weekly_chart
+from .charts import cumulative_chart, remaining_chart, remaining_glance_chart, weekly_chart
 from .dashboard import build_dashboard
 from .render import html_to_pdf, html_to_png, render_print_html
 
@@ -83,10 +84,14 @@ def view(tracker_id: int):
     )
 
 
+# Each takes the engine position, the tracker and the target changes made by the report week.
 CHARTS = {
-    "remaining": lambda rows, tracker: remaining_chart(rows, tracker.unit_label),
-    "weekly": lambda rows, tracker: weekly_chart(rows),
-    "cumulative": lambda rows, tracker: cumulative_chart(rows),
+    "remaining": lambda position, tracker, targets: remaining_chart(position.rows, tracker.unit_label),
+    "weekly": lambda position, tracker, targets: weekly_chart(position.rows),
+    "cumulative": lambda position, tracker, targets: cumulative_chart(position.rows),
+    "remaining-glance": lambda position, tracker, targets: remaining_glance_chart(
+        position.rows, tracker.unit_label, position.week_ending, targets, position.headline.forecast_completion
+    ),
 }
 
 
@@ -100,7 +105,8 @@ def chart_image(tracker_id: int, name: str):
         abort(404)
     tracker = g.tracker
     position = compute_position(get_session(), tracker, _report_week(tracker), today())
-    return Response(draw(position.rows, tracker), mimetype="image/svg+xml")  # sent "no-store", like every page
+    targets = target_history(get_session(), tracker, position.week_ending)
+    return Response(draw(position, tracker, targets), mimetype="image/svg+xml")  # sent "no-store", like every page
 
 
 @bp.get("/trackers/<int:tracker_id>/report/data.json")
@@ -109,7 +115,10 @@ def chart_data(tracker_id: int):
     """The weekly series behind the interactive charts, for the same week as the report page."""
     tracker = g.tracker
     position = compute_position(get_session(), tracker, _report_week(tracker), today())
-    return jsonify(chart_payload(tracker, position.rows))
+    targets = target_history(get_session(), tracker, position.week_ending)
+    return jsonify(
+        chart_payload(tracker, position.rows, position.week_ending, targets, position.headline.forecast_completion)
+    )
 
 
 def _slug(name: str) -> str:
