@@ -337,7 +337,8 @@
 // Admin › Feedback: a request opens in the side panel (dialog#feedback-panel), as the permission sets panel does. The
 // panel's body is the fragment from /admin/feedback/<id>/panel; without JavaScript, or when it cannot be loaded, the
 // row's link goes to the request's own page. The status and reply forms post in the background and the panel shows
-// the answer (the request again, or the form with its errors); closing the panel after a change reloads the page, so
+// the answer (the request again, or the form with its errors). A reply carries the status chosen in the head, and a
+// status save keeps what is typed in the reply box; closing the panel after a change reloads the page, so
 // the table shows the new status, replies and last activity. ?request=<id> follows the open panel. On a request's own
 // page only the reply switch is wired.
 (function () {
@@ -409,32 +410,74 @@
   }
 
   // Puts the server's fragment in the panel; false when the answer is not the request (a sign-in page, an error).
-  function show(row, html) {
+  // ``restore`` runs on the new fragment before it is wired, to put back what the reader had typed.
+  function show(row, html, restore) {
     if (openRow !== row) return true;
     if (html.indexOf("data-panel-feedback") === -1) return false;
     announce.textContent = "";
     body.innerHTML = html;
+    if (restore) restore();
     wireReply(body);
     return true;
+  }
+
+  // What the reader has put in the reply box, kept across a status save (which sends the head's form only).
+  function replyState() {
+    var reply = body.querySelector("[data-reply-form]");
+    if (!reply) return null;
+    var kind = reply.querySelector('input[name="kind"]:checked');
+    var email = reply.querySelector('input[name="email"]');
+    var files = reply.querySelector('input[name="files"]');
+    return {
+      kind: kind ? kind.value : "update",
+      text: reply.querySelector('textarea[name="body"]').value,
+      email: email && !email.disabled ? email.checked : null,
+      files: files ? files.files : null
+    };
+  }
+
+  function putBack(state) {
+    var reply = body.querySelector("[data-reply-form]");
+    if (!state || !reply) return;
+    each(reply.querySelectorAll('input[name="kind"]'), function (radio) { radio.checked = radio.value === state.kind; });
+    reply.querySelector('textarea[name="body"]').value = state.text;
+    var email = reply.querySelector('input[name="email"]');
+    if (email && !email.disabled && state.email !== null) email.checked = state.email;
+    var files = reply.querySelector('input[name="files"]');
+    if (files && state.files && state.files.length) {
+      try { files.files = state.files; } catch (error) { /* a browser that cannot set them leaves the field empty */ }
+    }
   }
 
   function send(row, form) {
     var button = form.querySelector('button[type="submit"]');
     if (button) button.disabled = true;
+    var data = new FormData(form);
+    var kept = null;
+    if (form.hasAttribute("data-reply-form")) {
+      // An update applies the status chosen in the head; the server ignores it for a question.
+      var head = body.querySelector("[data-head-status]");
+      if (head) data.set("status", head.value);
+    } else {
+      kept = replyState();
+    }
     fetch(form.getAttribute("action"), {
       method: "POST",
-      body: new FormData(form),
+      body: data,
       credentials: "same-origin",
       headers: { "X-Requested-With": "fetch" }
     })
       .then(function (response) {
         if (response.redirected) throw new Error("redirected");
-        return response.text().then(function (html) { return { ok: response.ok, status: response.status, html: html }; });
+        return response.text().then(function (html) {
+          return { ok: response.ok, status: response.status, html: html,
+            changed: response.headers.get("X-Panel-Changed") !== "0" };
+        });
       })
       .then(function (answer) {
         if (answer.status === 413) throw new Error("too large");
-        if (!show(row, answer.html)) throw new Error("not the panel");
-        if (answer.ok) changed = true;
+        if (!show(row, answer.html, function () { putBack(kept); })) throw new Error("not the panel");
+        if (answer.ok && answer.changed) changed = true;
         var focus = body.querySelector('[aria-invalid="true"]') || body.querySelector("[data-panel-notice]");
         if (focus) {
           if (!focus.hasAttribute("aria-invalid")) focus.setAttribute("tabindex", "-1");
@@ -443,6 +486,7 @@
       })
       .catch(function (error) {
         if (button) button.disabled = false;
+        each(form.querySelectorAll(".form-alert"), function (old) { old.parentNode.removeChild(old); });
         var alert = element("div", "form-alert", error.message === "too large"
           ? "That is more than can be sent at once. Remove a file and try again."
           : "The change could not be saved. Try again.");

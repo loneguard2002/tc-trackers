@@ -21,8 +21,9 @@
     <form class="feedback-status" method="post" action="{{ url_for('feedback.admin_status', request_id=rid) }}" data-panel-form>
       {{ csrf_field(csrf_token()) }}
       <label for="feedback-status-{{ rid }}">Status</label>
-      <select id="feedback-status-{{ rid }}" name="status"{% if status_errors %} aria-invalid="true" aria-describedby="feedback-status-{{ rid }}-error"{% endif %}>
-        {% for key, label in statuses %}<option value="{{ key }}"{{ ' selected' if key == kept.status }}>{{ label }}</option>{% endfor %}
+      <select id="feedback-status-{{ rid }}" name="status" data-head-status{% if status_errors %} aria-invalid="true" aria-describedby="feedback-status-{{ rid }}-error"{% endif %}>
+        {% set chosen_status = form.get('status') or kept.status %}
+        {% for key, label in statuses %}<option value="{{ key }}"{{ ' selected' if key == chosen_status }}>{{ label }}</option>{% endfor %}
       </select>
       <button class="button" type="submit">Save status</button>
       {% if status_errors %}<p class="field-error" id="feedback-status-{{ rid }}-error" role="alert">{{ status_errors|join(' ') }}</p>{% endif %}

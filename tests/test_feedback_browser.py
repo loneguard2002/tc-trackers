@@ -125,3 +125,41 @@ def test_a_reviewer_opens_a_request_in_the_panel_and_asks_a_question(page, live_
     assert "request=" not in page.url
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
+
+
+def test_the_head_status_goes_with_an_update_and_a_status_save_keeps_the_reply(
+    page, live_server, user_factory, give_set, db
+):
+    sam = user_factory(full_name="Sam Taylor")
+    reviewer = user_factory(full_name="Robin Lee")
+    give_set(["manage_feedback"], user=reviewer)
+    made = service.create_request(db, sam, "idea", "Dark theme", "", "Report", "/", "", [])
+    db.commit()
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, reviewer)
+    page.goto(f"{live_server}/admin/feedback?request={made.id}")
+    panel = page.locator("#feedback-panel")
+    expect(panel.locator("[data-panel-feedback]")).to_be_visible()
+
+    # a status save keeps what is typed in the reply box
+    panel.locator("textarea[name=body]").fill("Half written")
+    panel.get_by_text("Question", exact=True).click()
+    panel.locator("select[name=status]").select_option("under_review")
+    panel.get_by_role("button", name="Save status").click()
+    expect(panel.locator("[data-panel-notice]")).to_have_text("Status saved: Under review.")
+    expect(panel.locator("textarea[name=body]")).to_have_value("Half written")
+    expect(panel.get_by_role("button", name="Ask the question")).to_be_visible()
+
+    # an update carries the status chosen in the head
+    panel.get_by_text("Update", exact=True).click()
+    panel.locator("select[name=status]").select_option("planned")
+    panel.locator("textarea[name=body]").fill("Planned for March.")
+    panel.get_by_role("checkbox", name="Email Sam Taylor").uncheck()
+    panel.get_by_role("button", name="Send the update").click()
+    expect(panel.locator(".feedback-thread")).to_contain_text("Planned for March.")
+    expect(panel.locator(".feedback-thread")).to_contain_text("Status: Planned")
+    expect(panel.locator("select[name=status]")).to_have_value("planned")
+    db.expire_all()
+    assert db.get(FeedbackRequest, made.id).status == "planned"
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []

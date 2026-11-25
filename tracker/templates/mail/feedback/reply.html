@@ -11,5 +11,6 @@
 </td></tr></table>
 {% endblock %}
 {% block footer %}
-<p style="margin: 0;">From {{ reviewer_name }} for the people who run Progress Tracker. Replying to this email writes to {{ reviewer_name }} directly.</p>
+{% if reviewer_name %}<p style="margin: 0 0 6px;">From {{ reviewer_name }}, Progress Tracker team</p>
+<p style="margin: 0;">Reply to this email to answer {{ reviewer_name }} directly.</p>{% else %}<p style="margin: 0;">From the Progress Tracker team</p>{% endif %}
 {% endblock %}
