@@ -1676,11 +1676,11 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 @media (max-width: 720px) { .answer-card { grid-template-columns: 1fr; padding: 16px; } .answer-sentence { font-size: 1.3rem; } }
 
 /* Feedback: the link at the top right of the page content, and the form and thank-you in a list-dialog. */
-.main-content { position: relative; }
-.feedback-link { position: absolute; top: 6px; right: var(--page-gutter); z-index: 2; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px; color: var(--muted); font-size: .8125rem; font-weight: 600; text-decoration: none; }
+.feedback-link { float: right; display: inline-flex; align-items: center; gap: 6px; margin: 4px 0 0 12px; padding: 3px 8px; border-radius: 6px; color: var(--muted); font-size: .8125rem; font-weight: 600; text-decoration: none; }
 .feedback-link:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
 .feedback-link .icon { width: 15px; height: 15px; }
-.app-shell-bare .feedback-link { display: none; }
+/* On a phone the link is its icon alone (the words stay for screen readers), so the title keeps its width. */
+@media (max-width: 720px) { .feedback-link { padding: 6px; } .feedback-link-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
 .feedback-page { padding-top: 8px; }
 .feedback-drop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px; border: 1px dashed var(--field-border); border-radius: var(--radius); background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
 .feedback-drop.is-over { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
