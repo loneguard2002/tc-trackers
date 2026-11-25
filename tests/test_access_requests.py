@@ -317,3 +317,33 @@ def test_feedback_settings_need_manage_email_settings(client, db, user_factory):
     assert post(client, "/admin/smtp", BASE | {"feedback_email": "a@example.org"}).status_code == 403
     assert post(client, "/admin/smtp/feedback-test", {}).status_code == 403
     assert feedback_settings.addresses(db) == []
+
+
+def test_enter_in_the_settings_form_saves_and_send_a_test_is_a_form_of_its_own(client, user_factory):
+    from html.parser import HTMLParser
+
+    class Forms(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.stack, self.buttons = [], []  # (form id the button belongs to, label attributes)
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "form":
+                self.stack.append(attrs.get("id") or attrs.get("action"))
+            elif tag == "button" and attrs.get("type", "submit") == "submit":
+                self.buttons.append((attrs.get("form") or (self.stack[-1] if self.stack else None), attrs.get("id")))
+
+        def handle_endtag(self, tag):
+            if tag == "form":
+                self.stack.pop()
+
+    sign_in(client, user_factory(is_admin=True))
+    parser = Forms()
+    parser.feed(client.get("/admin/smtp").get_data(as_text=True))
+    settings_buttons = [b for b in parser.buttons if b[0] == "/admin/smtp"]
+    assert settings_buttons and settings_buttons[0][1] is None  # the first submit button of the settings form is Save
+    assert ("feedback-test-form", "feedback_test") in parser.buttons and (
+        "/admin/smtp",
+        "feedback_test",
+    ) not in parser.buttons

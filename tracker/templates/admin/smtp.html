@@ -95,12 +95,14 @@
       <div class="check-row"><label><input id="feedback_link" name="feedback_link" type="checkbox" role="switch" value="1" {{ 'checked' if feedback_link }} aria-describedby="feedback_link-help"> Show the Feedback link</label></div>
       {% endcall %}
       {% call setting('Send a test', 'Save first: the test goes to the saved address.', 'feedback_test') %}
-      <button id="feedback_test" class="button" type="submit" formaction="{{ url_for('admin.smtp_feedback_test') }}" formnovalidate aria-describedby="feedback_test-help">Send a test</button>
+      <button id="feedback_test" class="button" type="submit" form="feedback-test-form" aria-describedby="feedback_test-help">Send a test</button>
       {% endcall %}
     </section>
     <div class="settings-actions span-all">
       <button class="button primary" type="submit">Save</button>
     </div>
   </form>
+  {# The test button sits in the Feedback section but belongs to this form, so Enter in a field still saves. #}
+  <form id="feedback-test-form" method="post" action="{{ url_for('admin.smtp_feedback_test') }}">{{ csrf_field(csrf_token()) }}</form>
 </div>
 {% endblock %}
