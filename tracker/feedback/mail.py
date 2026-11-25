@@ -129,3 +129,45 @@ def notify_owner(session: Session, request: FeedbackRequest, message: FeedbackMe
                 note = NOTE_REFUSED
     _record_note(session, request, note)
     return note
+
+
+NOTE_TEST_NO_ADDRESS = "Save an address first."
+NOTE_TEST_NOT_SET_UP = "Email is not set up, so the test could not be sent."
+NOTE_TEST_FAILED = "The test email could not be sent: the mail server refused it."
+
+
+def send_test(session: Session, sender: User) -> str | None:
+    """Send a sample feedback email, from ``sender``, to the saved address(es).
+
+    ``None`` when sent, else the message to show. The sample is built, never saved, so no request is created.
+    """
+    to = settings.addresses(session)
+    if not to:
+        return NOTE_TEST_NO_ADDRESS
+    config = smtp.get_smtp_config(session)
+    if not (config["host"] and config["from_"]):
+        return NOTE_TEST_NOT_SET_UP
+    now = datetime.now(timezone.utc)
+    request = FeedbackRequest(
+        id=0,
+        kind="idea",
+        summary="Test of the feedback email",
+        sender_id=sender.id,
+        page_title="",
+        page_url="",
+        browser="",
+        created_at=now,
+    )
+    message = FeedbackMessage(
+        request_id=0,
+        role="sender",
+        kind="message",
+        body="This is a test of the feedback email. No request was created.",
+        created_at=now,
+    )
+    try:
+        smtp.send_message(build_email(session, request, message, to))
+    except Exception:
+        logger.exception("The feedback test email could not be sent")
+        return NOTE_TEST_FAILED
+    return None

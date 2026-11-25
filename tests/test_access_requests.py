@@ -7,11 +7,12 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from conftest import TENANT, post, sign_in
-from sqlalchemy import select
+from sqlalchemy import func, select
 from test_sso import FakeMsal, callback, claims, location, start
 
+from tracker.feedback import settings as feedback_settings
 from tracker.mail import access, smtp
-from tracker.models import AppSetting, AuditLog, User
+from tracker.models import AppSetting, AuditLog, FeedbackRequest, User
 
 
 @pytest.fixture
@@ -227,3 +228,92 @@ def test_email_settings_refuse_bad_access_values(client, db, user_factory, field
         ).status_code
         == 400
     )
+
+
+# ---- Email settings › Feedback (design 2026-11-25) ----------------------------------------------------------------
+
+BASE = {"report_email_subject": "{{summary}}", "smtp_auth": "none", "feedback_section": "1"}
+MAIL = {"smtp_host": "smtp.example.com", "smtp_from": "pt@example.com"}  # an administrator save writes these too
+
+
+def test_feedback_section_shows_its_fields_with_defaults(client, user_factory):
+    sign_in(client, user_factory(is_admin=True))
+    page = client.get("/admin/smtp").get_data(as_text=True)
+    assert 'id="section-feedback"' in page and "Send feedback to" in page
+    assert 'id="feedback_email" name="feedback_email" value=""' in page
+    assert "Saved as a setting, not in the code; change it here at any time." in page
+    assert "Until an address is set, messages are kept in Admin › Feedback only." in page
+    assert 'name="feedback_link" type="checkbox" role="switch" value="1" checked' in page
+    assert "Show the Feedback link" in page and "Send a test" in page
+    assert "Save first: the test goes to the saved address." in page
+
+
+def test_feedback_addresses_are_saved_and_recorded(client, db, user_factory):
+    sign_in(client, user_factory(is_admin=True))
+    data = BASE | {"feedback_email": "a@example.org,  b@example.org", "feedback_link": "1"}
+    assert post(client, "/admin/smtp", data).status_code == 302
+    assert feedback_settings.addresses(db) == ["a@example.org", "b@example.org"]
+    entry = actions(db, "feedback_settings_changed")[-1]
+    assert entry.detail == {"changed": ["feedback_email"]}
+    assert "a@example.org" not in str(entry.detail)
+
+
+def test_a_bad_feedback_address_shows_the_error_and_saves_nothing(client, db, user_factory):
+    sign_in(client, user_factory(is_admin=True))
+    response = post(client, "/admin/smtp", BASE | {"feedback_email": "ok@example.org, nonsense", "feedback_link": "1"})
+    assert response.status_code == 400 and feedback_settings.ADDRESS_ERROR in response.get_data(as_text=True)
+    assert feedback_settings.addresses(db) == [] and actions(db, "feedback_settings_changed") == []
+
+
+def test_unticking_the_link_hides_it_and_the_form_page_answers_404(client, db, user_factory):
+    sign_in(client, user_factory(is_admin=True))
+    assert "data-feedback-open" in client.get("/admin/smtp").get_data(as_text=True)
+    assert post(client, "/admin/smtp", BASE | {"feedback_email": ""}).status_code == 302  # the box is unticked
+    assert feedback_settings.link_on(db) is False
+    assert actions(db, "feedback_settings_changed")[-1].detail == {"changed": ["feedback_link"]}
+    assert "data-feedback-open" not in client.get("/admin/smtp").get_data(as_text=True)
+    assert client.get("/feedback/new").status_code == 404
+    # My feedback and Admin > Feedback answering 200 here belong to the tests of the tasks that build them.
+
+
+def test_the_feedback_settings_are_kept_when_the_form_leaves_the_section_out(client, db, user_factory):
+    sign_in(client, user_factory(is_admin=True))
+    post(client, "/admin/smtp", BASE | {"feedback_email": "a@example.org", "feedback_link": "1"})
+    post(client, "/admin/smtp", {"report_email_subject": "{{summary}}", "smtp_auth": "none"})
+    assert feedback_settings.addresses(db) == ["a@example.org"] and feedback_settings.link_on(db)
+
+
+def test_send_a_test_with_no_saved_address_says_so(client, user_factory, outbox, mail_on):
+    sign_in(client, user_factory(is_admin=True))
+    response = post(client, "/admin/smtp/feedback-test", {}, follow_redirects=True)
+    assert "Save an address first." in response.get_data(as_text=True) and outbox == []
+
+
+def test_send_a_test_goes_to_the_saved_address_and_creates_no_request(client, db, user_factory, outbox, mail_on):
+    admin = user_factory(is_admin=True, email="admin@example.com")
+    sign_in(client, admin)
+    post(client, "/admin/smtp", BASE | MAIL | {"feedback_email": "a@example.org, b@example.org", "feedback_link": "1"})
+    response = post(client, "/admin/smtp/feedback-test", {}, follow_redirects=True)
+    assert "A test feedback email was sent" in response.get_data(as_text=True)
+    assert len(outbox) == 1 and outbox[0]["To"] == "a@example.org, b@example.org"
+    assert outbox[0]["Reply-To"] == "admin@example.com" and "test" in outbox[0]["Subject"].lower()
+    assert db.scalar(select(func.count()).select_from(FeedbackRequest)) == 0
+
+
+def test_send_a_test_reports_a_mail_failure(client, db, user_factory, monkeypatch, mail_on):
+    def fail(msg):
+        raise smtp.MailError("down")
+
+    monkeypatch.setattr(smtp, "send_message", fail)
+    sign_in(client, user_factory(is_admin=True))
+    post(client, "/admin/smtp", BASE | MAIL | {"feedback_email": "a@example.org", "feedback_link": "1"})
+    page = post(client, "/admin/smtp/feedback-test", {}, follow_redirects=True).get_data(as_text=True)
+    assert "could not be sent" in page
+
+
+def test_feedback_settings_need_manage_email_settings(client, db, user_factory):
+    sign_in(client, user_factory())
+    assert client.get("/admin/smtp").status_code == 403
+    assert post(client, "/admin/smtp", BASE | {"feedback_email": "a@example.org"}).status_code == 403
+    assert post(client, "/admin/smtp/feedback-test", {}).status_code == 403
+    assert feedback_settings.addresses(db) == []

@@ -81,6 +81,23 @@
       <input id="access_reminder_days" name="access_reminder_days" inputmode="numeric" pattern="[0-9]*" value="{{ reminder_days }}" maxlength="2" required autocomplete="off" aria-describedby="access_reminder_days-help">
       {% endcall %}
     </section>
+
+    <section class="settings-section" aria-labelledby="section-feedback">
+      <header class="settings-section-head">
+        <h2 id="section-feedback">Feedback</h2>
+        <p>Where the messages people send with the Feedback link go, and whether the link shows.</p>
+      </header>
+      <input type="hidden" name="feedback_section" value="1">
+      {% call setting('Send feedback to', 'Saved as a setting, not in the code; change it here at any time. Until an address is set, messages are kept in Admin › Feedback only. Separate several addresses with commas.', 'feedback_email') %}
+      <input id="feedback_email" name="feedback_email" value="{{ feedback_to }}" autocomplete="off" spellcheck="false" aria-describedby="feedback_email-help">
+      {% endcall %}
+      {% call setting('Feedback link', 'Off hides the link and the form page for everyone; requests already sent stay readable and answerable.', 'feedback_link') %}
+      <div class="check-row"><label><input id="feedback_link" name="feedback_link" type="checkbox" role="switch" value="1" {{ 'checked' if feedback_link }} aria-describedby="feedback_link-help"> Show the Feedback link</label></div>
+      {% endcall %}
+      {% call setting('Send a test', 'Save first: the test goes to the saved address.', 'feedback_test') %}
+      <button id="feedback_test" class="button" type="submit" formaction="{{ url_for('admin.smtp_feedback_test') }}" formnovalidate aria-describedby="feedback_test-help">Send a test</button>
+      {% endcall %}
+    </section>
     <div class="settings-actions span-all">
       <button class="button primary" type="submit">Save</button>
     </div>

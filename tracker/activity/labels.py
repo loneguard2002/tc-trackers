@@ -93,6 +93,7 @@ ACTION_LABELS: dict[str, str] = {
     "permission_set_holder_added": "Permission set holder added",
     "permission_set_holder_removed": "Permission set holder removed",
     "smtp_settings_updated": "Email settings updated",
+    "feedback_settings_changed": "Feedback settings changed",
     "audit_retention_changed": "Activity retention changed",
     "audit_pruned": "Old activity entries removed",
     "feedback_sent": "Feedback sent",

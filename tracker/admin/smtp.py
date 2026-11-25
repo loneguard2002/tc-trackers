@@ -13,6 +13,8 @@ from sqlalchemy import select
 from ..audit import record
 from ..auth import current_user, permission_required
 from ..db import get_session
+from ..feedback import mail as feedback_mail
+from ..feedback import settings as feedback_settings
 from ..mail import access
 from ..mail.compose import BLOCK_PLACEHOLDERS, PLACEHOLDERS, REPORT_SUBJECT_KEY, report_subject, unknown_placeholders
 from ..models import AppSetting
@@ -75,6 +77,14 @@ def smtp():
             days, error = access.parse_reminder_days(request.form[access.REMINDER_DAYS_KEY])
             if error:
                 abort(400, description=error)
+        # Feedback (design 2026-11-25): kept as it is unless the form carries the section (an unticked box sends none).
+        feedback_before, link_before = feedback_settings.addresses(db), feedback_settings.link_on(db)
+        feedback_to, link = feedback_before, link_before
+        if "feedback_section" in request.form:
+            feedback_to, error = feedback_settings.parse_addresses(request.form.get(feedback_settings.ADDRESS_KEY, ""))
+            if error:
+                abort(400, description=error)
+            link = request.form.get(feedback_settings.LINK_KEY) == "1"
         for key, value in submitted.items():
             db.merge(AppSetting(key=key, value=value))
         if subject != subject_before:
@@ -83,6 +93,29 @@ def smtp():
             db.merge(AppSetting(key=access.INFOSEC_KEY, value=infosec))
         if days != days_before:
             db.merge(AppSetting(key=access.REMINDER_DAYS_KEY, value=str(days)))
+        if feedback_to != feedback_before:
+            db.merge(AppSetting(key=feedback_settings.ADDRESS_KEY, value=", ".join(feedback_to)))
+        if link != link_before:
+            db.merge(AppSetting(key=feedback_settings.LINK_KEY, value="1" if link else "0"))
+        if (feedback_to, link) != (feedback_before, link_before):
+            record(
+                db,
+                user_id=current_user().id,
+                tracker_id=None,
+                action="feedback_settings_changed",
+                entity="app_settings",
+                entity_id="feedback",
+                detail={
+                    "changed": [
+                        key
+                        for key, differs in (
+                            (feedback_settings.ADDRESS_KEY, feedback_to != feedback_before),
+                            (feedback_settings.LINK_KEY, link != link_before),
+                        )
+                        if differs
+                    ]
+                },
+            )
         record(
             db,
             user_id=current_user().id,
@@ -108,6 +141,8 @@ def smtp():
         report_subject=report_subject(db),
         infosec=access.infosec_email(db),
         reminder_days=access.reminder_days(db),
+        feedback_to=", ".join(feedback_settings.addresses(db)),
+        feedback_link=feedback_settings.link_on(db),
         max_reminder_days=access.MAX_REMINDER_DAYS,
         unknown=unknown_placeholders(report_subject(db)),
         placeholders={name: text for name, text in PLACEHOLDERS.items() if name not in BLOCK_PLACEHOLDERS},
@@ -117,3 +152,15 @@ def smtp():
         page_title="Email settings",
         current_page="smtp",
     )
+
+
+@bp.post("/smtp/feedback-test")
+@permission_required("manage_email_settings")
+def smtp_feedback_test():
+    db = get_session()
+    problem = feedback_mail.send_test(db, current_user())
+    if problem:
+        flash(problem, "danger")
+    else:
+        flash("A test feedback email was sent to the saved address.", "success")
+    return redirect(url_for("admin.smtp") + "#section-feedback")
