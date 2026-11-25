@@ -576,6 +576,17 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .target-note-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .target-note-foot .muted { flex: 1; font-size: .75rem; }
 .target-table .target-note-clear { min-height: 32px; color: var(--danger); font-size: .8125rem; font-weight: 600; }
+/* The Notes button and side panel: every week's note in one list, by month. */
+.settings-section-head .notes-open { display: inline-flex; align-items: center; gap: 8px; }
+.settings-section-head .notes-open[hidden] { display: none; }
+.notes-open .icon { width: 18px; height: 18px; }
+.notes-list { margin: 0; padding: 0; list-style: none; }
+.notes-list li { padding: 12px 16px; }
+.notes-list li + li { border-top: 1px solid var(--border); }
+.notes-list-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.notes-list-head .muted { font-size: .8125rem; }
+.notes-list-head .notes-edit { margin-left: auto; min-height: 32px; font-size: .8125rem; font-weight: 600; }
+.notes-list-text { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--primary); color: var(--primary-text); font-size: .7rem; font-weight: 700; vertical-align: 1px; }
 @media (max-width: 900px) {
   .targets-charts { grid-template-columns: minmax(0, 1fr); }

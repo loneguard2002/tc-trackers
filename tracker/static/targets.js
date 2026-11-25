@@ -176,6 +176,117 @@
     }
   });
 
+  // --- Notes panel: every week's note in one list, in a side panel that slides in from the right ------------------
+
+  var notesButton = form.querySelector("[data-notes-open]");
+  var notesCount = form.querySelector("[data-notes-count]");
+  var panel = document.getElementById("notes-panel");
+  var editing = null; // the note field to focus when the panel closes for an Edit, instead of the Notes button
+
+  function make(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  // Each week with a note, in page order, as typed (unsaved changes included).
+  function allNotes() {
+    return Array.prototype.slice.call(form.querySelectorAll("[data-note-row]")).map(function (noteRow) {
+      var n = noteParts(noteRow.previousElementSibling), month = noteRow.closest(".target-month");
+      return {
+        parts: n,
+        text: n.field.value.trim(),
+        changed: n.field.value.trim() !== n.field.defaultValue.trim(),
+        long: n.button.dataset.long,
+        month: month ? month.querySelector("h3").textContent : "",
+        target: noteRow.previousElementSibling.querySelector("input[data-week]").value.trim()
+      };
+    }).filter(function (item) { return item.text !== ""; });
+  }
+
+  function countNotes() {
+    if (notesCount) notesCount.textContent = String(allNotes().length);
+  }
+
+  function fillPanel() {
+    var notes = allNotes();
+    panel.textContent = "";
+    var head = make("header", "drawer-head");
+    var title = make("div", "perm-detail-title");
+    var heading = make("h2", "", "Notes");
+    heading.id = "notes-panel-title";
+    title.appendChild(heading);
+    var unsaved = notes.filter(function (item) { return item.changed; }).length;
+    title.appendChild(make("p", "", notes.length + (notes.length === 1 ? " week has a note" : " weeks have a note") +
+      (unsaved ? ", " + unsaved + " not saved yet" : "") + "."));
+    head.appendChild(title);
+    var cross = make("button", "tool-button", "✕");
+    cross.type = "button";
+    cross.title = "Close";
+    cross.setAttribute("aria-label", "Close");
+    cross.addEventListener("click", function () { panel.close(); });
+    head.appendChild(cross);
+    var body = make("div", "drawer-body set-panel");
+    if (!notes.length) {
+      body.appendChild(make("p", "empty-note", "No notes yet. Use the note button on a week to add one."));
+    }
+    var section = null, list = null, month = null;
+    notes.forEach(function (item) {
+      if (item.month !== month) {
+        month = item.month;
+        section = make("section");
+        section.appendChild(make("h3", "", month));
+        list = make("ul", "notes-list");
+        section.appendChild(list);
+        body.appendChild(section);
+      }
+      var li = make("li");
+      var top = make("div", "notes-list-head");
+      top.appendChild(make("strong", "", item.long));
+      top.appendChild(make("span", "muted", item.target === "" ? "No target" : "Target " + num(Number(item.target))));
+      if (item.changed) top.appendChild(make("span", "tag", "Not saved yet"));
+      var edit = make("button", "link-button notes-edit", "Edit");
+      edit.type = "button";
+      edit.setAttribute("aria-label", "Edit the note for the week ending " + item.long);
+      edit.addEventListener("click", function () {
+        item.parts.noteRow.hidden = false;
+        showNote(item.parts);
+        editing = item.parts.field;
+        panel.close();
+      });
+      top.appendChild(edit);
+      li.appendChild(top);
+      li.appendChild(make("p", "notes-list-text", item.text));
+      list.appendChild(li);
+    });
+    panel.appendChild(head);
+    panel.appendChild(body);
+  }
+
+  if (notesButton && panel) {
+    notesButton.hidden = false;
+    notesButton.addEventListener("click", function () {
+      fillPanel();
+      if (!panel.open) panel.showModal();
+    });
+    panel.addEventListener("close", function () {
+      if (editing) {
+        editing.scrollIntoView({ block: "center" });
+        editing.focus();
+        editing = null;
+      } else {
+        notesButton.focus();
+      }
+    });
+    // A click on the dimmed page closes it: the click targets the dialog itself, outside its box.
+    panel.addEventListener("click", function (event) {
+      if (event.target !== panel) return;
+      var box = panel.getBoundingClientRect();
+      if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) panel.close();
+    });
+  }
+
   // --- Charts --------------------------------------------------------------------------------------------------
 
   function el(tag, attrs, parent) {
@@ -268,6 +379,7 @@
       weekly(charts.querySelector('[data-chart="weekly"]'), weeks);
       cumulative(charts.querySelector('[data-chart="cumulative"]'), weeks);
     }
+    countNotes();
   }
 
   // --- Fill helpers -----------------------------------------------------------------------------------------------
