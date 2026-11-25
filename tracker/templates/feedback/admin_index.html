@@ -44,14 +44,14 @@
           data-sort-ref="{{ item.reference }}" data-sort-activity="{{ item.activity_key }}" data-sort-kind="{{ kind_labels[r.kind] }}"
           data-sort-summary="{{ r.summary }}" data-sort-from="{{ item.sender }}" data-sort-page="{{ r.page_title }}"
           data-sort-status="{{ status_name }}" data-sort-replies="{{ item.replies }}">
-          <td class="feedback-ref"><a href="{{ url_for('feedback.admin_request', request_id=r.id) }}" data-open-request>{{ item.reference }}</a></td>
-          <td class="feedback-when">{{ when(r.last_activity_at, true) }}</td>
-          <td>{{ kind_labels[r.kind] }}</td>
-          <td class="feedback-summary-cell">{{ r.summary }}</td>
-          <td>{{ item.sender or '–' }}</td>
-          <td class="hide-narrow">{{ r.page_title or '–' }}</td>
-          <td><span class="badge badge-{{ status_tones.get(r.status, 'muted') }}">{{ status_name }}</span></td>
-          <td class="num">{{ item.replies }}</td>
+          <td class="feedback-ref" data-label=""><a href="{{ url_for('feedback.admin_request', request_id=r.id) }}" data-open-request>{{ item.reference }}</a></td>
+          <td class="feedback-when" data-label="Last activity:">{{ when(r.last_activity_at, true) }}</td>
+          <td data-label="Kind:">{{ kind_labels[r.kind] }}</td>
+          <td class="feedback-summary-cell" data-label="">{{ r.summary }}</td>
+          <td data-label="From:">{{ item.sender or '–' }}</td>
+          <td class="hide-narrow" data-label="Page:">{{ r.page_title or '–' }}</td>
+          <td data-label="Status:"><span class="badge badge-{{ status_tones.get(r.status, 'muted') }}">{{ status_name }}</span></td>
+          <td class="num" data-label="Replies:">{{ item.replies }}</td>
         </tr>
         {% endfor %}
         </tbody>

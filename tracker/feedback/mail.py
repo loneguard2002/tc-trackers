@@ -188,7 +188,7 @@ def build_reply_email(session: Session, request: FeedbackRequest, message: Feedb
     """A reviewer's update or question, to the request's sender, Reply-To the reviewer."""
     sender = session.get(User, request.sender_id)
     reviewer = session.get(User, message.author_id) if message.author_id else None
-    reviewer_name = (reviewer.full_name if reviewer else "") or "The Progress Tracker team"
+    reviewer_name = (reviewer.full_name if reviewer else "") or (reviewer.email if reviewer else "")
     files = list(
         session.scalars(
             select(FeedbackFile.filename).where(FeedbackFile.message_id == message.id).order_by(FeedbackFile.id)

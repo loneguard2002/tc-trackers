@@ -314,6 +314,18 @@ def test_a_status_change_from_the_panel_answers_with_the_panel(client, reviewer,
     page = text_of(response)
     assert response.status_code == 200 and "data-panel-feedback" in page and "<html" not in page
     assert "Status: Done" in page
+    assert response.headers["X-Panel-Changed"] == "1"
+
+
+def test_saving_the_same_status_says_so_and_changes_nothing(client, reviewer, make, db):
+    made = make()
+    response = post(client, f"{URL}/{made.id}/status", {"status": "new"}, headers={"X-Requested-With": "fetch"})
+    assert response.status_code == 200 and response.headers["X-Panel-Changed"] == "0"
+    assert "The status is already New." in text_of(response)
+    assert db.scalars(select(FeedbackMessage).where(FeedbackMessage.kind == "status")).all() == []
+    plain = post(client, f"{URL}/{made.id}/status", {"status": "new"})
+    assert plain.status_code == 302
+    assert "The status is already New." in text_of(client.get(plain.headers["Location"]))
 
 
 # ---- replies -------------------------------------------------------------------------------------------------------
@@ -345,7 +357,38 @@ def test_an_update_keeps_the_status_and_has_its_own_subject(client, reviewer, ma
     db.expire_all()
     assert db.get(FeedbackRequest, made.id).status == "planned"
     assert outbox[0]["Subject"] == "Update on your idea: Add a dark chart theme (FB-0001)"
-    assert "See it in Progress Tracker" in outbox[0].get_body(("html",)).get_content()
+    body = outbox[0].get_body(("html",)).get_content()
+    assert "See it in Progress Tracker" in body
+    assert "From Robin Lee, Progress Tracker team" in body
+    assert "Reply to this email to answer Robin Lee directly." in body
+
+
+def test_an_update_applies_the_status_chosen_in_the_head(client, reviewer, make, db, outbox):
+    made = make()
+    response = reply(client, made.id, {"kind": "update", "body": "Planned for March.", "status": "planned"})
+    assert response.status_code == 302
+    db.expire_all()
+    assert db.get(FeedbackRequest, made.id).status == "planned"
+    kinds = db.scalars(
+        select(FeedbackMessage.kind).where(FeedbackMessage.role == "reviewer").order_by(FeedbackMessage.id)
+    ).all()
+    assert kinds == ["status", "update"]
+    assert "Status saved: Planned. Update sent." in text_of(client.get(response.headers["Location"]))
+
+
+def test_a_question_ends_waiting_whatever_the_head_says(client, reviewer, make, db, outbox):
+    made = make()
+    assert reply(client, made.id, {"kind": "question", "body": "Which page?", "status": "planned"}).status_code == 302
+    db.expire_all()
+    assert db.get(FeedbackRequest, made.id).status == "waiting"
+    assert db.scalars(select(FeedbackMessage).where(FeedbackMessage.kind == "status")).all() == []
+
+
+def test_a_reply_with_an_unknown_status_is_refused(client, reviewer, make, db, outbox):
+    made = make()
+    response = reply(client, made.id, {"status": "lost"})
+    assert response.status_code == 400 and "Choose a status from the list." in text_of(response)
+    assert db.scalars(select(FeedbackMessage).where(FeedbackMessage.role == "reviewer")).all() == []
 
 
 def test_unticking_email_sends_nothing(client, reviewer, make, db, outbox, mail_on):

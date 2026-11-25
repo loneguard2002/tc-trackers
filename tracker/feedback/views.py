@@ -332,10 +332,13 @@ def _show_request(kept: FeedbackRequest, status: int = 200, **context):
     )
 
 
-def _after_change(kept: FeedbackRequest, notice: str, warning: bool = False):
-    tone = "warning" if warning else "success"
+def _after_change(kept: FeedbackRequest, notice: str, warning: bool = False, changed: bool = True):
+    """The panel again with ``notice`` (``X-Panel-Changed: 0`` when nothing was saved, so feedback.js need not reload
+    the table), or the request's page with ``notice`` as a flash."""
+    tone = "warning" if warning else ("success" if changed else "info")
     if _from_panel():
-        return _show_request(kept, notice=notice, notice_tone=tone)
+        body, status = _show_request(kept, notice=notice, notice_tone=tone)
+        return body, status, {"X-Panel-Changed": "1" if changed else "0"}
     flash(notice, tone)
     return redirect(url_for("feedback.admin_request", request_id=kept.id))
 
@@ -361,11 +364,11 @@ def admin_status(request_id: int):
     kept = _request_or_404(request_id)
     db = get_session()
     status = request.form.get("status", "")
-    try:
-        service.set_status(db, kept, user, status)
-    except ValueError:
-        db.rollback()
+    if status not in STATUS_NAMES:
         return _show_request(kept, 400, field_errors={"status": [STATUS_UNKNOWN]})
+    if status == kept.status:
+        return _after_change(kept, f"The status is already {STATUS_NAMES[status]}.", changed=False)
+    service.set_status(db, kept, user, status)
     db.commit()
     return _after_change(kept, f"Status saved: {STATUS_NAMES[kept.status]}.")
 
@@ -379,8 +382,13 @@ def admin_reply(request_id: int):
     kind = request.form.get("kind", "update")
     kind = kind if kind in REPLY_KINDS else "update"
     body = (request.form.get("body") or "").strip()
-    form = {"kind": kind, "body": body, "email": bool(request.form.get("email"))}
+    # The status chosen in the head comes with the reply from the panel (feedback.js adds it): an update applies it,
+    # while a question always ends as Waiting for an answer. Without JavaScript none comes and the saved one stays.
+    status = request.form.get("status") or kept.status
+    form = {"kind": kind, "body": body, "email": bool(request.form.get("email")), "status": status}
     field_errors: dict[str, list[str]] = {}
+    if status not in STATUS_NAMES:
+        field_errors["status"] = [STATUS_UNKNOWN]
     if not body:
         field_errors["body"] = [REPLY_REQUIRED[kind]]
     elif len(body) > MAX_REPLY:
@@ -390,11 +398,10 @@ def admin_reply(request_id: int):
         field_errors["files"] = file_errors
     if field_errors:
         return _show_request(kept, 400, form=form, field_errors=field_errors)
-    try:
-        message = service.reviewer_reply(db, kept, user, kind, body, files)
-    except ValueError:
-        db.rollback()
-        abort(400)
+    moved = kind == "update" and status != kept.status
+    if moved:
+        service.set_status(db, kept, user, status)
+    message = service.reviewer_reply(db, kept, user, kind, body, files)
     db.commit()  # the reply is kept before any email is tried
     note = ""
     sender = db.get(User, kept.sender_id) if kept.sender_id else None
@@ -402,6 +409,8 @@ def admin_reply(request_id: int):
         note = mail.notify_sender(db, kept, message)
         db.commit()
     done = "Question sent." if kind == "question" else "Update sent."
+    if moved:
+        done = f"Status saved: {STATUS_NAMES[status]}. {done}"
     return _after_change(kept, f"{done} {note}." if note else done, warning=bool(note))
 
 
