@@ -1,0 +1,335 @@
+// Feedback: the "Feedback on this page" link opens the form as a pop-up. The form is the server's own page
+// (/feedback/new), whose dialog is read from it; without JavaScript the link simply goes to that page. In the
+// pop-up, Send posts in the background and the answer (the thank-you, or the form again with its errors) replaces
+// the pop-up's contents. The switch changes the copy of the details, files are added by the button, by dropping them
+// or by pasting a screenshot, and the browser line comes from the user agent and the window size.
+(function () {
+  "use strict";
+
+  var MAX_FILES = 5;
+  var MAX_BYTES = 5 * 1024 * 1024;
+  var DIALOG_ID = "feedback-dialog";
+
+  function each(list, callback) {
+    Array.prototype.forEach.call(list, callback);
+  }
+
+  function canBeModal(dialog) {
+    return Boolean(dialog) && typeof dialog.showModal === "function";
+  }
+
+  function canSetFiles() {
+    try {
+      return new DataTransfer().files !== undefined;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // "Edge on Windows" from the user agent (the same reading the server makes when a page sends none).
+  function browserName(agent) {
+    var name = "";
+    if (/Edg(A|e)?\//.test(agent)) name = "Edge";
+    else if (/OPR\//.test(agent)) name = "Opera";
+    else if (/Firefox\//.test(agent)) name = "Firefox";
+    else if (/Chrome\/|CriOS\//.test(agent)) name = "Chrome";
+    else if (/Safari\//.test(agent)) name = "Safari";
+    if (!name) return "";
+    var systems = [["Windows", "Windows"], ["Android", "Android"], ["iPhone", "iOS"], ["iPad", "iOS"],
+      ["Mac OS X", "macOS"], ["Linux", "Linux"]];
+    for (var i = 0; i < systems.length; i += 1) {
+      if (agent.indexOf(systems[i][0]) !== -1) return name + " on " + systems[i][1];
+    }
+    return name;
+  }
+
+  function sizeText(bytes) {
+    if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    return Math.max(1, Math.round(bytes / 1024)) + " KB";
+  }
+
+  // The name a pasted picture gets: by its type, as the server checks a name against the content.
+  var PICTURE_EXTENSIONS = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
+
+  function request(method, url, data, done) {
+    var xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+    xhr.onload = function () { done(xhr.status, xhr.responseText); };
+    xhr.onerror = function () { done(0, ""); };
+    xhr.send(data || null);
+  }
+
+  // The pop-up's dialog inside a page the server sent, or null.
+  function dialogIn(html) {
+    var doc = new DOMParser().parseFromString(html, "text/html");
+    return doc.getElementById(DIALOG_ID);
+  }
+
+  function wire(dialog, popup) {
+    var chosen = [];
+    var form = dialog.querySelector("form");
+    var input = dialog.querySelector("#feedback-files");
+    var list = dialog.querySelector("[data-feedback-list]");
+    var note = dialog.querySelector("[data-feedback-file-note]");
+    var addButton = dialog.querySelector("[data-feedback-add]");
+    var hint = dialog.querySelector("[data-feedback-drop-hint]");
+    var setFiles = canSetFiles();
+
+    function say(text) {
+      if (!note) return;
+      note.textContent = text;
+      note.hidden = text === "";
+    }
+
+    function render() {
+      if (!list) return;
+      list.textContent = "";
+      each(chosen, function (file, index) {
+        var item = document.createElement("li");
+        var name = document.createElement("span");
+        name.className = "feedback-file-name";
+        name.textContent = file.name;
+        var size = document.createElement("span");
+        size.className = "feedback-file-size";
+        size.textContent = sizeText(file.size);
+        var remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "button button-small";
+        remove.setAttribute("data-feedback-remove", String(index));
+        remove.appendChild(document.createTextNode("Remove"));
+        var spoken = document.createElement("span");
+        spoken.className = "sr-only";
+        spoken.textContent = " " + file.name;
+        remove.appendChild(spoken);
+        item.appendChild(name);
+        item.appendChild(size);
+        item.appendChild(remove);
+        list.appendChild(item);
+      });
+      list.hidden = chosen.length === 0;
+    }
+
+    // Put the chosen files into the file field, which is what the form posts.
+    function sync() {
+      if (!input) return;
+      var transfer = new DataTransfer();
+      each(chosen, function (file) { transfer.items.add(file); });
+      input.files = transfer.files;
+      render();
+    }
+
+    function add(files) {
+      var messages = [];
+      each(files, function (file) {
+        if (chosen.length >= MAX_FILES) {
+          if (messages.indexOf("Attach at most 5 files.") === -1) messages.push("Attach at most 5 files.");
+        } else if (file.size > MAX_BYTES) {
+          messages.push(file.name + " is over 5 MB.");
+        } else {
+          chosen.push(file);
+        }
+      });
+      say(messages.join(" "));
+      sync();
+    }
+
+    function pastedFile(file, number) {
+      var extension = PICTURE_EXTENSIONS[file.type];
+      if (!extension) return file;
+      var name = "screenshot" + (number > 1 ? "-" + number : "") + "." + extension;
+      return new File([file], name, { type: file.type });
+    }
+
+    // The switch changes the details' label, help and placeholder (and whether they are needed).
+    function showKind() {
+      var picked = dialog.querySelector('input[name="kind"]:checked');
+      var kind = picked ? picked.value : "idea";
+      var box = dialog.querySelector("[data-feedback-details]");
+      if (!box) return;
+      var label = box.querySelector("[data-feedback-details-label]");
+      var help = box.querySelector("[data-feedback-details-help]");
+      var details = box.querySelector("textarea");
+      label.textContent = box.getAttribute("data-" + kind + "-label");
+      help.textContent = box.getAttribute("data-" + kind + "-help");
+      details.placeholder = box.getAttribute("data-" + kind + "-placeholder");
+      details.required = kind === "problem";
+    }
+
+    // The line under the box: the page's title, and the browser with the window's size.
+    function showPage() {
+      var sendIt = dialog.querySelector("#feedback-with-page");
+      var line = dialog.querySelector("[data-feedback-page-line]");
+      if (line && sendIt) line.hidden = !sendIt.checked;
+    }
+
+    function fillBrowser() {
+      var field = dialog.querySelector("[data-feedback-browser]");
+      var text = dialog.querySelector("[data-feedback-browser-text]");
+      var name = browserName(navigator.userAgent);
+      if (!field || !name) return;
+      field.value = name + ", window " + window.innerWidth + " x " + window.innerHeight;
+      if (text) text.textContent = name;
+    }
+
+    function swapIn(html) {
+      var next = dialogIn(html);
+      if (!next) return false;
+      dialog.className = next.className;
+      dialog.innerHTML = next.innerHTML;
+      if (!dialog.querySelector("#feedback-files")) chosen = [];
+      reset();
+      return true;
+    }
+
+    function reset() {
+      form = dialog.querySelector("form");
+      input = dialog.querySelector("#feedback-files");
+      list = dialog.querySelector("[data-feedback-list]");
+      note = dialog.querySelector("[data-feedback-file-note]");
+      addButton = dialog.querySelector("[data-feedback-add]");
+      hint = dialog.querySelector("[data-feedback-drop-hint]");
+      if (input && setFiles) {
+        input.hidden = true;
+        if (addButton) addButton.hidden = false;
+        if (hint) hint.hidden = false;
+        sync();
+      }
+      showKind();
+      showPage();
+      fillBrowser();
+      var first = dialog.querySelector('[aria-invalid="true"], #feedback-summary');
+      if (first && popup) first.focus();
+    }
+
+    function failed(text) {
+      var box = dialog.querySelector(".list-dialog-body");
+      var message = document.createElement("div");
+      message.className = "form-alert";
+      message.setAttribute("role", "alert");
+      message.textContent = text;
+      if (box) box.insertBefore(message, box.firstChild);
+    }
+
+    function load(url) {
+      request("GET", url, null, function (status, html) {
+        if (status !== 200 || !swapIn(html)) window.location.href = url;
+      });
+    }
+
+    function submit() {
+      var button = dialog.querySelector('button[type="submit"]');
+      if (button) button.disabled = true;
+      request("POST", form.getAttribute("action"), new FormData(form), function (status, html) {
+        if (swapIn(html)) return;
+        if (button) button.disabled = false;
+        failed(status === 413
+          ? "That is more than can be sent at once. Remove a file and try again."
+          : "The feedback could not be sent. Try again.");
+      });
+    }
+
+    dialog.addEventListener("change", function (event) {
+      var target = event.target;
+      if (target.name === "kind") showKind();
+      if (target.id === "feedback-with-page") showPage();
+      if (target.id === "feedback-files" && setFiles) {
+        var picked = Array.prototype.slice.call(target.files);
+        add(picked);
+      }
+    });
+
+    dialog.addEventListener("click", function (event) {
+      var target = event.target.closest ? event.target.closest("a, button") : null;
+      if (!target) return;
+      if (target.hasAttribute("data-feedback-add")) {
+        input.click();
+      } else if (target.hasAttribute("data-feedback-remove")) {
+        chosen.splice(parseInt(target.getAttribute("data-feedback-remove"), 10), 1);
+        say("");
+        sync();
+      } else if (target.hasAttribute("data-feedback-again") && popup) {
+        event.preventDefault();
+        load(target.getAttribute("href"));
+      } else if (target.hasAttribute("data-dialog-close") && popup) {
+        event.preventDefault();
+        dialog.close();
+      }
+    });
+
+    if (popup) {
+      dialog.addEventListener("submit", function (event) {
+        event.preventDefault();
+        submit();
+      });
+    }
+
+    dialog.addEventListener("paste", function (event) {
+      var files = event.clipboardData && event.clipboardData.files;
+      if (!files || !files.length || !setFiles || !input) return;
+      event.preventDefault();
+      var count = 0;
+      add(Array.prototype.map.call(files, function (file) {
+        count += 1;
+        return pastedFile(file, chosen.length + count);
+      }));
+    });
+
+    dialog.addEventListener("dragover", function (event) {
+      if (!setFiles || !event.dataTransfer || !input) return;
+      event.preventDefault();
+      var zone = dialog.querySelector("[data-feedback-drop]");
+      if (zone) zone.classList.add("is-over");
+    });
+    dialog.addEventListener("dragleave", function () {
+      var zone = dialog.querySelector("[data-feedback-drop]");
+      if (zone) zone.classList.remove("is-over");
+    });
+    dialog.addEventListener("drop", function (event) {
+      var zone = dialog.querySelector("[data-feedback-drop]");
+      if (zone) zone.classList.remove("is-over");
+      if (!setFiles || !input || !event.dataTransfer || !event.dataTransfer.files.length) return;
+      event.preventDefault();
+      add(event.dataTransfer.files);
+    });
+
+    reset();
+  }
+
+  function open(link) {
+    var url = link.getAttribute("href");
+    request("GET", url, null, function (status, html) {
+      var found = status === 200 ? dialogIn(html) : null;
+      if (!found || !canBeModal(found)) {
+        window.location.href = url;
+        return;
+      }
+      var old = document.getElementById(DIALOG_ID);
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      var dialog = document.importNode(found, true);
+      dialog.removeAttribute("open");
+      dialog.removeAttribute("data-reopen");
+      document.body.appendChild(dialog);
+      dialog.addEventListener("close", function () {
+        if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+      });
+      wire(dialog, true);
+      dialog.showModal();
+      var first = dialog.querySelector("#feedback-summary");
+      if (first) first.focus();
+    });
+  }
+
+  each(document.querySelectorAll("a[data-feedback-open]"), function (link) {
+    link.addEventListener("click", function (event) {
+      if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (typeof XMLHttpRequest === "undefined" || typeof DOMParser === "undefined") return;
+      event.preventDefault();
+      open(link);
+    });
+  });
+
+  // The page of its own (reached without the pop-up) still gets the switch, the files and the browser line.
+  var onPage = document.querySelector(".feedback-page #" + DIALOG_ID + " form");
+  if (onPage) wire(document.getElementById(DIALOG_ID), false);
+})();

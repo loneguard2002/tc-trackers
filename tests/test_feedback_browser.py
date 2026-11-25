@@ -1,0 +1,85 @@
+"""The Feedback pop-up in a real browser, under the Content Security Policy (database)."""
+
+from __future__ import annotations
+
+import pytest
+from conftest import browser_sign_in
+from playwright.sync_api import expect
+from sqlalchemy import select
+from test_report_page_browser import RECORDER
+
+from tracker.models import FeedbackFile, FeedbackRequest
+
+pytestmark = pytest.mark.browser
+
+PASTE_A_PICTURE = """
+() => {
+  const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'),
+                                c => c.charCodeAt(0));
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([bytes], 'image.png', { type: 'image/png' }));
+  const event = new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true });
+  document.querySelector('#feedback-summary').dispatchEvent(event);
+}
+"""
+
+
+def open_pop_up(page, live_server, user):
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, user)
+    page.goto(f"{live_server}/")
+    page.get_by_role("link", name="Feedback on this page").click()
+    dialog = page.locator("#feedback-dialog")
+    expect(dialog).to_be_visible()
+    return dialog
+
+
+def test_the_link_opens_the_pop_up_and_the_form_works(page, live_server, user_factory, db):
+    sam = user_factory(full_name="Sam Taylor")
+    dialog = open_pop_up(page, live_server, sam)
+    expect(dialog.get_by_text("Tell us more")).to_be_visible()
+    expect(dialog.locator("[data-feedback-page-line]")).to_contain_text("Trackers")
+
+    dialog.get_by_text("Something is wrong").click()
+    expect(dialog.locator("[data-feedback-details-label]")).to_have_text("What happened?")
+    expect(dialog.locator("#feedback-details")).to_have_attribute(
+        "placeholder", "What you did, what you expected, and what happened instead."
+    )
+    expect(dialog.locator("[data-feedback-details-help]")).to_have_text("Steps to see it again help us fix it sooner.")
+    dialog.get_by_text("An idea", exact=True).click()
+    expect(dialog.locator("[data-feedback-details-label]")).to_have_text("Tell us more")
+
+    page.evaluate(PASTE_A_PICTURE)
+    expect(dialog.locator("[data-feedback-list] li")).to_have_count(1)
+    expect(dialog.locator("[data-feedback-list]")).to_contain_text("screenshot.png")
+
+    dialog.locator("#feedback-summary").fill("Add a dark chart theme")
+    dialog.get_by_role("button", name="Send feedback").click()
+    expect(dialog.locator("#feedback-dialog-title")).to_have_text("Thank you, Sam")
+    expect(dialog).to_contain_text("Reference FB-0001")
+    expect(dialog).to_contain_text("Add a dark chart theme")
+
+    request = db.scalars(select(FeedbackRequest)).one()
+    assert request.kind == "idea" and request.page_url == "/" and "window" in request.browser
+    assert db.scalars(select(FeedbackFile.filename)).all() == ["screenshot.png"]
+
+    dialog.get_by_role("link", name="Send another").click()
+    expect(dialog.locator("#feedback-summary")).to_be_visible()
+    dialog.get_by_role("link", name="Cancel").click()
+    expect(page.locator("#feedback-dialog")).to_have_count(0)
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+def test_a_refused_form_stays_in_the_pop_up_with_its_files(page, live_server, user_factory, db):
+    dialog = open_pop_up(page, live_server, user_factory())
+    dialog.get_by_text("Something is wrong").click()
+    page.evaluate(PASTE_A_PICTURE)
+    dialog.locator("#feedback-summary").fill("It is blank")
+    dialog.locator("#feedback-details").evaluate("el => el.removeAttribute('required')")
+    dialog.get_by_role("button", name="Send feedback").click()
+    expect(dialog.get_by_text("Say what happened.")).to_be_visible()
+    expect(dialog.locator("[data-feedback-list]")).to_contain_text("screenshot.png")
+    assert db.scalars(select(FeedbackRequest)).all() == []
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []

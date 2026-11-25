@@ -6,4 +6,6 @@ from flask import Blueprint
 
 bp = Blueprint("feedback", __name__)
 
+from . import views  # noqa: E402,F401  (registers the routes on ``bp``)
+
 __all__ = ["bp"]

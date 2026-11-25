@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon %}
+{% block content %}
+<div class="feedback-page">
+  <dialog id="feedback-dialog" class="list-dialog feedback-sent" aria-labelledby="feedback-dialog-title" open>
+    <header class="list-dialog-head">
+      <h2 id="feedback-dialog-title">Thank you, {{ name }}</h2>
+      <a class="tool-button" href="{{ back }}" data-dialog-close title="Close">{{ icon('close') }}<span class="sr-only">Close</span></a>
+    </header>
+    <div class="list-dialog-body">
+      <p>{{ 'Your idea is with the people who run Progress Tracker.' if kept.kind == 'idea' else 'Your report is with the people who run Progress Tracker.' }} If they have an update or a question, you will see it under My feedback.</p>
+      <p class="feedback-reference">Reference {{ reference }}</p>
+      <div class="feedback-summary">
+        <strong>{{ kept.summary }}</strong>
+        <span class="field-help">{{ 'Idea' if kept.kind == 'idea' else 'Problem' }}{% if kept.page_title %} · {{ kept.page_title }}{% endif %}</span>
+      </div>
+    </div>
+    <footer class="list-dialog-foot">
+      <a class="button" href="{{ url_for('feedback.send', page=back, title=kept.page_title) }}" data-feedback-again>Send another</a>
+      <a class="button primary" href="{{ back }}" data-dialog-close>Close</a>
+    </footer>
+  </dialog>
+</div>
+{% endblock %}
