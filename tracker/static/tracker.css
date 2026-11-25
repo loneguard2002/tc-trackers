@@ -1736,6 +1736,10 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .feedback-reply textarea { width: 100%; }
 .feedback-reply .field-help { margin: 4px 0 0; }
 .feedback-reply-foot { display: flex; justify-content: flex-end; }
+.feedback-withdraw { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border); }
+.feedback-withdraw .confirm-box { flex-basis: 100%; }
+.feedback-closed { margin: 0; padding-top: 12px; border-top: 1px solid var(--border); }
+.feedback-table .feedback-new-reply { margin-left: 6px; }
 
 /* Status at a glance, below the answer card: tiles, status strip, risks, locations. Scoped so the classic view is untouched. */
 .report-glance { --g-actual: #1260d0; --g-plan: #008f82; --g-forecast: #c27a00; display: grid; gap: 16px; max-width: 72rem; }

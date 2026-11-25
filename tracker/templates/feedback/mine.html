@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "lists/_table.html" import search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
+{% endblock %}
+{% set status_tones = {'new': 'info', 'under_review': 'info', 'waiting': 'warning', 'planned': 'info', 'done': 'success'} %}
+{% block content %}
+<h1>My feedback</h1>
+<p class="page-lede">The ideas and problems you have sent. Open one to read the team's replies, answer or add a message. Times are UTC.</p>
+<div class="settings">
+  <section class="settings-section" aria-labelledby="section-mine">
+    <h2 class="sr-only" id="section-mine">Your requests</h2>
+    <div class="list-tools">
+      {{ search_box('feedback-table', 'Search your feedback') }}
+      {{ status_filters('feedback-table', 'feedback', filter_options, counts) }}
+      {{ clear_filters('feedback-table') }}
+    </div>
+    <div class="section-table register feedback-table" data-table-frame>
+      <table id="feedback-table" class="table card-rows" data-sortable>
+        <thead><tr>
+          {{ sort_header('Summary', 'summary') }}
+          {{ sort_header('Kind', 'kind') }}
+          {{ sort_header('Sent', 'sent', type='date') }}
+          {{ sort_header('Status', 'status') }}
+          {{ sort_header('Last activity', 'activity', type='date') }}
+        </tr></thead>
+        <tbody>
+        {% for item in items %}
+        {% set r = item.request %}
+        {% set status_name = status_names[r.status] %}
+        <tr id="request-{{ r.id }}" data-request="{{ r.id }}" data-panel-url="{{ url_for('feedback.mine_panel', request_id=r.id) }}"
+          data-status="{{ item.group }} {{ r.status }}"
+          data-search="{{ [item.reference, r.summary, status_name]|join(' ')|lower }}"
+          data-sort-summary="{{ r.summary }}" data-sort-kind="{{ kind_labels[r.kind] }}" data-sort-sent="{{ item.sent_key }}"
+          data-sort-status="{{ status_name }}" data-sort-activity="{{ item.activity_key }}">
+          <td class="feedback-summary-cell" data-label="">
+            <a href="{{ url_for('feedback.mine_request', request_id=r.id) }}" data-open-request>{{ r.summary }}</a>
+            {% if item.new_reply %}<span class="badge badge-info feedback-new-reply">New reply</span>{% endif %}
+          </td>
+          <td data-label="Kind:">{{ kind_labels[r.kind] }}</td>
+          <td class="feedback-when" data-label="Sent:">{{ when(r.created_at, true) }}</td>
+          <td data-label="Status:"><span class="badge badge-{{ status_tones.get(r.status, 'muted') }}">{{ status_name }}</span></td>
+          <td class="feedback-when" data-label="Last activity:">{{ when(r.last_activity_at, true) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {{ no_match('No feedback matches.', 'feedback-table') }}
+    </div>
+    {{ table_pager('feedback-table', 'requests', 'request', items|length, counts.get('open', 0), 'open') }}
+  </section>
+</div>
+<dialog class="perm-drawer feedback-drawer" id="feedback-panel" aria-labelledby="feedback-panel-title"></dialog>
+{% endblock %}

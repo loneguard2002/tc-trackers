@@ -1,22 +1,28 @@
 {% from "macros.html" import csrf_field, icon %}
 {#- One request: the head, the conversation oldest first with the files under their message, and (``mode``
     "reviewer") the status and reply forms. It is the side panel's fragment, fetched by feedback.js, and the body of
-    the request's own page. Task 5's "sender" mode will reuse the head and the conversation. -#}
+    the request's own page. The "sender" mode (My feedback) shows the reviewers as "Progress Tracker team" and the
+    sender's answer box and Withdraw in place of the reviewer's forms. -#}
 {% set rid = kept.id %}
 {% set status_errors = field_errors.get('status', []) %}
 {% set body_errors = field_errors.get('body', []) %}
 {% set file_errors = field_errors.get('files', []) %}
 {% set question = form.kind == 'question' %}
-{% macro person_name(person_id) -%}
-{% set person = people.get(person_id) %}{{ (person.full_name if person else '') or 'Someone' }}
+{% macro person_name(m) -%}
+{% if mode == 'sender' and m.role == 'reviewer' %}Progress Tracker team{% else %}{% set person = people.get(m.author_id) %}{{ (person.full_name if person else '') or 'Someone' }}{% endif %}
 {%- endmacro %}
 <div class="feedback-request" data-panel-feedback="{{ rid }}">
   {% if notice %}<p class="flash flash-{{ notice_tone }}" role="status" data-panel-notice>{{ notice }}</p>{% endif %}
   <header class="feedback-head">
     <p class="feedback-head-kind">{{ kind_name }} · {{ reference }}</p>
     <h2 class="feedback-head-summary">{{ kept.summary }}</h2>
+    {% if mode == 'sender' %}
+    <p class="feedback-head-from"><span class="badge badge-{{ {'new': 'info', 'under_review': 'info', 'waiting': 'warning', 'planned': 'info', 'done': 'success'}.get(kept.status, 'muted') }}">{{ status_names[kept.status] }}</span>{% if kept.page_url or kept.page_title %} · {% if kept.page_url %}<a href="{{ kept.page_url }}">{{ kept.page_title or kept.page_url }}</a>{% else %}{{ kept.page_title }}{% endif %}{% endif %}</p>
+    <p class="feedback-head-when">Sent {{ when(kept.created_at) }}</p>
+    {% else %}
     <p class="feedback-head-from">From {{ sender_name }}{% if kept.page_url or kept.page_title %} · {% if kept.page_url %}<a href="{{ kept.page_url }}">{{ kept.page_title or kept.page_url }}</a>{% else %}{{ kept.page_title }}{% endif %}{% endif %}</p>
     <p class="feedback-head-when">Received {{ when(kept.created_at) }}{% if kept.browser %} · {{ kept.browser }}{% endif %}</p>
+    {% endif %}
     {% if mode == 'reviewer' %}
     <form class="feedback-status" method="post" action="{{ url_for('feedback.admin_status', request_id=rid) }}" data-panel-form>
       {{ csrf_field(csrf_token()) }}
@@ -37,12 +43,12 @@
       {% for m in messages %}
       <li class="feedback-item feedback-item-{{ m.role }} feedback-item-{{ m.kind }}">
         {% if m.kind == 'status' %}
-        <p class="feedback-item-line"><strong>Status: {{ status_names.get(m.status_to, m.status_to) }}</strong> <span class="feedback-item-meta">{{ person_name(m.author_id) }} · {{ when(m.created_at) }}</span></p>
+        <p class="feedback-item-line"><strong>Status: {{ status_names.get(m.status_to, m.status_to) }}</strong> <span class="feedback-item-meta">{{ person_name(m) }} · {{ when(m.created_at) }}</span></p>
         {% elif m.kind == 'email' %}
         <p class="feedback-item-line feedback-item-note">{{ icon('warning') }}<span>{{ m.body }}</span> <span class="feedback-item-meta">{{ when(m.created_at) }}</span></p>
         {% else %}
         <p class="feedback-item-head">
-          <strong>{{ person_name(m.author_id) }}</strong>
+          <strong>{{ person_name(m) }}</strong>
           {% if m.kind == 'update' %}<span class="badge badge-info">Update</span>{% elif m.kind == 'question' %}<span class="badge badge-warning">Question</span>{% endif %}
           <span class="feedback-item-meta">{{ when(m.created_at) }}</span>
         </p>
@@ -93,5 +99,41 @@
       <button class="button primary" type="submit" data-update-text="Send the update" data-question-text="Ask the question">{{ 'Ask the question' if question else 'Send the update' }}</button>
     </div>
   </form>
+  {% endif %}
+  {% if mode == 'sender' %}
+  {% if kept.status in ('new', 'under_review', 'waiting', 'planned') %}
+  {% set waiting = kept.status == 'waiting' %}
+  <form class="feedback-reply" method="post" action="{{ url_for('feedback.mine_message', request_id=rid) }}" enctype="multipart/form-data" data-panel-form>
+    {{ csrf_field(csrf_token()) }}
+    <div class="field{{ ' has-error' if body_errors }}">
+      <label for="answer-body-{{ rid }}">{{ 'Your answer' if waiting else 'Add a message' }}</label>
+      <textarea id="answer-body-{{ rid }}" name="body" rows="4" maxlength="5000" required aria-describedby="{{ 'answer-body-' ~ rid ~ ('-error' if body_errors else '-help') }}"{% if body_errors %} aria-invalid="true"{% endif %}>{{ form.body }}</textarea>
+      {% if body_errors %}<p class="field-error" id="answer-body-{{ rid }}-error">{{ body_errors|join(' ') }}</p>{% endif %}
+      <p class="field-help" id="answer-body-{{ rid }}-help">{{ 'Goes to the team, and the request moves back to Under review.' if waiting else 'Goes to the team.' }}</p>
+    </div>
+    <div class="field{{ ' has-error' if file_errors }}">
+      <label for="answer-files-{{ rid }}">Attach</label>
+      <input id="answer-files-{{ rid }}" name="files" type="file" multiple aria-describedby="answer-files-{{ rid }}-help">
+      {% if file_errors %}<p class="field-error" id="answer-files-{{ rid }}-error" role="alert">{{ file_errors|join(' ') }}</p>{% endif %}
+      <p class="field-help" id="answer-files-{{ rid }}-help">Up to 5 files, 5 MB each: pictures, PDF, Word, Excel or text.</p>
+    </div>
+    <div class="feedback-reply-foot">
+      <button class="button primary" type="submit">Send</button>
+    </div>
+  </form>
+  <section class="feedback-withdraw" aria-label="Withdraw request">
+    <a class="button" href="{{ url_for('feedback.mine_request', request_id=rid, withdraw=1) }}" data-withdraw-ask{% if ask_withdraw %} hidden{% endif %}>Withdraw request</a>
+    <form class="confirm-box" method="post" action="{{ url_for('feedback.mine_withdraw', request_id=rid) }}" data-panel-form data-withdraw-confirm{% if not ask_withdraw %} hidden{% endif %}>
+      {{ csrf_field(csrf_token()) }}
+      <p role="alert">Withdraw this request? The team will see that you withdrew it.</p>
+      <div class="confirm-box-actions">
+        <a class="button" href="{{ url_for('feedback.mine_request', request_id=rid) }}" data-withdraw-cancel>Keep it</a>
+        <button class="button danger" type="submit">Withdraw request</button>
+      </div>
+    </form>
+  </section>
+  {% else %}
+  <p class="field-help feedback-closed">This request is closed. It can no longer be added to.</p>
+  {% endif %}
   {% endif %}
 </div>

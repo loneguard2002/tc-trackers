@@ -276,13 +276,20 @@ def admin_index():
 
 
 def _request_context(
-    kept: FeedbackRequest, form: dict | None = None, field_errors=None, notice: str = "", notice_tone: str = "success"
+    kept: FeedbackRequest,
+    form: dict | None = None,
+    field_errors=None,
+    notice: str = "",
+    notice_tone: str = "success",
+    mode: str = "reviewer",
 ) -> dict:
-    """What ``feedback/_request.html`` shows: the head, the conversation oldest first with its files, and the forms."""
+    """What ``feedback/_request.html`` shows: the head, the conversation oldest first with its files, and the forms.
+    The ``sender`` mode leaves out the system notes about email, which concern the team."""
     db = get_session()
-    messages = list(
-        db.scalars(select(FeedbackMessage).where(FeedbackMessage.request_id == kept.id).order_by(FeedbackMessage.id))
-    )
+    query = select(FeedbackMessage).where(FeedbackMessage.request_id == kept.id).order_by(FeedbackMessage.id)
+    if mode == "sender":
+        query = query.where(FeedbackMessage.role != "system")
+    messages = list(db.scalars(query))
     files: dict[int, list] = {}
     for row in db.execute(
         select(FeedbackFile.id, FeedbackFile.message_id, FeedbackFile.filename, FeedbackFile.content_type)
@@ -311,7 +318,7 @@ def _request_context(
         "field_errors": field_errors or {},
         "notice": notice,
         "notice_tone": notice_tone,
-        "mode": "reviewer",
+        "mode": mode,
     }
 
 

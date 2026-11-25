@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{# One of the person's own requests on its own page: where the reply email's button and the list's links lead without
+   JavaScript. Withdraw asks here too (?withdraw=1) when the panel's own question is not available. #}
+{% block content %}
+<h1>{{ reference }}</h1>
+<p class="page-lede"><a href="{{ url_for('feedback.mine') }}">My feedback</a> › {{ reference }}</p>
+<div class="feedback-request-page">
+  {% include "feedback/_request.html" %}
+</div>
+{% endblock %}
