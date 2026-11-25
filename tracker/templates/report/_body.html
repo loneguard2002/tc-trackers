@@ -94,7 +94,7 @@
       {% if not h.totals_check_ok %}
       <p class="flash flash-warning report-check">
         {%- if gap > 0 %}The {{ many }} add up to {{ h.completed|num }} done, but the tracker's weekly history has {{ h.history_completed|num }}. {{ gap|num }} are on the tracker but not on any {{ one }}: set as completed before the first week (Settings), or weekly figures imported without a {{ one }}.
-        {%- else %}The {{ many }} add up to {{ h.completed|num }} done, {{ (0 - gap)|num }} more than the tracker's weekly history ({{ h.history_completed|num }}). A {{ one }}'s starting figure may count work done before the tracker's first week that the history does not.{% endif %}</p>
+        {%- else %}{{ many|capitalize }}: {{ h.completed|num }} done. Weekly history: {{ h.history_completed|num }}. The {{ (0 - gap)|num }} extra may be work done before the first week.{% endif %}</p>
       {% endif %}
       {#- One bar for all of them, so the starting amount shows: done before the first week, done since, retired, on the
           tracker but not on a group, and what is left. Parts that are 0 are left out. #}
