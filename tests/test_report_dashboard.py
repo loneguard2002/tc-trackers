@@ -46,15 +46,15 @@ def test_sentence_when_everything_is_done():
 def test_sentence_forecast_before_target_and_behind_plan():
     assert (
         answer_sentence(headline(), TARGET, 30)
-        == "On course to finish on 11 Dec, a week before the 18 Dec target, though 30 behind plan."
+        == "On course to finish on 11 Dec,\na week before the 18 Dec target, though 30 behind plan."
     )
 
 
 def test_sentence_counts_days_before_target():
     sentence = answer_sentence(headline(forecast_completion=date(2026, 12, 15)), TARGET, None)
-    assert sentence == "On course to finish on 15 Dec, 3 days before the 18 Dec target."
+    assert sentence == "On course to finish on 15 Dec,\n3 days before the 18 Dec target."
     assert answer_sentence(headline(forecast_completion=date(2026, 12, 17)), TARGET, 0).startswith(
-        "On course to finish on 17 Dec, 1 day before the 18 Dec target."
+        "On course to finish on 17 Dec,\n1 day before the 18 Dec target."
     )
 
 
@@ -65,12 +65,12 @@ def test_sentence_omits_behind_plan_when_not_behind():
 
 def test_sentence_on_the_target_date():
     sentence = answer_sentence(headline(forecast_completion=TARGET), TARGET, 12)
-    assert sentence == "On course to finish on 18 Dec, on the target date, though 12 behind plan."
+    assert sentence == "On course to finish on 18 Dec,\non the target date, though 12 behind plan."
 
 
 def test_sentence_forecast_after_target():
     sentence = answer_sentence(headline(forecast_completion=date(2026, 1, 8).replace(year=2027)), TARGET, 30)
-    assert sentence == "Forecast to finish on 8 Jan, 21 days after the 18 Dec target."
+    assert sentence == "Forecast to finish on 8 Jan,\n21 days after the 18 Dec target."
 
 
 def test_sentence_without_a_target():

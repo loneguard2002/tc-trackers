@@ -84,7 +84,7 @@ def _span(days: int) -> str:
 
 
 def answer_sentence(headline: Headline, target: date | None, behind_plan: int | None) -> str:
-    """The one-sentence answer: done, on course, late, or not yet known. ``behind_plan`` is units behind plan."""
+    """The one-sentence answer: done, on course, late, or not yet known. The date it finishes is on its own line. ``behind_plan`` is units behind plan."""
     if headline.total_scope > 0 and headline.remaining == 0:
         return f"All {fmt_num(headline.total_scope)} done."
     forecast = headline.forecast_completion
@@ -94,10 +94,10 @@ def answer_sentence(headline: Headline, target: date | None, behind_plan: int | 
         return f"Forecast to finish on {_short(forecast)}. No target date is set."
     days = (forecast - target).days
     if days > 0:
-        return f"Forecast to finish on {_short(forecast)}, {_span(days)} after the {_short(target)} target."
+        return f"Forecast to finish on {_short(forecast)},\n{_span(days)} after the {_short(target)} target."
     when = "on the target date" if days == 0 else f"{_span(-days)} before the {_short(target)} target"
     behind = f", though {fmt_num(behind_plan)} behind plan" if behind_plan and behind_plan > 0 else ""
-    return f"On course to finish on {_short(forecast)}, {when}{behind}."
+    return f"On course to finish on {_short(forecast)},\n{when}{behind}."
 
 
 def _complete_rows(report: Report) -> list:
