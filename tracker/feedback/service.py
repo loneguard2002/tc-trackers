@@ -278,7 +278,7 @@ def mark_seen(session: Session, request: FeedbackRequest) -> None:
     request.sender_seen_at = _now()
 
 
-def _unseen_reply():
+def unseen_reply():
     """A condition: some reviewer update, question or status change came after the sender last opened the request."""
     return exists().where(
         FeedbackMessage.request_id == FeedbackRequest.id,
@@ -288,14 +288,22 @@ def _unseen_reply():
     )
 
 
+def mine_counts(session: Session, user_id: int) -> tuple[int, int]:
+    """(how many requests the person has sent, how many have a reply they have not opened), in one query."""
+    row = session.execute(
+        select(func.count(), func.count().filter(unseen_reply())).where(FeedbackRequest.sender_id == user_id)
+    ).one()
+    return row[0], row[1]
+
+
 def has_new_reply(request: FeedbackRequest) -> bool:
     session = object_session(request)
-    return bool(session.scalar(select(_unseen_reply()).where(FeedbackRequest.id == request.id)))
+    return bool(session.scalar(select(unseen_reply()).where(FeedbackRequest.id == request.id)))
 
 
 def unread_count(session: Session, user_id: int) -> int:
     return session.scalar(
-        select(func.count()).select_from(FeedbackRequest).where(FeedbackRequest.sender_id == user_id, _unseen_reply())
+        select(func.count()).select_from(FeedbackRequest).where(FeedbackRequest.sender_id == user_id, unseen_reply())
     )
 
 

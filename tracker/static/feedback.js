@@ -523,6 +523,8 @@
       .then(function (response) {
         // An expired session redirects to the sign-in page, which answers 200: that is a failure too.
         if (!response.ok || response.redirected) throw new Error("status " + response.status);
+        // Opening a request in My feedback marks its new reply as seen, so the list and the count change.
+        if (response.headers.get("X-Panel-Changed") === "1") changed = true;
         return response.text();
       })
       .then(function (html) {
@@ -536,6 +538,27 @@
     if (!openRow || !form.hasAttribute("data-panel-form")) return;
     event.preventDefault();
     send(openRow, form);
+  });
+
+  // My feedback: Withdraw request asks in the panel (the link goes to a page that asks, without JavaScript).
+  panel.addEventListener("click", function (event) {
+    var target = event.target.closest ? event.target.closest("a") : null;
+    if (!target) return;
+    var area = target.closest("[data-panel-feedback]");
+    var confirmation = area ? area.querySelector("[data-withdraw-confirm]") : null;
+    var ask = area ? area.querySelector("[data-withdraw-ask]") : null;
+    if (!confirmation || !ask) return;
+    if (target === ask) {
+      event.preventDefault();
+      ask.hidden = true;
+      confirmation.hidden = false;
+      confirmation.querySelector("button").focus();
+    } else if (target.hasAttribute("data-withdraw-cancel")) {
+      event.preventDefault();
+      confirmation.hidden = true;
+      ask.hidden = false;
+      ask.focus();
+    }
   });
 
   panel.addEventListener("close", function () {

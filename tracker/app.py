@@ -84,10 +84,17 @@ def create_app(overrides: dict | None = None) -> Flask:
     def feedback_context():
         """Whether the Feedback link shows (an administrator can switch it off), and the New count beside Admin ›
         Feedback; each is asked only when the page needs it."""
+
+        def mine_counts() -> tuple[int, int]:
+            person = current_user()
+            return feedback_service.mine_counts(get_session(), person.id) if person else (0, 0)
+
         return {
             "feedback_link_on": lambda: feedback_settings.link_on(get_session()),
             # The number of New requests, for the count beside Feedback; asked only when the menu shows Feedback.
             "feedback_new_count": lambda: feedback_service.new_count(get_session()),
+            # (requests the person has sent, those with a reply not yet opened): one query, for the My feedback link.
+            "feedback_mine_counts": mine_counts,
         }
 
     register_filters(app)

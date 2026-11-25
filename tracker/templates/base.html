@@ -49,6 +49,8 @@
     <nav class="sidebar-nav">
       {{ nav_link('trackers', 'index', 'Trackers', 'trackers') }}
       {% if can('import_workbooks') %}{{ nav_link('import', 'importer.upload', 'Import workbook', 'upload') }}{% endif %}
+      {% set mine_total, mine_unread = feedback_mine_counts() %}
+      {% if mine_total %}{{ nav_link('mine', 'feedback.mine', 'My feedback', 'feedback', mine_unread, 'with a new reply') }}{% endif %}
       {% set show_users = can('manage_users') %}
       {% set show_permsets = current_user.is_admin %}
       {% set show_teams = can('manage_teams') %}

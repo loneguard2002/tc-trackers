@@ -16,8 +16,9 @@ pytestmark = pytest.mark.browser
 
 PASTE_A_PICTURE = """
 () => {
-  const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'),
-                                c => c.charCodeAt(0));
+  const bytes = Uint8Array.from(
+    atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'),
+    c => c.charCodeAt(0));
   const transfer = new DataTransfer();
   transfer.items.add(new File([bytes], 'image.png', { type: 'image/png' }));
   const event = new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true });
@@ -180,5 +181,71 @@ def test_on_a_phone_the_link_stays_on_the_title_row_and_no_page_scrolls_sideways
         assert page.evaluate("document.scrollingElement.scrollWidth") <= 390, path
         tabs = page.locator("nav.tabs").bounding_box()
         assert tabs["x"] >= 0 and tabs["x"] + tabs["width"] <= 390, path
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+def test_a_sender_opens_a_request_answers_it_and_withdraws(page, live_server, user_factory, give_set, db):
+    sam = user_factory(full_name="Sam Taylor")
+    reviewer = user_factory(full_name="Robin Lee")
+    give_set(["manage_feedback"], user=reviewer)
+    made = service.create_request(db, sam, "problem", "Chart is blank", "Nothing shows.", "Report", "/", "", [])
+    service.reviewer_reply(db, made, reviewer, "question", "Which browser do you use?", [])
+    db.commit()
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, sam)
+    page.goto(f"{live_server}/feedback/mine")
+    expect(page.locator("nav.sidebar-nav .nav-count")).to_have_text("1 with a new reply")
+    expect(page.locator(f'tr[data-request="{made.id}"]')).to_contain_text("New reply")
+
+    page.get_by_role("cell", name="Chart is blank").click()
+    panel = page.locator("#feedback-panel")
+    expect(panel).to_be_visible()
+    expect(panel.locator(".feedback-thread")).to_contain_text("Progress Tracker team")
+    expect(panel.locator(".feedback-thread")).not_to_contain_text("Robin Lee")
+    expect(panel.get_by_label("Your answer")).to_be_visible()
+    expect(panel).to_contain_text("Goes to the team, and the request moves back to Under review.")
+
+    panel.get_by_label("Your answer").fill("Chrome on Windows")
+    panel.get_by_role("button", name="Send", exact=True).click()
+    expect(panel.locator(".feedback-thread")).to_contain_text("Chrome on Windows")
+    expect(panel).to_contain_text("Answer sent.")
+    expect(panel.get_by_label("Add a message")).to_be_visible()
+    db.expire_all()
+    assert db.get(FeedbackRequest, made.id).status == "under_review"
+
+    panel.get_by_role("link", name="Withdraw request").click()
+    expect(panel.get_by_text("Withdraw this request? The team will see that you withdrew it.")).to_be_visible()
+    panel.get_by_role("link", name="Keep it").click()
+    expect(panel.get_by_role("link", name="Withdraw request")).to_be_visible()
+    db.expire_all()
+    assert db.get(FeedbackRequest, made.id).status == "under_review"
+    panel.get_by_role("link", name="Withdraw request").click()
+    panel.get_by_role("button", name="Withdraw request").click()
+    expect(panel).to_contain_text("Request withdrawn.")
+    expect(panel.locator("textarea")).to_have_count(0)
+    expect(panel.locator(".feedback-thread")).to_contain_text("Status: Withdrawn")
+
+    panel.get_by_role("button", name="Close").click()
+    expect(page.locator(f'tr[data-request="{made.id}"]')).to_contain_text("Withdrawn")
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+def test_opening_a_request_clears_the_new_reply_mark_and_the_count(page, live_server, user_factory, give_set, db):
+    sam = user_factory(full_name="Sam Taylor")
+    reviewer = user_factory(full_name="Robin Lee")
+    give_set(["manage_feedback"], user=reviewer)
+    made = service.create_request(db, sam, "idea", "Dark theme", "", "Report", "/", "", [])
+    service.reviewer_reply(db, made, reviewer, "update", "Planned.", [])
+    db.commit()
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, sam)
+    page.goto(f"{live_server}/feedback/mine")
+    page.get_by_role("cell", name="Dark theme").click()
+    expect(page.locator("#feedback-panel .feedback-thread")).to_contain_text("Planned.")
+    page.locator("#feedback-panel").get_by_role("button", name="Close").click()
+    expect(page.locator(".nav-count")).to_have_count(0)
+    expect(page.locator(f'tr[data-request="{made.id}"]')).not_to_contain_text("New reply")
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
