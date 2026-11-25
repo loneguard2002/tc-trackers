@@ -1413,6 +1413,8 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
   :is(.section-table:has(.card-rows), .section-table[data-table-frame]) { overflow-x: clip; }
   :is(.section-table:has(.card-rows), .section-table[data-table-frame]).is-wide { overflow-x: auto; }  /* set by lists.js when the table does not fit */
   .set-panel .section-table[data-table-frame] { overflow-x: auto; }
+  /* A wrapper that scrolls sideways is the sticky container, so its headings would sit var(--sticky-top) down over the rows. */
+  :is(.section-table:has(.card-rows), .section-table[data-table-frame]).is-wide thead th { position: static; }
 }
 .list-table th { vertical-align: middle; }
 .list-table th.num { text-align: right; }
