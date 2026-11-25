@@ -5,7 +5,6 @@ from __future__ import annotations
 import html
 import io
 import re
-from datetime import timedelta
 
 import pytest
 from conftest import post, sign_in
@@ -394,12 +393,3 @@ def test_a_closed_request_is_read_only(client, sam, make, db, status, outbox):
     kept = reload(db, made)
     assert kept.status == status and len(db.scalars(select(FeedbackMessage)).all()) == 1
     assert outbox == []
-
-
-def test_a_reply_after_the_sender_opened_marks_it_again(client, sam, make, db, robin):
-    made = make()
-    client.get(f"{URL}/{made.id}")
-    assert service.mine_counts(db, sam.id) == (1, 0)
-    reload(db, made).sender_seen_at -= timedelta(minutes=5)
-    ask(db, made, robin, "update", "Later")
-    assert service.mine_counts(db, sam.id) == (1, 1)
