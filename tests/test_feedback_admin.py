@@ -407,6 +407,22 @@ def test_a_failed_email_to_the_sender_is_noted(client, reviewer, make, db, outbo
     assert notes == ["Email to Sam Taylor not sent: email is not set up"]
 
 
+def test_a_reply_email_the_mail_server_refuses_is_noted(client, reviewer, make, db, mail_on, monkeypatch):
+    def refuse(msg):
+        raise smtp.MailError("550 no")
+
+    monkeypatch.setattr(smtp, "send_message", refuse)
+    made = make()
+    response = reply(client, made.id)
+    assert response.status_code == 302
+    notes = db.scalars(select(FeedbackMessage.body).where(FeedbackMessage.kind == "email")).all()
+    assert notes == ["Email to Sam Taylor not sent: the mail server refused it"]
+    assert db.scalars(select(FeedbackMessage).where(FeedbackMessage.kind == "update")).one()  # the reply is kept
+    assert "Update sent. Email to Sam Taylor not sent: the mail server refused it." in text_of(
+        client.get(response.headers["Location"])
+    )
+
+
 def test_an_inactive_sender_cannot_be_emailed(client, reviewer, make, db, outbox, mail_on, sam):
     made = make()
     sam.status = "disabled"
@@ -440,6 +456,20 @@ def test_a_reply_needs_text_and_keeps_what_was_typed(client, reviewer, make, db,
     assert db.scalars(select(FeedbackMessage).where(FeedbackMessage.role == "reviewer")).all() == []
     long = reply(client, made.id, {"body": "x" * 5001})
     assert long.status_code == 400 and "Keep this to 5,000 characters at most." in text_of(long)
+
+
+def test_a_reply_of_exactly_5000_characters_is_taken(client, reviewer, make, db, outbox):
+    made = make()
+    assert reply(client, made.id, {"body": "x" * 5000, "email": ""}).status_code == 302
+    assert len(db.scalars(select(FeedbackMessage).where(FeedbackMessage.kind == "update")).one().body) == 5000
+
+
+def test_a_reply_of_an_unknown_kind_is_kept_as_an_update(client, reviewer, make, db, outbox):
+    made = make()
+    assert reply(client, made.id, {"kind": "memo", "body": "Noted.", "email": ""}).status_code == 302
+    db.expire_all()
+    kinds = db.scalars(select(FeedbackMessage.kind).where(FeedbackMessage.role == "reviewer")).all()
+    assert kinds == ["update"] and db.get(FeedbackRequest, made.id).status == "new"
 
 
 def test_a_reply_keeps_its_files_and_refuses_bad_ones(client, reviewer, make, db, outbox):

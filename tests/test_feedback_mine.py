@@ -158,6 +158,21 @@ def test_the_list_answers_for_a_person_with_no_requests_and_with_the_link_switch
     assert answer(client, made.id).status_code == 302
 
 
+def test_the_list_filters_count_open_closed_and_all(client, sam, make, db):
+    make("New one")
+    make("Planned one", status="planned")
+    make("Done one", status="done")
+    make("Withdrawn one", status="withdrawn")
+    page = client.get(URL).get_data(as_text=True)
+    buttons = re.findall(
+        r'data-status="([a-z]+)" aria-pressed="(true|false)">([^<]+) <span class="chip-count[^"]*" data-count>(\d+)',
+        page,
+    )
+    assert buttons == [("open", "true", "Open", "2"), ("closed", "false", "Closed", "2"), ("all", "false", "All", "4")]
+    assert len(re.findall(r'data-status="open (new|planned)"', page)) == 2
+    assert len(re.findall(r'data-status="closed (done|withdrawn)"', page)) == 2
+
+
 def test_anonymous_goes_to_sign_in(app):
     assert app.test_client().get(URL).status_code in (302, 303)
 

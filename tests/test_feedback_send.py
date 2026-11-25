@@ -128,6 +128,27 @@ def test_a_problem_report_says_so_on_the_thank_you(client, sender, db):
     assert "Your report is with the people who run Progress Tracker" in page
 
 
+def test_an_unknown_kind_is_kept_as_an_idea(client, sender, db):
+    assert send(client, {"kind": "complaint"}).status_code == 302
+    assert db.scalars(select(FeedbackRequest)).one().kind == "idea"
+
+
+@pytest.mark.parametrize("back", ["https://elsewhere.example/x", "//elsewhere.example/x", "javascript:alert(1)"])
+def test_the_thank_you_links_back_only_within_the_site(client, sender, db, back):
+    created = service.create_request(db, sender, "idea", "Mine", "", "", "", "", [])
+    db.commit()
+    page = client.get(f"/feedback/sent/{created.id}", query_string={"back": back}).get_data(as_text=True)
+    assert "elsewhere" not in page and "javascript" not in page
+    assert '<a class="button primary" href="/" data-dialog-close>Close</a>' in page
+
+
+def test_the_thank_you_links_back_to_the_page_it_came_from(client, sender, db):
+    created = service.create_request(db, sender, "idea", "Mine", "", "", "", "", [])
+    db.commit()
+    page = client.get(f"/feedback/sent/{created.id}", query_string={"back": "/trackers/3"}).get_data(as_text=True)
+    assert '<a class="button primary" href="/trackers/3" data-dialog-close>Close</a>' in page
+
+
 def test_only_the_sender_sees_the_thank_you(client, sender, db, user_factory):
     other = user_factory(is_admin=True)
     created = service.create_request(db, other, "idea", "Mine", "", "", "", "", [])
