@@ -509,6 +509,24 @@ class AppSetting(Base):
     value: Mapped[str] = mapped_column(Text)
 
 
+class LoginFailure(Base):
+    """One refused sign-in, counted by the sign-in limiter (auth/throttle.py) once for the account (the email entered)
+    and once for the address (the client's IP). Kept in the database so every worker and every instance shares one
+    count, and a restart or deploy does not reset it; rows older than a day are deleted."""
+
+    __tablename__ = "login_failures"
+    __table_args__ = (
+        CheckConstraint("kind IN ('account', 'address')", name="kind"),
+        Index("ix_login_failures_kind_value_at", "kind", "value", "at"),
+        Index("ix_login_failures_at", "at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    kind: Mapped[str] = mapped_column(Text)
+    value: Mapped[str] = mapped_column(Text)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class FeedbackRequest(Base):
     """One idea or problem sent by a signed-in person; a conversation with the people who run the application."""
 

@@ -16,6 +16,8 @@ ACTION_LABELS: dict[str, str] = {
     "sso_login": "Signed in with Microsoft",
     "sso_linked": "Microsoft account linked",
     "login_failed": "Failed sign-in",
+    "sign_in_limits_changed": "Sign-in limits changed",
+    "sign_in_unblocked": "Sign-in unblocked",
     "user_created": "User created",
     "user_approved": "User approved",
     "user_disabled": "User disabled",

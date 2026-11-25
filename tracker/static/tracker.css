@@ -854,7 +854,7 @@ main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-heigh
 .access-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 16px; }
 .access-groups .empty-note { padding: 0; }
 .access-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.import-summary { margin-bottom: 20px; }
+.import-summary, .sign-in-summary { margin-bottom: 20px; }
 .key-values { display: grid; margin: 0; }
 .key-values div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; padding: 10px 20px; }
 .key-values div + div { border-top: 1px solid var(--border); }

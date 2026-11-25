@@ -3,7 +3,8 @@
 import pytest
 from flask import Flask
 
-from tracker.auth.csrf import LoginThrottle, csrf_token, safe_next_url, valid_csrf
+from tracker.auth import throttle
+from tracker.auth.csrf import csrf_token, safe_next_url, valid_csrf
 from tracker.auth.passwords import MIN_PASSWORD_LENGTH, hash_password, validate_new_password, verify_password
 from tracker.config import load_config
 
@@ -26,16 +27,9 @@ def test_validate_new_password_rules():
     assert validate_new_password("a" * MIN_PASSWORD_LENGTH) is None
 
 
-def test_login_throttle_blocks_after_attempts_and_clears():
-    throttle = LoginThrottle(attempts=5, window_seconds=300)
-    for _ in range(4):
-        throttle.fail("k")
-    assert not throttle.blocked("k")
-    throttle.fail("k")
-    assert throttle.blocked("k")
-    assert not throttle.blocked("other")
-    throttle.clear("k")
-    assert not throttle.blocked("k")
+def test_the_longest_sign_in_window_fits_inside_the_kept_failures():
+    longest = throttle.LIMIT_FIELDS["window_minutes"][3]
+    assert throttle.Limits(window_minutes=longest).window <= throttle.KEEP_FAILURES
 
 
 def _flask():
