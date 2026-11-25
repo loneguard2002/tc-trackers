@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, NamedTuple
 
 from ..auth.permissions import PERMISSIONS
+from ..feedback.service import STATUS_LABELS, STATUSES
 
 ACTION_LABELS: dict[str, str] = {
     "login": "Signed in",
@@ -142,6 +143,35 @@ class DetailLine(NamedTuple):
 
 def action_label(action: str) -> str:
     return ACTION_LABELS.get(action, action)
+
+
+# Feedback entries hold only the reference, the kind, the reply kind and a status change (the feedback spec), so they
+# read as one line after the reference: "FB-0042: question sent".
+_FEEDBACK_STATUS_LABELS = dict(zip(STATUSES, STATUS_LABELS))
+
+
+def feedback_text(action: str, detail: Any) -> str:
+    """What happened in a feedback entry, after its reference; the action itself for anything unknown."""
+    detail = detail if isinstance(detail, dict) else {}
+
+    def status(key: str) -> str:
+        value = detail.get(key)
+        return _FEEDBACK_STATUS_LABELS.get(value, str(value)) if value is not None else "none"
+
+    change = f"status from {status('before')} to {status('after')}"
+    moved = "before" in detail or "after" in detail
+    if action == "feedback_sent":
+        return f"{detail.get('kind', 'feedback')} sent"
+    if action == "feedback_replied":
+        text = f"{detail.get('reply', 'reply')} sent"
+        return f"{text}; {change}" if moved else text
+    if action == "feedback_status":
+        return change
+    if action == "feedback_answered":
+        return f"answered by the sender; {change}" if moved else "message from the sender"
+    if action == "feedback_withdrawn":
+        return "withdrawn by the sender"
+    return action
 
 
 def _text(value: Any) -> str:

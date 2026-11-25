@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "lists/_table.html" import search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
+{% endblock %}
+{% set status_tones = {'new': 'info', 'under_review': 'info', 'waiting': 'warning', 'planned': 'info', 'done': 'success'} %}
+{% block content %}
+<h1>Feedback</h1>
+<p class="page-lede">Ideas and problems sent with the Feedback link. Open one to read it, reply or change its status. Times are UTC.</p>
+<div class="settings">
+  <section class="settings-section" aria-labelledby="section-feedback">
+    <h2 class="sr-only" id="section-feedback">Requests</h2>
+    {% if items %}
+    <div class="list-tools">
+      {{ search_box('feedback-table', 'Search feedback') }}
+      {# The kind filter reuses lists.js's region select: it matches each row's data-region, which holds the kind. #}
+      <select id="feedback-table-kind" class="list-region" aria-label="Filter by kind" data-region-filter="feedback-table" hidden>
+        {% for value, text in (('', 'Ideas and problems'), ('idea', 'Ideas'), ('problem', 'Problems')) %}
+        <option value="{{ value }}"{% if chosen_kind == value and value %} selected{% endif %}>{{ text }}</option>
+        {% endfor %}
+      </select>
+      {{ status_filters('feedback-table', 'feedback', filter_options, counts) }}
+      {{ clear_filters('feedback-table') }}
+    </div>
+    <div class="section-table register feedback-table" data-table-frame>
+      <table id="feedback-table" class="table card-rows" data-sortable>
+        <thead><tr>
+          {{ sort_header('Ref', 'ref') }}
+          {{ sort_header('Last activity', 'activity', type='date') }}
+          {{ sort_header('Kind', 'kind') }}
+          {{ sort_header('Summary', 'summary') }}
+          {{ sort_header('From', 'from') }}
+          {{ sort_header('Page', 'page', 'hide-narrow') }}
+          {{ sort_header('Status', 'status') }}
+          {{ sort_header('Replies', 'replies', 'num', type='number') }}
+        </tr></thead>
+        <tbody>
+        {% for item in items %}
+        {% set r = item.request %}
+        {% set status_name = status_names[r.status] %}
+        <tr id="request-{{ r.id }}" data-request="{{ r.id }}" data-panel-url="{{ url_for('feedback.admin_panel', request_id=r.id) }}"
+          data-status="{{ item.group }} {{ r.status }}" data-region="{{ r.kind }}"
+          data-search="{{ [item.reference, r.summary, r.details, item.sender, r.page_title, r.page_url]|join(' ')|lower }}"
+          data-sort-ref="{{ item.reference }}" data-sort-activity="{{ item.activity_key }}" data-sort-kind="{{ kind_labels[r.kind] }}"
+          data-sort-summary="{{ r.summary }}" data-sort-from="{{ item.sender }}" data-sort-page="{{ r.page_title }}"
+          data-sort-status="{{ status_name }}" data-sort-replies="{{ item.replies }}">
+          <td class="feedback-ref"><a href="{{ url_for('feedback.admin_request', request_id=r.id) }}" data-open-request>{{ item.reference }}</a></td>
+          <td class="feedback-when">{{ when(r.last_activity_at, true) }}</td>
+          <td>{{ kind_labels[r.kind] }}</td>
+          <td class="feedback-summary-cell">{{ r.summary }}</td>
+          <td>{{ item.sender or '–' }}</td>
+          <td class="hide-narrow">{{ r.page_title or '–' }}</td>
+          <td><span class="badge badge-{{ status_tones.get(r.status, 'muted') }}">{{ status_name }}</span></td>
+          <td class="num">{{ item.replies }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {{ no_match('No feedback matches.', 'feedback-table') }}
+    </div>
+    {{ table_pager('feedback-table', 'requests', 'request', items|length, counts.get('open', 0), 'open') }}
+    {% else %}
+    <p class="empty-note">No feedback yet. Requests sent with the Feedback link appear here.</p>
+    {% endif %}
+  </section>
+</div>
+<dialog class="perm-drawer feedback-drawer" id="feedback-panel" aria-labelledby="feedback-panel-title"></dialog>
+{% endblock %}

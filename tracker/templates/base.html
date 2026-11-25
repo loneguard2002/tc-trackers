@@ -17,7 +17,8 @@
   {# The Feedback link and its pop-up: on every signed-in page except the sign-in pages and the feedback pages. #}
   {% set feedback_on = current_user and not bare_page|default(false) and feedback_link_on() %}
   {% set feedback_shown = feedback_on and request.endpoint not in ('feedback.send', 'feedback.sent') %}
-  {% if feedback_on %}<script src="{{ url_for('static', filename='feedback.js', v=app_version) }}" defer></script>{% endif %}
+  {# Admin › Feedback needs feedback.js for its side panel even while the link is switched off (feedback_script). #}
+  {% if feedback_on or feedback_script|default(false) %}<script src="{{ url_for('static', filename='feedback.js', v=app_version) }}" defer></script>{% endif %}
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -54,7 +55,8 @@
       {% set show_lists = can('manage_lists') %}
       {% set show_smtp = can('manage_email_settings') %}
       {% set show_activity = can('view_activity') %}
-      {% if show_users or show_permsets or show_teams or show_lists or show_smtp or show_activity %}
+      {% set show_feedback = can('manage_feedback') %}
+      {% if show_users or show_permsets or show_teams or show_lists or show_smtp or show_activity or show_feedback %}
       <span class="nav-heading">Administration</span>
       {% if show_users %}{% set waiting = waiting_requests() %}{{ nav_link('users', 'admin.users', 'Users', 'users', waiting, 'waiting for approval') }}{% endif %}
       {% if show_permsets %}{{ nav_link('permsets', 'permsets.index', 'Permission sets', 'key') }}{% endif %}
@@ -62,6 +64,7 @@
       {% if show_lists %}{{ nav_link('lists', 'lists.regions', 'Regions & business lines', 'globe') }}{% endif %}
       {% if show_smtp %}{{ nav_link('smtp', 'admin.smtp', 'Email settings', 'mail') }}{% endif %}
       {% if show_activity %}{{ nav_link('activity', 'activity.index', 'Activity', 'activity') }}{% endif %}
+      {% if show_feedback %}{{ nav_link('feedback', 'feedback.admin_index', 'Feedback', 'feedback', feedback_new_count(), 'new') }}{% endif %}
       {% endif %}
     </nav>
 

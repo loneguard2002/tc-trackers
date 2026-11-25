@@ -1694,6 +1694,46 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .feedback-summary { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow-wrap: anywhere; }
 .feedback-sent p { margin: 0; }
 
+/* Admin › Feedback: the table, and a request in the side panel or on its own page (feedback/_request.html). */
+.feedback-table .feedback-ref { white-space: nowrap; font-weight: 600; }
+.feedback-table .feedback-when { white-space: nowrap; color: var(--muted); font-size: .8125rem; }
+.feedback-table table.opens-panel tbody tr { cursor: pointer; }  /* feedback.js opens the panel from anywhere on a row */
+.feedback-table .feedback-summary-cell { overflow-wrap: anywhere; }
+.feedback-request { display: grid; gap: 18px; }
+.feedback-request-page { max-width: 48rem; }
+.feedback-request .flash { margin: 0; }
+.feedback-request h3 { margin: 0 0 10px; font-size: 1rem; }
+.feedback-head { display: grid; gap: 4px; }
+.feedback-head p { margin: 0; overflow-wrap: anywhere; }
+.feedback-head-kind { color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.feedback-head-summary { margin: 0; font-size: 1.125rem; overflow-wrap: anywhere; }
+.feedback-head-when { color: var(--muted); font-size: .8125rem; }
+.feedback-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; }
+.feedback-status label { margin: 0; font-weight: 600; }
+.feedback-status select { width: auto; max-width: 100%; }
+.feedback-status .field-error { flex-basis: 100%; margin: 0; }
+.feedback-thread { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.feedback-item { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.feedback-item-reviewer { border-left: 3px solid var(--primary); }
+.feedback-item-status, .feedback-item-email { padding: 6px 12px; background: transparent; }
+.feedback-item p { margin: 0; }
+.feedback-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.feedback-item-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: .875rem; }
+.feedback-item-note { color: var(--warning); }
+.feedback-item-note .icon { width: 16px; height: 16px; }
+.feedback-item-meta { color: var(--muted); font-size: .8125rem; font-weight: 400; }
+.feedback-item-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.feedback-attached { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.feedback-thumb-link { display: block; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg); }
+.feedback-thumb { display: block; max-width: 160px; max-height: 120px; min-width: 24px; min-height: 24px; object-fit: contain; }
+.feedback-file-link { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; overflow-wrap: anywhere; }
+.feedback-file-link .icon { width: 15px; height: 15px; flex: none; }
+.feedback-reply { display: grid; gap: 14px; padding-top: 16px; border-top: 1px solid var(--border); }
+.feedback-reply h3 { margin: 0; }
+.feedback-reply textarea { width: 100%; }
+.feedback-reply .field-help { margin: 4px 0 0; }
+.feedback-reply-foot { display: flex; justify-content: flex-end; }
+
 /* Status at a glance, below the answer card: tiles, status strip, risks, locations. Scoped so the classic view is untouched. */
 .report-glance { --g-actual: #1260d0; --g-plan: #008f82; --g-forecast: #c27a00; display: grid; gap: 16px; max-width: 72rem; }
 [data-theme="dark"] .report-glance { --g-actual: #5b8ff0; --g-plan: #22a596; --g-forecast: #b8801c; }

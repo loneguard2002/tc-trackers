@@ -171,3 +171,80 @@ def send_test(session: Session, sender: User) -> str | None:
         logger.exception("The feedback test email could not be sent")
         return NOTE_TEST_FAILED
     return None
+
+
+# ---- a reviewer's reply to the sender ------------------------------------------------------------------------------
+
+_KIND_NOUNS = {"idea": "idea", "problem": "report"}
+
+
+def _reply_subject(request: FeedbackRequest, message: FeedbackMessage) -> str:
+    noun = _KIND_NOUNS[request.kind]
+    what = f"Update on your {noun}" if message.kind == "update" else f"A question about your {noun}"
+    return sanitise_subject(f"{what}: {request.summary} ({service.reference(request.id)})")
+
+
+def build_reply_email(session: Session, request: FeedbackRequest, message: FeedbackMessage) -> EmailMessage:
+    """A reviewer's update or question, to the request's sender, Reply-To the reviewer."""
+    sender = session.get(User, request.sender_id)
+    reviewer = session.get(User, message.author_id) if message.author_id else None
+    reviewer_name = (reviewer.full_name if reviewer else "") or "The Progress Tracker team"
+    files = list(
+        session.scalars(
+            select(FeedbackFile.filename).where(FeedbackFile.message_id == message.id).order_by(FeedbackFile.id)
+        )
+    )
+    app_url = current_app.config["APP_URL"].rstrip("/")
+    page = render_template(
+        "mail/feedback/reply.html",
+        app_url=app_url,
+        question=message.kind == "question",
+        reference=service.reference(request.id),
+        summary=request.summary,
+        body=message.body,
+        reviewer_name=reviewer_name,
+        files=files,
+        request_link=f"{app_url}/feedback/mine/{request.id}",
+    )
+    msg = EmailMessage()
+    msg["Subject"] = _reply_subject(request, message)
+    msg["To"] = sender.email
+    if reviewer:
+        msg["Reply-To"] = reviewer.email
+    msg.set_content(html_to_text(page) + "\n")
+    msg.add_alternative(page, subtype="html")
+    return msg
+
+
+def _note_in_conversation(session: Session, request: FeedbackRequest, note: str) -> None:
+    session.add(
+        FeedbackMessage(
+            request_id=request.id,
+            author_id=None,
+            role="system",
+            kind="email",
+            body=note,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+
+
+def notify_sender(session: Session, request: FeedbackRequest, message: FeedbackMessage) -> str:
+    """Email the sender a reviewer's ``message``. ``""`` when sent, else the note saying why not, which is also kept in
+    the conversation (the request's ``email_note`` is about the email to the feedback address, so it stays)."""
+    sender = session.get(User, request.sender_id) if request.sender_id else None
+    name = (sender.full_name if sender else "") or "the sender"
+    config = smtp.get_smtp_config(session)
+    if sender is None or sender.status != "active":
+        note = f"Email to {name} not sent: their account is not active"
+    elif not (config["host"] and config["from_"]):
+        note = f"Email to {name} not sent: email is not set up"
+    else:
+        try:
+            smtp.send_message(build_reply_email(session, request, message))
+            return ""
+        except Exception:
+            logger.exception("The reply email about request %s could not be sent", request.id)
+            note = f"Email to {name} not sent: the mail server refused it"
+    _note_in_conversation(session, request, note)
+    return note

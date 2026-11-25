@@ -70,10 +70,11 @@
    more than 25 rows match. ``total`` is the number of rows in the table and ``active`` the number holding the
    "active" status (leave it out for a table without one); ``noun_one`` is the singular for a total of one. The count
    is rendered in full for a first paint and without JavaScript, where every row shows and the controls stay hidden;
-   lists.js writes it from the data-* attributes on the count. #}
-{% macro table_pager(table_id, noun_plural, noun_one, total, active=None) -%}
+   lists.js writes it from the data-* attributes on the count. ``active_token`` names another status token to count
+   in that place ("open": "· 7 open"); the token is also the word shown. #}
+{% macro table_pager(table_id, noun_plural, noun_one, total, active=None, active_token='active') -%}
 <div class="pager" data-pager-for="{{ table_id }}">
-  <p class="pager-count" data-pager-count aria-live="polite" data-noun-many="{{ noun_plural }}" data-noun-one="{{ noun_one }}"{% if active is not none %} data-has-active{% endif %}>Showing {{ total }} of {{ total }} {{ noun_one if total == 1 else noun_plural }}{% if active is not none %} · {{ active }} active{% endif %}</p>
+  <p class="pager-count" data-pager-count aria-live="polite" data-noun-many="{{ noun_plural }}" data-noun-one="{{ noun_one }}"{% if active is not none %} data-has-active{% if active_token != 'active' %} data-active-token="{{ active_token }}"{% endif %}{% endif %}>Showing {{ total }} of {{ total }} {{ noun_one if total == 1 else noun_plural }}{% if active is not none %} · {{ active }} {{ active_token }}{% endif %}</p>
   <nav class="pager-controls" aria-label="Pages of {{ noun_plural }}" data-pager-controls hidden>
     <label class="pager-size">Rows per page <select data-pager-size><option value="25" selected>25</option><option value="50">50</option><option value="100">100</option></select></label>
     <button class="pager-button" type="button" data-pager-prev>Previous</button>

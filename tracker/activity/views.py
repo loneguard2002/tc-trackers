@@ -13,14 +13,14 @@ from flask import render_template, request, url_for
 from sqlalchemy import or_, select
 from sqlalchemy.orm import aliased
 
-from ..auth import current_user, tracker_roles
+from ..auth import current_user, has_permission, tracker_roles
 from ..auth.permissions import permission_required
 from ..auth.session import admin_required
 from ..db import get_session
 from ..ids import parse_id
 from ..models import AuditLog, Tracker, User
 from . import bp
-from .labels import ACTION_LABELS, action_label, describe
+from .labels import ACTION_LABELS, action_label, describe, feedback_text
 from .retention import retention_days, save_retention
 
 PAGE_SIZE = 50
@@ -123,6 +123,20 @@ def index():
     def hidden(entry: AuditLog) -> bool:
         return can_open is not None and entry.tracker_id is not None and entry.tracker_id not in can_open
 
+    # A feedback entry reads "FB-0042: question sent"; its reference opens the request only for people who may read it.
+    reads_feedback = has_permission(viewer, "manage_feedback")
+
+    def feedback(entry: AuditLog) -> dict | None:
+        if entry.entity != "feedback":
+            return None
+        detail = entry.detail if isinstance(entry.detail, dict) else {}
+        request_id = parse_id(entry.entity_id)
+        return {
+            "reference": str(detail.get("reference", "")),
+            "url": url_for("feedback.admin_request", request_id=request_id) if reads_feedback and request_id else None,
+            "text": feedback_text(entry.action, detail),
+        }
+
     entries = [
         {
             "id": entry.id,
@@ -137,6 +151,7 @@ def index():
             "tracker": tracker_name,
             "hidden": hidden(entry),
             "lines": [] if hidden(entry) else describe(entry.action, entry.detail),
+            "feedback": feedback(entry),
         }
         for (
             entry,

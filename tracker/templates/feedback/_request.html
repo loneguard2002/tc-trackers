@@ -1,0 +1,96 @@
+{% from "macros.html" import csrf_field, icon %}
+{#- One request: the head, the conversation oldest first with the files under their message, and (``mode``
+    "reviewer") the status and reply forms. It is the side panel's fragment, fetched by feedback.js, and the body of
+    the request's own page. Task 5's "sender" mode will reuse the head and the conversation. -#}
+{% set rid = kept.id %}
+{% set status_errors = field_errors.get('status', []) %}
+{% set body_errors = field_errors.get('body', []) %}
+{% set file_errors = field_errors.get('files', []) %}
+{% set question = form.kind == 'question' %}
+{% macro person_name(person_id) -%}
+{% set person = people.get(person_id) %}{{ (person.full_name if person else '') or 'Someone' }}
+{%- endmacro %}
+<div class="feedback-request" data-panel-feedback="{{ rid }}">
+  {% if notice %}<p class="flash flash-{{ notice_tone }}" role="status" data-panel-notice>{{ notice }}</p>{% endif %}
+  <header class="feedback-head">
+    <p class="feedback-head-kind">{{ kind_name }} · {{ reference }}</p>
+    <h2 class="feedback-head-summary">{{ kept.summary }}</h2>
+    <p class="feedback-head-from">From {{ sender_name }}{% if kept.page_url or kept.page_title %} · {% if kept.page_url %}<a href="{{ kept.page_url }}">{{ kept.page_title or kept.page_url }}</a>{% else %}{{ kept.page_title }}{% endif %}{% endif %}</p>
+    <p class="feedback-head-when">Received {{ when(kept.created_at) }}{% if kept.browser %} · {{ kept.browser }}{% endif %}</p>
+    {% if mode == 'reviewer' %}
+    <form class="feedback-status" method="post" action="{{ url_for('feedback.admin_status', request_id=rid) }}" data-panel-form>
+      {{ csrf_field(csrf_token()) }}
+      <label for="feedback-status-{{ rid }}">Status</label>
+      <select id="feedback-status-{{ rid }}" name="status"{% if status_errors %} aria-invalid="true" aria-describedby="feedback-status-{{ rid }}-error"{% endif %}>
+        {% for key, label in statuses %}<option value="{{ key }}"{{ ' selected' if key == kept.status }}>{{ label }}</option>{% endfor %}
+      </select>
+      <button class="button" type="submit">Save status</button>
+      {% if status_errors %}<p class="field-error" id="feedback-status-{{ rid }}-error" role="alert">{{ status_errors|join(' ') }}</p>{% endif %}
+    </form>
+    {% endif %}
+  </header>
+
+  <section class="feedback-conversation" aria-labelledby="feedback-conversation-{{ rid }}">
+    <h3 id="feedback-conversation-{{ rid }}">Conversation</h3>
+    <ol class="feedback-thread">
+      {% for m in messages %}
+      <li class="feedback-item feedback-item-{{ m.role }} feedback-item-{{ m.kind }}">
+        {% if m.kind == 'status' %}
+        <p class="feedback-item-line"><strong>Status: {{ status_names.get(m.status_to, m.status_to) }}</strong> <span class="feedback-item-meta">{{ person_name(m.author_id) }} · {{ when(m.created_at) }}</span></p>
+        {% elif m.kind == 'email' %}
+        <p class="feedback-item-line feedback-item-note">{{ icon('warning') }}<span>{{ m.body }}</span> <span class="feedback-item-meta">{{ when(m.created_at) }}</span></p>
+        {% else %}
+        <p class="feedback-item-head">
+          <strong>{{ person_name(m.author_id) }}</strong>
+          {% if m.kind == 'update' %}<span class="badge badge-info">Update</span>{% elif m.kind == 'question' %}<span class="badge badge-warning">Question</span>{% endif %}
+          <span class="feedback-item-meta">{{ when(m.created_at) }}</span>
+        </p>
+        {% if m.body %}<p class="feedback-item-body">{{ m.body }}</p>{% elif loop.first %}<p class="feedback-item-body muted">No details.</p>{% endif %}
+        {% set attached = files.get(m.id, []) %}
+        {% if attached %}
+        <ul class="feedback-attached">
+          {% for f in attached %}
+          {% set file_url = url_for('feedback.file', file_id=f.id) %}
+          <li>{% if f.picture %}<a class="feedback-thumb-link" href="{{ file_url }}" target="_blank" rel="noopener"><img class="feedback-thumb" src="{{ file_url }}" alt="{{ f.name }}" loading="lazy"></a>{% else %}<a class="feedback-file-link" href="{{ file_url }}">{{ icon('attach') }}{{ f.name }}</a>{% endif %}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  {% if mode == 'reviewer' %}
+  <form class="feedback-reply" method="post" action="{{ url_for('feedback.admin_reply', request_id=rid) }}" enctype="multipart/form-data" data-panel-form data-reply-form>
+    {{ csrf_field(csrf_token()) }}
+    <h3>Reply</h3>
+    <div class="field">
+      <span class="field-label" id="reply-kind-{{ rid }}">Reply with</span>
+      <div class="segmented" role="radiogroup" aria-labelledby="reply-kind-{{ rid }}">
+        <label><input type="radio" name="kind" value="update"{{ ' checked' if not question }}>Update</label>
+        <label><input type="radio" name="kind" value="question"{{ ' checked' if question }}>Question</label>
+      </div>
+    </div>
+    <div class="field{{ ' has-error' if body_errors }}">
+      <label for="reply-body-{{ rid }}" data-reply-label data-update-text="Your update" data-question-text="Your question">{{ 'Your question' if question else 'Your update' }}</label>
+      <textarea id="reply-body-{{ rid }}" name="body" rows="4" maxlength="5000" required aria-describedby="{{ 'reply-body-' ~ rid ~ ('-error' if body_errors else '-help') }}"{% if body_errors %} aria-invalid="true"{% endif %}>{{ form.body }}</textarea>
+      {% if body_errors %}<p class="field-error" id="reply-body-{{ rid }}-error">{{ body_errors|join(' ') }}</p>{% endif %}
+      <p class="field-help" id="reply-body-{{ rid }}-help" data-update-text="An update leaves the status as chosen above." data-question-text="A question sets the status to Waiting for an answer.">{{ 'A question sets the status to Waiting for an answer.' if question else 'An update leaves the status as chosen above.' }}</p>
+    </div>
+    <div class="field{{ ' has-error' if file_errors }}">
+      <label for="reply-files-{{ rid }}">Attach</label>
+      <input id="reply-files-{{ rid }}" name="files" type="file" multiple aria-describedby="reply-files-{{ rid }}-help">
+      {% if file_errors %}<p class="field-error" id="reply-files-{{ rid }}-error" role="alert">{{ file_errors|join(' ') }}</p>{% endif %}
+      <p class="field-help" id="reply-files-{{ rid }}-help">Up to 5 files, 5 MB each: pictures, PDF, Word, Excel or text.</p>
+    </div>
+    <div class="field">
+      <div class="check-row"><label><input type="checkbox" name="email" value="1"{% if not can_email %} disabled aria-describedby="reply-email-{{ rid }}-note"{% elif form.email %} checked{% endif %}>Email {{ sender_name }}</label></div>
+      {% if not can_email %}<p class="field-help" id="reply-email-{{ rid }}-note">{{ sender_name }} can no longer be emailed: their account is not active.</p>{% endif %}
+    </div>
+    <div class="feedback-reply-foot">
+      <button class="button primary" type="submit" data-update-text="Send the update" data-question-text="Ask the question">{{ 'Ask the question' if question else 'Send the update' }}</button>
+    </div>
+  </form>
+  {% endif %}
+</div>

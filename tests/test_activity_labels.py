@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from tracker.activity.labels import ACTION_LABELS, DetailLine, action_label, describe
+from tracker.activity.labels import ACTION_LABELS, DetailLine, action_label, describe, feedback_text
 
 
 def test_every_action_written_in_the_code_has_a_label():
@@ -76,3 +76,26 @@ def test_describe_shows_odd_values_as_text():
     ]
     assert describe("x", {"before": None, "after": "a"}) == [DetailLine("", "none", "a", None)]
     assert describe("x", "odd") == [DetailLine("", None, None, "odd")]
+
+
+def test_feedback_entries_read_as_a_reference_and_what_happened():
+    ref = {"reference": "FB-0042", "kind": "idea"}
+    assert feedback_text("feedback_sent", ref) == "idea sent"
+    assert feedback_text("feedback_sent", {**ref, "kind": "problem"}) == "problem sent"
+    assert feedback_text("feedback_replied", {**ref, "reply": "update"}) == "update sent"
+    assert feedback_text("feedback_replied", {**ref, "reply": "question", "before": "done", "after": "waiting"}) == (
+        "question sent; status from Done to Waiting for an answer"
+    )
+    assert feedback_text("feedback_status", {**ref, "before": "new", "after": "planned"}) == (
+        "status from New to Planned"
+    )
+    assert feedback_text("feedback_answered", ref) == "message from the sender"
+    assert feedback_text("feedback_answered", {**ref, "before": "waiting", "after": "under_review"}) == (
+        "answered by the sender; status from Waiting for an answer to Under review"
+    )
+    assert feedback_text("feedback_withdrawn", {**ref, "before": "new", "after": "withdrawn"}) == (
+        "withdrawn by the sender"
+    )
+    # odd or missing values never fail
+    assert feedback_text("feedback_status", {"before": "gone"}) == "status from gone to none"
+    assert feedback_text("feedback_mystery", None) == "feedback_mystery"

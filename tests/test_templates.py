@@ -19,6 +19,7 @@ EXEMPT = {
     Path("report/print.html"),
     Path("mail/feedback/_layout.html"),
     Path("mail/feedback/new.html"),
+    Path("mail/feedback/reply.html"),
 }
 FORBIDDEN = {
     "style attribute": re.compile(r"<[^>]*\sstyle\s*=", re.IGNORECASE),

@@ -6,8 +6,10 @@ import pytest
 from conftest import browser_sign_in
 from playwright.sync_api import expect
 from sqlalchemy import select
+from test_feedback_service import _png
 from test_report_page_browser import RECORDER
 
+from tracker.feedback import service
 from tracker.models import FeedbackFile, FeedbackRequest
 
 pytestmark = pytest.mark.browser
@@ -81,5 +83,45 @@ def test_a_refused_form_stays_in_the_pop_up_with_its_files(page, live_server, us
     expect(dialog.get_by_text("Say what happened.")).to_be_visible()
     expect(dialog.locator("[data-feedback-list]")).to_contain_text("screenshot.png")
     assert db.scalars(select(FeedbackRequest)).all() == []
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+def test_a_reviewer_opens_a_request_in_the_panel_and_asks_a_question(page, live_server, user_factory, give_set, db):
+    sam = user_factory(full_name="Sam Taylor")
+    reviewer = user_factory(full_name="Robin Lee")
+    give_set(["manage_feedback"], user=reviewer)
+    made = service.create_request(
+        db, sam, "problem", "Chart is blank", "Nothing shows.", "Report", "/", "Edge on Windows",
+        [service.ValidFile("shot.png", "image/png", _png())],
+    )  # fmt: skip
+    db.commit()
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, reviewer)
+    page.goto(f"{live_server}/admin/feedback")
+    page.get_by_role("cell", name="Sam Taylor").click()  # anywhere on the row
+    panel = page.locator("#feedback-panel")
+    expect(panel).to_be_visible()
+    expect(panel.locator("[data-panel-feedback]")).to_contain_text("Nothing shows.")
+    expect(panel.locator("img.feedback-thumb")).to_have_count(1)
+    assert panel.locator("img.feedback-thumb").evaluate("img => img.naturalWidth") == 1
+    assert f"request={made.id}" in page.url
+
+    expect(panel.get_by_role("button", name="Send the update")).to_be_visible()
+    panel.get_by_text("Question", exact=True).click()
+    expect(panel.get_by_role("button", name="Ask the question")).to_be_visible()
+    expect(panel.locator("[data-reply-label]")).to_have_text("Your question")
+    panel.locator("textarea[name=body]").fill("Which browser do you use?")
+    panel.get_by_role("checkbox", name="Email Sam Taylor").uncheck()
+    panel.get_by_role("button", name="Ask the question").click()
+    expect(panel.locator(".feedback-thread")).to_contain_text("Which browser do you use?")
+    expect(panel).to_contain_text("Question sent.")
+    expect(panel.locator("select[name=status]")).to_have_value("waiting")
+
+    panel.get_by_role("button", name="Close").click()
+    expect(panel).to_be_hidden()
+    # the table shows the change once the panel closes
+    expect(page.locator(f'tr[data-request="{made.id}"]')).to_contain_text("Waiting for an answer")
+    assert "request=" not in page.url
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []

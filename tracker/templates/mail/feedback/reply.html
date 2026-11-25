@@ -1,0 +1,15 @@
+{#- To the sender of a request, when a reviewer sends an update or asks a question. -#}
+{% extends "mail/feedback/_layout.html" %}
+{% block body %}
+<p style="margin: 0 0 4px; font-size: 13px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; color: #4f5d75;">{{ 'Question' if question else 'Update' }} · {{ reference }}</p>
+<p style="margin: 0 0 14px; font-size: 20px; line-height: 26px; font-weight: bold;">{{ summary }}</p>
+<p style="margin: 0 0 16px; white-space: pre-wrap;">{{ body }}</p>
+{% if files %}<p style="margin: 0 0 14px; font-size: 14px; line-height: 20px; color: #4f5d75;">Files: {{ files|join(', ') }}. They are with the request in Progress Tracker.</p>{% endif %}
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 16px auto;"><tr>
+<td align="center" bgcolor="#1260d0" style="background: #1260d0; border-radius: 6px;">
+<a href="{{ request_link }}" style="display: inline-block; padding: 12px 22px; font-family: 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 15px; font-weight: bold; color: #ffffff; text-decoration: none;">{{ 'Answer in Progress Tracker' if question else 'See it in Progress Tracker' }}</a>
+</td></tr></table>
+{% endblock %}
+{% block footer %}
+<p style="margin: 0;">From {{ reviewer_name }} for the people who run Progress Tracker. Replying to this email writes to {{ reviewer_name }} directly.</p>
+{% endblock %}
