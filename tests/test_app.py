@@ -48,3 +48,24 @@ def test_not_found_renders_error_page(client):
     assert r.status_code == 404
     assert b"Page not found" in r.data
     assert b"Trackers" in r.data
+
+
+def test_a_database_error_still_shows_the_styled_error_page(app, client, user_factory):
+    from conftest import sign_in
+    from sqlalchemy import text
+
+    from tracker.auth import current_user, has_permission, login_required
+    from tracker.db import get_session
+
+    @login_required
+    def boom():
+        has_permission(current_user(), "view_activity")
+        get_session().execute(text("select 1/0"))
+        return "never"
+
+    app.add_url_rule("/test-database-error", "test_database_error", boom)
+    app.config["PROPAGATE_EXCEPTIONS"] = False
+    sign_in(client, user_factory(full_name="Pat Probe", email="pat@example.com"))
+    response = client.get("/test-database-error")
+    assert response.status_code == 500
+    assert "Something went wrong" in response.get_data(as_text=True)

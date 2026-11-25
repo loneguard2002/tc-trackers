@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import io
 import re
 from datetime import timedelta
 
@@ -166,7 +167,7 @@ def test_anonymous_goes_to_sign_in(app):
 
 def test_another_persons_request_is_404_everywhere(client, sam, make, db, robin, user_factory):
     theirs = make(sender=user_factory(full_name="Pat Doe"))
-    for path in (f"{URL}/{theirs.id}", f"{URL}/{theirs.id}/panel", "/feedback/mine/999", f"{URL}/{theirs.id}/panel"):
+    for path in (f"{URL}/{theirs.id}", f"{URL}/{theirs.id}/panel", "/feedback/mine/999"):
         assert client.get(path).status_code == 404
     assert answer(client, theirs.id).status_code == 404
     assert post(client, f"{URL}/{theirs.id}/withdraw").status_code == 404
@@ -259,7 +260,7 @@ def test_a_message_on_an_open_request_keeps_its_status_and_takes_files(client, s
     response = post(
         client,
         f"{URL}/{made.id}/message",
-        {"body": "One more thing", "files": (__import__("io").BytesIO(_png()), "shot.png")},
+        {"body": "One more thing", "files": (io.BytesIO(_png()), "shot.png")},
         content_type="multipart/form-data",
     )
     assert response.status_code == 302
@@ -318,6 +319,42 @@ def test_withdraw_asks_first_then_withdraws_without_email(client, sam, make, db,
     assert db.scalars(select(AuditLog).where(AuditLog.action == "feedback_withdrawn")).one()
 
 
+def test_a_later_message_email_says_it_is_a_message_on_the_request(client, app, sam, make, db, mail_on, outbox):
+    made = make()
+    with app.test_request_context():
+        mail.notify_owner(db, made, db.scalars(select(FeedbackMessage)).first())
+    assert "Message from" not in outbox[0].get_body(("html",)).get_content()
+    assert answer(client, made.id, "A follow-up").status_code == 302
+    page = outbox[1].get_body(("html",)).get_content()
+    assert f"Message from Sam Taylor on {service.reference(made.id)}" in page and "A follow-up" in page
+
+
+def test_a_message_takes_26_mb_but_not_more(client, sam, make, db):
+    made = make()
+    ok = post(
+        client,
+        f"{URL}/{made.id}/message",
+        {"body": "Many", "files": [(io.BytesIO(b"a" * (5 * 1024 * 1024)), f"{n}.txt") for n in range(5)]},
+        content_type="multipart/form-data",
+    )
+    assert ok.status_code == 302
+    over = post(
+        client,
+        f"{URL}/{made.id}/message",
+        {"body": "Too much", "files": [(io.BytesIO(b"a" * (5 * 1024 * 1024)), f"{n}.txt") for n in range(6)]},
+        content_type="multipart/form-data",
+    )
+    assert over.status_code == 413
+
+
+def test_other_feedback_posts_keep_the_1_mb_limit(client, sam, make, app):
+    made = make()
+    filler = {"filler": "a" * (1024 * 1024 + 10)}
+    assert post(client, f"{URL}/{made.id}/withdraw", filler).status_code == 413
+    assert post(client, f"/admin/feedback/{made.id}/status", filler).status_code == 413
+    assert post(app.test_client(), "/feedback/new", filler).status_code == 413
+
+
 # ---- a closed request is read-only ---------------------------------------------------------------------------------
 
 
@@ -328,7 +365,9 @@ def test_a_closed_request_is_read_only(client, sam, make, db, status, outbox):
     assert "Add a message" not in page and "Your answer" not in page and "Withdraw request" not in page
     for refused in (answer(client, made.id), post(client, f"{URL}/{made.id}/withdraw")):
         assert refused.status_code == 302
-    assert "This request is closed, so it cannot be changed." in text_of(client.get(f"{URL}/{made.id}"))
+    refused_page = text_of(client.get(refused.headers["Location"]))
+    assert refused_page.count("This request is closed, so it cannot be changed.") == 1  # the notice only
+    assert text_of(client.get(f"{URL}/{made.id}")).count("This request is closed, so it cannot be changed.") == 1
     fetched = post(
         client,
         f"{URL}/{made.id}/message",

@@ -89,7 +89,7 @@
       </header>
       <input type="hidden" name="feedback_section" value="1">
       {% call setting('Send feedback to', 'Saved as a setting, not in the code; change it here at any time. Until an address is set, messages are kept in Admin › Feedback only. Separate several addresses with commas.', 'feedback_email') %}
-      <input id="feedback_email" name="feedback_email" value="{{ feedback_to }}" autocomplete="off" spellcheck="false" aria-describedby="feedback_email-help">
+      <input id="feedback_email" name="feedback_email" type="email" multiple value="{{ feedback_to }}" autocomplete="off" spellcheck="false" aria-describedby="feedback_email-help">
       {% endcall %}
       {% call setting('Feedback link', 'Off hides the link and the form page for everyone; requests already sent stay readable and answerable.', 'feedback_link') %}
       <div class="check-row"><label><input id="feedback_link" name="feedback_link" type="checkbox" role="switch" value="1" {{ 'checked' if feedback_link }} aria-describedby="feedback_link-help"> Show the Feedback link</label></div>

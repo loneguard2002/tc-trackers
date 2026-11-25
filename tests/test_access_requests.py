@@ -240,7 +240,7 @@ def test_feedback_section_shows_its_fields_with_defaults(client, user_factory):
     sign_in(client, user_factory(is_admin=True))
     page = client.get("/admin/smtp").get_data(as_text=True)
     assert 'id="section-feedback"' in page and "Send feedback to" in page
-    assert 'id="feedback_email" name="feedback_email" value=""' in page
+    assert 'id="feedback_email" name="feedback_email" type="email" multiple value=""' in page
     assert "Saved as a setting, not in the code; change it here at any time." in page
     assert "Until an address is set, messages are kept in Admin › Feedback only." in page
     assert 'name="feedback_link" type="checkbox" role="switch" value="1" checked' in page

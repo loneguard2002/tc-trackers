@@ -11,6 +11,7 @@ import click
 from flask import Flask, jsonify, render_template, request
 from jinja2 import StrictUndefined
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -85,12 +86,25 @@ def create_app(overrides: dict | None = None) -> Flask:
         """Whether the Feedback link shows (an administrator can switch it off), and the New count beside Admin ›
         Feedback; each is asked only when the page needs it."""
 
+        def link_on() -> bool:
+            try:
+                return feedback_settings.link_on(get_session())
+            except SQLAlchemyError:  # the error page must still draw when the database is the problem
+                get_session().rollback()
+                return False
+
         def mine_counts() -> tuple[int, int]:
             person = current_user()
-            return feedback_service.mine_counts(get_session(), person.id) if person else (0, 0)
+            if not person:
+                return (0, 0)
+            try:
+                return feedback_service.mine_counts(get_session(), person.id)
+            except SQLAlchemyError:
+                get_session().rollback()
+                return (0, 0)
 
         return {
-            "feedback_link_on": lambda: feedback_settings.link_on(get_session()),
+            "feedback_link_on": link_on,
             # The number of New requests, for the count beside Feedback; asked only when the menu shows Feedback.
             "feedback_new_count": lambda: feedback_service.new_count(get_session()),
             # (requests the person has sent, those with a reply not yet opened): one query, for the My feedback link.
@@ -151,6 +165,10 @@ def create_app(overrides: dict | None = None) -> Flask:
     @app.errorhandler(Exception)
     def handle_unexpected_error(error: Exception):
         app.logger.exception("Unhandled error", exc_info=error)
+        try:  # a database error leaves the transaction aborted; the page's own queries need a clean one
+            get_session().rollback()
+        except Exception:
+            app.logger.exception("The session could not be rolled back")
         message = "An unexpected error occurred. Please try again."
         return render_template("error.html", status=500, title="Something went wrong", message=message), 500
 

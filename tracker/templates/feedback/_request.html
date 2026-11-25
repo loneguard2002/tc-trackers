@@ -132,8 +132,8 @@
       </div>
     </form>
   </section>
-  {% else %}
-  <p class="field-help feedback-closed">This request is closed. It can no longer be added to.</p>
+  {% elif not notice %}
+  <p class="field-help feedback-closed">This request is closed, so it cannot be changed.</p>
   {% endif %}
   {% endif %}
 </div>

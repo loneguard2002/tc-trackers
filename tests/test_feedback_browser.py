@@ -214,6 +214,7 @@ def test_a_sender_opens_a_request_answers_it_and_withdraws(page, live_server, us
     db.expire_all()
     assert db.get(FeedbackRequest, made.id).status == "under_review"
 
+    expect(panel.get_by_text("Withdraw this request? The team will see that you withdrew it.")).to_be_hidden()
     panel.get_by_role("link", name="Withdraw request").click()
     expect(panel.get_by_text("Withdraw this request? The team will see that you withdrew it.")).to_be_visible()
     panel.get_by_role("link", name="Keep it").click()

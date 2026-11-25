@@ -35,6 +35,7 @@ def _is_first_sender_message(session: Session, request: FeedbackRequest, message
             FeedbackMessage.request_id == request.id,
             FeedbackMessage.role == "sender",
             FeedbackMessage.kind == "message",
+            FeedbackMessage.kind == "message",
         )
     )
     return message.id == first
@@ -72,6 +73,7 @@ def build_email(
         reference=service.reference(request.id),
         summary=request.summary,
         details=message.body,
+        later=_is_later(session, request, message),
         sender_name=sender_name,
         page_title=request.page_title,
         page_link=app_url + request.page_url if request.page_url else "",
@@ -93,6 +95,24 @@ def build_email(
             maintype, _, subtype = item.content_type.partition("/")
             msg.add_attachment(item.data, maintype=maintype, subtype=subtype, filename=item.filename)
     return msg
+
+
+def _is_later(session: Session, request: FeedbackRequest, message: FeedbackMessage) -> bool:
+    """Whether the sender wrote an earlier message on this request (so this one is not the first)."""
+    if message.id is None:  # the sample email is never kept
+        return False
+    return bool(
+        session.scalar(
+            select(FeedbackMessage.id)
+            .where(
+                FeedbackMessage.request_id == request.id,
+                FeedbackMessage.role == "sender",
+                FeedbackMessage.kind == "message",
+                FeedbackMessage.id < message.id,
+            )
+            .limit(1)
+        )
+    )
 
 
 def _record_note(session: Session, request: FeedbackRequest, note: str) -> None:
