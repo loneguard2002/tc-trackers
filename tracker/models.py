@@ -363,6 +363,7 @@ class Week(Base):
     week_ending: Mapped[date] = mapped_column(Date, primary_key=True)
     target: Mapped[int | None] = mapped_column(Integer)
     imported_actual: Mapped[int | None] = mapped_column(Integer)
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")  # why the target is what it is
 
 
 class ReportInput(Base):

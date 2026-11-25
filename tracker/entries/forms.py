@@ -81,6 +81,23 @@ def parse_targets(form: Mapping[str, str], weeks: Iterable[date]) -> tuple[dict[
     return targets, errors
 
 
+TARGET_NOTE_MAX = 500
+
+
+def parse_target_notes(form: Mapping[str, str], weeks: Iterable[date]) -> tuple[dict[date, str], list[str]]:
+    """Read ``note-YYYY-MM-DD`` fields for each week, trimmed. Blank clears the note; the longest is 500 characters."""
+    notes: dict[date, str] = {}
+    errors: list[str] = []
+    for week in weeks:
+        text = (form.get(f"note-{week.isoformat()}") or "").strip()
+        if len(text) > TARGET_NOTE_MAX:
+            errors.append(
+                f"The note for {format_date(week)} is {len(text)} characters long. The most is {TARGET_NOTE_MAX}."
+            )
+        notes[week] = text
+    return notes, errors
+
+
 def validate_inputs_form(form: Mapping[str, str]) -> tuple[dict, list[str]]:
     errors: list[str] = []
     status = (form.get("status") or "").strip() or None

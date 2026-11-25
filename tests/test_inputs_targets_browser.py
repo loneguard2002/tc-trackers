@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 
 import pytest
@@ -71,6 +72,53 @@ def test_targets_spread_fills_blank_upcoming_weeks_and_reset_undoes_it(page, liv
     expect(page.locator('[data-stat="planned-sub"]')).to_have_text("The plan covers the full scope")
     page.click("button[type=reset]")
     expect(page.locator('[data-stat="planned"]')).to_have_text("10")
+
+
+def test_a_target_note_folds_out_counts_as_a_change_and_saves(page, live_server, editor, db):
+    page.add_init_script(RECORDER)
+    page.goto(f"{live_server}/trackers/{editor.id}/targets")
+    week = WEEKS[2].isoformat()
+    button = page.locator(f'[aria-controls="note-row-{week}"]')
+    field = page.locator(f"#note-{week}")
+    expect(field).to_be_hidden()
+    expect(button).to_have_attribute("aria-expanded", "false")
+    button.click()
+    expect(field).to_be_focused()
+    expect(button).to_have_attribute("aria-expanded", "true")
+    field.fill("Bank holiday on Monday")
+    expect(page.locator("[data-dirty-note]")).to_have_text("1 week changed, not saved yet")
+    page.locator(f"#note-row-{week} [data-note-done]").click()
+    expect(field).to_be_hidden()
+    expect(button).to_be_focused()
+    expect(button).to_have_class("note-toggle has-note")
+    expect(button).to_have_attribute("aria-label", re.compile("^Edit the note"))
+    preview = page.locator("tr", has=button).locator("[data-note-preview]")
+    expect(preview).to_have_text("Bank holiday on Monday")
+    # Escape closes an open note too.
+    button.click()
+    expect(preview).to_be_hidden()
+    field.press("Escape")
+    expect(field).to_be_hidden()
+    page.get_by_role("button", name="Save targets").click()
+    expect(page.get_by_text("Targets saved.")).to_be_visible()
+    db.expire_all()
+    assert db.get(Week, (editor.id, WEEKS[2])).note == "Bank holiday on Monday"
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
+
+
+def test_removing_a_target_note_and_reset_brings_it_back(page, live_server, editor, db):
+    db.get(Week, (editor.id, WEEKS[0])).note = "Slow start"
+    db.commit()
+    page.goto(f"{live_server}/trackers/{editor.id}/targets")
+    week = WEEKS[0].isoformat()
+    preview = page.locator(f"#target-{week}").locator("xpath=ancestor::tr").locator("[data-note-preview]")
+    expect(preview).to_have_text("Slow start")
+    page.click(f'[aria-controls="note-row-{week}"]')
+    page.locator(f"#note-row-{week} [data-note-clear]").click()
+    expect(preview).to_be_hidden()
+    expect(page.locator("[data-dirty-note]")).to_have_text("1 week changed, not saved yet")
+    page.click("button[type=reset]")
+    expect(preview).to_have_text("Slow start")
 
 
 def test_inputs_preview_follows_the_form(page, live_server, editor):

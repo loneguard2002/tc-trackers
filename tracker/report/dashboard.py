@@ -84,7 +84,10 @@ def _span(days: int) -> str:
 
 
 def answer_sentence(headline: Headline, target: date | None, behind_plan: int | None) -> str:
-    """The one-sentence answer: done, on course, late, or not yet known. The date it finishes is on its own line. ``behind_plan`` is units behind plan."""
+    """The one-sentence answer: done, on course, late, or not yet known; the gap to the target is on its own line.
+
+    ``behind_plan`` is units behind plan.
+    """
     if headline.total_scope > 0 and headline.remaining == 0:
         return f"All {fmt_num(headline.total_scope)} done."
     forecast = headline.forecast_completion

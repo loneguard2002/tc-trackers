@@ -554,7 +554,28 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .target-table tr.is-past td:first-child { color: var(--muted); }
 .target-table tr.is-current { background: color-mix(in srgb, var(--primary) 7%, transparent); }
 .target-diff { font-weight: 600; }
-.target-table .tag { display: block; width: max-content; margin: 2px 0 0; }
+.target-table .tag { display: block; width: max-content; margin: 2px 0 0; padding: 0 5px; }
+/* A note on each week's target folds out in a row under the week (design A, 2026-11-25). Closed, the start of the
+   note shows under the date; the button is blue when the week has a note. */
+/* Five columns in a month as narrow as 290px: tighter cell padding, a narrower target box and a note column with
+   no visible heading. */
+.target-table :is(th, td) { padding-right: 5px; padding-left: 5px; }
+.target-table :is(th, td):first-child { padding-left: 10px; }
+.target-table .target-note-cell { width: 1%; text-align: center; }
+.target-table td input { width: 56px; }
+.target-table th { white-space: nowrap; }
+.note-toggle { display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--muted); cursor: pointer; vertical-align: middle; }
+.note-toggle .icon { width: 17px; height: 17px; }
+.note-toggle:hover { border-color: var(--primary); color: var(--primary); }
+.note-toggle.has-note, .note-toggle[aria-expanded="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); color: var(--primary); }
+.target-note-preview { display: block; width: 0; min-width: 100%; overflow: hidden; color: var(--muted); font-size: .75rem; white-space: nowrap; text-overflow: ellipsis; }
+.target-table tr.target-note-row td { padding: 8px 10px 10px; border-top: 1px dashed var(--border); background: color-mix(in srgb, var(--primary) 5%, var(--surface)); text-align: left; white-space: normal; }
+.target-table .target-note-row label { display: block; margin: 0 0 6px; font-size: .8rem; font-weight: 700; }
+.target-table .target-note-row textarea { display: block; width: 100%; min-height: 72px; resize: vertical; }
+.target-table .target-note-row textarea.is-changed { border-color: var(--primary); }
+.target-note-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.target-note-foot .muted { flex: 1; font-size: .75rem; }
+.target-table .target-note-clear { min-height: 32px; color: var(--danger); font-size: .8125rem; font-weight: 600; }
 .tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--primary); color: var(--primary-text); font-size: .7rem; font-weight: 700; vertical-align: 1px; }
 @media (max-width: 900px) {
   .targets-charts { grid-template-columns: minmax(0, 1fr); }
