@@ -29,6 +29,7 @@ from ..auth.guards import TEAM_WITH_SETS_MESSAGE, team_holds_sets
 from ..auth.passwords import hash_password, validate_new_password
 from ..auth.permissions import PERMISSIONS, permission_sources
 from ..auth.roles import tracker_access_routes
+from ..auth.session import login_user
 from ..db import get_session
 from ..ids import in_range, parse_id
 from ..listview import list_url
@@ -604,6 +605,8 @@ def password(user_id: int):
         target_user_id=user.id,
     )
     db.commit()
+    if user.id == actor.id:  # the new password ends every other session; this one carries on
+        login_user(user)
     flash(f"Set a new password for {user.full_name}. Share it with them securely.", "success")
     return redirect(_users_url())
 
@@ -617,8 +620,9 @@ def switch_sign_in(user_id: int):
     """Turn a password account into a Microsoft one, with no password and no Microsoft link yet.
 
     The person's next Microsoft sign-in links the account by its email address (``_resolve_user``). A session already
-    signed in is not ended, as after a password reset. The switch is not an administrator loss, so only the last
-    administrator who signs in with a password is guarded, not the last administrator.
+    signed in is ended, as after a password reset, because the password it was started with is gone. The switch is not
+    an administrator loss, so only the last administrator who signs in with a password is guarded, not the last
+    administrator.
     """
     user = _get_user_or_404(user_id)
     db = get_session()

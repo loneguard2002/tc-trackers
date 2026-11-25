@@ -1,4 +1,4 @@
-"""CSRF protection, login throttling and redirect safety (ported from the EVERTON dashboard)."""
+"""CSRF protection, login throttling, redirect safety and a NUL byte guard (ported from the EVERTON dashboard)."""
 
 from __future__ import annotations
 
@@ -71,8 +71,22 @@ def safe_next_url(value: str | None) -> str | None:
     return value
 
 
+NUL_MESSAGE = "The request contained a character that is not allowed (a NUL byte). Remove it and try again."
+
+
+def _has_nul(values) -> bool:
+    return any("\x00" in key or any("\x00" in value for value in values.getlist(key)) for key in values)
+
+
 def install_csrf(app: Flask) -> None:
-    """Reject any state-changing request that lacks a valid token with 400."""
+    """Reject any state-changing request that lacks a valid token with 400, and any request whose address or form
+    fields hold a NUL byte (PostgreSQL text cannot store one, so it would otherwise fail as a 500). Uploaded files are
+    not checked: their bytes are read by the importer, not stored as text."""
+
+    @app.before_request
+    def reject_nul_bytes():
+        if "\x00" in request.path or _has_nul(request.args) or _has_nul(request.form):
+            abort(400, description=NUL_MESSAGE)
 
     @app.before_request
     def check_csrf():

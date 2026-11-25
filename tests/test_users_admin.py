@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import select
 
-from tests.conftest import post, sign_in
+from tests.conftest import TEST_PASSWORD, post, sign_in
 from tracker.auth.accounts import (
     ELEVATED_MESSAGE,
     LAST_ADMIN_MESSAGE,
@@ -166,6 +166,36 @@ def test_reset_password_rules_and_microsoft_accounts(client, user_manager, user_
     assert SSO_MESSAGE in text_of(client.get(f"/admin/users/{sso.id}/password", follow_redirects=True))
     assert f"/admin/users/{sso.id}/password" not in text_of(client.get("/admin/users"))
     assert entries(db, "password_reset") == []
+
+
+def test_a_reset_password_ends_the_persons_other_sessions(app, client, user_manager, user_factory, db):
+    target = user_factory(full_name="Target")
+    elsewhere = app.test_client()
+    post(elsewhere, "/login", {"email": target.email, "password": TEST_PASSWORD})
+    assert elsewhere.get("/").status_code == 200
+    both = {"password": NEW_PASSWORD, "password_confirm": NEW_PASSWORD}
+    assert post(client, f"/admin/users/{target.id}/password", both).status_code == 302
+    # the session started with the old password is signed out; the new password signs in
+    assert elsewhere.get("/").headers["Location"].startswith("/login")
+    post(elsewhere, "/login", {"email": target.email, "password": NEW_PASSWORD})
+    assert elsewhere.get("/").status_code == 200
+    assert client.get("/admin/users").status_code == 200  # the holder's own session is untouched
+
+
+def test_an_administrator_who_resets_their_own_password_stays_signed_in(app, client, logged_in_admin, db):
+    elsewhere = app.test_client()
+    post(elsewhere, "/login", {"email": logged_in_admin.email, "password": TEST_PASSWORD})
+    both = {"password": NEW_PASSWORD, "password_confirm": NEW_PASSWORD}
+    assert post(client, f"/admin/users/{logged_in_admin.id}/password", both).status_code == 302
+    assert client.get("/admin/users").status_code == 200
+    assert elsewhere.get("/").headers["Location"].startswith("/login")
+
+
+def test_a_session_without_the_password_fingerprint_is_signed_out(client, user_factory):
+    user = user_factory()
+    with client.session_transaction() as sess:
+        sess["user_id"] = user.id  # a session from before the fingerprint, or a forged one
+    assert client.get("/").headers["Location"].startswith("/login")
 
 
 def test_reset_password_for_a_missing_user_is_404(client, logged_in_admin):

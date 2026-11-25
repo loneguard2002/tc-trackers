@@ -31,12 +31,7 @@ Scope to settle in the spec:
 - Package versions in `requirements.txt` are not pinned.
 - The remaining minor review points are listed in the plan ledger (`.superpowers/sdd/2026-10-20-generic-progress-tracker/progress.md`).
 
-## 3. Found while building teams, permission sets and the activity log
-
-- A password reset does not end the person's existing sessions (now that delegates can reset passwords).
-- NUL bytes in form input cause a 500 app-wide, including the sign-in page; reject them at request level.
-
-## 4. Small interface changes
+## 3. Small interface changes
 
 - **Email page preview** (`mail/settings.html`, `.email-layout` and `.mail-frame .email-preview` in `tracker.css`): make the preview column about 20% wider than it is now, and make the preview as tall as the email template box beside it, so that both end at the same line instead of the preview stopping at a fixed 560px.
 - **Report email header** (`mail/email_body.html`, `mail/compose.py`): give the weekly report email the same header as the access emails (the Tradition logo attached inline beside "Progress Tracker" on the navy band), so every Progress Tracker email looks the same. Deferred on 18 Nov 2026 from the sign-in and approval work (`docs/superpowers/specs/2026-11-18-signin-and-approval-design.md`).

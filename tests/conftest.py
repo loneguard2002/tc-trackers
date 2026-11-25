@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from tracker.app import create_app
 from tracker.auth.passwords import hash_password
+from tracker.auth.session import SESSION_KEY, session_key
 from tracker.db import get_engine
 from tracker.models import (
     Base,
@@ -309,6 +310,7 @@ def give_set(db):
 def sign_in(client, user: User) -> None:
     with client.session_transaction() as sess:
         sess["user_id"] = user.id
+        sess[SESSION_KEY] = session_key(user, client.application.secret_key)
         sess["csrf_token"] = "test-csrf-token"
 
 
