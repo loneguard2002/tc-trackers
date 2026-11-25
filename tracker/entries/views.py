@@ -48,10 +48,12 @@ from ..trackers.views import _jsonable, _ordered_groups, _refuse_if_archived
 from . import bp
 from .forms import (
     RISK_STATUSES,
+    TARGET_NOTE_MAX,
     check_entry_date,
     format_date,
     next_risk_ref,
     parse_quantity,
+    parse_target_notes,
     parse_targets,
     validate_inputs_form,
     validate_risk_form,
@@ -413,28 +415,36 @@ def targets(tracker_id: int):
         if refused:
             return refused
         new_targets, errors = parse_targets(request.form, weeks)
+        new_notes, note_errors = parse_target_notes(request.form, weeks)
+        errors += note_errors
         if errors:
             for message in errors:
                 flash(message, "danger")
             return _render_targets(tracker, weeks, rows, request.form, 400)
         changed: dict[str, list] = {}
         for week, value in new_targets.items():
+            note = new_notes[week]
             row = rows.get(week)
             old = row.target if row else None
+            old_note = row.note if row else ""
             if row is None:
-                if value is None:
+                if value is None and not note:
                     continue
-                db.add(Week(tracker_id=tracker.id, week_ending=week, target=value))
+                db.add(Week(tracker_id=tracker.id, week_ending=week, target=value, note=note))
             else:
                 row.target = value  # imported_actual is left untouched
+                row.note = note
             if old != value:
                 changed[week.isoformat()] = [old, value]
+            if old_note != note:
+                changed[f"{week.isoformat()} note"] = [old_note, note]
         if changed:
             _audit(db, tracker, "targets_updated", "tracker", tracker.id, changed)
         db.commit()
         flash("Targets saved.", "success")
         return redirect(url_for("entries.targets", tracker_id=tracker.id))
     values = {f"target-{w.isoformat()}": "" if r.target is None else str(r.target) for w, r in rows.items()}
+    values.update({f"note-{w.isoformat()}": r.note for w, r in rows.items() if r.note})
     return _render_targets(tracker, weeks, rows, values, 200)
 
 
@@ -459,6 +469,7 @@ def _render_targets(tracker: Tracker, weeks: list[date], rows: dict, form, statu
             planned_to_date=sum(saved.get(w, 0) for w in past),
             last_planned=max(saved) if saved else None,
             format_date=format_date,
+            note_max=TARGET_NOTE_MAX,
             **_page(tracker, "Weekly targets"),
         ),
         status,

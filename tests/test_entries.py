@@ -347,6 +347,49 @@ def test_targets_saved_per_week(client, db, tracker_factory, user_factory, grant
     assert rows[date(2026, 9, 18)].target == 0
 
 
+def test_target_notes_are_saved_with_the_targets(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    db.add(Week(tracker_id=tracker.id, week_ending=date(2026, 9, 4), target=3, note="Old note"))
+    db.commit()
+    response = post(
+        client,
+        f"/trackers/{tracker.id}/targets",
+        {"target-2026-09-04": "3", "note-2026-09-04": "", "note-2026-09-11": " Bank holiday on Monday "},
+    )
+    assert response.status_code == 302
+    db.expire_all()
+    rows = {w.week_ending: w for w in db.scalars(select(Week))}
+    assert rows[date(2026, 9, 4)].note == "" and rows[date(2026, 9, 4)].target == 3
+    # A week with a note and no target still gets a row, so the note is kept.
+    assert (rows[date(2026, 9, 11)].note, rows[date(2026, 9, 11)].target) == ("Bank holiday on Monday", None)
+    log = db.scalars(select(AuditLog).where(AuditLog.action == "targets_updated")).one()
+    assert log.detail["2026-09-04 note"] == ["Old note", ""]
+    assert log.detail["2026-09-11 note"] == ["", "Bank holiday on Monday"]
+    assert "2026-09-04" not in log.detail
+
+
+def test_targets_page_shows_each_note_under_its_week(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    db.add(Week(tracker_id=tracker.id, week_ending=date(2026, 9, 4), target=3, note="Two extra engineers"))
+    db.commit()
+    page = client.get(f"/trackers/{tracker.id}/targets").get_data(as_text=True)
+    assert '<span class="target-note-preview" data-note-preview>Two extra engineers</span>' in page
+    assert re.search(r'<textarea id="note-2026-09-04" name="note-2026-09-04"[^>]*>Two extra engineers</textarea>', page)
+    assert 'aria-label="Edit the note for the week ending 04 Sep 2026"' in page
+    assert 'aria-label="Add a note for the week ending 11 Sep 2026"' in page
+    assert page.count('<tr class="target-note-row"') == page.count("data-note-toggle")
+
+
+def test_a_note_that_is_too_long_saves_nothing_and_stays_open(client, db, tracker_factory, user_factory, grant):
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    response = post(client, f"/trackers/{tracker.id}/targets", {"target-2026-09-04": "5", "note-2026-09-04": "x" * 501})
+    assert response.status_code == 400
+    assert db.scalars(select(Week)).all() == []
+    page = response.get_data(as_text=True)
+    assert "is 501 characters long. The most is 500." in page
+    assert re.search(r'<tr class="target-note-row" id="note-row-2026-09-04" data-note-row>', page)
+
+
 def test_targets_invalid_value_changes_nothing(client, db, tracker_factory, user_factory, grant):
     tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
     response = post(client, f"/trackers/{tracker.id}/targets", {"target-2026-09-04": "-1"})

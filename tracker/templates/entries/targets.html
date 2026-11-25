@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import bar, csrf_field %}
+{% from "macros.html" import bar, csrf_field, icon %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='targets.js', v=app_version) }}" defer></script>
 {% endblock %}
@@ -50,7 +50,7 @@
   <section class="settings-section" aria-labelledby="section-targets">
     <header class="settings-section-head">
       <h2 id="section-targets">Weekly targets</h2>
-      <p>The number you plan to finish each week ({{ unit }}). Targets draw the plan line on the report charts. Leave a week blank to clear its target.</p>
+      <p>The number you plan to finish each week ({{ unit }}). Targets draw the plan line on the report charts. Leave a week blank to clear its target. Use the note button on a week to say why its target is what it is.</p>
     </header>
     <div class="fill-tools" data-fill-tools hidden>
       <label for="fill-value">Fill blank upcoming weeks with</label>
@@ -70,16 +70,35 @@
       <div class="target-month" role="group" aria-labelledby="month-{{ w.strftime('%Y-%m') }}">
         <div class="target-month-head"><h3 id="month-{{ w.strftime('%Y-%m') }}">{{ month }}</h3><span data-month-total="{{ w.strftime('%Y-%m') }}"></span></div>
         <table class="target-table">
-          <thead><tr><th>Week</th><th>Target</th><th>Actual</th><th><span aria-hidden="true">+/−</span><span class="sr-only">Difference</span></th></tr></thead>
+          <thead><tr><th>Week</th><th>Target</th><th>Actual</th><th><span aria-hidden="true">+/−</span><span class="sr-only">Difference</span></th><th class="target-note-cell"><span class="sr-only">Note</span></th></tr></thead>
           <tbody>
       {% endif %}
           {% set past = w in actuals %}
+          {% set iso = w.isoformat() %}
+          {% set note = form.get('note-' ~ iso, '') %}
+          {% set note_open = note|length > note_max %}
           <tr class="{{ 'is-past' if past }}{{ ' is-current' if w == current_week }}">
-            <td><label for="target-{{ w.isoformat() }}">{{ format_date(w)[:6] }}<span class="sr-only"> {{ w.year }}</span></label>{% if w == current_week %}<span class="tag">This week</span>{% endif %}</td>
+            <td><label for="target-{{ iso }}">{{ format_date(w)[:6] }}<span class="sr-only"> {{ w.year }}</span></label>{% if w == current_week %}<span class="tag">This week</span>{% endif %}
+              <span class="target-note-preview" data-note-preview{% if not note or note_open %} hidden{% endif %}>{{ note }}</span></td>
             <td><input id="target-{{ w.isoformat() }}" name="target-{{ w.isoformat() }}" type="number" min="0" step="1" inputmode="numeric"
               value="{{ form.get('target-' ~ w.isoformat(), '') }}" data-week="{{ w.isoformat() }}" data-month="{{ w.strftime('%Y-%m') }}"{% if past %} data-actual="{{ actuals[w] or 0 }}"{% endif %}></td>
             <td class="num">{{ actuals[w]|num if past else '–' }}</td>
             <td class="num target-diff" data-diff></td>
+            <td class="target-note-cell"><button class="note-toggle{{ ' has-note' if note }}" type="button" data-note-toggle data-long="{{ format_date(w) }}"
+              aria-expanded="{{ 'true' if note_open else 'false' }}" aria-controls="note-row-{{ iso }}"
+              aria-label="{{ 'Edit the note' if note else 'Add a note' }} for the week ending {{ format_date(w) }}">{{ icon('note') }}</button></td>
+          </tr>
+          <tr class="target-note-row" id="note-row-{{ iso }}" data-note-row{% if not note_open %} hidden{% endif %}>
+            <td colspan="5">
+              <label for="note-{{ iso }}">Note for the week ending {{ format_date(w) }}</label>
+              <textarea id="note-{{ iso }}" name="note-{{ iso }}" rows="3" maxlength="{{ note_max }}"
+                placeholder="Why this target? For example: bank holiday, extra engineers, site closed.">{{ note }}</textarea>
+              <div class="target-note-foot">
+                <span class="muted">Saved with the targets</span>
+                <button class="link-button target-note-clear" type="button" data-note-clear{% if not note %} hidden{% endif %}>Remove note</button>
+                <button class="button button-small" type="button" data-note-done>Done</button>
+              </div>
+            </td>
           </tr>
       {% if loop.last %}</tbody></table></div>{% endif %}
       {% endfor %}
