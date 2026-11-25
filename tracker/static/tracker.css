@@ -1675,6 +1675,25 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .answer-written { margin: 0; font-size: .8rem; color: var(--muted); }
 @media (max-width: 720px) { .answer-card { grid-template-columns: 1fr; padding: 16px; } .answer-sentence { font-size: 1.3rem; } }
 
+/* Feedback: the link at the top right of the page content, and the form and thank-you in a list-dialog. */
+.main-content { position: relative; }
+.feedback-link { position: absolute; top: 6px; right: var(--page-gutter); z-index: 2; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px; color: var(--muted); font-size: .8125rem; font-weight: 600; text-decoration: none; }
+.feedback-link:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.feedback-link .icon { width: 15px; height: 15px; }
+.app-shell-bare .feedback-link { display: none; }
+.feedback-page { padding-top: 8px; }
+.feedback-drop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px; border: 1px dashed var(--field-border); border-radius: var(--radius); background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
+.feedback-drop.is-over { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
+.feedback-drop-hint { color: var(--muted); font-size: .8125rem; }
+.feedback-files { flex-basis: 100%; display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.feedback-files li { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.feedback-file-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.feedback-file-size { color: var(--muted); font-size: .8125rem; white-space: nowrap; }
+.feedback-page-line, .feedback-sender { margin: 6px 0 0; }
+.feedback-reference { margin: 0; font-weight: 700; }
+.feedback-summary { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow-wrap: anywhere; }
+.feedback-sent p { margin: 0; }
+
 /* Status at a glance, below the answer card: tiles, status strip, risks, locations. Scoped so the classic view is untouched. */
 .report-glance { --g-actual: #1260d0; --g-plan: #008f82; --g-forecast: #c27a00; display: grid; gap: 16px; max-width: 72rem; }
 [data-theme="dark"] .report-glance { --g-actual: #5b8ff0; --g-plan: #22a596; --g-forecast: #b8801c; }

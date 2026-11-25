@@ -26,6 +26,7 @@ from .config import load_config, validate_config
 from .db import get_session, init_db
 from .entries import bp as entries_bp
 from .feedback import bp as feedback_bp
+from .feedback import settings as feedback_settings
 from .formatting import register_filters
 from .importer import bp as importer_bp
 from .lists import bp as lists_bp
@@ -77,6 +78,11 @@ def create_app(overrides: dict | None = None) -> Flask:
             return get_session().scalar(select(func.count()).select_from(User).where(User.status == "pending")) or 0
 
         return {"waiting_requests": waiting_requests}
+
+    @app.context_processor
+    def feedback_context():
+        """Whether the Feedback link shows (an administrator can switch it off); asked only for a signed-in page."""
+        return {"feedback_link_on": lambda: feedback_settings.link_on(get_session())}
 
     register_filters(app)
     if app.config.get("TESTING"):

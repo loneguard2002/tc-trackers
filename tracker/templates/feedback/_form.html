@@ -1,0 +1,58 @@
+{% from "macros.html" import icon %}
+{% from "lists/_table.html" import list_dialog, dialog_field, described_by %}
+{# The feedback form as a list-dialog: the pop-up feedback.js opens, and the page of its own without JavaScript. The
+   copy for each kind sits in data attributes, for feedback.js to swap when the switch changes. #}
+{% macro feedback_form(form, errors, field_errors, sender, cancel_url) -%}
+{% set problem = form.kind == 'problem' %}
+{% set summary_errors = field_errors.get('summary', []) %}
+{% set details_errors = field_errors.get('details', []) %}
+{% set file_errors = field_errors.get('files', []) %}
+{% set details_help = 'Steps to see it again help us fix it sooner.' if problem else 'Optional. A sentence or two is plenty.' %}
+{% call list_dialog('feedback', 'Feedback on this page', url_for('feedback.send'), true, errors, 'Send feedback', cancel_url, '', 'multipart/form-data') %}
+<input type="hidden" name="page_title" value="{{ form.page_title }}" data-feedback-page-title>
+<input type="hidden" name="page_url" value="{{ form.page_url }}">
+<input type="hidden" name="back" value="{{ form.back }}">
+<input type="hidden" name="browser" value="{{ form.browser }}" data-feedback-browser>
+<div class="field">
+  <span class="field-label" id="feedback-kind-label">What is it?</span>
+  <div class="segmented" role="radiogroup" aria-labelledby="feedback-kind-label">
+    <label><input type="radio" name="kind" value="idea"{{ ' checked' if not problem }}>An idea</label>
+    <label><input type="radio" name="kind" value="problem"{{ ' checked' if problem }}>Something is wrong</label>
+  </div>
+</div>
+{% call dialog_field('In one line', 'At most 150 characters.', 'feedback-summary', summary_errors) %}
+<input id="feedback-summary" name="summary" value="{{ form.summary }}" maxlength="150" required autocomplete="off" aria-describedby="{{ described_by('feedback-summary', 'At most 150 characters.', summary_errors) }}"{% if summary_errors %} aria-invalid="true"{% endif %}>
+{% endcall %}
+<div class="field{{ ' has-error' if details_errors }}" data-feedback-details
+     data-idea-label="Tell us more" data-idea-help="Optional. A sentence or two is plenty." data-idea-placeholder=""
+     data-problem-label="What happened?" data-problem-help="Steps to see it again help us fix it sooner." data-problem-placeholder="What you did, what you expected, and what happened instead.">
+  <label for="feedback-details" data-feedback-details-label>{{ 'What happened?' if problem else 'Tell us more' }}</label>
+  <textarea id="feedback-details" name="details" rows="4" maxlength="5000" placeholder="{{ 'What you did, what you expected, and what happened instead.' if problem }}"{% if problem %} required{% endif %} aria-describedby="{{ described_by('feedback-details', details_help, details_errors) }}"{% if details_errors %} aria-invalid="true"{% endif %}>{{ form.details }}</textarea>
+  {% if details_errors %}<p class="field-error" id="feedback-details-error">{{ details_errors|join(' ') }}</p>{% endif %}
+  <p class="field-help" id="feedback-details-help" data-feedback-details-help{% if details_errors %} hidden{% endif %}>{{ details_help }}</p>
+</div>
+<div class="field{{ ' has-error' if file_errors }}">
+  <label for="feedback-files">Screenshots and files</label>
+  <div class="feedback-drop" data-feedback-drop>
+    <input id="feedback-files" name="files" type="file" multiple aria-describedby="feedback-files-help">
+    <button class="button button-small" type="button" data-feedback-add hidden>{{ icon('attach') }}Add files</button>
+    <span class="feedback-drop-hint" data-feedback-drop-hint hidden>or drop files here, or paste a screenshot with Ctrl+V</span>
+    <ul class="feedback-files" data-feedback-list hidden></ul>
+  </div>
+  {% if file_errors %}<p class="field-error" id="feedback-files-error" role="alert">{{ file_errors|join(' ') }}</p>{% endif %}
+  <p class="field-error" data-feedback-file-note role="alert" hidden></p>
+  <p class="field-help" id="feedback-files-help">Up to 5 files, 5 MB each: pictures, PDF, Word, Excel or text.</p>
+</div>
+<div class="field">
+  <label class="switch-row" for="feedback-with-page">
+    <span class="switch">
+      <input id="feedback-with-page" name="with_page" type="checkbox" role="switch" value="1"{{ ' checked' if form.with_page }} aria-describedby="feedback-page-line">
+      <span class="switch-track" aria-hidden="true"></span>
+    </span>
+    Send this page with it
+  </label>
+  <p class="field-help feedback-page-line" id="feedback-page-line" data-feedback-page-line{% if not form.with_page %} hidden{% endif %}>{% if form.page_title %}<span data-feedback-page-text>{{ form.page_title }}</span>{% endif %}{% if form.page_title and form.browser %} · {% endif %}{% if form.browser %}<span data-feedback-browser-text>{{ form.browser }}</span>{% endif %}</p>
+</div>
+<p class="field-help feedback-sender">Sent as {{ sender.full_name }} ({{ sender.email }}) from your account, so the reply comes back to you.</p>
+{% endcall %}
+{%- endmacro %}

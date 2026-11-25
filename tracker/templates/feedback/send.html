@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% from "feedback/_form.html" import feedback_form %}
+{# Without JavaScript the Feedback link comes here; feedback.js reads the dialog from this page to show it as a pop-up. #}
+{% block content %}
+<div class="feedback-page">
+  {{ feedback_form(form, errors, field_errors, sender, form.back) }}
+</div>
+{% endblock %}

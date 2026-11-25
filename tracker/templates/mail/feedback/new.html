@@ -1,0 +1,21 @@
+{#- To the feedback address, when a request is created or its sender adds a message. -#}
+{% extends "mail/feedback/_layout.html" %}
+{% block body %}
+<p style="margin: 0 0 4px; font-size: 13px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; color: #4f5d75;">{{ kind_name }} · {{ reference }}</p>
+<p style="margin: 0 0 14px; font-size: 20px; line-height: 26px; font-weight: bold;">{{ summary }}</p>
+{% if details %}<p style="margin: 0 0 16px; white-space: pre-wrap;">{{ details }}</p>{% endif %}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 14px; font-size: 14px; line-height: 20px;">
+<tr><td style="padding: 3px 18px 3px 0; color: #4f5d75; vertical-align: top;">From</td><td style="padding: 3px 0; font-weight: bold;">{{ sender_name }}</td></tr>
+{% if page_title or page_link %}<tr><td style="padding: 3px 18px 3px 0; color: #4f5d75; vertical-align: top;">Page</td><td style="padding: 3px 0;">{% if page_link %}<a href="{{ page_link }}" style="color: #1260d0;">{{ page_title or page_link }}</a>{% else %}{{ page_title }}{% endif %}</td></tr>{% endif %}
+<tr><td style="padding: 3px 18px 3px 0; color: #4f5d75; vertical-align: top;">Sent</td><td style="padding: 3px 0;">{{ sent }}</td></tr>
+{% if browser %}<tr><td style="padding: 3px 18px 3px 0; color: #4f5d75; vertical-align: top;">Browser</td><td style="padding: 3px 0;">{{ browser }}</td></tr>{% endif %}
+{% if files %}<tr><td style="padding: 3px 18px 3px 0; color: #4f5d75; vertical-align: top;">Files</td><td style="padding: 3px 0;">{% for name, size in files %}{{ name }} ({{ size }}){% if not loop.last %}<br>{% endif %}{% endfor %}{% if not attached %}<br><span style="color: #4f5d75;">Too large to attach together: they are in the request.</span>{% endif %}</td></tr>{% endif %}
+</table>
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 16px auto;"><tr>
+<td align="center" bgcolor="#1260d0" style="background: #1260d0; border-radius: 6px;">
+<a href="{{ request_link }}" style="display: inline-block; padding: 12px 22px; font-family: 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 15px; font-weight: bold; color: #ffffff; text-decoration: none;">Open in Progress Tracker</a>
+</td></tr></table>
+{% endblock %}
+{% block footer %}
+<p style="margin: 0;">Reply to this email to answer {{ sender_name }} directly. Every message is also kept under Admin › Feedback.</p>
+{% endblock %}
