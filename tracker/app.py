@@ -25,6 +25,7 @@ from .auth.passwords import hash_password, validate_new_password
 from .config import load_config, validate_config
 from .db import get_session, init_db
 from .entries import bp as entries_bp
+from .feedback import bp as feedback_bp
 from .formatting import register_filters
 from .importer import bp as importer_bp
 from .lists import bp as lists_bp
@@ -92,6 +93,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     app.register_blueprint(report_bp)
     app.register_blueprint(mail_bp)
     app.register_blueprint(importer_bp)
+    app.register_blueprint(feedback_bp)
     if app.config["SSO_ENABLED"]:
         from .auth.sso import bp as sso_bp
 

@@ -31,6 +31,7 @@ def test_permission_names_in_order():
         "manage_email_settings",
         "view_all_trackers",
         "view_activity",
+        "manage_feedback",
     ]
 
 

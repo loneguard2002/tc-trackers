@@ -95,6 +95,11 @@ ACTION_LABELS: dict[str, str] = {
     "smtp_settings_updated": "Email settings updated",
     "audit_retention_changed": "Activity retention changed",
     "audit_pruned": "Old activity entries removed",
+    "feedback_sent": "Feedback sent",
+    "feedback_replied": "Feedback reply sent",
+    "feedback_status": "Feedback status changed",
+    "feedback_answered": "Feedback answered by its sender",
+    "feedback_withdrawn": "Feedback withdrawn",
 }
 
 # The older actions that store each change as {field: [before, after]}.
