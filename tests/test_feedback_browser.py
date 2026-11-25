@@ -163,3 +163,22 @@ def test_the_head_status_goes_with_an_update_and_a_status_save_keeps_the_reply(
     assert db.get(FeedbackRequest, made.id).status == "planned"
     assert page.evaluate("window.__csp") == []
     assert page.evaluate("window.__errors") == []
+
+
+def test_on_a_phone_the_link_stays_on_the_title_row_and_no_page_scrolls_sideways(page, live_server, user_factory):
+    page.set_viewport_size({"width": 390, "height": 900})
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    for path in ("/admin/users", "/admin/teams", "/", "/admin/permission-sets"):
+        page.goto(f"{live_server}{path}")
+        link = page.get_by_role("link", name="Feedback on this page").bounding_box()
+        title = page.locator("main h1").first.bounding_box()
+        assert link["y"] < title["y"] + title["height"] and link["y"] + link["height"] > title["y"], path
+        assert page.evaluate("document.scrollingElement.scrollWidth") <= 390, path
+    for path in ("/admin/regions", "/admin/locations", "/admin/business-lines"):
+        page.goto(f"{live_server}{path}")
+        assert page.evaluate("document.scrollingElement.scrollWidth") <= 390, path
+        tabs = page.locator("nav.tabs").bounding_box()
+        assert tabs["x"] >= 0 and tabs["x"] + tabs["width"] <= 390, path
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
