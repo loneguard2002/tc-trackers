@@ -19,7 +19,7 @@ from .activity import bp as activity_bp
 from .admin import bp as admin_bp
 from .audit import record
 from .auth import bp as auth_bp
-from .auth import current_user, has_permission
+from .auth import current_user, has_permission, throttle
 from .auth.accounts import find_by_email
 from .auth.csrf import install_csrf
 from .auth.passwords import hash_password, validate_new_password
@@ -80,6 +80,21 @@ def create_app(overrides: dict | None = None) -> Flask:
             return get_session().scalar(select(func.count()).select_from(User).where(User.status == "pending")) or 0
 
         return {"waiting_requests": waiting_requests}
+
+    @app.context_processor
+    def sign_in_context():
+        """The number of accounts and addresses blocked now, for the count beside Sign-in protection; asked only when
+        the menu shows it (administrators)."""
+
+        def signin_blocked_count() -> int:
+            db = get_session()
+            try:
+                return throttle.blocked_count(db, throttle.load_limits(db))
+            except SQLAlchemyError:  # the error page must still draw when the database is the problem
+                db.rollback()
+                return 0
+
+        return {"signin_blocked_count": signin_blocked_count}
 
     @app.context_processor
     def feedback_context():

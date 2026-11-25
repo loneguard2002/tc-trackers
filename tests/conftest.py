@@ -70,6 +70,10 @@ def app():
         {"TESTING": True, "SECRET_KEY": "test", "DATABASE_URL": DATABASE_URL, "SESSION_COOKIE_SECURE": False}
     )
     yield application
+    engine = _state.get("engine")
+    if engine is not None:  # sign-in failures now live in the database; one test's must never throttle the next
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM login_failures"))
     get_engine(application).dispose()
 
 

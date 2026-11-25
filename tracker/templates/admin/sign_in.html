@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field, setting %}
+{% from "lists/_table.html" import search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
+{% endblock %}
+{% macro when(at) -%}{{ at.strftime('%d %b %H:%M') }}{%- endmacro %}
+{% macro unblock_button(row) -%}
+<form method="post" action="{{ url_for('admin.sign_in_unblock') }}" data-confirm="Unblock {{ row.value }}? Its {{ row.last_day }} failed sign-in{{ 's' if row.last_day != 1 }} will be cleared.">
+  {{ csrf_field(csrf_token()) }}
+  <input type="hidden" name="kind" value="{{ row.kind }}">
+  <input type="hidden" name="value" value="{{ row.value }}">
+  <button class="button button-small" type="submit">Unblock<span class="sr-only"> {{ row.value }}</span></button>
+</form>
+{%- endmacro %}
+{% block content %}
+<h1>Sign-in protection</h1>
+<p class="page-lede">Failed password sign-ins are counted for each account (the email entered) and each address (the IP address the attempt came from). When either reaches its limit within the window, sign-in is refused until older failures leave the window. Microsoft sign-in is not counted. Failures are kept for 24 hours. Times are UTC.</p>
+
+{% set blocked_accounts = blocked|selectattr('kind', 'equalto', 'account')|list|length %}
+<section class="stat-band sign-in-summary" aria-label="Sign-in summary">
+  <div class="stat"><span class="stat-label">Blocked now</span>
+    <span class="stat-value">{{ blocked|length }}</span>
+    <span class="stat-sub">{{ blocked_accounts }} account{{ 's' if blocked_accounts != 1 }}, {{ blocked|length - blocked_accounts }} address{{ 'es' if blocked|length - blocked_accounts != 1 }}</span></div>
+  <div class="stat"><span class="stat-label">Failed sign-ins</span>
+    <span class="stat-value">{{ failures_last_day }}</span>
+    <span class="stat-sub">in the last 24 hours</span></div>
+  <div class="stat"><span class="stat-label">Limits</span>
+    <span class="stat-value">{{ limits.account_attempts }} <small>/ {{ limits.address_attempts }}</small></span>
+    <span class="stat-sub">per account / per address in {{ limits.window_minutes }} minute{{ 's' if limits.window_minutes != 1 }}</span></div>
+</section>
+
+<div class="settings">
+  <section class="settings-section" aria-labelledby="section-blocked">
+    <header class="settings-section-head">
+      <h2 id="section-blocked">Blocked now</h2>
+      <p>Accounts and addresses that cannot sign in with a password at the moment. Unblock clears their failures at once; it is recorded in Activity.</p>
+    </header>
+    {% if blocked %}
+    <div class="section-table register">
+      <table id="blocked-table" class="table">
+        <thead><tr><th scope="col">Type</th><th scope="col">Account or address</th><th scope="col">Failures in window</th><th scope="col">Unblocks at</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody>
+        {% for row in blocked %}
+        <tr>
+          <td data-label="Type:">{{ kind_names[row.kind] }}</td>
+          <td data-label="Account or address:">{{ row.value }}</td>
+          <td data-label="Failures in window:">{{ row.in_window }} of {{ row.limit }}</td>
+          <td data-label="Unblocks at:">{{ when(row.unblocks_at) }}</td>
+          <td class="cell-actions">{{ unblock_button(row) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-note">No account or address is blocked.</p>
+    {% endif %}
+  </section>
+
+  <section class="settings-section" aria-labelledby="section-recent">
+    <header class="settings-section-head">
+      <h2 id="section-recent">Failed sign-ins in the last 24 hours</h2>
+      <p>Every account and address with a failed sign-in, blocked ones first. "In window" is the number the limit is compared with.</p>
+    </header>
+    {% if rows %}
+    <div class="list-tools">
+      {{ search_box('failures-table', 'Search accounts and addresses') }}
+      {{ status_filters('failures-table', 'accounts and addresses', (('all', 'All'), ('blocked', 'Blocked'), ('account', 'Accounts'), ('address', 'Addresses')), counts, alerts=('blocked',)) }}
+      {{ clear_filters('failures-table') }}
+    </div>
+    <div class="section-table register" data-table-frame>
+      <table id="failures-table" class="table" data-sortable>
+        <thead><tr>{{ sort_header('Type', 'kind') }}{{ sort_header('Account or address', 'value') }}{{ sort_header('In window', 'window', type='number') }}{{ sort_header('Last 24 h', 'day', type='number') }}{{ sort_header('Last failure', 'last') }}<th scope="col">Status</th></tr></thead>
+        <tbody>
+        {% for row in rows %}
+        <tr data-status="{{ row.kind }}{{ ' blocked' if row.blocked }}" data-search="{{ (row.value ~ ' ' ~ row.kind)|lower }}" data-sort-kind="{{ row.kind }}" data-sort-value="{{ row.value }}" data-sort-window="{{ row.in_window }}" data-sort-day="{{ row.last_day }}" data-sort-last="{{ row.last_at.isoformat() }}">
+          <td data-label="Type:">{{ kind_names[row.kind] }}</td>
+          <td data-label="Account or address:">{{ row.value }}</td>
+          <td data-label="In window:">{{ row.in_window }} of {{ row.limit }}</td>
+          <td data-label="Last 24 h:">{{ row.last_day }}</td>
+          <td data-label="Last failure:">{{ when(row.last_at) }}</td>
+          <td data-label="Status:">{% if row.blocked %}<span class="badge badge-danger">Blocked until {{ row.unblocks_at.strftime('%H:%M') }}</span>{% elif row.in_window %}<span class="badge badge-warning">{{ row.left }} left</span>{% else %}<span class="badge badge-muted">Clear</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {{ no_match('No account or address matches.', 'failures-table') }}
+    </div>
+    {{ table_pager('failures-table', 'accounts and addresses', 'account or address', rows|length, active=blocked|length, active_token='blocked') }}
+    {% else %}
+    <p class="empty-note">No failed sign-ins in the last 24 hours.</p>
+    {% endif %}
+  </section>
+
+  <form method="post" action="{{ url_for('admin.sign_in_protection') }}">
+    {{ csrf_field(csrf_token()) }}
+    <section class="settings-section span-all" aria-labelledby="section-limits">
+      <header class="settings-section-head">
+        <h2 id="section-limits">Limits</h2>
+        <p>Lower numbers stop guessing sooner but lock people out sooner after typing mistakes. Changes apply to the next attempt and are recorded in Activity.</p>
+      </header>
+      {% for name, label, help in (
+        ('account_attempts', 'Failures per account', 'Failed sign-ins for one email address before it is blocked.'),
+        ('address_attempts', 'Failures per address', 'Failed sign-ins from one IP address, for any accounts, before it is blocked. Keep this higher: an office can share one address.'),
+        ('window_minutes', 'Window (minutes)', 'How far back failures count. A block ends once enough failures are older than this.')
+      ) %}
+      {% set low, high = fields[name][2], fields[name][3] %}
+      {% call setting(label, help ~ ' ' ~ low ~ ' to ' ~ high ~ '.', name) %}
+      <input id="{{ name }}" name="{{ name }}" type="number" inputmode="numeric" min="{{ low }}" max="{{ high }}" step="1" value="{{ form[name] }}" required aria-describedby="{{ name }}-help{{ ' ' ~ name ~ '-error' if errors.get(name) }}"{% if errors.get(name) %} aria-invalid="true"{% endif %}>
+      {% if errors.get(name) %}<p class="field-error" id="{{ name }}-error">{{ errors[name] }}</p>{% endif %}
+      {% endcall %}
+      {% endfor %}
+    </section>
+    <div class="settings-actions span-all">
+      <button class="button primary" type="submit">Save limits</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

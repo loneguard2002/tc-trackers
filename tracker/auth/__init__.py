@@ -10,8 +10,9 @@ from flask import session as browser_session  # ``session`` here is this package
 from ..audit import record
 from ..db import get_session
 from ..models import User
+from . import throttle
 from .accounts import find_by_email
-from .csrf import LoginThrottle, csrf_token, safe_next_url, valid_csrf
+from .csrf import csrf_token, safe_next_url, valid_csrf
 from .passwords import verify_against_dummy, verify_password
 from .permissions import PERMISSIONS, has_permission, permission_required, user_permissions
 from .roles import ROLE_ORDER, ROLES, require_tracker_role, tracker_roles, user_role, visible_trackers
@@ -21,7 +22,6 @@ __all__ = [
     "PERMISSIONS",
     "ROLE_ORDER",
     "ROLES",
-    "LoginThrottle",
     "admin_required",
     "bp",
     "csrf_token",
@@ -43,14 +43,6 @@ bp = Blueprint("auth", __name__)
 
 MAX_EMAIL_LENGTH = 254
 MAX_PASSWORD_LENGTH = 512
-_THROTTLE_KEY = "login_throttles"
-
-
-def _throttles() -> tuple[LoginThrottle, LoginThrottle]:
-    """Per-account (5 failures) and per-address (20 failures) limiters, kept on the application."""
-    return current_app.extensions.setdefault(
-        _THROTTLE_KEY, (LoginThrottle(attempts=5, window_seconds=300), LoginThrottle(attempts=20, window_seconds=300))
-    )
 
 
 def _login_page(error: str | None = None, status: int = 200):
@@ -92,15 +84,16 @@ def login():
     email = request.form.get("email", "").strip().lower()
     entered_email = email[:MAX_EMAIL_LENGTH]
     password = request.form.get("password", "")
-    account_throttle, address_throttle = _throttles()
-    account_key = f"account:{email}"
-    address_key = f"address:{request.remote_addr}"
-    if account_throttle.blocked(account_key) or address_throttle.blocked(address_key):
+    address = request.remote_addr or "unknown"
+    db = get_session()
+    limits = throttle.load_limits(db)  # changed by administrators on Admin › Sign-in protection
+    if (entered_email and throttle.blocked(db, limits, "account", entered_email)) or throttle.blocked(
+        db, limits, "address", address
+    ):
         return _login_page("Too many failed attempts. Please wait a few minutes and try again.", 429)
 
     if len(email) > MAX_EMAIL_LENGTH or len(password) > MAX_PASSWORD_LENGTH:
         email, password = "", ""
-    db = get_session()
     user = find_by_email(db, email) if email else None
     if user is None or not user.password_hash:
         verify_against_dummy(password)
@@ -109,8 +102,9 @@ def login():
         password_ok = verify_password(password, user.password_hash)
 
     if not password_ok:
-        account_throttle.fail(account_key)
-        address_throttle.fail(address_key)
+        if entered_email:
+            throttle.fail(db, "account", entered_email)
+        throttle.fail(db, "address", address)
         reason = "unknown_account" if user is None else "wrong_password"
         _record_failure(db, user, entered_email, reason)
         return _login_page("Invalid email or password.", 200)
@@ -119,11 +113,11 @@ def login():
         _record_failure(db, user, entered_email, "not_active")
         return _login_page("Your account is awaiting approval by an administrator.", 200)
     if user.status != "active":
-        account_throttle.fail(account_key)
+        throttle.fail(db, "account", entered_email)
         _record_failure(db, user, entered_email, "not_active")
         return _login_page("Invalid email or password.", 200)
 
-    account_throttle.clear(account_key)
+    throttle.clear(db, "account", entered_email)
     login_user(user)
     record(
         db, user_id=user.id, tracker_id=None, action="login", entity="user", entity_id=user.id, target_user_id=user.id

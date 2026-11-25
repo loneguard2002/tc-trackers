@@ -1,11 +1,9 @@
-"""CSRF protection, login throttling, redirect safety and a NUL byte guard (ported from the EVERTON dashboard)."""
+"""CSRF protection, redirect safety and a NUL byte guard (ported from the EVERTON dashboard); the sign-in limiter is in
+``throttle.py``."""
 
 from __future__ import annotations
 
 import secrets
-import threading
-import time
-from collections import defaultdict, deque
 from urllib.parse import urlsplit
 
 from flask import Flask, abort, request, session
@@ -14,39 +12,6 @@ UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # Endpoints that take a POST without the app's token. Microsoft posts the sign-in result to the SSO callback
 # (response_mode=form_post); there MSAL checks the posted state against the signed flow cookie instead (auth/sso.py).
 CSRF_EXEMPT_ENDPOINTS = frozenset({"sso.sso_callback"})
-
-
-class LoginThrottle:
-    """Process-local rate limiter for the login form."""
-
-    def __init__(self, attempts: int = 5, window_seconds: int = 300) -> None:
-        self.attempts = attempts
-        self.window_seconds = window_seconds
-        self._failures: dict[str, deque[float]] = defaultdict(deque)
-        self._lock = threading.Lock()
-
-    def _trim(self, key: str, now: float) -> deque[float]:
-        failures = self._failures[key]
-        while failures and failures[0] <= now - self.window_seconds:
-            failures.popleft()
-        return failures
-
-    def blocked(self, key: str) -> bool:
-        now = time.monotonic()
-        with self._lock:
-            blocked = len(self._trim(key, now)) >= self.attempts
-            if not self._failures[key]:
-                self._failures.pop(key, None)
-            return blocked
-
-    def fail(self, key: str) -> None:
-        now = time.monotonic()
-        with self._lock:
-            self._trim(key, now).append(now)
-
-    def clear(self, key: str) -> None:
-        with self._lock:
-            self._failures.pop(key, None)
 
 
 def csrf_token() -> str:
