@@ -328,3 +328,33 @@ def test_manage_feedback_is_in_the_application_group():
     assert PERMISSIONS["manage_feedback"][1] == "Read, reply to and change the status of feedback in Admin › Feedback."
     groups = dict(PERMISSION_GROUPS)
     assert "manage_feedback" in groups["Application"]
+
+
+def test_sender_and_reviewer_files_are_stored_with_their_message(db, people, sent):
+    _, reviewer = people
+    reply = service.reviewer_reply(db, sent, reviewer, "update", "See", [service.ValidFile("r.png", "image/png", b"r")])
+    answer = service.sender_message(db, sent, "Here", [service.ValidFile("s.txt", "text/plain", b"ss")])
+    stored = {f.filename: (f.message_id, f.request_id, f.size) for f in db.scalars(select(FeedbackFile))}
+    assert stored["r.png"] == (reply.id, sent.id, 1)
+    assert stored["s.txt"] == (answer.id, sent.id, 2)
+
+
+def test_mark_seen_is_not_activity(db, people, sent):
+    before = sent.last_activity_at
+    service.mark_seen(db, sent)
+    assert sent.sender_seen_at is not None
+    assert sent.last_activity_at == before
+
+
+def test_withdraw_notes_the_change_in_the_conversation(db, people, sent):
+    sender, _ = people
+    service.set_status(db, sent, people[1], "planned")
+    service.withdraw(db, sent)
+    note = db.scalars(select(FeedbackMessage).order_by(FeedbackMessage.id.desc())).first()
+    assert (note.role, note.kind, note.status_from, note.status_to, note.author_id) == (
+        "sender",
+        "status",
+        "planned",
+        "withdrawn",
+        sender.id,
+    )

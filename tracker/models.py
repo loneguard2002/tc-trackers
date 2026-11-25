@@ -562,6 +562,10 @@ class FeedbackFile(Base):
     """A file that came with a message, kept in the database."""
 
     __tablename__ = "feedback_files"
+    __table_args__ = (
+        Index("ix_feedback_files_request_id", "request_id"),
+        Index("ix_feedback_files_message_id", "message_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
     request_id: Mapped[int] = mapped_column(ForeignKey("feedback_requests.id", ondelete="CASCADE"))

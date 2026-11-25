@@ -94,9 +94,13 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_feedback_files")),
     )
+    op.create_index("ix_feedback_files_request_id", "feedback_files", ["request_id"])
+    op.create_index("ix_feedback_files_message_id", "feedback_files", ["message_id"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_feedback_files_message_id", table_name="feedback_files")
+    op.drop_index("ix_feedback_files_request_id", table_name="feedback_files")
     op.drop_table("feedback_files")
     op.drop_index("ix_feedback_messages_request_id_id", table_name="feedback_messages")
     op.drop_table("feedback_messages")
