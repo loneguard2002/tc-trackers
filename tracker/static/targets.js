@@ -106,7 +106,9 @@
       }
       var isChanged = w.input.value.trim() !== w.input.defaultValue.trim();
       w.input.classList.toggle("is-changed", isChanged);
-      if (isChanged) changed += 1;
+      var n = noteParts(w.input.closest("tr"));
+      if (n) showNote(n);
+      if (isChanged || (n && n.field.value.trim() !== n.field.defaultValue.trim())) changed += 1;
     });
     Object.keys(totals).forEach(function (m) {
       var el = form.querySelector('[data-month-total="' + m + '"]');
@@ -117,6 +119,62 @@
       note.classList.toggle("is-dirty", changed > 0);
     }
   }
+
+  // --- Notes: each week's note folds out in a row under the week ----------------------------------------------
+
+  function noteParts(row) {
+    var noteRow = row && row.nextElementSibling;
+    if (!noteRow || !noteRow.hasAttribute("data-note-row")) return null;
+    return {
+      noteRow: noteRow,
+      button: row.querySelector("[data-note-toggle]"),
+      preview: row.querySelector("[data-note-preview]"),
+      clear: noteRow.querySelector("[data-note-clear]"),
+      field: noteRow.querySelector("textarea")
+    };
+  }
+
+  function showNote(n) {
+    var text = n.field.value.trim(), open = !n.noteRow.hidden;
+    n.button.classList.toggle("has-note", text !== "");
+    n.button.setAttribute("aria-expanded", open ? "true" : "false");
+    n.button.setAttribute("aria-label", (text ? "Edit the note" : "Add a note") + " for the week ending " + n.button.dataset.long);
+    n.preview.textContent = text;
+    n.preview.hidden = !text || open;
+    n.clear.hidden = !text;
+    n.field.classList.toggle("is-changed", n.field.value.trim() !== n.field.defaultValue.trim());
+  }
+
+  function closeNote(noteRow) {
+    var n = noteParts(noteRow.previousElementSibling);
+    n.noteRow.hidden = true;
+    showNote(n);
+    n.button.focus();
+  }
+
+  form.addEventListener("click", function (e) {
+    var toggle = e.target.closest("[data-note-toggle]");
+    if (toggle) {
+      var n = noteParts(toggle.closest("tr"));
+      n.noteRow.hidden = !n.noteRow.hidden;
+      showNote(n);
+      if (!n.noteRow.hidden) n.field.focus();
+      return;
+    }
+    var clear = e.target.closest("[data-note-clear]");
+    if (clear) {
+      clear.closest("tr").querySelector("textarea").value = "";
+      refresh();
+    }
+    if (clear || e.target.closest("[data-note-done]")) closeNote(e.target.closest("tr"));
+  });
+
+  form.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && e.target.closest("[data-note-row]")) {
+      e.preventDefault();
+      closeNote(e.target.closest("tr"));
+    }
+  });
 
   // --- Charts --------------------------------------------------------------------------------------------------
 

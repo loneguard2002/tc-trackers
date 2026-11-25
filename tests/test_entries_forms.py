@@ -8,6 +8,7 @@ from tracker.entries.forms import (
     check_entry_date,
     next_risk_ref,
     parse_quantity,
+    parse_target_notes,
     parse_targets,
     validate_inputs_form,
     validate_risk_form,
@@ -57,6 +58,18 @@ def test_targets_reject_negative_and_text():
     weeks = [date(2026, 9, 4), date(2026, 9, 11)]
     _, errors = parse_targets({"target-2026-09-04": "-1", "target-2026-09-11": "x"}, weeks)
     assert len(errors) == 2
+
+
+def test_target_notes_are_trimmed_and_blank_clears():
+    weeks = [date(2026, 9, 4), date(2026, 9, 11), date(2026, 9, 18)]
+    notes, errors = parse_target_notes({"note-2026-09-04": "  Bank holiday  ", "note-2026-09-11": "   "}, weeks)
+    assert notes == {weeks[0]: "Bank holiday", weeks[1]: "", weeks[2]: ""} and errors == []
+
+
+def test_target_notes_longer_than_500_characters_are_refused():
+    notes, errors = parse_target_notes({"note-2026-09-04": "x" * 501}, [date(2026, 9, 4)])
+    assert errors == ["The note for 04 Sep 2026 is 501 characters long. The most is 500."]
+    assert parse_target_notes({"note-2026-09-04": "x" * 500}, [date(2026, 9, 4)])[1] == []
 
 
 def test_inputs_status_validation():
