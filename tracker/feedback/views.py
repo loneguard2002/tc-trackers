@@ -11,7 +11,7 @@ from __future__ import annotations
 import io
 from datetime import timezone
 
-from flask import abort, flash, redirect, render_template, request, send_file, url_for
+from flask import abort, flash, redirect, render_template, request, send_file, session, url_for
 from sqlalchemy import func, select
 
 from ..auth import current_user, has_permission, login_required, permission_required
@@ -29,6 +29,8 @@ MAX_PAGE_URL = 500
 MAX_BROWSER = 200
 # A feedback form carries up to 5 files of 5 MB, so its POST routes take a body of 26 MB (every other route keeps 1 MB).
 MAX_BODY = 26 * 1024 * 1024
+# Only the form, a reply and a sender's message take it, and only for a signed-in person.
+BODY_ENDPOINTS = {"feedback.send", "feedback.admin_reply", "feedback.mine_message"}
 
 SUMMARY_ERROR = "Keep it to one line, 150 characters at most."
 SUMMARY_REQUIRED = "Say it in one line, 150 characters at most."
@@ -41,7 +43,7 @@ KINDS = ("idea", "problem")
 def raise_body_limit(endpoint: str | None, values: dict | None) -> None:
     """Take the larger body on this blueprint's POST routes. A plain ``before_request`` of the blueprint is too late:
     the application's CSRF check runs first and reads the form under the 1 MB limit; URL preprocessors run before it."""
-    if request.method == "POST":
+    if request.method == "POST" and endpoint in BODY_ENDPOINTS and session.get("user_id"):
         request.max_content_length = MAX_BODY
 
 

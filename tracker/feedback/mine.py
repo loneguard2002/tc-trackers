@@ -74,7 +74,9 @@ def _open(kept: FeedbackRequest):
     had_new_reply = service.has_new_reply(kept)
     service.mark_seen(db, kept)
     db.commit()
-    return _show(kept, headers={"X-Panel-Changed": "1" if had_new_reply else "0"})
+    refused = request.args.get("closed") == "1" and kept.status in service.CLOSED
+    notice = {"notice": CLOSED_NOTICE, "notice_tone": "warning"} if refused else {}
+    return _show(kept, **notice, headers={"X-Panel-Changed": "1" if had_new_reply else "0"})
 
 
 @bp.get("/feedback/mine")
@@ -177,5 +179,4 @@ def _refused(kept: FeedbackRequest):
     """A closed request is read-only: the form is refused with a message, never an error page."""
     if _from_panel():
         return _show(kept, 409, notice=CLOSED_NOTICE, notice_tone="warning", headers={"X-Panel-Changed": "0"})
-    flash(CLOSED_NOTICE, "warning")
-    return redirect(url_for("feedback.mine_request", request_id=kept.id))
+    return redirect(url_for("feedback.mine_request", request_id=kept.id, closed=1))
