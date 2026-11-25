@@ -684,8 +684,7 @@ def test_data_check_explains_a_tracker_figure_not_on_any_group(app):
 def test_data_check_explains_groups_counting_more_than_the_history(app):
     report, _ = synthetic_report()
     text = flat_text(body_html(app, _with_groups(report, [_group("Site A", 100, 10, 20)], completed_history=15)))
-    assert "The sites add up to 20 done, 5 more than the tracker's weekly history (15)." in text
-    assert "starting figure" in text
+    assert "Sites: 20 done. Weekly history: 15. The 5 extra may be work done before the first week." in text
 
 
 def test_no_data_check_when_the_totals_agree(app):
