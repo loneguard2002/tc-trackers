@@ -342,6 +342,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
    list. Nothing inside the card has a frame of its own (docs/design-rules.md rule 3). */
 .tracker-card-head { display: flex; gap: 14px; align-items: center; padding: 16px 18px 10px 23px; background: linear-gradient(to bottom, color-mix(in srgb, var(--tone) 9%, var(--surface)), var(--surface)); }
 .tracker-card-titles { display: grid; gap: 2px; flex: 1; min-width: 0; }
+/* The tracker's regions, top right of the card, so they can be picked out at a glance. */
+.card-regions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; align-self: flex-start; max-width: 40%; margin: 0; padding: 0; list-style: none; }
+.region-pill { padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--primary) 45%, var(--surface)); border-radius: 999px; background: color-mix(in srgb, var(--primary) 10%, var(--surface)); color: var(--primary); font-size: .75rem; font-weight: 700; letter-spacing: .04em; line-height: 1.4; white-space: nowrap; }
+.region-pill-unset { border-style: dashed; border-color: var(--border); background: var(--surface); color: var(--muted); font-weight: 600; letter-spacing: 0; }
 .tracker-card-status { margin: 2px 0 0; font-size: .8125rem; }
 .tracker-card-status .status-word { font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .tracker-card:not(.tracker-card-red, .tracker-card-amber, .tracker-card-green) .status-word { text-transform: none; letter-spacing: 0; font-weight: 700; }

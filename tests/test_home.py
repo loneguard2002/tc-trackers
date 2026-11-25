@@ -89,8 +89,11 @@ def test_cards_show_business_line_and_regions_and_carry_filter_data(
 
 
 @pytest.mark.parametrize(
-    "labelled, subtitle",
-    [(True, "Desktop · Tradition brokerage · EMEA"), (False, "Desktop · Business line and regions not set")],
+    "labelled, subtitle, row",
+    [
+        (True, "Desktop · Tradition brokerage", "Desktop · Tradition brokerage · EMEA"),
+        (False, "Desktop · Business line not set", "Desktop · Business line and regions not set"),
+    ],
     ids=["labels set", "labels not set"],
 )
 def test_card_subtitle_puts_the_team_first(
@@ -103,6 +106,7 @@ def test_card_subtitle_puts_the_team_first(
     business_line_factory,
     labelled,
     subtitle,
+    row,
 ):
     tracker = tracker_factory(name="Teamed", team_id=team_factory(name="Desktop").id)
     if labelled:
@@ -110,9 +114,22 @@ def test_card_subtitle_puts_the_team_first(
         set_tracker_regions(db, tracker.id, [region_factory("EMEA").id])
         db.commit()
     page = text_of(client.get("/"))
+    # The card's regions are pills at the top right, so its subtitle leaves them out; the list row keeps them.
     assert f'<p class="tracker-card-team">{subtitle}</p>' in page
-    # The list view's tracker cell shows the same line.
-    assert f'<span class="cell-sub">{subtitle}</span>' in page
+    assert f'<span class="cell-sub">{row}</span>' in page
+
+
+def test_card_shows_its_regions_as_pills(client, logged_in_admin, db, tracker_factory, region_factory):
+    labelled = tracker_factory(name="Labelled")
+    set_tracker_regions(db, labelled.id, [region_factory("EMEA").id, region_factory("APAC").id])
+    db.commit()
+    tracker_factory(name="Bare")
+    page = client.get("/").get_data(as_text=True)
+    assert (
+        '<ul class="card-regions" aria-label="Regions"><li class="region-pill">APAC</li>'
+        '<li class="region-pill">EMEA</li></ul>' in page
+    )
+    assert '<li class="region-pill region-pill-unset">No region</li>' in page
 
 
 # --- C. Filter options ----------------------------------------------------------------------------------------------
