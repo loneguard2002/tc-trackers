@@ -328,3 +328,30 @@ def test_sign_in_entry_names_the_user(client, db, user_factory):
     post(client, "/login", {"email": user.email, "password": TEST_PASSWORD})
     entry = db.scalars(select(AuditLog).where(AuditLog.action == "login")).one()
     assert entry.user_id == user.id and entry.target_user_id == user.id
+
+
+NUL_MESSAGE = "a NUL byte"
+
+
+@pytest.mark.parametrize(
+    "path, data",
+    [
+        ("/login", {"email": "a\x00@example.com", "password": "x"}),
+        ("/login", {"email": "a@example.com", "pass\x00word": "x"}),
+    ],
+)
+def test_a_nul_byte_in_a_form_is_refused_with_400_not_500(client, path, data):
+    response = post(client, path, data)
+    assert response.status_code == 400 and NUL_MESSAGE in response.get_data(as_text=True)
+
+
+def test_a_nul_byte_in_the_address_is_refused_with_400(client, logged_in_user):
+    assert client.get("/?q=a%00b").status_code == 400
+    assert client.get("/admin/users?search=%00").status_code == 400
+    assert client.get("/trackers/a%00b").status_code == 400
+
+
+def test_a_signed_in_form_with_a_nul_byte_is_refused_before_it_reaches_the_database(client, logged_in_admin, db):
+    response = post(client, "/admin/users", {"email": "x@example.com", "full_name": "N\x00ul", "password": "p" * 14})
+    assert response.status_code == 400 and NUL_MESSAGE in response.get_data(as_text=True)
+    assert db.scalar(select(User).where(User.email == "x@example.com")) is None

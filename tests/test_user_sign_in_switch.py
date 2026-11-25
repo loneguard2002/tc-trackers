@@ -233,3 +233,13 @@ def test_access_page_offers_the_switch_with_its_confirmation(sso_client, sso_adm
     box = page.split("data-confirm-box", 1)[1]
     assert f"<strong>{escape(person.full_name)} ({person.email})</strong>" in box
     assert "Their password stops working now." in box
+
+
+def test_the_switch_ends_the_persons_password_session(sso_app, sso_client, sso_admin, user_factory):
+    person = user_factory()
+    person_client = sso_app.test_client()
+    post(person_client, "/login", {"email": person.email, "password": TEST_PASSWORD})
+    assert person_client.get("/").status_code == 200
+    sign_in(sso_client, sso_admin)
+    switch(sso_client, person)
+    assert person_client.get("/").headers["Location"].startswith("/login")
