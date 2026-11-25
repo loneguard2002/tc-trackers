@@ -26,6 +26,7 @@ from .config import load_config, validate_config
 from .db import get_session, init_db
 from .entries import bp as entries_bp
 from .feedback import bp as feedback_bp
+from .feedback import service as feedback_service
 from .feedback import settings as feedback_settings
 from .formatting import register_filters
 from .importer import bp as importer_bp
@@ -81,8 +82,13 @@ def create_app(overrides: dict | None = None) -> Flask:
 
     @app.context_processor
     def feedback_context():
-        """Whether the Feedback link shows (an administrator can switch it off); asked only for a signed-in page."""
-        return {"feedback_link_on": lambda: feedback_settings.link_on(get_session())}
+        """Whether the Feedback link shows (an administrator can switch it off), and the New count beside Admin ›
+        Feedback; each is asked only when the page needs it."""
+        return {
+            "feedback_link_on": lambda: feedback_settings.link_on(get_session()),
+            # The number of New requests, for the count beside Feedback; asked only when the menu shows Feedback.
+            "feedback_new_count": lambda: feedback_service.new_count(get_session()),
+        }
 
     register_filters(app)
     if app.config.get("TESTING"):

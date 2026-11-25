@@ -58,7 +58,9 @@
             <td>{{ e.label }}</td>
             <td>{{ e.tracker or '–' }}</td>
             <td>
-              {% if e.hidden %}
+              {% if e.feedback %}
+              {% if e.feedback.url %}<a href="{{ e.feedback.url }}">{{ e.feedback.reference }}</a>{% else %}{{ e.feedback.reference }}{% endif %}: {{ e.feedback.text }}
+              {% elif e.hidden %}
               <span class="activity-hidden">{{ hidden_detail }}</span>
               {% elif e.lines %}
               <ul class="activity-detail">

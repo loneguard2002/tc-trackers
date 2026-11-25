@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{# A request on its own page: where the feedback email's button and the table's links lead without JavaScript. #}
+{% block content %}
+<h1>{{ reference }}</h1>
+<p class="page-lede"><a href="{{ url_for('feedback.admin_index') }}">Feedback</a> › {{ reference }}</p>
+<div class="feedback-request-page">
+  {% include "feedback/_request.html" %}
+</div>
+{% endblock %}

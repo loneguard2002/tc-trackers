@@ -70,6 +70,8 @@
     var sizeSelect = pager ? pager.querySelector("[data-pager-size]") : null;
     var countText = pager ? pager.querySelector("[data-pager-count]") : null;
     var controls = pager ? pager.querySelector("[data-pager-controls]") : null;
+    // The status the footer counts after "\u00b7": "active" unless the count names another (data-active-token="open").
+    var activeToken = (countText && countText.getAttribute("data-active-token")) || "active";
     // The first status button is the default view ("All", or "All open"); a table without buttons matches every row.
     var defaultStatus = buttons.length ? buttons[0].getAttribute("data-status") : "all";
     var status = defaultStatus;
@@ -156,7 +158,7 @@
           matching.push(row);
           if (counted) countedMatching += 1;
         }
-        if (rowTokens.indexOf("active") !== -1) active += 1;
+        if (rowTokens.indexOf(activeToken) !== -1) active += 1;
       });
       var pages = Math.max(1, Math.ceil(matching.length / pageSize));
       if (pageNumber > pages) pageNumber = settingUp ? 1 : pages;
@@ -187,7 +189,7 @@
         var noun = countText.getAttribute(countedTotal === 1 ? "data-noun-one" : "data-noun-many");
         var copy = "Showing " + (many ? (first + 1) + "\u2013" + (first + shown) + " of " + countedMatching
           : countedMatching + " of " + countedTotal) + " " + (many ? countText.getAttribute("data-noun-many") : noun);
-        if (countText.hasAttribute("data-has-active")) copy += " \u00b7 " + active + " active";
+        if (countText.hasAttribute("data-has-active")) copy += " \u00b7 " + active + " " + activeToken;
         countText.textContent = copy;
         if (controls) controls.hidden = matching.length <= 25;
       }

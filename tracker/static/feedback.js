@@ -333,3 +333,204 @@
   var onPage = document.querySelector(".feedback-page #" + DIALOG_ID + " form");
   if (onPage) wire(document.getElementById(DIALOG_ID), false);
 })();
+
+// Admin › Feedback: a request opens in the side panel (dialog#feedback-panel), as the permission sets panel does. The
+// panel's body is the fragment from /admin/feedback/<id>/panel; without JavaScript, or when it cannot be loaded, the
+// row's link goes to the request's own page. The status and reply forms post in the background and the panel shows
+// the answer (the request again, or the form with its errors); closing the panel after a change reloads the page, so
+// the table shows the new status, replies and last activity. ?request=<id> follows the open panel. On a request's own
+// page only the reply switch is wired.
+(function () {
+  "use strict";
+
+  function each(list, callback) {
+    Array.prototype.forEach.call(list, callback);
+  }
+
+  function element(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  // Update or Question: the box's label, its help and the button follow the switch.
+  function wireReply(root) {
+    var form = root ? root.querySelector("[data-reply-form]") : null;
+    if (!form) return;
+    function show() {
+      var picked = form.querySelector('input[name="kind"]:checked');
+      var kind = picked ? picked.value : "update";
+      each(form.querySelectorAll("[data-update-text]"), function (node) {
+        node.textContent = node.getAttribute("data-" + kind + "-text");
+      });
+    }
+    form.addEventListener("change", function (event) {
+      if (event.target.name === "kind") show();
+    });
+    show();
+  }
+
+  var panel = document.getElementById("feedback-panel");
+  var table = document.getElementById("feedback-table");
+  if (!panel || !table || typeof panel.showModal !== "function" || typeof fetch !== "function") {
+    wireReply(document.querySelector(".feedback-request-page"));
+    return;
+  }
+
+  var openRow = null;
+  var changed = false;
+  var body = null;
+  var announce = null;
+
+  function setAddress(id) {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      if (id) params.set("request", id);
+      else params.delete("request");
+      var query = params.toString();
+      history.replaceState(history.state, "", location.pathname + (query ? "?" + query : "") + location.hash);
+    } catch (error) { /* an address that cannot be rewritten leaves it as it is */ }
+  }
+
+  function ownPage(row) {
+    return row.querySelector("[data-open-request]").getAttribute("href");
+  }
+
+  function failed(row, text) {
+    if (openRow !== row) return;
+    announce.textContent = text;
+    body.textContent = "";
+    var note = element("p", "empty-note", text + " ");
+    var link = element("a", "", "Open the request's own page");
+    link.href = ownPage(row);
+    note.appendChild(link);
+    body.appendChild(note);
+  }
+
+  // Puts the server's fragment in the panel; false when the answer is not the request (a sign-in page, an error).
+  function show(row, html) {
+    if (openRow !== row) return true;
+    if (html.indexOf("data-panel-feedback") === -1) return false;
+    announce.textContent = "";
+    body.innerHTML = html;
+    wireReply(body);
+    return true;
+  }
+
+  function send(row, form) {
+    var button = form.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    fetch(form.getAttribute("action"), {
+      method: "POST",
+      body: new FormData(form),
+      credentials: "same-origin",
+      headers: { "X-Requested-With": "fetch" }
+    })
+      .then(function (response) {
+        if (response.redirected) throw new Error("redirected");
+        return response.text().then(function (html) { return { ok: response.ok, status: response.status, html: html }; });
+      })
+      .then(function (answer) {
+        if (answer.status === 413) throw new Error("too large");
+        if (!show(row, answer.html)) throw new Error("not the panel");
+        if (answer.ok) changed = true;
+        var focus = body.querySelector('[aria-invalid="true"]') || body.querySelector("[data-panel-notice]");
+        if (focus) {
+          if (!focus.hasAttribute("aria-invalid")) focus.setAttribute("tabindex", "-1");
+          focus.focus();
+        }
+      })
+      .catch(function (error) {
+        if (button) button.disabled = false;
+        var alert = element("div", "form-alert", error.message === "too large"
+          ? "That is more than can be sent at once. Remove a file and try again."
+          : "The change could not be saved. Try again.");
+        alert.setAttribute("role", "alert");
+        form.insertBefore(alert, form.firstChild);
+      });
+  }
+
+  function open(row) {
+    openRow = row;
+    panel.textContent = "";
+    var head = element("header", "drawer-head");
+    var title = element("div", "perm-detail-title");
+    var heading = element("h2", "", row.querySelector("[data-open-request]").textContent.trim());
+    heading.id = "feedback-panel-title";
+    title.appendChild(heading);
+    head.appendChild(title);
+    var cross = element("button", "tool-button", "✕");
+    cross.type = "button";
+    cross.title = "Close";
+    cross.setAttribute("aria-label", "Close");
+    cross.addEventListener("click", function () { panel.close(); });
+    head.appendChild(cross);
+    announce = element("p", "sr-only", "Loading the request…");
+    announce.setAttribute("role", "status");
+    body = element("div", "drawer-body");
+    body.appendChild(element("p", "empty-note", "Loading the request…"));
+    panel.appendChild(head);
+    panel.appendChild(announce);
+    panel.appendChild(body);
+    if (!panel.open) panel.showModal();
+    setAddress(row.getAttribute("data-request"));
+    fetch(row.getAttribute("data-panel-url"), { credentials: "same-origin", headers: { "X-Requested-With": "fetch" } })
+      .then(function (response) {
+        // An expired session redirects to the sign-in page, which answers 200: that is a failure too.
+        if (!response.ok || response.redirected) throw new Error("status " + response.status);
+        return response.text();
+      })
+      .then(function (html) {
+        if (!show(row, html)) throw new Error("not the panel");
+      })
+      .catch(function () { failed(row, "The request could not be loaded."); });
+  }
+
+  panel.addEventListener("submit", function (event) {
+    var form = event.target;
+    if (!openRow || !form.hasAttribute("data-panel-form")) return;
+    event.preventDefault();
+    send(openRow, form);
+  });
+
+  panel.addEventListener("close", function () {
+    var row = openRow;
+    openRow = null;
+    setAddress(null);
+    if (changed) {
+      window.location.reload();
+      return;
+    }
+    var link = row && row.querySelector("[data-open-request]");
+    if (link) link.focus();
+  });
+
+  // A click on the dimmed page closes it: the point lies outside the panel's box (keyboard clicks target a button).
+  panel.addEventListener("click", function (event) {
+    if (event.target !== panel) return;
+    var box = panel.getBoundingClientRect();
+    if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) {
+      panel.close();
+    }
+  });
+
+  // The reference opens the panel, and so does a click anywhere else on the row.
+  table.classList.add("opens-panel");
+  table.addEventListener("click", function (event) {
+    var row = event.target.closest ? event.target.closest("tbody tr[data-request]") : null;
+    if (!row) return;
+    var link = event.target.closest("a, button, input, select, textarea, label");
+    if (link && !link.hasAttribute("data-open-request")) return;
+    if (link && (event.metaKey || event.ctrlKey || event.shiftKey || event.button)) return;
+    event.preventDefault();
+    open(row);
+  });
+
+  // ?request=<id> opens that request's panel; anything that is not the id of a row here is ignored.
+  var wanted = /[?&]request=(\d+)(&|$)/.exec(location.search);
+  if (wanted) {
+    var row = table.querySelector('tbody tr[data-request="' + String(Number(wanted[1])) + '"]');
+    if (row) open(row);
+  }
+})();
