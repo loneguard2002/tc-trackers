@@ -547,7 +547,7 @@ def test_glance_dots_appear_along_the_line_and_match_the_classic_size(page, live
     assert forecast_end["symbolSize"] == 6
 
 
-def test_glance_lines_reach_their_last_point_in_one_and_a_half_seconds(page, live_server, seeded, db):
+def test_glance_lines_reach_their_last_point_in_two_seconds(page, live_server, seeded, db):
     add_targets(db, seeded.tracker)  # the axis runs on to 18 Dec, well past the last point
     db.commit()
     open_glance(page, live_server, seeded)
@@ -557,7 +557,7 @@ def test_glance_lines_reach_their_last_point_in_one_and_a_half_seconds(page, liv
     last = max((d["value"] if isinstance(d, dict) else d)[0] for s in lines for d in s["data"])
     for s in lines:
         # The reveal is steady (linear) across the plot, so the last point shows at this share of the duration.
-        assert abs(s["animationDuration"] * (last - low) / (high - low) - 1500) <= 1
+        assert abs(s["animationDuration"] * (last - low) / (high - low) - 2000) <= 1
 
 
 def test_glance_status_and_risks_sit_side_by_side_under_the_chart(page, live_server, seeded):
