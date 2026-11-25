@@ -44,6 +44,17 @@
 {% if not c.labels.business_line and not c.labels.regions %}{{ (c.team ~ ' · ') if c.team }}Business line and regions not set{% else %}{{ labels_text(c.labels, c.team) }}{% endif %}
 {%- endmacro %}
 
+{#- The card shows the regions as pills at the top right, so its subtitle is the team and business line only. #}
+{% macro card_line_text(c) -%}
+{{ (([c.team] if c.team else []) + [c.labels.business_line or 'Business line not set'])|join(' · ') }}
+{%- endmacro %}
+
+{% macro region_pills(c) -%}
+<ul class="card-regions" aria-label="Regions">
+  {%- for code in c.labels.regions %}<li class="region-pill">{{ code }}</li>{% else %}<li class="region-pill region-pill-unset">No region</li>{% endfor -%}
+</ul>
+{%- endmacro %}
+
 {% macro last_entry_text(c) -%}
 {% if c.starts %}Starts {{ c.starts|fdate }}{% elif not c.last_entry %}No entries yet{% else %}{% set days = (today - c.last_entry).days %}Last entry {{ c.last_entry|fdate }} · {{ 'today' if days == 0 else ('yesterday' if days == 1 else days ~ ' days ago') }}{% endif %}
 {%- endmacro %}
@@ -210,12 +221,13 @@
         <h2 class="tracker-card-title"><a href="{{ url_for('report.view', tracker_id=t.id) }}">{{ t.name }}</a>
           {% if c.role %}<span class="role-tag">{{ c.role|capitalize }}</span>{% endif %}
           {% if t.status == 'archived' %}<span class="role-tag">Archived</span>{% endif %}</h2>
-        <p class="tracker-card-team">{{ card_labels(c) }}</p>
+        <p class="tracker-card-team">{{ card_line_text(c) }}</p>
         <p class="tracker-card-lead">In charge: {% if c.lead %}<strong>{{ 'You' if current_user and c.lead.id == current_user.id else c.lead.full_name }}</strong>{% else %}<span class="tone-warning">Nobody yet</span>{% endif %}</p>
         <p class="tracker-card-status"><span class="status-word">{{ c.status or 'Status not set' }}</span>
           {%- if c.disagree %} · <span class="flag">forecast disagrees</span>{% endif %}
           <span class="muted"> · {{ h.completed|num }} of {{ h.total_scope|num }} {{ t.unit_label }}{% if cd.plan is not none %}, plan {{ cd.plan|pct }}{% endif %}</span></p>
       </div>
+      {{ region_pills(c) }}
     </header>
     <div class="tracker-card-body">
       <p class="tracker-card-finish">{{ finish_line(c) }}</p>
