@@ -1681,9 +1681,9 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .feedback-link .icon { width: 15px; height: 15px; }
 /* On a phone the link is its icon alone (the words stay for screen readers), so the title keeps its width. */
 @media (max-width: 720px) { .feedback-link { padding: 6px; } .feedback-link-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
-/* A page that does not open with its title (the list pages' tab bar, a team's page) starts below the icon on a phone,
-   so the float takes no width from a row that is sized to fit the screen. */
-@media (max-width: 720px) { .feedback-link + :not(h1) { clear: right; } }
+/* The list pages open with a tab bar sized to fit the screen, so on a phone they start below the icon: the float takes
+   no width from that row. Every other page keeps the icon on its title row. */
+@media (max-width: 720px) { .feedback-link + .list-page { clear: right; } }
 .feedback-page { padding-top: 8px; }
 .feedback-drop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px; border: 1px dashed var(--field-border); border-radius: var(--radius); background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
 .feedback-drop.is-over { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
