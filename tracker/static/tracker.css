@@ -1663,7 +1663,7 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 /* The status and "In progress" side by side, the same height, centred on one line. */
 .answer-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .status-badge-progress { color: var(--info); }
-.answer-sentence { margin: 12px 0 6px; font-size: 1.6rem; font-weight: 700; line-height: 1.25; }
+.answer-sentence { margin: 12px 0 6px; font-size: 1.6rem; font-weight: 700; line-height: 1.25; white-space: pre-line; }
 .answer-headline { margin: 0; color: var(--muted); }
 .answer-needed { align-self: start; padding: 16px 20px; border-radius: var(--radius); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
 .answer-needed-label { margin: 0 0 6px; font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
