@@ -121,6 +121,54 @@ def test_removing_a_target_note_and_reset_brings_it_back(page, live_server, edit
     expect(preview).to_have_text("Slow start")
 
 
+def test_the_notes_panel_lists_every_note_and_edit_opens_the_week(page, live_server, editor, db):
+    db.get(Week, (editor.id, WEEKS[0])).note = "Slow start"
+    db.add(Week(tracker_id=editor.id, week_ending=WEEKS[5], target=None, note="Site closed\nfor the audit"))
+    db.commit()
+    page.add_init_script(RECORDER)
+    page.goto(f"{live_server}/trackers/{editor.id}/targets")
+    notes = page.get_by_role("button", name=re.compile("^Notes"))
+    expect(notes.locator("[data-notes-count]")).to_have_text("2")
+    # a note typed but not saved counts and is marked
+    week = WEEKS[2].isoformat()
+    page.click(f'[aria-controls="note-row-{week}"]')
+    page.fill(f"#note-{week}", "Bank holiday")
+    expect(notes.locator("[data-notes-count]")).to_have_text("3")
+    notes.click()
+    panel = page.locator("#notes-panel")
+    expect(panel).to_be_visible()
+    expect(panel.get_by_role("heading", name="Notes")).to_be_visible()
+    expect(panel).to_contain_text("3 weeks have a note, 1 not saved yet.")
+    items = panel.locator(".notes-list li")
+    expect(items).to_have_count(3)
+    expect(items.nth(0)).to_contain_text("Slow start")
+    expect(items.nth(0)).to_contain_text("Target 10")
+    expect(items.nth(1)).to_contain_text("Bank holiday")
+    expect(items.nth(1)).to_contain_text("Not saved yet")
+    expect(items.nth(2).locator(".notes-list-text")).to_have_text("Site closed\nfor the audit")
+    expect(items.nth(2)).to_contain_text("No target")
+    # Escape closes the panel and the focus returns to the Notes button
+    page.keyboard.press("Escape")
+    expect(panel).to_be_hidden()
+    expect(notes).to_be_focused()
+    # Edit closes the panel and opens that week's note with the focus in it
+    notes.click()
+    last = WEEKS[5].isoformat()
+    panel.get_by_role("button", name=re.compile("^Edit the note for the week ending")).nth(2).click()
+    expect(panel).to_be_hidden()
+    expect(page.locator(f"#note-{last}")).to_be_visible()
+    expect(page.locator(f"#note-{last}")).to_be_focused()
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
+
+
+def test_the_notes_panel_says_when_there_are_no_notes(page, live_server, editor):
+    page.goto(f"{live_server}/trackers/{editor.id}/targets")
+    notes = page.get_by_role("button", name=re.compile("^Notes"))
+    expect(notes.locator("[data-notes-count]")).to_have_text("0")
+    notes.click()
+    expect(page.locator("#notes-panel")).to_contain_text("No notes yet. Use the note button on a week to add one.")
+
+
 def test_inputs_preview_follows_the_form(page, live_server, editor):
     page.goto(f"{live_server}/trackers/{editor.id}/inputs?week={WEEKS[1].isoformat()}")
     band = page.locator("[data-band]")

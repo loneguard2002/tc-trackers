@@ -48,9 +48,12 @@
   </section>
 
   <section class="settings-section" aria-labelledby="section-targets">
-    <header class="settings-section-head">
-      <h2 id="section-targets">Weekly targets</h2>
-      <p>The number you plan to finish each week ({{ unit }}). Targets draw the plan line on the report charts. Leave a week blank to clear its target. Use the note button on a week to say why its target is what it is.</p>
+    <header class="settings-section-head has-action">
+      <div>
+        <h2 id="section-targets">Weekly targets</h2>
+        <p>The number you plan to finish each week ({{ unit }}). Targets draw the plan line on the report charts. Leave a week blank to clear its target. Use the note button on a week to say why its target is what it is; Notes lists them all.</p>
+      </div>
+      <button class="button notes-open" type="button" data-notes-open aria-haspopup="dialog" aria-controls="notes-panel" hidden>{{ icon('note') }}Notes <span class="count-pill" data-notes-count>0</span></button>
     </header>
     <div class="fill-tools" data-fill-tools hidden>
       <label for="fill-value">Fill blank upcoming weeks with</label>
@@ -111,4 +114,5 @@
     <button class="button primary" type="submit">Save targets</button>
   </div>
 </form>
+<dialog class="perm-drawer notes-panel" id="notes-panel" aria-labelledby="notes-panel-title"></dialog>
 {% endblock %}
