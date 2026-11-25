@@ -35,3 +35,7 @@ Scope to settle in the spec:
 
 - **Email page preview** (`mail/settings.html`, `.email-layout` and `.mail-frame .email-preview` in `tracker.css`): make the preview column about 20% wider than it is now, and make the preview as tall as the email template box beside it, so that both end at the same line instead of the preview stopping at a fixed 560px.
 - **Report email header** (`mail/email_body.html`, `mail/compose.py`): give the weekly report email the same header as the access emails (the Tradition logo attached inline beside "Progress Tracker" on the navy band), so every Progress Tracker email looks the same. Deferred on 18 Nov 2026 from the sign-in and approval work (`docs/superpowers/specs/2026-11-18-signin-and-approval-design.md`).
+
+## 4. Missing tests
+
+- **Browser name detection for feedback** (`tracker/feedback/views.py`, `describe_browser`): only "Edge on Windows" is tested. Add a parametrised test for Opera, Firefox, Chrome (including CriOS), Safari, the iOS, Android, macOS and Linux systems, a browser with no recognised system (name only) and an unrecognised agent (empty). Found in the feedback test review on 25 Nov 2026.

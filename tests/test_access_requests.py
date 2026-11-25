@@ -311,6 +311,15 @@ def test_send_a_test_reports_a_mail_failure(client, db, user_factory, monkeypatc
     assert "could not be sent" in page
 
 
+def test_send_a_test_without_a_mail_server_says_so(client, db, user_factory, outbox):
+    sign_in(client, user_factory(is_admin=True))
+    db.add(AppSetting(key="feedback_email", value="a@example.org"))
+    db.commit()
+    page = post(client, "/admin/smtp/feedback-test", {}, follow_redirects=True).get_data(as_text=True)
+    assert "Email is not set up, so the test could not be sent." in page
+    assert outbox == []
+
+
 def test_feedback_settings_need_manage_email_settings(client, db, user_factory):
     sign_in(client, user_factory())
     assert client.get("/admin/smtp").status_code == 403
