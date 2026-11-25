@@ -39,6 +39,10 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "manage_email_settings": ("Manage email settings", "Change the application's email (SMTP) settings."),
     "view_all_trackers": ("View all trackers", "Viewer on every tracker."),
     "view_activity": ("View activity", "Read the Activity screen."),
+    "manage_feedback": (
+        "Manage feedback",
+        "Read, reply to and change the status of feedback in Admin › Feedback.",
+    ),
 }
 
 # How the Permission sets screen groups the permissions on each card. Every permission appears in exactly one group.
@@ -46,7 +50,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("People and teams", ("manage_users", "manage_teams")),
     ("Lists", ("manage_lists",)),
     ("Trackers", ("create_trackers", "import_workbooks", "view_all_trackers")),
-    ("Application", ("manage_email_settings", "view_activity")),
+    ("Application", ("manage_email_settings", "view_activity", "manage_feedback")),
 )
 
 

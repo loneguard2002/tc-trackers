@@ -506,3 +506,68 @@ class AppSetting(Base):
 
     key: Mapped[str] = mapped_column(Text, primary_key=True)
     value: Mapped[str] = mapped_column(Text)
+
+
+class FeedbackRequest(Base):
+    """One idea or problem sent by a signed-in person; a conversation with the people who run the application."""
+
+    __tablename__ = "feedback_requests"
+    __table_args__ = (
+        CheckConstraint("kind IN ('idea', 'problem')", name="kind"),
+        CheckConstraint(
+            "status IN ('new', 'under_review', 'waiting', 'planned', 'done', 'will_not_do', 'withdrawn')",
+            name="status",
+        ),
+        Index("ix_feedback_requests_status_last_activity_at", "status", "last_activity_at"),
+        Index("ix_feedback_requests_sender_id", "sender_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    kind: Mapped[str] = mapped_column(Text)
+    summary: Mapped[str] = mapped_column(Text)
+    details: Mapped[str] = mapped_column(Text, default="", server_default="")
+    status: Mapped[str] = mapped_column(Text, default="new", server_default="new")
+    sender_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    page_title: Mapped[str] = mapped_column(Text, default="", server_default="")
+    page_url: Mapped[str] = mapped_column(Text, default="", server_default="")
+    browser: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_at: Mapped[datetime] = _now()
+    last_activity_at: Mapped[datetime] = _now()
+    sender_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_note: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+
+class FeedbackMessage(Base):
+    """One entry in a request's conversation: a message, an update, a question, a status change or an email note."""
+
+    __tablename__ = "feedback_messages"
+    __table_args__ = (
+        CheckConstraint("role IN ('sender', 'reviewer', 'system')", name="role"),
+        CheckConstraint("kind IN ('message', 'update', 'question', 'status', 'email')", name="kind"),
+        Index("ix_feedback_messages_request_id_id", "request_id", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("feedback_requests.id", ondelete="CASCADE"))
+    author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    role: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text, default="", server_default="")
+    status_from: Mapped[str | None] = mapped_column(Text)
+    status_to: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now()
+
+
+class FeedbackFile(Base):
+    """A file that came with a message, kept in the database."""
+
+    __tablename__ = "feedback_files"
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("feedback_requests.id", ondelete="CASCADE"))
+    message_id: Mapped[int] = mapped_column(ForeignKey("feedback_messages.id", ondelete="CASCADE"))
+    filename: Mapped[str] = mapped_column(Text)
+    content_type: Mapped[str] = mapped_column(Text)
+    size: Mapped[int] = mapped_column(Integer)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = _now()
