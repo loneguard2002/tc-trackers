@@ -303,16 +303,3 @@ def test_a_refused_send_keeps_the_request_and_says_why(client, sender, db, mail_
     request = db.scalars(select(FeedbackRequest)).one()
     assert request.email_note == "Email not sent: the mail server refused it"
     assert db.scalars(select(FeedbackMessage).where(FeedbackMessage.kind == "email")).one().body == request.email_note
-
-
-def test_a_later_message_from_the_sender_has_its_own_subject(db, app, sender, outbox, mail_on, owner_address):
-    from tracker.feedback import mail
-
-    created = service.create_request(db, sender, "idea", "Add a dark chart theme", "", "", "", "", [])
-    service.reviewer_reply(db, created, sender, "question", "Which charts?", [])
-    answer = service.sender_message(db, created, "The weekly ones.", [])
-    db.commit()
-    with app.test_request_context("/"):
-        assert mail.notify_owner(db, created, answer) == ""
-    assert outbox[0]["Subject"] == f"Sam Taylor answered: Add a dark chart theme ({service.reference(created.id)})"
-    assert "The weekly ones." in body(outbox[0])

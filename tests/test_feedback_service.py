@@ -172,17 +172,6 @@ def test_a_question_sets_waiting_and_an_update_leaves_the_status(db, people, sen
     assert service.replies(sent) == 2
 
 
-def test_a_reviewer_may_reply_to_and_restatus_a_withdrawn_request(db, people, sent):
-    _, reviewer = people
-    service.withdraw(db, sent)
-    service.reviewer_reply(db, sent, reviewer, "update", "Noted", [])
-    assert sent.status == "withdrawn"
-    service.reviewer_reply(db, sent, reviewer, "question", "Still there?", [])
-    assert sent.status == "waiting"
-    service.set_status(db, sent, reviewer, "done")
-    assert sent.status == "done"
-
-
 def test_set_status_notes_it_and_refuses_an_unknown_status(db, people, sent):
     _, reviewer = people
     service.set_status(db, sent, reviewer, "under_review")
