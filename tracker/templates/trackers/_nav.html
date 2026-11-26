@@ -1,9 +1,11 @@
 {% from "macros.html" import icon %}
+{% from "trackers/_role_guide.html" import role_guide_table %}
 {#- The icons match the actions on the home cards: Report, Entries (Record completions), Weekly update (Write the update). -#}
 {% macro tab(endpoint, label, icon_name, also=()) -%}
 {% set active = request.endpoint == endpoint or request.endpoint in also %}
 <a class="tab{{ ' active' if active }}" href="{{ url_for(endpoint, tracker_id=tracker.id) }}"{% if active %} aria-current="page"{% endif %}>{{ icon(icon_name) }}{{ label }}</a>
 {%- endmacro %}
+<div class="tabs-bar">
 <nav class="tabs" aria-label="Tracker sections">
   {% if g.role %}
   {{ tab('report.view', 'Report', 'report') }}
@@ -21,4 +23,18 @@
   {% endif %}
   {% if can('manage_teams') %}{{ tab('trackers.roles', 'Access', 'key') }}{% endif %}
 </nav>
+{% if g.role %}
+<p class="tracker-role">Your role: <strong>{{ g.role|title }}{% if current_user and current_user.is_admin %} (administrator){% endif %}</strong> · <a href="{{ url_for('trackers.role_guide', tracker_id=tracker.id) }}" data-role-guide>What each role can do</a></p>
+{% endif %}
+</div>
+{% if g.role %}
+{#- Opened by tracker.js from the link above; without JavaScript the link opens the same table on its own page. -#}
+<dialog id="role-guide-dialog" class="list-dialog role-guide-dialog" aria-labelledby="role-guide-title">
+  <header class="list-dialog-head">
+    <h2 id="role-guide-title">What each role can do</h2>
+    <button class="tool-button" type="button" data-close title="Close">{{ icon('close') }}<span class="sr-only">Close</span></button>
+  </header>
+  <div class="list-dialog-body">{{ role_guide_table(tracker) }}</div>
+</dialog>
+{% endif %}
 {% if tracker.status == 'archived' %}<p class="flash flash-danger">This tracker is archived.</p>{% endif %}

@@ -258,15 +258,18 @@ def test_give_form_leaves_out_the_holder_but_not_for_an_administrator(
     assert f'value="{logged_in_user.id}"' in admin_client.get(f"/trackers/{t.id}/roles").get_data(as_text=True)
 
 
-def test_roles_legend_names_groups_generically_for_a_holder_without_a_role(
+def test_role_guide_names_groups_generically_for_a_holder_without_a_role(
     client, logged_in_user, give_set, tracker_factory, user_factory, grant
 ):
     t = holder_with_tracker(client, logged_in_user, give_set, tracker_factory)
-    legend = text_of(client.get(f"/trackers/{t.id}/roles")).split('class="role-legend"', 1)[1].split("</dl>", 1)[0]
-    assert "targets, groups and risks" in legend and "locations" not in legend
+
+    def guide() -> str:
+        page = text_of(client.get(f"/trackers/{t.id}/roles"))
+        return page.split('class="role-guide-foldout"', 1)[1].split("</details>", 1)[0]
+
+    assert "Add groups; change a group's name" in guide() and "location" not in guide()
     grant(logged_in_user, t, "viewer")
-    legend = text_of(client.get(f"/trackers/{t.id}/roles")).split('class="role-legend"', 1)[1].split("</dl>", 1)[0]
-    assert "targets, locations and risks" in legend
+    assert "Add locations; change a location's name" in guide()
 
 
 def test_a_vouched_account_can_have_its_direct_role_lowered(

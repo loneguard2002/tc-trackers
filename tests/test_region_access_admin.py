@@ -49,7 +49,8 @@ def test_access_page_lists_people_and_offers_only_active_people_without_access(
     assert "<title>Access to EMEA" in page
     assert "Europe, Middle East and Africa" in page
     assert "People given access to a region reach every tracker that covers it, at the role shown." in page
-    table = page[page.index("<table") : page.index("</table>")]
+    holders = page.index('aria-labelledby="access-heading"')  # the role guide's table comes first
+    table = page[page.index("<table", holders) : page.index("</table>", holders)]
     assert "Holder One" in table and "holder@example.com" in table and "Gone Person" in table
     assert "Disabled" in table
     assert '<option value="editor" selected>' in table
@@ -63,7 +64,8 @@ def test_access_page_lists_people_and_offers_only_active_people_without_access(
 def test_empty_access_page_says_so(client, logged_in_admin, region_factory):
     region = region_factory("EMEA")
     page = text_of(client.get(url(region)))
-    assert "Nobody has access to this region yet." in page and "<table" not in page
+    holders = page[page.index('aria-labelledby="access-heading"') :]  # after the role guide's table
+    assert "Nobody has access to this region yet." in holders and "<table" not in holders
 
 
 def test_give_access_logs_and_reaches_the_tracker(

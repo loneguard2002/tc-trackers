@@ -722,10 +722,28 @@ main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-heigh
 .toolbar-end { margin-left: auto; }
 
 /* Access: one row per person, with their role on the right. */
-.role-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 10px 0 0; }
-.role-legend div { padding: 8px 10px; border-radius: 8px; background: var(--bg); }
-.role-legend dt { font-size: .8125rem; font-weight: 700; }
-.role-legend dd { margin: 2px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.4; }
+/* What each role can do (trackers/_role_guide.html): beside a tracker's tabs, in a pop-up, on its own page, and folded
+   out where roles are given. */
+.tabs-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px 16px; margin: 6px 0 24px; border-bottom: 1px solid var(--border); }
+.tabs-bar > .tabs { flex: 1 1 auto; min-width: 0; margin: 0; border-bottom: 0; }
+.tracker-role { margin: 0 0 10px auto; color: var(--muted); font-size: .8125rem; white-space: nowrap; }
+.tracker-role strong { color: var(--text); }
+/* The rows read as sentences, not as column headings: they wrap, in ordinary text. */
+.role-guide .role-guide-table tbody th { color: var(--text); font-size: .875rem; font-weight: 400; letter-spacing: normal; text-transform: none; white-space: normal; }
+.role-guide-table thead th:not(:first-child), .role-guide-mark { width: 5rem; text-align: center; }
+@media (max-width: 560px) {
+  .tracker-role { margin-left: 0; white-space: normal; }
+  .role-guide-table thead th:not(:first-child), .role-guide-mark { width: 3.4rem; padding-left: 4px; padding-right: 4px; }
+  .role-guide .role-guide-table :is(th, td):first-child { padding-left: 8px; }
+  .role-guide .role-guide-table thead th { font-size: .6875rem; letter-spacing: 0; }
+}
+.role-guide-mark .icon { width: 18px; height: 18px; color: var(--success); vertical-align: middle; }
+.role-guide-no { color: var(--muted); }
+.role-guide-notes { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: .8125rem; }
+.role-guide-foldout { margin: 10px 0 0; }
+.role-guide-foldout > summary { cursor: pointer; color: var(--primary); font-weight: 600; font-size: .875rem; }
+.role-guide-foldout[open] > summary { margin-bottom: 8px; }
+.role-guide-dialog { width: min(720px, calc(100% - 32px)); }
 .member-list { margin: 0; padding: 0; list-style: none; }
 .member { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 20px; }
 .member + .member { border-top: 1px solid var(--border); }
@@ -1057,7 +1075,7 @@ a.pager-button, span.pager-button { display: inline-flex; align-items: center; j
 }
 
 @media (max-width: 720px) {
-  .role-legend, .inline-form { grid-template-columns: 1fr; }
+  .inline-form { grid-template-columns: 1fr; }
   .member, .section-body { padding-left: 16px; padding-right: 16px; }
   .toolbar-end { margin-left: 0; }
   .settings-section-head.has-action { flex-wrap: wrap; }

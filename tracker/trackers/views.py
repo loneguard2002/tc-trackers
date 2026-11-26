@@ -1068,6 +1068,16 @@ def _update_group(db, tracker: Tracker, group: Group, form) -> list[str]:
 # --- Roles ---------------------------------------------------------------------------------------------------
 
 
+@bp.get("/trackers/<int:tracker_id>/role-guide")
+@require_tracker_role("viewer")
+def role_guide(tracker_id: int):
+    """What each role can do, on its own page: the pop-up beside the tabs without JavaScript."""
+    tracker = g.tracker
+    return render_template(
+        "trackers/role_guide.html", tracker=tracker, page_title=f"{tracker.name}: roles", current_page="trackers"
+    )
+
+
 @bp.route("/trackers/<int:tracker_id>/roles", methods=["GET", "POST"])
 @permission_required("manage_teams")
 def roles(tracker_id: int):

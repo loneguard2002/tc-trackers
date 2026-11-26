@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "trackers/_role_guide.html" import role_guide_foldout %}
 {% from "macros.html" import csrf_field, icon %}
 {% from "lists/_table.html" import list_tabs %}
 {% block head_extra %}
@@ -21,6 +22,8 @@
     <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
   </div>
   {% endif %}
+
+  {{ role_guide_foldout() }}
 
   <section class="list-panel" aria-labelledby="access-heading">
     <h2 class="sr-only" id="access-heading">People with access to {{ region.code }}</h2>

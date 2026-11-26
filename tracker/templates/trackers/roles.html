@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "trackers/_role_guide.html" import role_guide_foldout %}
 {% from "macros.html" import csrf_field %}
 {% from "lists/_table.html" import search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
 {% block head_extra %}
@@ -17,11 +18,7 @@
     <header class="settings-section-head">
       <h2 id="section-members">Who can open this tracker</h2>
       <p>Everyone with access, the role they get and where it comes from. When several routes apply, the highest role wins.</p>
-      <dl class="role-legend">
-        <div><dt>Viewer</dt><dd>Opens the report and downloads it.</dd></div>
-        <div><dt>Editor</dt><dd>Also records entries, weekly updates, targets, {{ (tracker.group_label|plural if tracker.group_label and g.role else 'groups')|lower }} and risks.</dd></div>
-        <div><dt>Owner</dt><dd>Also changes settings and manages the weekly email.</dd></div>
-      </dl>
+      {{ role_guide_foldout(tracker if g.role else none) }}
     </header>
     {% set role_counts = {'all': access|length, 'owner': access|selectattr('role', 'equalto', 'owner')|list|length, 'editor': access|selectattr('role', 'equalto', 'editor')|list|length, 'viewer': access|selectattr('role', 'equalto', 'viewer')|list|length} %}
     {% set ranks = {'viewer': 1, 'editor': 2, 'owner': 3} %}

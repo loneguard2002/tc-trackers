@@ -23,6 +23,7 @@ from .auth import current_user, has_permission, throttle
 from .auth.accounts import find_by_email
 from .auth.csrf import install_csrf
 from .auth.passwords import hash_password, validate_new_password
+from .auth.role_guide import ROLE_NOTES, role_guide_rows
 from .config import load_config, validate_config
 from .db import get_session, init_db
 from .entries import bp as entries_bp
@@ -129,6 +130,9 @@ def create_app(overrides: dict | None = None) -> Flask:
 
     register_filters(app)
     app.jinja_env.globals["page_numbers"] = page_numbers  # the window of page links in server_pager
+    # What each tracker role can do (trackers/_role_guide.html), from one list of rows.
+    app.jinja_env.globals["role_guide_rows"] = role_guide_rows
+    app.jinja_env.globals["role_guide_notes"] = ROLE_NOTES
     if app.config.get("TESTING"):
         app.jinja_env.undefined = StrictUndefined
     install_csrf(app)
