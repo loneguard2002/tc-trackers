@@ -6,6 +6,9 @@ them. They can change the limits and unblock an account or address at once; both
 
 The same form holds the per-person limit on PDF and PNG report downloads (report/limits.py): another limit that stops
 one person from overloading the server, trusted to the same people.
+
+Opening the page marks every block so far as seen for everyone who can open it: the count beside Sign-in protection in
+the menu goes back to 0, and the blocks that started since the last visit carry a New badge on this visit only.
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from flask import abort, flash, redirect, render_template, request, url_for
 from ..audit import change, record
 from ..auth import current_user, permission_required, throttle
 from ..db import get_session
+from ..mail.access import mail_configured
 from ..report import limits as export_limits
 from . import bp
 
@@ -22,12 +26,15 @@ KIND_NAMES = {"account": "Account", "address": "Address"}
 
 
 def _form(limits: throttle.Limits, per_minute: int) -> dict[str, str]:
-    return {**{name: str(value) for name, value in limits.as_dict().items()}, export_limits.FIELD: str(per_minute)}
+    return {**limits.form(), export_limits.FIELD: str(per_minute)}
 
 
 def _page(limits: throttle.Limits, form: dict | None = None, errors: dict | None = None, status: int = 200):
     db = get_session()
     now, rows = throttle.summaries(db, limits)
+    new = throttle.new_blocks(db, throttle.seen_at(db))
+    throttle.mark_seen(db, now)
+    db.commit()
     blocked = [row for row in rows if row.blocked]
     counts = {
         "all": len(rows),
@@ -51,6 +58,8 @@ def _page(limits: throttle.Limits, form: dict | None = None, errors: dict | None
             counts=counts,
             failures_last_day=sum(row.last_day for row in rows if row.kind == "address"),
             kind_names=KIND_NAMES,
+            new=new,
+            mail_ready=mail_configured(db),
         ),
         status,
     )
@@ -68,7 +77,9 @@ def sign_in_protection():
     if download_error:
         errors[export_limits.FIELD] = download_error
     if errors:
-        form = {name: request.form.get(name, "") for name in (*throttle.LIMIT_FIELDS, export_limits.FIELD)}
+        form = {
+            name: request.form.get(name, "") for name in (*throttle.LIMIT_FIELDS, "email_admins", export_limits.FIELD)
+        }
         return _page(before, form, errors, 400)
     before_per_minute = export_limits.load_per_minute(db)
     if limits == before and per_minute == before_per_minute:
@@ -77,7 +88,7 @@ def sign_in_protection():
     actor = current_user().id
     if limits != before:
         old, new = before.as_dict(), limits.as_dict()
-        changed = [name for name in throttle.LIMIT_FIELDS if old[name] != new[name]]
+        changed = [name for name in old if old[name] != new[name]]
         throttle.save_limits(db, limits)
         record(
             db,

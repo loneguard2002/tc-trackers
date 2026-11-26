@@ -74,6 +74,23 @@ def _record_failure(db, user: User | None, entered_email: str, reason: str) -> N
     db.commit()
 
 
+def _count_failures(db, limits: throttle.Limits, *identities: tuple[str, str]) -> bool:
+    """Count a failed sign-in against each ``(kind, value)``; a block it starts goes to the activity log. ``True`` when
+    one started, so the people who manage sign-in protection are emailed once the failure is committed."""
+    started = False
+    for kind, value in identities:
+        if throttle.fail(db, limits, kind, value):
+            throttle.record_block(db, limits, kind, value)
+            started = True
+    return started
+
+
+def _alert_administrators(db) -> None:
+    from ..mail import sign_in_alerts  # here: the mail package imports views that need this blueprint's helpers
+
+    sign_in_alerts.send_block_alert(db)
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user() is not None:
@@ -102,19 +119,22 @@ def login():
         password_ok = verify_password(password, user.password_hash)
 
     if not password_ok:
-        if entered_email:
-            throttle.fail(db, "account", entered_email)
-        throttle.fail(db, "address", address)
+        identities = ([("account", entered_email)] if entered_email else []) + [("address", address)]
+        started = _count_failures(db, limits, *identities)
         reason = "unknown_account" if user is None else "wrong_password"
         _record_failure(db, user, entered_email, reason)
+        if started:
+            _alert_administrators(db)
         return _login_page("Invalid email or password.", 200)
 
     if user.status == "pending":
         _record_failure(db, user, entered_email, "not_active")
         return _login_page("Your account is awaiting approval by an administrator.", 200)
     if user.status != "active":
-        throttle.fail(db, "account", entered_email)
+        started = _count_failures(db, limits, ("account", entered_email))
         _record_failure(db, user, entered_email, "not_active")
+        if started:
+            _alert_administrators(db)
         return _login_page("Invalid email or password.", 200)
 
     throttle.clear(db, "account", entered_email)

@@ -21,6 +21,19 @@ EXEMPT = {
     Path("mail/feedback/_layout.html"),
     Path("mail/feedback/new.html"),
     Path("mail/feedback/reply.html"),
+    *(
+        Path("mail/access") / name
+        for name in (
+            "_layout.html",
+            "_parts.html",
+            "approved.html",
+            "declined.html",
+            "reminder.html",
+            "request_approvers.html",
+            "request_person.html",
+            "sign_in_blocked.html",
+        )
+    ),  # the access and sign-in block emails
     Path("report/print_dashboard.html"),
 }
 FORBIDDEN = {

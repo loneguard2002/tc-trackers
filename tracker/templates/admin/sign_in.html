@@ -4,6 +4,7 @@
 {% block head_extra %}
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
 {% endblock %}
+{% macro new_badge(row) -%}{% if (row.kind, row.value) in new %} <span class="badge badge-info">New</span>{% endif %}{%- endmacro %}
 {% macro when(at) -%}{{ at.strftime('%d %b %H:%M') }}{%- endmacro %}
 {% macro unblock_button(row) -%}
 <form method="post" action="{{ url_for('admin.sign_in_unblock') }}" data-confirm="Unblock {{ row.value }}? Its {{ row.last_day }} failed sign-in{{ 's' if row.last_day != 1 }} will be cleared.">
@@ -34,7 +35,7 @@
   <section class="settings-section" aria-labelledby="section-blocked">
     <header class="settings-section-head">
       <h2 id="section-blocked">Blocked now</h2>
-      <p>Accounts and addresses that cannot sign in with a password at the moment. Unblock clears their failures at once; it is recorded in Activity.</p>
+      <p>Accounts and addresses that cannot sign in with a password at the moment. Unblock clears their failures at once; it is recorded in Activity. New marks a block that started since this page was last opened.</p>
     </header>
     {% if blocked %}
     <div class="section-table register">
@@ -44,7 +45,7 @@
         {% for row in blocked %}
         <tr>
           <td data-label="Type:">{{ kind_names[row.kind] }}</td>
-          <td data-label="Account or address:">{{ row.value }}</td>
+          <td data-label="Account or address:">{{ row.value }}{{ new_badge(row) }}</td>
           <td data-label="Failures in window:">{{ row.in_window }} of {{ row.limit }}</td>
           <td data-label="Unblocks at:">{{ when(row.unblocks_at) }}</td>
           <td class="cell-actions">{{ unblock_button(row) }}</td>
@@ -76,7 +77,7 @@
         {% for row in rows %}
         <tr data-status="{{ row.kind }}{{ ' blocked' if row.blocked }}" data-search="{{ (row.value ~ ' ' ~ row.kind)|lower }}" data-sort-kind="{{ row.kind }}" data-sort-value="{{ row.value }}" data-sort-window="{{ row.in_window }}" data-sort-day="{{ row.last_day }}" data-sort-last="{{ row.last_at.isoformat() }}">
           <td data-label="Type:">{{ kind_names[row.kind] }}</td>
-          <td data-label="Account or address:">{{ row.value }}</td>
+          <td data-label="Account or address:">{{ row.value }}{{ new_badge(row) }}</td>
           <td data-label="In window:">{{ row.in_window }} of {{ row.limit }}</td>
           <td data-label="Last 24 h:">{{ row.last_day }}</td>
           <td data-label="Last failure:">{{ when(row.last_at) }}</td>
@@ -97,7 +98,7 @@
     {{ csrf_field(csrf_token()) }}
     <section class="settings-section span-all" aria-labelledby="section-limits">
       <header class="settings-section-head">
-        <h2 id="section-limits">Limits</h2>
+        <h2 id="section-limits">Limits and alerts</h2>
         <p>Lower numbers stop guessing sooner but lock people out sooner after typing mistakes. Changes apply to the next attempt and are recorded in Activity.</p>
       </header>
       {% for name, label, help in (
@@ -111,6 +112,9 @@
       {% if errors.get(name) %}<p class="field-error" id="{{ name }}-error">{{ errors[name] }}</p>{% endif %}
       {% endcall %}
       {% endfor %}
+      {% call setting('Email alerts', 'When a block starts, everyone who can open this page gets an email listing who is blocked. At most one email every 15 minutes, however many blocks start; the count beside Sign-in protection in the menu shows every block.' ~ ('' if mail_ready else ' No email goes out until the mail server is set up in Email settings.'), 'email_admins') %}
+      <div class="check-row"><label><input id="email_admins" name="email_admins" type="checkbox" role="switch" value="on" {{ 'checked' if form.email_admins == 'on' }} aria-describedby="email_admins-help"> Email when a block starts</label></div>
+      {% endcall %}
     </section>
     <section class="settings-section span-all" aria-labelledby="section-downloads">
       <header class="settings-section-head">
