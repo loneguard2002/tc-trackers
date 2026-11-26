@@ -60,6 +60,52 @@ def chart_order(nodes: list[ChartNode], depth: int = 1) -> list[tuple[TeamRow, i
     return found
 
 
+MAX_CHAINS = 6
+
+
+def paths_to(rows: list[TeamRow], team_id: int, parent_ids: frozenset[int] | None = None) -> list[list[TeamRow]]:
+    """Each chain of teams from the top level down to just above the team, by name; none for a top-level team.
+    ``parent_ids`` stands in for the team's own higher teams (a change being previewed). At most ``MAX_CHAINS``."""
+    by_id = {row.id: row for row in rows}
+
+    def up(current: int, path: frozenset[int]) -> list[list[TeamRow]]:
+        chains: list[list[TeamRow]] = []
+        for parent_id in by_id[current].parent_ids if current in by_id else ():
+            if parent_id in path or parent_id not in by_id:  # a cycle in corrupted data, or a team just deleted
+                continue
+            chains.extend([*chain, by_id[parent_id]] for chain in up(parent_id, path | {parent_id}) or [[]])
+        return chains
+
+    if parent_ids is None:
+        chains = up(team_id, frozenset({team_id}))
+    else:
+        chains = []
+        for parent_id in parent_ids:
+            if parent_id in by_id and parent_id != team_id:
+                above = up(parent_id, frozenset({team_id, parent_id})) or [[]]
+                chains.extend([*chain, by_id[parent_id]] for chain in above)
+    chains.sort(key=lambda chain: [(row.name.casefold(), row.id) for row in chain])
+    return chains[:MAX_CHAINS]
+
+
+def ancestor_levels(rows: list[TeamRow], team_id: int) -> dict[int, int]:
+    """Each team above the team to how many levels up it is by the shortest path (1 for a higher team)."""
+    by_id = {row.id: row for row in rows}
+    levels: dict[int, int] = {}
+    current, level, seen = [team_id], 0, {team_id}
+    while current:
+        level += 1
+        above = []
+        for team in current:
+            for parent_id in by_id[team].parent_ids if team in by_id else ():
+                if parent_id not in seen and parent_id in by_id:
+                    seen.add(parent_id)
+                    levels[parent_id] = level
+                    above.append(parent_id)
+        current = above
+    return levels
+
+
 def member_counts(session: Session) -> dict[int, int]:
     """Team id to its number of active direct members."""
     return dict(

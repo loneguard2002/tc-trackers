@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{#- A team's page in the Teams New view (spec 2026-11-26-teams-new-view-design.md): the access map, then People in two
+    groups, members of this team and people reaching it from teams above. The forms post to the routes the Classic
+    page uses. -#}
+{% from "macros.html" import csrf_field, icon, title_crumb %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='teams-new.js', v=app_version) }}" defer></script>
+{% endblock %}
+{% macro counted(n, one, many) %}{{ n }} {{ one if n == 1 else many }}{% endmacro %}
+{% macro avatar(user) %}<span class="member-avatar" aria-hidden="true">{{ user.full_name[:1]|upper }}</span>{% endmacro %}
+{% macro who(user) -%}
+<span class="member-who"><span class="member-name">{{ user.full_name }}</span>{% if user.id == current_user.id %} <span class="muted">(you)</span>{% endif %}{% if user.status != 'active' %} <span class="badge badge-muted">{{ user.status|title }}</span>{% endif %}
+  <span class="member-email">{{ user.email }}</span></span>
+{%- endmacro %}
+{% block content %}
+<header class="list-head">
+  <div>
+    {{ title_crumb([(url_for('teams.index'), 'Teams')], team.name) }}
+    <p class="page-lede">{{ team.description or "People in this team reach its trackers, and the trackers of every team below it." }}</p>
+  </div>
+  <div class="teams-head-actions">{% include "teams/_view_switch.html" %}</div>
+</header>
+
+<div class="settings-section team-card team-card-new">
+  {% set alert %}{% if errors and not picking %}<div class="form-alert team-alert" role="alert">
+    <strong>Please correct the following:</strong>
+    <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>{% endif %}{% endset %}
+  {% if editing %}
+  {% include "teams/_edit_details.html" %}
+  {% else %}
+  <header class="team-header team-header-new">
+    {{ alert }}
+    <div class="team-pills">
+      {% if place %}<span class="team-pill team-header-place">{% set colour = region_colour(place.region_code) %}{% if colour %}<span class="region-mark region-c{{ colour }}" aria-hidden="true"></span>{% endif %}<strong>{{ place.region_code }}</strong>{% if place.location %}{{ icon('pin') }}{{ place.location }}{% endif %}</span>{% else %}<span class="team-pill team-header-place is-unset">Region not set</span>{% endif %}
+    </div>
+    <div class="team-header-actions">
+      <a class="button" href="{{ url_for('teams.view', team_id=team.id, edit=1, tab=tab if tab != 'people' else none) }}">{{ icon('edit') }}Edit details</a>
+      <details class="team-menu">
+        <summary class="button" title="More actions">{{ icon('more') }}<span class="sr-only">More actions</span></summary>
+        <div class="team-menu-body">
+          <a href="{{ url_for('teams.parents', team_id=team.id) }}">{{ icon('teams') }}Where it sits</a>
+          {% if delete_blocker %}
+          <p class="team-menu-note"><strong>Delete team:</strong> {{ delete_blocker }}</p>
+          {% else %}
+          <form method="post" action="{{ url_for('teams.delete', team_id=team.id) }}" data-confirm="Delete {{ team.name }}? Its members lose the access it gives. This cannot be undone.">
+            {{ csrf_field(csrf_token()) }}
+            <button class="team-menu-danger" type="submit">{{ icon('trash') }}Delete team</button>
+          </form>
+          {% endif %}
+        </div>
+      </details>
+    </div>
+  </header>
+  {% endif %}
+
+  <section class="access-map" aria-labelledby="map-title">
+    <header class="access-map-head">
+      <h2 id="map-title">How people reach this team's trackers</h2>
+      <p>Access flows down: a team's people also reach every team below it.</p>
+    </header>
+    {% for chain in chains or [[]] %}
+    <ol class="access-chain">
+      {% for row in chain %}
+      {% set up = chain|length - loop.index + 1 %}
+      <li><a class="chain-node" href="{{ url_for('teams.view', team_id=row.id) }}">
+        <span class="chain-level">{{ 'Team above' if up == 1 else up ~ ' levels up' }}</span>
+        <strong class="chain-name">{{ row.name }}</strong>
+        <span class="chain-note">{{ counted(reach_down.get(row.id, 0), 'person reaches down', 'people reach down') }}</span>
+      </a></li>
+      {% endfor %}
+      <li><div class="chain-node is-here" aria-current="true">
+        <span class="chain-level">This team</span>
+        <strong class="chain-name">{{ team.name }}</strong>
+        <span class="chain-note">{{ counted(member_total, 'member', 'members') }} · {{ counted(tracker_total, 'tracker', 'trackers') }}</span>
+      </div></li>
+      {% if loop.first %}
+      <li><div class="chain-node is-below">
+        <span class="chain-level">Teams below</span>
+        {% if below %}<strong class="chain-name-plain">{{ counted(below|length, 'team', 'teams') }}</strong>
+        <a href="{{ url_for('teams.view', team_id=team.id, tab='below') }}">See them</a>
+        {% else %}<strong class="chain-name-plain muted">None yet</strong>
+        <a href="{{ url_for('teams.view', team_id=team.id, tab='below') }}">Add a team below</a>{% endif %}
+      </div></li>
+      {% endif %}
+    </ol>
+    {% endfor %}
+  </section>
+
+  <nav class="tabs team-tabs" aria-label="Team sections">
+    {% for key, label, count in (('people', 'People', active_people), ('below', 'Teams below', below|length), ('trackers', 'Trackers', trackers|length)) %}
+    <a class="tab{{ ' active' if key == tab }}" href="{{ url_for('teams.view', team_id=team.id, tab=key) }}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }} <span class="tab-count">{{ count }}</span></a>
+    {% endfor %}
+  </nav>
+</div>
+
+{% if tab == 'people' %}
+<div class="team-people-new">
+  <div class="team-people-lists">
+    <section class="list-panel team-members" aria-labelledby="members-title">
+      <header class="team-group-head">
+        <div>
+          <h3 id="members-title">Members of {{ team.name }} <span class="tab-count">{{ members|length }}</span></h3>
+          <p>Change their role here. Their role covers this team and every team below.</p>
+        </div>
+      </header>
+      {% for row in members %}
+      {% set u = row.person.user %}
+      <div class="member-row">
+        {{ avatar(u) }}
+        <div class="member-main">
+          {{ who(u) }}
+          {% set top = outranked.get(u.id) %}
+          {% if top %}<span class="outranked-note">{{ top[0]|title }} counts: {{ top[0]|title }} of {{ top[1] }}, above</span>{% endif %}
+        </div>
+        <form class="role-switch" method="post" action="{{ url_for('teams.update_member', team_id=team.id, user_id=u.id) }}">
+          {{ csrf_field(csrf_token()) }}
+          <fieldset>
+            <legend class="sr-only">Role for {{ u.full_name }}</legend>
+            {% for r in roles %}<label><input type="radio" name="role" value="{{ r }}"{{ ' checked' if row.person.direct_role == r }} data-autosubmit><span>{{ r|title }}</span></label>{% endfor %}
+          </fieldset>
+          <button class="button button-small" type="submit" data-autosubmit-fallback>Set role</button>
+        </form>
+        <form method="post" action="{{ url_for('teams.update_member', team_id=team.id, user_id=u.id) }}"
+          data-confirm="Remove {{ u.full_name }} from {{ team.name }}? They lose the access this team gives.">
+          {{ csrf_field(csrf_token()) }}<input type="hidden" name="action" value="remove">
+          <button class="tool-button is-danger" type="submit" title="Remove {{ u.full_name }} from {{ team.name }}">{{ icon('close') }}<span class="sr-only">Remove {{ u.full_name }} from {{ team.name }}</span></button>
+        </form>
+      </div>
+      {% else %}
+      <p class="empty-note">No members yet.</p>
+      {% endfor %}
+    </section>
+
+    <section class="list-panel team-from-above" aria-labelledby="above-title">
+      <header class="team-group-head">
+        <div>
+          <h3 id="above-title">Reaching this team from teams above <span class="tab-count">{{ inherited_count }}</span></h3>
+          <p>They keep the role they hold up there. Change it on that team.</p>
+        </div>
+      </header>
+      {% for name, distance, team_id, rows in from_above %}
+      <h4 class="from-team">From {{ name }} · {{ distance }}</h4>
+      {% for person, role in rows %}
+      <div class="member-row is-inherited">
+        {{ avatar(person.user) }}
+        <div class="member-main">{{ who(person.user) }}</div>
+        <span class="role-pill role-{{ role }}">{{ role|title }}</span>
+        <a class="from-change" href="{{ url_for('teams.view', team_id=team_id) }}">Change in {{ name }}</a>
+      </div>
+      {% endfor %}
+      {% else %}
+      <p class="empty-note">No one reaches this team from a team above.</p>
+      {% endfor %}
+    </section>
+  </div>
+</div>
+{% elif tab == 'below' %}
+{% include "teams/_tab_below.html" %}
+{% else %}
+{% include "teams/_tab_trackers.html" %}
+{% endif %}
+{% endblock %}

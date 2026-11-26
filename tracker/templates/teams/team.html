@@ -24,27 +24,7 @@
         <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
       </div>{% endif %}{% endset %}
       {% if editing %}
-      <header class="team-header team-edit">
-        {{ alert }}
-        <h2>Edit details</h2>
-        <form method="post" action="{{ url_for('teams.rename', team_id=team.id) }}">
-          {{ csrf_field(csrf_token()) }}
-          {% if tab != 'people' %}<input type="hidden" name="tab" value="{{ tab }}">{% endif %}
-          <div class="field-stack">
-            {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
-            <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
-            {% endcall %}
-            {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
-            <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
-            {% endcall %}
-            {% include "teams/_place_fields.html" %}
-          </div>
-          <div class="team-edit-foot">
-            <a class="button" href="{{ url_for('teams.view', team_id=team.id, tab=tab if tab != 'people' else none) }}">Cancel</a>
-            <button class="button primary" type="submit">Save details</button>
-          </div>
-        </form>
-      </header>
+      {% include "teams/_edit_details.html" %}
       {% else %}
       <header class="team-header">
         {{ alert }}
@@ -166,113 +146,9 @@
     </section>
     </div>
     {% elif tab == 'below' %}
-    <div id="tab-below">
-    <section class="list-panel team-panel" id="teams-below" aria-labelledby="section-below">
-      <h2 class="sr-only" id="section-below">Teams below</h2>
-      {% if existing_teams %}
-      <form class="team-add-panel team-add-below" method="get" action="{{ url_for('teams.add_below', team_id=team.id) }}">
-        <div>
-          <label for="below_team_id">Existing team</label>
-          <select id="below_team_id" name="team_id" required>
-            {% for id, name in existing_teams %}<option value="{{ id }}">{{ name }}</option>{% endfor %}
-          </select>
-        </div>
-        <button class="button" type="submit">{{ icon('plus') }}Add selected team</button>
-        <span class="team-add-or">or</span>
-        <a class="button" href="{{ url_for('teams.index', parent=team.id, _anchor='new-team') }}">{{ icon('plus') }}New team</a>
-      </form>
-      {% else %}
-      <p class="team-add-panel team-add-note"><span>No other team can be placed below {{ team.name }}.</span>
-        <a class="button" href="{{ url_for('teams.index', parent=team.id, _anchor='new-team') }}">{{ icon('plus') }}New team</a></p>
-      {% endif %}
-      {% if below %}
-      <div class="list-tools">
-        {{ search_box('below-table', 'Search teams below') }}
-        {{ clear_filters('below-table') }}
-      </div>
-      <div class="section-table list-table">
-        <table id="below-table" class="card-rows" data-state-prefix="below-">
-          <thead><tr>
-            {{ sort_header('Team', 'team', default=True) }}
-            {{ sort_header('Place', 'place') }}
-            {{ sort_header('People', 'people', 'num', type='number') }}
-            {{ sort_header('Trackers', 'trackers', 'num', type='number') }}
-            <th scope="col"><span class="sr-only">Actions</span></th>
-          </tr></thead>
-          <tbody>
-          {% for row in below %}
-          {% set place = places.get(row.id) %}
-          {% set place_text = (place.region_code ~ (' · ' ~ place.city if place.city else '')) if place else 'Region not set' %}
-          {% set people_total = reach.get(row.id, 0) %}
-          {% set tracker_total = tracker_counts.get(row.id, 0) %}
-          <tr data-search="{{ (row.name ~ ' ' ~ place_text)|lower }}" data-sort-team="{{ row.name }}" data-sort-place="{{ place_text }}" data-sort-people="{{ people_total }}" data-sort-trackers="{{ tracker_total }}">
-            <td class="list-name"><a href="{{ url_for('teams.view', team_id=row.id) }}">{{ row.name }}</a></td>
-            <td>{% if place %}{{ place_text }}{% else %}<span class="muted">{{ place_text }}</span>{% endif %}</td>
-            <td class="num">{{ people_count(people_total) }}</td>
-            <td class="num">{{ tracker_total }}</td>
-            <td class="cell-actions"><div class="row-tools"><a class="tool-button is-danger" href="{{ url_for('teams.parents', team_id=row.id, remove=team.id, back=team.id) }}" title="Remove {{ row.name }} from under {{ team.name }}">{{ icon('close') }}<span class="sr-only">Remove {{ row.name }} from under {{ team.name }}</span></a></div></td>
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      {{ no_match('No teams match the search.', 'below-table') }}
-      </div>
-      {{ table_pager('below-table', 'teams below', 'team below', below|length) }}
-      {% else %}
-      <p class="empty-note">No teams are below this one.</p>
-      {% endif %}
-    </section>
-    </div>
+    {% include "teams/_tab_below.html" %}
     {% else %}
-    <div id="tab-trackers">
-    <section class="list-panel team-panel" id="trackers" aria-labelledby="section-trackers">
-      <h2 class="sr-only" id="section-trackers">Trackers</h2>
-      <div class="list-tools">
-        {% if trackers %}
-        {{ search_box('trackers-table', 'Search trackers') }}
-        {{ status_filters('trackers-table', 'trackers', (('all', 'All'), ('active', 'Active'), ('archived', 'Archived')), {'all': trackers|length, 'active': active_trackers, 'archived': trackers|length - active_trackers}) }}
-        {{ clear_filters('trackers-table') }}
-        {% endif %}
-        <a class="button list-tools-action" href="{{ url_for('teams.view', team_id=team.id, tab='trackers', add=1) }}"{% if picking %} aria-current="true"{% endif %}>{{ icon('plus') }}Add trackers</a>
-      </div>
-      {% if picking %}{% include "teams/_tracker_picker.html" %}{% endif %}
-      {% if trackers %}
-      <div class="section-table list-table">
-        <table id="trackers-table" class="card-rows" data-state-prefix="trackers-">
-          <thead><tr>
-            {{ sort_header('Tracker', 'tracker', default=True) }}
-            {{ sort_header('Business line', 'line') }}
-            {{ sort_header('Regions', 'regions') }}
-            {{ sort_header('Status', 'status') }}
-            <th scope="col"><span class="sr-only">Actions</span></th>
-          </tr></thead>
-          <tbody>
-          {% for row in trackers %}
-          {% set t = row.tracker %}
-          {% set archived = t.status == 'archived' %}
-          <tr{% if archived %} class="is-retired"{% endif %} data-search="{{ (t.name ~ ' ' ~ row.business_line ~ ' ' ~ row.regions|join(' ') ~ ' ' ~ t.status)|lower }}" data-status="{{ t.status }}" data-sort-tracker="{{ t.name }}" data-sort-line="{{ row.business_line }}" data-sort-regions="{{ row.regions|join(', ') }}" data-sort-status="{{ t.status }}">
-            <td class="list-name">{{ t.name }}</td>
-            <td>{% if row.business_line %}{{ row.business_line }}{% else %}<span class="muted">None</span>{% endif %}</td>
-            <td>{% if row.regions %}<span class="team-regions">{% for code in row.regions %}{{ code_badge(code, colour=region_colour(code)) }}{% endfor %}</span>{% else %}<span class="muted">None</span>{% endif %}</td>
-            <td>{% if archived %}<span class="badge badge-muted">Archived</span>{% else %}<span class="badge badge-success">Active</span>{% endif %}</td>
-            <td class="cell-actions"><div class="row-tools"><a class="button button-small row-edit" href="{{ url_for('trackers.roles', tracker_id=t.id) }}">{{ icon('key') }}Access<span class="sr-only"> for {{ t.name }}</span></a>
-              <form method="post" action="{{ url_for('trackers.set_team', tracker_id=t.id) }}"
-                data-confirm="Remove {{ t.name }} from {{ team.name }}? It moves to no team and keeps its regions. {% if active_people %}Anyone who reaches it only through {{ team.name }} or a team above it loses that access.{% else %}No one reaches it through {{ team.name }}, so no one's access changes.{% endif %}">
-                {{ csrf_field(csrf_token()) }}<input type="hidden" name="team_id" value=""><input type="hidden" name="next" value="team"><input type="hidden" name="team" value="{{ team.id }}">
-                <button class="tool-button is-danger" type="submit" title="Remove {{ t.name }} from {{ team.name }}">{{ icon('close') }}<span class="sr-only">Remove {{ t.name }} from {{ team.name }}</span></button>
-              </form></div></td>
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      {{ no_match('No trackers match the search.', 'trackers-table') }}
-      </div>
-      {{ table_pager('trackers-table', 'trackers', 'tracker', trackers|length, active=active_trackers) }}
-      {% else %}
-      <p class="empty-note">No trackers are in this team.</p>
-      {% endif %}
-    </section>
-    </div>
+    {% include "teams/_tab_trackers.html" %}
     {% endif %}
   </div>
 </div>

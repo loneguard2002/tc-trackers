@@ -47,7 +47,15 @@ from ..models import (
 from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
-from .overview import chart, chart_order, member_counts, reach_people, tracker_counts
+from .overview import (
+    ancestor_levels,
+    chart,
+    chart_order,
+    member_counts,
+    paths_to,
+    reach_people,
+    tracker_counts,
+)
 from .people import TeamPerson, reach_counts, team_people
 from .tracker_moves import (
     TEAM_DELETED_MESSAGE,
@@ -307,6 +315,42 @@ def _tracker_rows(db, team_id: int) -> list[TrackerRow]:
     return [TrackerRow(tracker, line or "", codes.get(tracker.id, [])) for tracker, line in found]
 
 
+def _new_team_context(db, rows: list[TeamRow], team: Team, people: list[PersonRow]) -> dict:
+    """What a team's page needs in the New view: the chains of teams above it, its members, the people reaching it
+    from each team above (nearest first, each person with the role held there), and whose role here is outranked."""
+    labels = team_labels(rows)
+    levels = ancestor_levels(rows, team.id)
+    groups: dict[int, list[tuple[TeamPerson, str]]] = {}
+    outranked: dict[int, tuple[str, str]] = {}
+    for row in people:
+        for inherit in row.person.inherited:
+            groups.setdefault(inherit.team_id, []).append((row.person, inherit.role))
+        if row.person.direct_role is not None and row.person.inherited:
+            top = max(row.person.inherited, key=lambda inherit: ROLE_ORDER[inherit.role])  # the nearest on a tie
+            if ROLE_ORDER[top.role] > ROLE_ORDER[row.person.direct_role]:
+                outranked[row.person.user.id] = (top.role, top.team_name)
+    from_above = [
+        (
+            labels[above],
+            "team above" if levels.get(above) == 1 else f"{levels.get(above)} levels up",
+            above,
+            sorted(groups[above], key=lambda item: (item[0].user.full_name.casefold(), item[0].user.id)),
+        )
+        for above in ancestors(rows, team.id)
+        if above in groups
+    ]
+    members = member_counts(db)
+    return {
+        "chains": paths_to(rows, team.id),
+        "members": [row for row in people if row.person.direct_role is not None],
+        "from_above": from_above,
+        "outranked": outranked,
+        "reach_down": members,
+        "member_total": members.get(team.id, 0),
+        "tracker_total": tracker_counts(db).get(team.id, 0),
+    }
+
+
 def _render_team(
     team: Team,
     errors: list[str],
@@ -344,11 +388,13 @@ def _render_team(
         ).all()
     )
     excluded = {team.id, *(row.id for row in below), *ancestors(rows, team.id)}  # itself, direct lower, all higher
+    view = chosen_view()
     page = render_template(
-        "teams/team.html",
+        "teams/team_new.html" if view == "new" else "teams/team.html",
+        **(_new_team_context(db, rows, team, people) if view == "new" else {}),
         **context,
         view_urls=switch_urls("teams.view", team_id=team.id, tab=tab if tab in TEAM_TABS and tab != "people" else None),
-        active_view=chosen_view(),
+        active_view=view,
         existing_teams=[(row.id, row.name) for row in sorted_by_name(rows) if row.id not in excluded],
         team=team,
         under=_higher_teams(labels, _row(rows, team).parent_ids),
