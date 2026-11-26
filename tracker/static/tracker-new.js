@@ -14,6 +14,8 @@
   });
 
   var ticked = null;
+  // A fresh start (the pop-up on Home opened again) follows the team again.
+  team.form.addEventListener("reset", function () { touched = false; ticked = null; });
 
   team.addEventListener("change", function () {
     if (touched) return;
@@ -31,9 +33,10 @@
   });
 })();
 
-// New tracker in five steps, like New permission set: one real form shown a step at a time. Next checks the step it
-// leaves (the server checks everything again); Back and the finished steps in the step bar move freely; Create
-// tracker, on the review, submits once. Without JavaScript every step shows and Create tracker submits the form.
+// New tracker in five steps, like New permission set: one real form shown a step at a time, in a pop-up on Home or on
+// the New tracker page. Next checks the step it leaves (the server checks everything again); Back and the finished
+// steps in the step bar move freely; Create tracker, on the review, submits once and opens the tracker's Settings.
+// Without JavaScript the New tracker link opens the page, where every step shows and Create tracker submits the form.
 (function () {
   "use strict";
 
@@ -56,6 +59,8 @@
   var skip = form.querySelector("[data-wizard-skip]");
   var create = form.querySelector("[data-wizard-create]");
   var review = form.querySelector("[data-review]");
+  var dialog = form.closest("dialog");
+  var opener = document.querySelector("[data-new-tracker]");
   var step = 1;
   var sending = false;
 
@@ -350,6 +355,24 @@
     create.disabled = true;
   });
   window.addEventListener("pageshow", function () { sending = false; create.disabled = false; });
+
+  // Home: New tracker opens the pop-up at step 1 with a fresh draft; closing it in any way discards the draft.
+  if (dialog && opener) {
+    opener.addEventListener("click", function (event) {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.button) return;  // a new tab still gets the page
+      event.preventDefault();
+      form.reset();
+      averageButtons();
+      each(form.querySelectorAll("[data-live-unit]"), function (el) { el.textContent = "units"; });
+      go(1);
+      dialog.showModal();
+      els.name.focus();
+    });
+    each(dialog.querySelectorAll("[data-close]"), function (button) {
+      button.addEventListener("click", function () { dialog.close(); });
+    });
+    dialog.addEventListener("close", function () { opener.focus(); });
+  }
 
   // After the server refused the form: the first step with something to fix, else the review under its list.
   averageButtons();

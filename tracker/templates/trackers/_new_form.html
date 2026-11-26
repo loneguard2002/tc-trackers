@@ -1,0 +1,78 @@
+{#- New tracker in five steps, like New permission set: one real form, which tracker-new.js shows a step at a time with
+    the step bar, Back, Next and a review; Create tracker opens the new tracker's Settings. ``in_dialog`` (Home) puts it
+    in the pop-up, with a close button; otherwise it stands on the New tracker page. Without JavaScript every step shows
+    at once and Create tracker submits it. When the server refuses the form, it comes back on the page, open on the
+    first step to fix. -#}
+{% from "macros.html" import csrf_field %}
+{% import "trackers/_field_parts.html" as parts with context %}
+{% set in_dialog = in_dialog is defined and in_dialog %}
+<form class="tracker-wizard{{ '' if in_dialog else ' list-dialog wizard wizard-card' }}" method="post" action="{{ url_for('trackers.new') }}" data-tracker-wizard data-start-step="{{ 5 if errors else 1 }}"{% if not in_dialog %} aria-labelledby="wizard-caption"{% endif %}>
+  {{ csrf_field(csrf_token()) }}
+  <header class="list-dialog-head">
+    {% if in_dialog %}
+    <div><h2 id="new-tracker-title">New tracker</h2><p class="list-dialog-sub" data-step-caption>Step 1 of 5: name it and say what it counts</p></div>
+    <button class="tool-button" type="button" data-close title="Close" aria-label="Close">✕</button>
+    {% else %}
+    <p class="list-dialog-sub wizard-caption" id="wizard-caption" data-step-caption>New tracker</p>
+    {% endif %}
+  </header>
+  <ol class="wizard-steps wizard-steps-5" aria-label="Steps" hidden>
+    <li data-step-dot="1" aria-current="step"><span>1</span>Details</li>
+    <li data-step-dot="2"><span>2</span>Who sees it</li>
+    <li data-step-dot="3"><span>3</span>Weeks</li>
+    <li data-step-dot="4"><span>4</span>Forecast</li>
+    <li data-step-dot="5"><span>5</span>Review</li>
+  </ol>
+  <div class="list-dialog-body wizard-body">
+    {{ parts.error_alert() }}
+    <section data-wizard-step="1" aria-labelledby="step-details">
+      <h2 class="wizard-step-title" id="step-details" tabindex="-1">Details</h2>
+      <p class="wizard-lede">Name the tracker and say what it counts.</p>
+      {{ parts.name_field() }}
+      {{ parts.label_pair() }}
+      {{ parts.description_field() }}
+      <p class="field-error" data-step-error role="alert" hidden></p>
+    </section>
+    <section data-wizard-step="2" aria-labelledby="step-access">
+      <h2 class="wizard-step-title" id="step-access" tabindex="-1">Who sees it</h2>
+      <p class="wizard-lede">People given a region see its trackers, so the regions decide who can see this one.</p>
+      {% include "trackers/_label_fields.html" %}
+      {{ parts.team_field() }}
+      <p class="field-error" data-step-error role="alert" hidden></p>
+    </section>
+    <section data-wizard-step="3" aria-labelledby="step-weeks">
+      <h2 class="wizard-step-title" id="step-weeks" tabindex="-1">Weeks</h2>
+      <p class="wizard-lede">The weeks the tracker covers. Every entry and report is dated to a week-ending day.</p>
+      {{ parts.weekday_field() }}
+      {{ parts.date_pair() }}
+      {{ parts.target_field() }}
+      <div class="wizard-weeks" data-weeks hidden>
+        <p class="wizard-weeks-sum" data-weeks-sum aria-live="polite"></p>
+        <div class="wizard-weeks-bar" data-weeks-bar aria-hidden="true"></div>
+        <p class="wizard-weeks-ends"><span data-weeks-first></span><span data-weeks-target></span><span data-weeks-last></span></p>
+      </div>
+      <p class="field-error" data-step-error role="alert" hidden></p>
+    </section>
+    <section data-wizard-step="4" aria-labelledby="step-forecast">
+      <h2 class="wizard-step-title" id="step-forecast" tabindex="-1">Forecast</h2>
+      <p class="wizard-lede">Optional. The defaults suit most trackers: Skip for now keeps them.</p>
+      {{ parts.before_field() }}
+      {{ parts.average_field() }}
+      <p class="field-error" data-step-error role="alert" hidden></p>
+    </section>
+    <section data-wizard-step="5" aria-labelledby="step-review" hidden>
+      <h2 class="wizard-step-title" id="step-review" tabindex="-1">Review</h2>
+      <div class="review" data-review></div>
+      <p class="review-left">Nothing is saved until you press Create tracker.</p>
+    </section>
+  </div>
+  <footer class="list-dialog-foot wizard-foot">
+    {% if in_dialog %}<button class="button" type="button" data-close>Cancel</button>
+    {% else %}<a class="button" href="{{ url_for('index') }}">Cancel</a>{% endif %}
+    <span class="wizard-spacer"></span>
+    <button class="button" type="button" data-wizard-back hidden>Back</button>
+    <button class="button" type="button" data-wizard-skip hidden>Skip for now</button>
+    <button class="button primary" type="button" data-wizard-next hidden>Next</button>
+    <button class="button primary" type="submit" data-wizard-create>Create tracker</button>
+  </footer>
+</form>

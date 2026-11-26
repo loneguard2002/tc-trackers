@@ -34,7 +34,7 @@ def test_region_filter_shows_only_trackers_covering_it(
     page.goto(live_server + "/")
     cards = page.locator("[data-home-cards] [data-card]:visible")
     region = page.get_by_label("Region", exact=True)
-    business_line = page.get_by_label("Business line", exact=True)
+    business_line = page.locator("#home-line")  # the New tracker pop-up has a Business line field too
     expect(region).to_be_visible()
     expect(cards).to_have_count(3)
 

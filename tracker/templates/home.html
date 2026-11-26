@@ -3,6 +3,7 @@
 {% from "lists/_table.html" import search_box, sort_header, clear_filters %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='home.js', v=app_version) }}" defer></script>
+  {% if can('create_trackers') %}<script src="{{ url_for('static', filename='tracker-new.js', v=app_version) }}" defer></script>{% endif %}
 {% endblock %}
 
 {% macro forecast_fact(h) -%}
@@ -150,7 +151,7 @@
     {% if show_archived %}<a class="button" href="{{ url_for('index') }}">Hide archived</a>
     {% else %}<a class="button" href="{{ url_for('index', archived=1) }}">Show archived</a>{% endif %}
     {% endif %}
-    {% if can('create_trackers') %}<a class="button primary" href="{{ url_for('trackers.new') }}">{{ icon('plus') }}New tracker</a>{% endif %}
+    {% if can('create_trackers') %}<a class="button primary" href="{{ url_for('trackers.new') }}" data-new-tracker>{{ icon('plus') }}New tracker</a>{% endif %}
   </div>
   {% endif %}
 </div>
@@ -290,5 +291,11 @@
   <p class="pager-count" data-home-count aria-live="polite"></p>
   {{ clear_filters('home') }}
 </div>
+{% endif %}
+{% if can('create_trackers') %}
+{#- New tracker opens here as a pop-up; its link leads to the New tracker page without JavaScript. -#}
+<dialog class="list-dialog wizard" id="new-tracker-dialog" aria-labelledby="new-tracker-title">
+  {% with in_dialog = true %}{% include "trackers/_new_form.html" %}{% endwith %}
+</dialog>
 {% endif %}
 {% endblock %}

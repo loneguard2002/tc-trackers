@@ -66,3 +66,22 @@ def test_settings_still_shows_the_three_sections(client, db, tracker_factory, us
     for section in ("general", "reporting-period", "progress-forecast"):
         assert f'id="{section}"' in page
     assert "data-wizard-step" not in page and "data-step-error" not in page
+
+
+def test_home_holds_the_new_tracker_pop_up_only_for_people_who_may_create(
+    client, user_factory, give_set, region_factory
+):
+    from conftest import sign_in
+
+    region_factory("EMEA", "Europe")
+    creator, viewer = user_factory(), user_factory()
+    give_set(["create_trackers"], user=creator)
+    sign_in(client, viewer)
+    page = client.get("/").get_data(as_text=True)
+    assert "new-tracker-dialog" not in page and "tracker-new.js" not in page
+    sign_in(client, creator)
+    page = client.get("/").get_data(as_text=True)
+    assert '<dialog class="list-dialog wizard" id="new-tracker-dialog"' in page
+    assert 'href="/trackers/new" data-new-tracker>' in page  # without JavaScript the link opens the page
+    assert _steps(page) == ["1", "2", "3", "4", "5"] and "EMEA – Europe" in page
+    assert '<button class="button" type="button" data-close>Cancel</button>' in page

@@ -1722,27 +1722,28 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .review-group li::before { content: "\2713"; color: var(--success); font-weight: 700; }
 .review-left { margin: 0; color: var(--muted); font-size: .8125rem; }
 .review-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-/* New tracker: the five-step form, on its own page rather than in a pop-up (new.html, tracker-new.js). Without
-   JavaScript the step bar stays hidden and every step shows, each under its own heading. */
+/* New tracker: the five-step form (_new_form.html, tracker-new.js), in a pop-up on Home (.tracker-wizard) or on its own
+   page (.wizard-card too). Without JavaScript the step bar stays hidden and every step shows, each under its own
+   heading. */
 .list-dialog.wizard-card { width: 100%; max-width: 720px; margin: 0 0 24px; box-shadow: var(--card-shadow); }
 .wizard-card .list-dialog-head { padding: 12px 20px; }
 .wizard-card .wizard-caption { margin: 0; color: var(--text); font-size: .875rem; font-weight: 600; }
 .wizard-card .wizard-body { max-height: none; overflow: visible; }
-.wizard-card .list-dialog-body .field-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tracker-wizard .list-dialog-body .field-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @container (max-width: 440px) {
-  .wizard-card .list-dialog-body .field-pair { grid-template-columns: minmax(0, 1fr); }
+  .tracker-wizard .list-dialog-body .field-pair { grid-template-columns: minmax(0, 1fr); }
 }
 .wizard-steps[hidden] { display: none; }
 /* The seven days share the width evenly, so they fit a phone and line up with the fields on a wide screen. */
-.wizard-card .segmented-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.wizard-card .segmented-days label { min-width: 0; padding-left: 0; padding-right: 0; }
+.tracker-wizard .segmented-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.tracker-wizard .segmented-days label { min-width: 0; padding-left: 0; padding-right: 0; }
 .wizard-steps-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .wizard-steps-5::before { left: 10%; right: 10%; }
 .wizard-steps-5::after { left: 10%; width: calc(80% * var(--progress, 0)); }
 .wizard-step-title { margin: 0; font-size: 1.05rem; }
 .wizard-step-title:focus { outline: none; }
 .wizard-step-title:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
-.wizard-card .wizard-body > section > .field-error { margin: 0; }
+.tracker-wizard .wizard-body > section > .field-error { margin: 0; }
 .wizard-weeks { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
 .wizard-weeks[hidden] { display: none; }
 .wizard-weeks-sum { margin: 0; font-size: .875rem; font-weight: 600; }
