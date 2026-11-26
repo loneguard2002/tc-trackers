@@ -48,12 +48,14 @@ from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
 from .overview import (
+    ROLE_SUMMARY,
     ancestor_levels,
     chart,
     chart_order,
     member_counts,
     paths_to,
     reach_people,
+    reach_trackers,
     tracker_counts,
 )
 from .people import TeamPerson, reach_counts, team_people
@@ -348,6 +350,8 @@ def _new_team_context(db, rows: list[TeamRow], team: Team, people: list[PersonRo
         "reach_down": members,
         "member_total": members.get(team.id, 0),
         "tracker_total": tracker_counts(db).get(team.id, 0),
+        "reached_trackers": reach_trackers(db, rows, team.id),
+        "role_summary": ROLE_SUMMARY,
     }
 
 

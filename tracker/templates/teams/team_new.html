@@ -3,6 +3,7 @@
     groups, members of this team and people reaching it from teams above. The forms post to the routes the Classic
     page uses. -#}
 {% from "macros.html" import csrf_field, icon, title_crumb %}
+{% from "trackers/_role_guide.html" import role_guide_foldout %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
@@ -156,6 +157,41 @@
       {% endfor %}
     </section>
   </div>
+
+  {#- Add a member: the person, a role card each saying what the role allows, and what the new member will reach.
+      teams-new.js keeps the preview's person and role in step with the choices. -#}
+  <aside id="add-member" class="settings-section add-member-panel" aria-labelledby="add-title">
+    <h3 id="add-title">Add a member</h3>
+    {% if not can_add %}
+    <p class="team-add-note">{{ add_refusal }}</p>
+    {% elif candidates %}
+    <form class="add-member-form" method="post" action="{{ url_for('teams.add_member', team_id=team.id) }}">
+      {{ csrf_field(csrf_token()) }}
+      <div class="add-member-person">
+        <label class="field-label" for="user_id">Person</label>
+        <input class="select-filter" type="search" placeholder="Filter people" autocomplete="off" aria-label="Filter the list of people" data-select-filter="user_id" hidden>
+        <select id="user_id" name="user_id" required data-preview-source>
+          {% for u in candidates %}<option value="{{ u.id }}" data-name="{{ u.full_name }}">{{ u.full_name }} ({{ u.email }})</option>{% endfor %}
+        </select>
+      </div>
+      <fieldset class="role-cards">
+        <legend class="field-label">Role</legend>
+        {% for r in roles %}
+        <label class="role-card"><input type="radio" name="role" value="{{ r }}"{{ ' checked' if loop.first }} data-preview-role="{{ 'an' if r[0] in 'aeiou' else 'a' }} {{ r|title }}">
+          <span class="role-card-text"><strong>{{ r|title }}</strong><span>{{ role_summary[r] }}</span></span></label>
+        {% endfor %}
+      </fieldset>
+      {% set n = reached_trackers|length %}
+      <p class="add-preview"><strong data-preview-person>{{ candidates[0].full_name }}</strong> will be <span data-preview-role-text>a {{ roles[0]|title }}</span>
+        {%- if n %} on {{ n }} {{ 'tracker' if n == 1 else 'trackers' }}: {{ reached_trackers[:3]|join(', ') }}{% if n > 3 %} and {{ n - 3 }} more{% endif %}.
+        {%- else %} here; this team and the teams below have no trackers yet.{% endif %}</p>
+      <button class="button primary add-member-submit" type="submit">{{ icon('plus') }}Add to {{ team.name }}</button>
+    </form>
+    {% else %}
+    <p class="team-add-note">Every active person is already a direct member.</p>
+    {% endif %}
+    {{ role_guide_foldout() }}
+  </aside>
 </div>
 {% elif tab == 'below' %}
 {% include "teams/_tab_below.html" %}
