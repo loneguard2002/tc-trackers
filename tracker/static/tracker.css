@@ -1445,7 +1445,6 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .activity-field { color: var(--muted); font-weight: 600; }
 .activity-before { color: var(--muted); text-decoration: line-through; }
 .activity-hidden { color: var(--muted); font-style: italic; }
-.activity-pager { display: flex; justify-content: space-between; gap: 12px; }
 .activity-retention { justify-content: space-between; align-items: flex-end; }
 .activity-retention .field { margin: 0; flex: 1 1 320px; }
 .route-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
