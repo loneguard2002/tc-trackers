@@ -76,11 +76,24 @@ def test_each_area_shows_to_those_who_manage_it(client, logged_in_user, give_set
     assert not seen & ids(rows, "set_created", "entry_theirs")
 
 
-def test_who_hands_out_roles_sees_role_changes_without_the_trackers_details(client, logged_in_user, give_set, log):
-    _mine, _theirs, rows = log
-    give_set(["view_activity", "manage_teams"], user=logged_in_user)
+def test_role_changes_show_only_to_the_trackers_own_people(client, logged_in_user, give_set, grant, log):
+    _mine, theirs, rows = log
+    give_set(["view_activity", "manage_teams"], user=logged_in_user)  # hands out roles, but has none on Theirs
+    assert str(rows["role_theirs"].id) not in shown_ids(client)
+    grant(logged_in_user, theirs, "viewer")
+    assert str(rows["role_theirs"].id) in shown_ids(client)
+
+
+def test_their_own_action_on_a_tracker_they_cannot_open_shows_without_its_details(
+    client, db, logged_in_user, give_set, log
+):
+    _mine, theirs, _rows = log
+    give_set(["view_activity"], user=logged_in_user)
+    own = AuditLog(user_id=logged_in_user.id, tracker_id=theirs.id, action="role_set", entity="tracker", entity_id="7")
+    db.add(own)
+    db.commit()
     html = client.get("/admin/activity?size=100").get_data(as_text=True)
-    assert str(rows["role_theirs"].id) in set(re.findall(r'data-entry="(\d+)"', html))
+    assert str(own.id) in set(re.findall(r'data-entry="(\d+)"', html))
     assert "Details hidden: you cannot open this tracker." in html
 
 

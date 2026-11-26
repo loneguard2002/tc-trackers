@@ -471,7 +471,7 @@ def test_activity_hides_tracker_removals_from_viewers_who_cannot_open_the_tracke
 ):
     post(client, delete_url(s.person), {"confirm_email": EMAIL})
     viewer = user_factory()
-    # Manage users shows the deletion, and Manage teams the role removals, on trackers they cannot open too.
+    # Manage users shows the deletion; a role removal shows only to the people of its tracker.
     give_set(["view_activity", "manage_users", "manage_teams"], user=viewer)
     grant(viewer, s.desktops, "viewer")  # Desktop rollout only, not Laptop refresh
     sign_in(client, viewer)
@@ -481,7 +481,8 @@ def test_activity_hides_tracker_removals_from_viewers_who_cannot_open_the_tracke
         entry = db.scalars(select(AuditLog).where(AuditLog.action == action)).one()
         return re.search(rf'<tr data-entry="{entry.id}">(.*?)</tr>', page, re.S).group(1)
 
-    assert HIDDEN in row("role_removed") and "owner" not in row("role_removed")
+    removal = db.scalars(select(AuditLog).where(AuditLog.action == "role_removed")).one()
+    assert f'data-entry="{removal.id}"' not in page and HIDDEN not in page  # on Laptop refresh, which they cannot open
     assert HIDDEN not in row("settings_updated") and '<span class="activity-field">lead</span>' in row(
         "settings_updated"
     )
