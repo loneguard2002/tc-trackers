@@ -84,6 +84,53 @@
 </div>
 {%- endmacro %}
 
+{# The heading of a column of a table sorted on the server (tracker/servertable.py): the same look as sort_header, but
+   the button is a link to ``url`` (the address with this column's next sort, from state_args and sort_changes). ``state``
+   is the TableState; the heading takes aria-sort "ascending" or "descending" when it is the sorted column. #}
+{% macro server_sort_header(label, key, state, url, class_name='') -%}
+<th scope="col"{% if class_name %} class="{{ class_name }}"{% endif %} aria-sort="{{ ('descending' if state.descending else 'ascending') if state.sort == key else 'none' }}"><a class="sort-button" href="{{ url }}">{{ label }}{{ icon('sort') }}</a></th>
+{%- endmacro %}
+
+{# The footer under a table paged on the server: the same markup and wording as table_pager. ``state`` is the TableState
+   and ``total`` the number of rows (or, for a table paged by groups of rows, of groups) the search matches; ``first``
+   and ``last`` are the numbers of the first and last of those on this page. "Showing 26–50 of 312 entries"; for one
+   page "Showing 3 of 3 entries" ("Showing 1 of 1 entry"). ``noun_first`` puts the noun before the range ("Showing
+   weeks 1–10 of 23"). ``extra`` is the text after the "·" ("214 entries"). ``page_url(n)`` gives the link of page n.
+   ``size_form`` is a mapping of the other address keys to keep (q, sort, filters) as hidden inputs of the Rows per
+   page form, or none for a table with no such control. The controls show when more than one page exists (and, with the
+   Rows per page control, whenever the rows would fill more than the smallest page, so that a larger size can be
+   undone). The rows per page is read from ``state.size`` and the pages are counted from it. #}
+{% macro server_pager(state, total, noun_plural, noun_one, page_url, size_form, first, last, extra='', noun_first=False) -%}
+{% set pages = [1, (total / state.size)|round(0, 'ceil')|int]|max %}
+{% set current = [state.page, pages]|min %}
+<div class="pager">
+  <p class="pager-count" aria-live="polite">Showing {% if total == 0 %}0 of 0 {{ noun_plural }}
+    {%- elif pages > 1 or noun_first %}{% if noun_first %}{{ noun_plural if total != 1 else noun_one }} {% endif %}{{ first }}{% if last != first %}–{{ last }}{% endif %} of {{ total }}{% if not noun_first %} {{ noun_plural }}{% endif %}
+    {%- else %}{{ total }} of {{ total }} {{ noun_one if total == 1 else noun_plural }}{% endif %}{% if extra %} · {{ extra }}{% endif %}</p>
+  {% if pages > 1 or (size_form is not none and total > 25) %}
+  <nav class="pager-controls" aria-label="Pages of {{ noun_plural }}">
+    {% if size_form is not none %}
+    <form class="pager-size-form" method="get">
+      {% for name, value in size_form.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+      <label class="pager-size">Rows per page <select name="size" data-autosubmit>{% for n in (25, 50, 100) %}<option value="{{ n }}"{% if n == state.size %} selected{% endif %}>{{ n }}</option>{% endfor %}</select></label>
+      <button class="button button-small" type="submit" data-autosubmit-fallback>Apply</button>
+    </form>
+    {% endif %}
+    {% if current > 1 %}<a class="pager-button" href="{{ page_url(current - 1) }}" rel="prev">Previous</a>
+    {%- else %}<span class="pager-button is-disabled" aria-disabled="true">Previous</span>{% endif %}
+    <span class="pager-pages">
+      {%- for n in page_numbers(current, pages) -%}
+      {%- if n is none %}<span class="pager-gap">…</span>
+      {%- else %}<a class="pager-button" href="{{ page_url(n) }}" aria-label="Page {{ n }}"{% if n == current %} aria-current="page"{% endif %}>{{ n }}</a>{% endif -%}
+      {%- endfor -%}
+    </span>
+    {% if current < pages %}<a class="pager-button" href="{{ page_url(current + 1) }}" rel="next">Next</a>
+    {%- else %}<span class="pager-button is-disabled" aria-disabled="true">Next</span>{% endif %}
+  </nav>
+  {% endif %}
+</div>
+{%- endmacro %}
+
 {# Edit, Retire or Restore, and Delete when nothing uses the entry. ``what`` names the entry in a sentence ("the
    region EMEA"), ``name`` on its own ("EMEA"). When the entry is in use, ``in_use_reason`` says why it cannot be
    deleted, in a muted slot that keeps Delete's place so the columns stay aligned. Without JavaScript Edit opens the
