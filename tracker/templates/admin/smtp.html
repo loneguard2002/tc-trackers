@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, setting %}
+{% from "mail/_placeholders.html" import placeholder_table %}
 {# A server setting is sent only by an administrator; anyone else sees it read-only and the form leaves it out. #}
 {% macro locked(key) %}{% if server_locked %}readonly{% else %}name="{{ key }}"{% endif %}{% endmacro %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='placeholder-table.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
 <h1>Email settings</h1>
 <p class="page-lede">The mail server, the subject every tracker uses for its weekly report, and the emails about access requests. Each tracker's recipients and message are set on its own Email tab.</p>
@@ -50,23 +54,31 @@
       <p class="section-foot-note">The SMTP password and the client secret are never stored here. Set them as the environment variables <code>SMTP_PASSWORD</code> and <code>SMTP_CLIENT_SECRET</code>.</p>
     </section>
 
-    <section class="settings-section" aria-labelledby="section-report">
+    <section class="settings-section span-all" aria-labelledby="section-report">
       <header class="settings-section-head">
         <h2 id="section-report">Report email</h2>
         <p>The subject of every tracker's weekly email. <code>{% raw %}{{summary}}{% endraw %}</code> gives the week in one line; the other placeholders also work.</p>
       </header>
-      {% call setting('Subject', 'At most 300 characters.', 'report_email_subject') %}
-      <input id="report_email_subject" name="report_email_subject" value="{{ report_subject }}" maxlength="300" required autocomplete="off" spellcheck="false" aria-describedby="report_email_subject-help">
-      {% endcall %}
-      {% if unknown %}<p class="warn-box" role="status">Unknown placeholders will be sent as written: {{ unknown|join(', ') }}.</p>{% endif %}
-      <details class="placeholder-help">
-        <summary>Placeholders</summary>
-        <dl>
-          {% for name, description in placeholders.items() %}
-          <dt><code>{% raw %}{{{% endraw %}{{ name }}{% raw %}}}{% endraw %}</code></dt><dd>{{ description }}</dd>
-          {% endfor %}
-        </dl>
-      </details>
+      {#- The field takes the whole row: a subject with a few placeholders is longer than the usual control column. -#}
+      <div class="setting-row setting-row-stacked">
+        <div class="setting-label">
+          <label for="report_email_subject">Subject</label>
+          <p class="setting-help" id="report_email_subject-help">At most {{ max_subject }} characters. The placeholders are replaced with each tracker's figures for the week.</p>
+        </div>
+        <div class="setting-control subject-control">
+          <input id="report_email_subject" name="report_email_subject" value="{{ report_subject }}" required autocomplete="off" spellcheck="false" aria-describedby="report_email_subject-help report_email_subject-count report_email_subject-example" data-subject-field data-max-length="{{ max_subject }}">
+          <p class="char-count" id="report_email_subject-count" aria-live="polite"><span class="char-note" data-char-note></span><span class="char-number" data-char-count>{{ report_subject|length }} / {{ max_subject }}</span></p>
+          <p class="warn-box" data-unknown data-known="{{ known|join(' ') }}"{% if not unknown %} hidden{% endif %}>
+            {%- if unknown %}Unknown placeholders will be sent as written: {{ unknown|join(', ') }}.{% endif %}</p>
+          <p class="subject-example" id="report_email_subject-example" data-subject-example data-context="{{ sample|tojson|forceescape }}" data-blocks="{{ blocks|join(' ') }}">
+            <span class="subject-example-label">Example, with sample figures <span data-example-length></span></span>
+            <span data-example-text>{{ sample_subject }}</span>
+          </p>
+        </div>
+      </div>
+      <div class="setting-row setting-row-stacked">
+        {{ placeholder_table(placeholders, sample, 'report_email_subject', 'toggle') }}
+      </div>
     </section>
 
     <section class="settings-section" aria-labelledby="section-access">

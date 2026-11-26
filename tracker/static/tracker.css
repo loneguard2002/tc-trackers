@@ -867,11 +867,52 @@ input[type="file"] { padding: 6px; font-size: .875rem; }
 input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
 
 /* Email: placeholder reference and the recent-sends table. */
-.placeholder-help { margin-top: 8px; font-size: .8125rem; }
-.placeholder-help summary { color: var(--primary); font-weight: 600; cursor: pointer; }
-.placeholder-help dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 8px 0 0; }
-.placeholder-help dt code { font-size: .8125rem; }
-.placeholder-help dd { margin: 0; color: var(--muted); }
+/* The placeholder table (mail/_placeholders.html): name, what it gives, an example and an Insert button that reads
+   "✓ Inserted" while the placeholder is in its field, and Remove or Insert again when pointed at. */
+.placeholder-table { container-type: inline-size; min-width: 0; }
+.placeholder-table-title { margin: 0 0 4px; font-size: .9rem; }
+.placeholder-table-frame { overflow-x: auto; }
+.placeholder-list { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+.placeholder-list th { padding: 8px 12px; text-align: left; font-size: .6875rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.placeholder-list td { padding: 7px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.placeholder-list tr:last-child td { border-bottom: 0; }
+.placeholder-list :is(th, td):first-child { padding-left: 0; }
+.placeholder-list :is(th, td):last-child { padding-right: 0; text-align: right; }
+.placeholder-list .ph-name code { font-size: .8125rem; font-weight: 500; white-space: nowrap; }
+.placeholder-list tr.is-inserted .ph-name code { color: var(--primary); }
+.placeholder-list .ph-what { min-width: 180px; color: var(--muted); }
+.placeholder-list .ph-example { min-width: 120px; overflow-wrap: anywhere; }
+.ph-button { min-width: 96px; padding: 3px 10px; font-size: .75rem; white-space: nowrap; }
+.ph-button :is(.ph-label-done, .ph-label-again) { display: none; }
+.ph-button.is-inserted { border-color: color-mix(in srgb, var(--success) 55%, var(--surface)); background: color-mix(in srgb, var(--success) 12%, var(--surface)); color: var(--success); }
+.ph-button.is-inserted .ph-label-insert { display: none; }
+.ph-button.is-inserted .ph-label-done { display: inline; }
+.ph-button.is-inserted:is(:hover, :focus-visible) .ph-label-done { display: none; }
+.ph-button.is-inserted:is(:hover, :focus-visible) .ph-label-again { display: inline; }
+[data-mode="toggle"] .ph-button.is-inserted:is(:hover, :focus-visible) { border-color: var(--danger); background: var(--surface); color: var(--danger); }
+[data-mode="repeat"] .ph-button.is-inserted:is(:hover, :focus-visible) { border-color: var(--primary); background: var(--surface); color: var(--primary); }
+@container (max-width: 560px) {
+  .placeholder-list thead { display: none; }
+  .placeholder-list tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .placeholder-list tr:last-child { border-bottom: 0; }
+  .placeholder-list td { padding: 0 !important; border: 0; text-align: left !important; min-width: 0 !important; }
+  .placeholder-list .ph-action { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+  .placeholder-list :is(.ph-name, .ph-what, .ph-example) { grid-column: 1; }
+  .placeholder-list .ph-example:not(:empty)::before { content: "Example: "; color: var(--muted); }
+}
+/* Email settings: the subject takes the whole row, with its character count and an example under it. */
+.settings-section .setting-row.setting-row-stacked { grid-template-columns: minmax(0, 1fr); gap: 8px; }  /* beats the two-column form rule */
+.subject-control { display: grid; gap: 6px; }
+.char-count { display: flex; align-items: baseline; justify-content: flex-end; gap: 10px; margin: -2px 0 0; color: var(--muted); font-size: .75rem; }
+.char-count .char-note { margin-right: auto; }
+.char-count .char-number { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.char-count.is-near { color: var(--warning); }
+.char-count.is-over { color: var(--danger); font-weight: 600; }
+.subject-control input[aria-invalid="true"] { border-color: var(--danger); }
+.subject-example { display: grid; gap: 2px; margin: 0; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--primary) 9%, var(--surface)); font-size: .8125rem; line-height: 1.45; overflow-wrap: anywhere; }
+.subject-example-label { color: var(--muted); font-size: .6875rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.subject-example-label [data-example-length] { font-weight: 400; letter-spacing: 0; text-transform: none; }
+.subject-example-label .is-over { color: var(--danger); font-weight: 600; }
 .section-table { position: relative; overflow-x: auto; }
 .section-table table { font-size: .875rem; }
 .section-table :is(th, td) { padding: 9px 12px; }
@@ -1287,9 +1328,6 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .recipient-add { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 12px 20px 16px; }
 .recipient-add input { flex: 1 1 180px; padding: 7px 10px; font-size: .875rem; }
 .subject-line { margin: 0 0 4px; font-weight: 600; overflow-wrap: anywhere; }
-.placeholder-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.placeholder-chip { padding: 3px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .75rem; cursor: pointer; }
-.placeholder-chip:hover { border-color: var(--primary); color: var(--primary); }
 .warn-box { margin: 10px 0 0; padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border)); border-radius: var(--radius); background: color-mix(in srgb, var(--warning) 8%, var(--surface)); color: var(--warning); font-size: .8125rem; font-weight: 600; }
 .schedule-state { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0; padding: 14px 20px 0; font-size: .8125rem; }
 .send-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; padding: 14px 20px 18px; }

@@ -103,7 +103,7 @@ def test_email_preview_follows_the_template(page, live_server, admin):
     page.goto(f"{live_server}/trackers/{admin.id}/mail")
     expect(page.locator(".subject-line")).to_contain_text("Live tracker | ")
     expect(page.locator("[data-preview-subject]")).to_contain_text("Subject: Live tracker | ")
-    page.get_by_role("button", name="tracker_name", exact=True).click()  # chips only ever go into the body
+    page.locator('[data-insert="tracker_name"]').click()  # the table's buttons only ever go into the body
     expect(page.locator("#body_html")).to_have_value(re.compile(r"\{\{tracker_name\}\}"))
     frame = page.frame_locator("[data-preview-frame]")
     expect(frame.locator(".mail-figures")).to_be_visible()  # the default message's parts render, not escaped
@@ -112,8 +112,15 @@ def test_email_preview_follows_the_template(page, live_server, admin):
     expect(page.locator("[data-unknown]")).to_have_text("Unknown placeholders will be sent as written: nope.")
     page.locator("#body_html").focus()
     page.locator("#body_html").press("End")
-    page.get_by_role("button", name="status", exact=True).click()
+    status = page.locator('[data-insert="status"]')
+    expect(status).to_have_text("Insert", use_inner_text=True)  # the visible label only
+    status.click()
     expect(page.locator("#body_html")).to_have_value("<p>Hello {{nope}}</p>{{status}}")
+    expect(status).to_have_accessible_name("{{status}} is in the field. Insert it again")
+    page.mouse.move(0, 0)  # not pointing at it, so it reads Inserted rather than Insert again
+    expect(status).to_have_text("✓ Inserted", use_inner_text=True)
+    status.click()  # in the body a placeholder may appear twice
+    expect(page.locator("#body_html")).to_have_value("<p>Hello {{nope}}</p>{{status}}{{status}}")
     expect(frame.locator("body")).to_contain_text("Hello {{nope}}")
     expect(page.locator("[data-dirty-note]")).to_have_text("Unsaved changes; the preview shows them")
     assert_clean(page)
@@ -193,3 +200,39 @@ def test_a_page_back_from_the_cache_can_send_again(page, live_server, admin, slo
         form.get_by_role("button", name="Send a test to me").click()
     slow_sends.release.set()
     expect(page.get_by_text("A test email was sent to")).to_be_visible()
+
+
+def test_email_settings_subject_inserts_counts_and_shows_an_example(page, live_server, admin):
+    page.goto(f"{live_server}/admin/smtp")
+    subject = page.locator("#report_email_subject")
+    count = page.locator("#report_email_subject-count")
+    expect(subject).to_have_value("{{summary}}")
+    expect(page.locator("[data-char-count]")).to_have_text("11 / 300")
+    summary = page.locator('[data-insert="summary"]')
+    expect(summary).to_have_accessible_name("{{summary}} is in the field. Remove it")
+    expect(page.locator("[data-example-text]")).to_contain_text("Network refresh | 06/11/26 : Green")
+
+    summary.click()  # in the subject the button takes the placeholder out again
+    expect(subject).to_have_value("")
+    expect(count).to_contain_text("Enter a subject")
+    expect(summary).to_have_accessible_name("Insert {{summary}}")
+
+    subject.fill("[PMO] ")
+    subject.press("End")
+    page.locator('[data-insert="tracker_name"]').click()
+    expect(subject).to_have_value("[PMO] {{tracker_name}}")
+    expect(page.locator("[data-example-text]")).to_have_text("[PMO] Network refresh")
+    expect(page.locator("[data-example-length]")).to_have_text("· 21 characters once filled in")
+
+    subject.fill("x" * 280)
+    expect(page.locator("[data-char-note]")).to_have_text("20 characters left.")
+    expect(page.locator("[data-char-count]")).to_have_text("280 / 300")
+    subject.fill("x" * 305 + " {{sumary}}")
+    expect(page.locator("[data-char-note]")).to_have_text("16 characters too many: shorten the subject to save.")
+    expect(page.locator("[data-char-count]")).to_have_text("316 / 300")
+    expect(subject).to_have_attribute("aria-invalid", "true")
+    expect(page.locator("[data-unknown]")).to_have_text("Unknown placeholders will be sent as written: sumary.")
+    page.get_by_role("button", name="Save", exact=True).click()  # refused in the page, before the server's 400
+    expect(page).to_have_url(f"{live_server}/admin/smtp")
+    expect(subject).to_be_focused()
+    assert_clean(page)
