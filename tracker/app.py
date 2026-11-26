@@ -36,6 +36,7 @@ from .mail import bp as mail_bp
 from .models import Tracker, User
 from .permsets import bp as permsets_bp
 from .report import bp as report_bp
+from .servertable import page_numbers
 from .teams import bp as teams_bp
 from .trackers import bp as trackers_bp
 from .trackers import home
@@ -127,6 +128,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         }
 
     register_filters(app)
+    app.jinja_env.globals["page_numbers"] = page_numbers  # the window of page links in server_pager
     if app.config.get("TESTING"):
         app.jinja_env.undefined = StrictUndefined
     install_csrf(app)

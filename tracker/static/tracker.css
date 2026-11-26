@@ -999,10 +999,13 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .pager-pages { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .pager-gap { padding: 0 2px; }
 .pager-button { min-width: 34px; min-height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
-.pager-button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); }
+.pager-button:hover:not(:disabled):not(.is-disabled) { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); }
 .pager-button[aria-current="page"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); color: var(--primary); }
 /* Dimmed with the muted text colour rather than faded out, so it stays readable in both themes. */
-.pager-button:disabled { border-style: dashed; background: transparent; color: var(--muted); font-weight: 400; cursor: not-allowed; }
+.pager-button:disabled, .pager-button.is-disabled { border-style: dashed; background: transparent; color: var(--muted); font-weight: 400; cursor: not-allowed; }
+/* The server-paged footer's buttons are links (and a span at either end), which need the button's shape. */
+a.pager-button, span.pager-button { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.pager-size-form { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 .pager-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 @media (max-width: 720px) {
   .team-add-panel, .pager { padding-left: 16px; padding-right: 16px; }
@@ -1492,6 +1495,7 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .list-table tr.is-retired .list-name { font-weight: 400; }
 .sort-button { display: inline-flex; align-items: center; gap: 4px; margin: -4px -6px; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
 .sort-button:hover { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
+a.sort-button { text-decoration: none; }
 .sort-button .icon { width: 14px; height: 14px; }
 .sort-button .icon path { opacity: .45; }
 th[aria-sort="ascending"] .sort-button, th[aria-sort="descending"] .sort-button { color: var(--text); }
