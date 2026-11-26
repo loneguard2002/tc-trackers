@@ -16,15 +16,16 @@ never see even those. The owner wants a clear table in the app so everyone under
    | Open the report and download it as PDF or PNG | ✓ | ✓ | ✓ |
    | Record, edit and delete entries; download entries | | ✓ | ✓ |
    | Write the weekly update; set a calendar reminder | | ✓ | ✓ |
-   | Add and edit risks; set weekly targets | | ✓ | ✓ |
+   | Add, edit and delete risks; set weekly targets | | ✓ | ✓ |
    | Set a location's status, planned date, ready figure and comment | | ✓ | ✓ |
-   | Add locations; change a location's name, baseline and starting figure | | | ✓ |
-   | Change the tracker's settings; archive it | | | ✓ |
+   | Add, retire, delete and reorder locations; change a location's name, baseline and starting figure | | | ✓ |
+   | Change the tracker's settings | | | ✓ |
    | Preview, test and send the report email | | | ✓ |
 
    ("location" follows the tracker's own label for its groups where the table is shown on a tracker to someone
    with a role on it; elsewhere it reads "group", the app's generic word, as the tracker's tabs do.) Under it:
-   "Administrators can do everything on every tracker." "If you have a role from more than one place, the highest
+   "Administrators can do everything on every tracker, including archiving it." "An archived tracker cannot
+   be changed by anyone." "If you have a role from more than one place, the highest
    one counts." "People with Manage teams choose who has which role."
 2. **Every tracker page** shows, beside its tabs, "Your role: Editor · What each role can do" (an administrator sees
    "Your role: Owner (administrator)"). The link opens the table in a pop-up; without JavaScript it opens a page with
@@ -32,7 +33,8 @@ never see even those. The owner wants a clear table in the app so everyone under
 3. **Where roles are given**, a fold-out "What each role can do" shows the table: the tracker's Access tab (replacing
    today's three lines), a team's People tab and a region's Access page.
 4. **The table cannot drift:** each row names the routes it describes, and a test checks each route's required role
-   is the row's role.
+   is the row's role; every tracker route must be in a row or in a short list of exceptions with a reason, and the
+   owner-only actions inside editors' pages are tested as refused to editors.
 
 ## Non-goals
 

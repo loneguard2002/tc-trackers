@@ -267,9 +267,9 @@ def test_role_guide_names_groups_generically_for_a_holder_without_a_role(
         page = text_of(client.get(f"/trackers/{t.id}/roles"))
         return page.split('class="role-guide-foldout"', 1)[1].split("</details>", 1)[0]
 
-    assert "Add groups; change a group's name" in guide() and "location" not in guide()
+    assert "reorder groups; change a group's name" in guide() and "location" not in guide()
     grant(logged_in_user, t, "viewer")
-    assert "Add locations; change a location's name" in guide()
+    assert "reorder locations; change a location's name" in guide()
 
 
 def test_a_vouched_account_can_have_its_direct_role_lowered(
