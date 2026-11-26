@@ -471,7 +471,8 @@ def test_activity_hides_tracker_removals_from_viewers_who_cannot_open_the_tracke
 ):
     post(client, delete_url(s.person), {"confirm_email": EMAIL})
     viewer = user_factory()
-    give_set(["view_activity"], user=viewer)
+    # Manage users shows the deletion, and Manage teams the role removals, on trackers they cannot open too.
+    give_set(["view_activity", "manage_users", "manage_teams"], user=viewer)
     grant(viewer, s.desktops, "viewer")  # Desktop rollout only, not Laptop refresh
     sign_in(client, viewer)
     page = text_of(client.get("/admin/activity"))

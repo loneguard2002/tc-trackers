@@ -225,11 +225,18 @@ def index():
     keep = state_args(state, DEFAULT_SORT, DEFAULT_DESCENDING, q="", page=1)
     clear_url = url_for("activity.index", **keep)
     # People can share a name, and a deleted person's email may be reused by a new account, so a label carries both.
+    # The Person filter names only the people in entries the viewer may see.
+    people_query = select(User.id, User.full_name, User.email, User.status)
+    if scope is not None:
+        people_query = people_query.where(
+            or_(
+                User.id.in_(select(AuditLog.user_id).where(scope)),
+                User.id.in_(select(AuditLog.target_user_id).where(scope)),
+            )
+        )
     people = [
         (id, f"{name} ({email})" + (" – deleted" if status == "deleted" else ""))
-        for id, name, email, status in db.execute(
-            select(User.id, User.full_name, User.email, User.status).order_by(User.full_name, User.email, User.id)
-        )
+        for id, name, email, status in db.execute(people_query.order_by(User.full_name, User.email, User.id))
     ]
     return render_template(
         "activity/index.html",

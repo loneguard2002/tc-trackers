@@ -97,3 +97,17 @@ def test_the_counts_and_the_action_filter_follow_the_scope(client, db, logged_in
     assert "Showing 1 of 1 entry" in html  # the one entry about Mine
     options = set(re.findall(r'<option value="([a-z_]+)"', html))
     assert "entry_created" in options and "permission_set_created" not in options and "user_created" not in options
+
+
+def test_the_person_filter_names_only_people_in_entries_the_viewer_may_see(
+    client, db, logged_in_user, give_set, grant, log, user_factory
+):
+    mine, _theirs, _rows = log
+    stranger = user_factory(full_name="Hidden Stranger")
+    db.add(AuditLog(user_id=stranger.id, action="team_created", entity="team", entity_id="9"))
+    db.commit()
+    give_set(["view_activity"], user=logged_in_user)
+    grant(logged_in_user, mine, "viewer")
+    html = client.get("/admin/activity").get_data(as_text=True)
+    assert "Other Person (" in html  # recorded an entry on their tracker
+    assert "Hidden Stranger" not in html

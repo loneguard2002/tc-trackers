@@ -548,6 +548,5 @@ def test_activity_shows_a_feedback_entry_without_its_content(client, reviewer, m
     other = client.application.test_client()
     sign_in(other, reader)
     page = text_of(other.get("/admin/activity"))
-    assert "FB-0001: question sent" in page
-    assert f'href="{URL}/{made.id}"' not in page
+    assert "FB-0001" not in page  # feedback entries are for those who manage feedback
     assert "Secret" not in page
