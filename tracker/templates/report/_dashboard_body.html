@@ -155,10 +155,6 @@
   {% set retired = report.groups|selectattr('retired')|list %}
   <section class="glance-card glance-locations" aria-labelledby="glance-locations-title">
     <h2 id="glance-locations-title">{{ group_name|plural }}, furthest behind first</h2>
-    <ul class="glance-key">
-      <li><span class="key-swatch split-start-key" aria-hidden="true"></span>Done before the first week</li>
-      <li><span class="key-swatch split-since-key" aria-hidden="true"></span>Done since</li>
-    </ul>
     {% set gap = h.history_completed - h.completed %}
     {% if not h.totals_check_ok %}
     <p class="flash flash-warning report-check">
@@ -175,6 +171,11 @@
         <p class="glance-location-note">{{ loc.note }}</p>
       </li>
       {% endfor %}
+    </ul>
+    {#- The key sits under the bars, at the right, like the chart's legend. -#}
+    <ul class="glance-key">
+      <li><span class="key-swatch split-start-key" aria-hidden="true"></span>Done before the first week</li>
+      <li><span class="key-swatch split-since-key" aria-hidden="true"></span>Done since</li>
     </ul>
     {% else %}<p class="glance-empty">No {{ many }} yet.</p>{% endif %}
     {% if retired %}<p class="glance-note glance-hidden">Not shown: {{ retired|length }} retired {{ one if retired|length == 1 else many }}, {{ retired|sum(attribute='deployed')|num }} done.</p>{% endif %}
