@@ -1,0 +1,100 @@
+{#- The tracker's own fields, one macro each, shared by Settings (_fields.html, in three sections) and New tracker
+    (new.html, in steps). Import with context: they read form, tracker, weekdays, weekday_locked, team_choices and
+    team_regions. The business line and regions are in _label_fields.html. -#}
+{% from "macros.html" import field, icon %}
+
+{% macro error_alert() -%}
+{% if errors %}
+<div class="form-alert" role="alert">
+  <strong>Please correct the following:</strong>
+  <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro name_field() -%}
+{% call field('Name', 'Shown in the tracker list, at the top of the report and in email subjects.', 'name') %}
+<input id="name" name="name" value="{{ form.get('name', '') }}" required aria-describedby="name-help">
+{% endcall %}
+{%- endmacro %}
+
+{% macro label_pair() -%}
+<div class="field-pair">
+  {% call field('Unit being counted', 'One unit of progress, used in chart labels and figures.', 'unit_label') %}
+  <input id="unit_label" name="unit_label" value="{{ form.get('unit_label', '') }}" placeholder="For example, thin clients" aria-describedby="unit_label-help">
+  {% endcall %}
+  {% call field('Grouping label', 'What the groups are called. It also names the groups tab.', 'group_label') %}
+  <input id="group_label" name="group_label" value="{{ form.get('group_label', '') }}" placeholder="For example, Location" aria-describedby="group_label-help">
+  {% endcall %}
+</div>
+{%- endmacro %}
+
+{% macro team_field() -%}
+{% if not tracker %}
+{% call field('Team', 'Optional. People in a team, and in the teams above it, reach its trackers. It can be changed later by people who manage teams.', 'team_id') %}
+<select id="team_id" name="team_id" aria-describedby="team_id-help">
+  <option value="" {{ 'selected' if not form.get('team_id') }}>No team</option>
+  {% for id, label in team_choices %}<option value="{{ id }}"{% if id in team_regions %} data-region="{{ team_regions[id] }}"{% endif %} {{ 'selected' if form.get('team_id')|string == id|string }}>{{ label }}</option>{% endfor %}
+</select>
+{% endcall %}
+{% endif %}
+{%- endmacro %}
+
+{% macro description_field() -%}
+{% call field('Description', 'A note for the people who maintain the tracker. Not shown on the report or in emails.', 'description') %}
+<textarea id="description" name="description" rows="2" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
+{% endcall %}
+{%- endmacro %}
+
+{% macro weekday_field() -%}
+{% set chosen = form.get('week_ending_weekday', '4')|string %}
+<div class="field" role="radiogroup" aria-labelledby="weekday-label" aria-describedby="weekday-help">
+  <span class="field-label" id="weekday-label">Week-ending day</span>
+  <p class="field-help{{ ' is-locked' if weekday_locked }}" id="weekday-help">
+    {%- if weekday_locked %}{{ icon('lock') }}The week-ending day cannot change once entries exist.{% else %}The day each reporting week closes. Scheduled emails are sent on this day.{% endif %}</p>
+  <div class="segmented segmented-days">
+    {% for n, day in weekdays %}
+    <label title="{{ day }}"><input type="radio" name="week_ending_weekday" value="{{ n }}" {{ 'checked' if chosen == n|string }}{{ ' disabled' if weekday_locked }}><span aria-hidden="true">{{ day[:3] }}</span><span class="sr-only">{{ day }}</span></label>
+    {% endfor %}
+  </div>
+  {% if weekday_locked %}<input type="hidden" name="week_ending_weekday" value="{{ chosen }}">{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro date_pair() -%}
+<div class="field-pair">
+  {% call field('First week-ending', 'Any date moves forward to the next week-ending day.', 'start_date') %}
+  <input id="start_date" name="start_date" type="date" value="{{ form.get('start_date', '') }}" required aria-describedby="start_date-help">
+  {% endcall %}
+  {% call field('Last week-ending', 'On the week-ending day, at most 52 weeks after the first.', 'last_week_ending') %}
+  <input id="last_week_ending" name="last_week_ending" type="date" value="{{ form.get('last_week_ending', '') }}" required aria-describedby="last_week_ending-help">
+  {% endcall %}
+</div>
+{%- endmacro %}
+
+{% macro target_field() -%}
+{% call field('Target completion', 'Optional. The forecast finish is compared with this date to judge whether the work is on track.', 'target_completion', 'field-short') %}
+<input id="target_completion" name="target_completion" type="date" value="{{ form.get('target_completion', '') }}" aria-describedby="target_completion-help"{% if tracker %} data-saved="{{ tracker.target_completion.isoformat() if tracker.target_completion else '' }}"{% endif %}>
+{% endcall %}
+{%- endmacro %}
+
+{% macro before_field() -%}
+{% set unit = form.get('unit_label') or 'units' %}
+{% call field('Completed before the first week', 'Units finished before tracking began. They count towards the cumulative total from the first week.', 'completed_before_first', 'field-short') %}
+<div class="input-affix">
+  <input id="completed_before_first" name="completed_before_first" type="number" min="0" inputmode="numeric" value="{{ form.get('completed_before_first', '0') }}" aria-describedby="completed_before_first-help">
+  <span aria-hidden="true" data-live-unit>{{ unit }}</span>
+</div>
+{% endcall %}
+{%- endmacro %}
+
+{% macro average_field() -%}
+{% call field('Moving-average period', 'How many recent weeks are averaged to estimate the weekly rate, from 1 to 12. A shorter period reacts faster to change.', 'moving_average_weeks') %}
+<div class="stepper" data-stepper>
+  <button class="stepper-button" type="button" data-step="-1" aria-label="One week fewer" hidden>−</button>
+  <input id="moving_average_weeks" name="moving_average_weeks" type="number" min="1" max="12" inputmode="numeric" value="{{ form.get('moving_average_weeks', '3') }}" aria-describedby="moving_average_weeks-help">
+  <button class="stepper-button" type="button" data-step="1" aria-label="One week more" hidden>+</button>
+  <span class="stepper-unit" aria-hidden="true">weeks</span>
+</div>
+{% endcall %}
+{%- endmacro %}

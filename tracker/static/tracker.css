@@ -1719,6 +1719,44 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .review-group li::before { content: "\2713"; color: var(--success); font-weight: 700; }
 .review-left { margin: 0; color: var(--muted); font-size: .8125rem; }
 .review-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* New tracker: the five-step form, on its own page rather than in a pop-up (new.html, tracker-new.js). Without
+   JavaScript the step bar stays hidden and every step shows, each under its own heading. */
+.list-dialog.wizard-card { width: 100%; max-width: 720px; margin: 0 0 24px; box-shadow: var(--card-shadow); }
+.wizard-card .list-dialog-head { padding: 12px 20px; }
+.wizard-card .wizard-caption { margin: 0; color: var(--text); font-size: .875rem; font-weight: 600; }
+.wizard-card .wizard-body { max-height: none; overflow: visible; }
+.wizard-card .list-dialog-body .field-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container (max-width: 440px) {
+  .wizard-card .list-dialog-body .field-pair { grid-template-columns: minmax(0, 1fr); }
+}
+.wizard-steps[hidden] { display: none; }
+/* The seven days share the width evenly, so they fit a phone and line up with the fields on a wide screen. */
+.wizard-card .segmented-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.wizard-card .segmented-days label { min-width: 0; padding-left: 0; padding-right: 0; }
+.wizard-steps-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.wizard-steps-5::before { left: 10%; right: 10%; }
+.wizard-steps-5::after { left: 10%; width: calc(80% * var(--progress, 0)); }
+.wizard-step-title { margin: 0; font-size: 1.05rem; }
+.wizard-step-title:focus { outline: none; }
+.wizard-step-title:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
+.wizard-card .wizard-body > section > .field-error { margin: 0; }
+.wizard-weeks { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
+.wizard-weeks[hidden] { display: none; }
+.wizard-weeks-sum { margin: 0; font-size: .875rem; font-weight: 600; }
+.wizard-weeks-bar { display: flex; gap: 2px; }
+.wizard-weeks-bar:empty { display: none; }
+.wizard-week { flex: 1 1 0; height: 12px; border-radius: 3px; background: color-mix(in srgb, var(--primary) 30%, var(--surface)); }
+.wizard-week.is-target { background: var(--warning); }
+.wizard-week.is-after-target { background: color-mix(in srgb, var(--warning) 30%, var(--surface)); }
+.wizard-weeks-ends { display: flex; justify-content: space-between; gap: 12px; margin: 0; color: var(--muted); font-size: .75rem; }
+.review-list { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: .875rem; }
+.review-list dt { color: var(--muted); }
+.review-list dd { margin: 0; overflow-wrap: anywhere; }
+.review-list dd.is-none { color: var(--muted); font-style: italic; }
+@container (max-width: 440px) {
+  .review-list { grid-template-columns: minmax(0, 1fr); }
+  .review-list dd + dt { margin-top: 6px; }
+}
 .review-chips li { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: .8125rem; font-weight: 600; overflow-wrap: anywhere; }
 .review-chips li small { color: var(--muted); font-weight: 400; }
 .review-empty { margin: 0; color: var(--muted); font-size: .875rem; }
