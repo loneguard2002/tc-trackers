@@ -288,16 +288,20 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .home-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .home-head h1 { margin: 0; }
 .home-head p { margin: 2px 0 0; font-size: .9rem; }
-.home-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.home-actions .button { display: inline-flex; align-items: center; gap: 6px; }
+.home-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.home-actions .button { display: inline-flex; align-items: center; gap: 6px; height: 40px; }
+.home-actions .toggle[hidden] { display: none; }
+.home-actions .toggle button { min-height: 38px; }
+/* The ‹ › arrows at the end of the filter row (the Permission sets arrows' look). */
+.home-scroll { display: flex; gap: 6px; margin-left: auto; }
+.home-scroll[hidden] { display: none; }
+.home-scroll .perm-scroll { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-width: 36px; height: 36px; padding: 0; }
 /* Two rows, each on one line where it fits: the filter chips, then search, Business line, Region and Sort on the left
    with the Cards/List switch at the right end. Every control in the second row is 36px tall, so their edges and the
    labels beside them line up. */
 .home-tools { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 16px; }
 .home-tools-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
 .home-tools-right :is(select, .list-search input) { height: 36px; }
-.home-tools-right .toggle { margin-left: auto; }
-.home-tools-right .toggle button { min-height: 34px; }
 .home-tools-right label { margin: 0; color: var(--muted); font-size: .85rem; }
 .home-tools-right select { width: auto; min-width: 0; max-width: 100%; padding: 6px 10px; }
 .home-tool { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }

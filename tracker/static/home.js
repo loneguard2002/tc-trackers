@@ -23,6 +23,8 @@
   var headings = Array.prototype.slice.call(list.querySelectorAll("thead th")).filter(function (th) {
     return th.querySelector("button.sort-button[data-sort]");
   });
+  var layoutSwitch = document.querySelector("[data-home-layout]");
+  var scroller = document.querySelector("[data-home-scroll]");
   var state = { filter: "all", layout: "cards" };
   var DEFAULT_SORT = "attention";
   // How each sort key reads its value: "number" as a number, "text" as text. Target, forecast and last are ISO dates
@@ -140,9 +142,10 @@
     tools.querySelectorAll("[data-filter]").forEach(function (chip) {
       chip.setAttribute("aria-pressed", String(chip.dataset.filter === state.filter));
     });
-    tools.querySelectorAll("[data-layout]").forEach(function (button) {
+    document.querySelectorAll("[data-layout]").forEach(function (button) {
       button.setAttribute("aria-pressed", String(button.dataset.layout === state.layout));
     });
+    syncArrows();
   }
 
   tools.querySelectorAll("[data-filter]").forEach(function (chip) {
@@ -151,7 +154,7 @@
       render();
     });
   });
-  tools.querySelectorAll("[data-layout]").forEach(function (button) {
+  document.querySelectorAll("[data-layout]").forEach(function (button) {
     button.addEventListener("click", function () {
       state.layout = button.dataset.layout;
       try {
@@ -162,6 +165,30 @@
       render();
     });
   });
+  // ‹ › beside the filters: shown while the cards are shown and the row has more than fits (wider than a phone the
+  // cards sit in one sideways row); each steps one card, and they grey out at either end.
+  function syncArrows() {
+    if (!scroller) return;
+    var arrows = scroller.querySelectorAll("[data-card-scroll]");
+    var rest = cards.scrollWidth - cards.clientWidth - cards.scrollLeft;
+    scroller.hidden = cards.hidden || cards.scrollWidth <= cards.clientWidth + 1;
+    arrows[0].disabled = cards.scrollLeft <= 1;
+    arrows[1].disabled = rest <= 1;
+  }
+
+  if (scroller) {
+    scroller.querySelectorAll("[data-card-scroll]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var card = Array.prototype.filter.call(cards.querySelectorAll("[data-card]"), function (c) { return !c.hidden; })[0];
+        var step = card ? card.getBoundingClientRect().width + 16 : cards.clientWidth;
+        var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        cards.scrollBy({ left: step * Number(button.getAttribute("data-card-scroll")), behavior: reduce ? "auto" : "smooth" });
+      });
+    });
+    cards.addEventListener("scroll", syncArrows, { passive: true });
+    window.addEventListener("resize", syncArrows);
+  }
+
   sort.addEventListener("change", render);
   // A heading sets the Sort select to its column; a second click on the sorted heading reverses it.
   headings.forEach(function (th) {
@@ -209,6 +236,7 @@
   if (params.get("layout") === "list" || params.get("layout") === "cards") state.layout = params.get("layout");
 
   tools.hidden = false;
+  if (layoutSwitch) layoutSwitch.hidden = false;
   if (footer) footer.hidden = false;
   render();
 })();

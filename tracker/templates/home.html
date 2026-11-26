@@ -137,8 +137,15 @@
     <p class="muted">{{ cards|length }} tracker{{ '' if cards|length == 1 else 's' }} you can open{{ ', including archived' if show_archived }}</p>
   </div>
   {% set admin_view = current_user and current_user.is_admin %}
-  {% if admin_view or can('create_trackers') %}
+  {% if cards or admin_view or can('create_trackers') %}
   <div class="home-actions">
+    {% if cards %}
+    {#- Beside the page's buttons so the two line up; home.js shows it (without JavaScript every tracker is a card). -#}
+    <div class="toggle" role="group" aria-label="Layout" data-home-layout hidden>
+      <button type="button" data-layout="cards" aria-pressed="true">Cards</button>
+      <button type="button" data-layout="list" aria-pressed="false">List</button>
+    </div>
+    {% endif %}
     {% if admin_view %}
     {% if show_archived %}<a class="button" href="{{ url_for('index') }}">Hide archived</a>
     {% else %}<a class="button" href="{{ url_for('index', archived=1) }}">Show archived</a>{% endif %}
@@ -198,9 +205,11 @@
         {% endfor %}
       </select>
     </div>
-    <div class="toggle" role="group" aria-label="Layout">
-      <button type="button" data-layout="cards" aria-pressed="true">Cards</button>
-      <button type="button" data-layout="list" aria-pressed="false">List</button>
+    {#- ‹ › step the sideways row of cards one card at a time, as on Permission sets; home.js shows them only while the
+        cards are shown and the row has more than fits. -#}
+    <div class="home-scroll" data-home-scroll hidden>
+      <button class="button perm-scroll" type="button" data-card-scroll="-1" aria-label="Previous cards" title="Previous cards">{{ icon('chevron-left') }}</button>
+      <button class="button perm-scroll" type="button" data-card-scroll="1" aria-label="Next cards" title="Next cards">{{ icon('chevron-right') }}</button>
     </div>
   </div>
 </div>

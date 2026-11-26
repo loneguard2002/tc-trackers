@@ -299,3 +299,51 @@ def test_names_sort_in_natural_order(page, live_server, tracker_factory, user_fa
     sort.select_option("-name")
     assert names(page, "cards") == ["tracker 10", "tracker 5", "tracker 1"]
     clean(page)
+
+
+def _six_trackers(page, live_server, user_factory, tracker_factory):
+    admin = user_factory(is_admin=True)
+    for n in range(6):
+        tracker_factory(
+            name=f"Rollout {n + 1}", first_week_ending=date(2026, 9, 4), last_week_ending=date(2026, 12, 25)
+        )
+    page.add_init_script(RECORDER)
+    page.add_init_script("localStorage.setItem('tracker-sidebar','collapsed');")
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}/")
+
+
+def test_arrows_step_the_row_of_cards_and_grey_out_at_the_ends(page, live_server, user_factory, tracker_factory):
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _six_trackers(page, live_server, user_factory, tracker_factory)
+    previous, following = page.locator("[data-card-scroll='-1']"), page.locator("[data-card-scroll='1']")
+    expect(previous).to_be_visible()
+    expect(previous).to_be_disabled()
+    expect(following).to_be_enabled()
+    following.click()
+    expect(previous).to_be_enabled()  # the row moved off its start
+    for _ in range(6):
+        if following.is_disabled():
+            break
+        following.click()
+        page.wait_for_timeout(500)
+    expect(following).to_be_disabled()  # at the end of the row
+    page.locator("[data-layout=list]").click()
+    expect(page.locator("[data-home-scroll]")).to_be_hidden()  # no arrows for the list
+    assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
+
+
+def test_no_arrows_on_a_phone_where_the_cards_stack(page, live_server, user_factory, tracker_factory):
+    page.set_viewport_size({"width": 390, "height": 844})
+    _six_trackers(page, live_server, user_factory, tracker_factory)
+    expect(page.locator("[data-home-scroll]")).to_be_hidden()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+
+def test_the_cards_and_list_switch_sits_beside_new_tracker(page, live_server, user_factory, tracker_factory):
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _six_trackers(page, live_server, user_factory, tracker_factory)
+    switch = page.locator("[data-home-layout]").bounding_box()
+    new = page.get_by_role("link", name="New tracker").bounding_box()
+    assert abs((switch["y"] + switch["height"] / 2) - (new["y"] + new["height"] / 2)) <= 2  # one row, centred
+    assert switch["x"] + switch["width"] < new["x"]  # to its left
