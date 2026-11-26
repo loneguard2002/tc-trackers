@@ -27,7 +27,7 @@
 <p class="tracker-role">Your role: <strong>{{ g.role|title }}{% if current_user and current_user.is_admin %} (administrator){% endif %}</strong> · <a href="{{ url_for('trackers.role_guide', tracker_id=tracker.id) }}" data-role-guide>What each role can do</a></p>
 {% endif %}
 </div>
-{% if g.role %}
+{% if g.role and request.endpoint != 'trackers.role_guide' %}
 {#- Opened by tracker.js from the link above; without JavaScript the link opens the same table on its own page. -#}
 <dialog id="role-guide-dialog" class="list-dialog role-guide-dialog" aria-labelledby="role-guide-title">
   <header class="list-dialog-head">

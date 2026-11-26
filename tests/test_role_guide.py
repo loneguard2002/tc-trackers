@@ -7,20 +7,21 @@ from datetime import date
 from html import unescape
 
 import pytest
-from conftest import browser_sign_in
+from conftest import browser_sign_in, post
 from playwright.sync_api import expect
 from test_report_page_browser import RECORDER
 
-from tracker.auth.role_guide import ROLE_GUIDE, role_guide_rows
+from tracker.auth.role_guide import NOT_IN_GUIDE, ROLE_GUIDE, role_guide_rows
+from tracker.models import Group
 
 ROW_TEXTS = [
     "Open the report and download it as PDF or PNG",
     "Record, edit and delete entries; download entries",
     "Write the weekly update; set a calendar reminder",
-    "Add and edit risks; set weekly targets",
+    "Add, edit and delete risks; set weekly targets",
     "Set a group's status, planned date, ready figure and comment",
-    "Add groups; change a group's name, baseline and starting figure",
-    "Change the tracker's settings; archive it",
+    "Add, retire, delete and reorder groups; change a group's name, baseline and starting figure",
+    "Change the tracker's settings",
     "Preview, test and send the report email",
 ]
 
@@ -37,6 +38,25 @@ def test_every_row_matches_the_role_its_routes_require(app):
             assert getattr(view, "required_role", None) == row.role, f"{endpoint} does not require {row.role}"
 
 
+def test_every_tracker_route_is_in_the_table_or_listed_with_a_reason(app):
+    tracker_routes = {name for name, view in app.view_functions.items() if getattr(view, "required_role", None)}
+    in_rows = {endpoint for row in ROLE_GUIDE for endpoint in row.endpoints}
+    assert tracker_routes - in_rows - set(NOT_IN_GUIDE) == set(), "add the new route to a row or to NOT_IN_GUIDE"
+    assert in_rows <= tracker_routes and set(NOT_IN_GUIDE) <= tracker_routes  # no stale names
+
+
+@pytest.mark.parametrize("action", ["create", "delete", "retire", "up"])
+def test_the_owner_only_location_actions_are_refused_to_editors(client, db, logged_in_user, grant, tracker, action):
+    grant(logged_in_user, tracker, "editor")
+    group = Group(tracker_id=tracker.id, name="Site A", baseline=0)
+    db.add(group)
+    db.commit()
+    response = post(
+        client, f"/trackers/{tracker.id}/groups", {"action": action, "group_id": group.id, "name": "B", "baseline": "1"}
+    )
+    assert response.status_code == 403
+
+
 def test_the_rows_read_as_agreed_and_take_the_trackers_own_label():
     rows = role_guide_rows()
     assert [r["text"] for r in rows] == ROW_TEXTS
@@ -45,7 +65,9 @@ def test_the_rows_read_as_agreed_and_take_the_trackers_own_label():
     ] * 4 + [(False, False, True)] * 3
     sites = role_guide_rows("Site", "Sites")
     assert sites[4]["text"] == "Set a site's status, planned date, ready figure and comment"
-    assert sites[5]["text"] == "Add sites; change a site's name, baseline and starting figure"
+    assert (
+        sites[5]["text"] == "Add, retire, delete and reorder sites; change a site's name, baseline and starting figure"
+    )
 
 
 def _page(client, url):
@@ -63,7 +85,8 @@ def test_every_tracker_page_shows_your_role_and_the_table(client, logged_in_user
     dialog = unescape(re.search(r'<dialog id="role-guide-dialog".*?</dialog>', html, re.S).group(0))
     for text in ROW_TEXTS:  # in the tracker's own words: the test tracker calls its groups "Location"
         assert text.replace("group", "location") in dialog
-    assert "Administrators can do everything on every tracker." in dialog
+    assert "Administrators can do everything on every tracker, including archiving it." in dialog
+    assert "An archived tracker cannot be changed by anyone." in dialog
 
 
 def test_an_administrator_sees_owner_administrator(client, logged_in_admin, tracker):

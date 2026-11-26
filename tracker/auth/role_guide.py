@@ -21,7 +21,7 @@ ROLE_GUIDE: tuple[RoleRow, ...] = (
     RoleRow(
         "Open the report and download it as PDF or PNG",
         "viewer",
-        ("report.view", "report.export_pdf", "report.export_png"),
+        ("report.view", "report.export_pdf", "report.export_png", "report.chart_data", "report.chart_image"),
     ),
     RoleRow(
         "Record, edit and delete entries; download entries",
@@ -35,22 +35,35 @@ ROLE_GUIDE: tuple[RoleRow, ...] = (
         ),
     ),
     RoleRow(
-        "Write the weekly update; set a calendar reminder", "editor", ("entries.inputs", "entries.calendar_reminder")
+        "Write the weekly update; set a calendar reminder",
+        "editor",
+        (
+            "entries.inputs",
+            "entries.calendar_reminder",
+            "entries.calendar_reminder_history",
+            "entries.calendar_reminder_history_panel",
+            "entries.calendar_reminder_ics",
+            "entries.calendar_reminder_resend",
+        ),
     ),
     RoleRow(
-        "Add and edit risks; set weekly targets",
+        "Add, edit and delete risks; set weekly targets",
         "editor",
-        ("entries.risks", "entries.new_risk", "entries.edit_risk", "entries.targets"),
+        ("entries.risks", "entries.new_risk", "entries.edit_risk", "entries.delete_risk", "entries.targets"),
     ),
     RoleRow(
         "Set a {location}'s status, planned date, ready figure and comment",
         "editor",
-        ("trackers.set_group_status", "trackers.edit_group"),
+        ("trackers.groups", "trackers.set_group_status", "trackers.edit_group"),
     ),
+    # The groups page and edit_group are editors' pages; their owner-only actions (add, retire, delete, reorder, and
+    # the name, baseline and starting figure) are refused to editors inside them, which tests/test_role_guide.py checks.
     RoleRow(
-        "Add {locations}; change a {location}'s name, baseline and starting figure", "owner", ("trackers.new_group",)
+        "Add, retire, delete and reorder {locations}; change a {location}'s name, baseline and starting figure",
+        "owner",
+        ("trackers.new_group",),
     ),
-    RoleRow("Change the tracker's settings; archive it", "owner", ("trackers.settings", "trackers.archive")),
+    RoleRow("Change the tracker's settings", "owner", ("trackers.settings",)),
     RoleRow(
         "Preview, test and send the report email",
         "owner",
@@ -58,8 +71,17 @@ ROLE_GUIDE: tuple[RoleRow, ...] = (
     ),
 )
 
+# Tracker routes the table does not describe, and why. tests/test_role_guide.py requires every tracker route to be in
+# a row or here, so a new route cannot be left out of the table unnoticed.
+NOT_IN_GUIDE: dict[str, str] = {
+    "trackers.view": "the tracker's own address, which opens its first page",
+    "trackers.role_guide": "this table",
+    "trackers.archive": "administrators only (the administrator note says so)",
+}
+
 ROLE_NOTES: tuple[str, ...] = (
-    "Administrators can do everything on every tracker.",
+    "Administrators can do everything on every tracker, including archiving it.",
+    "An archived tracker cannot be changed by anyone.",
     "If you have a role from more than one place, the highest one counts.",
     "People with Manage teams choose who has which role.",
 )
