@@ -68,7 +68,10 @@ def test_a_team_can_have_a_region_without_a_location(client, logged_in_admin, db
     [entry] = entries(db, "team_created")
     assert entry.detail["location"] == "GLOBAL"
     index = client.get("/admin/teams").get_data(as_text=True)
-    assert '<span class="team-place">GLOBAL</span>' in tree_item(index, "Group risk")
+    assert (
+        '<span class="team-place"><span class="region-mark region-c1" aria-hidden="true"></span>GLOBAL</span>'
+        in tree_item(index, "Group risk")
+    )
     page = client.get(f"/admin/teams/{team.id}?edit=1").get_data(as_text=True)
     assert "<strong>GLOBAL</strong></span>" in client.get(f"/admin/teams/{team.id}").get_data(as_text=True)
     assert selected_value(page, "region_id") == str(world.id) and selected_value(page, "location_id") == ""
@@ -262,7 +265,10 @@ def test_tree_and_team_page_show_the_place(client, logged_in_admin, team_factory
     team_factory("Windows", parent=infra)
     for url in ("/admin/teams", f"/admin/teams/{infra.id}"):
         page = text_of(client.get(url))
-        assert '<span class="team-place">EMEA · Geneva</span>' in tree_item(page, "Infrastructure")
+        assert (
+            '<span class="team-place"><span class="region-mark region-c1" aria-hidden="true"></span>'
+            "EMEA · Geneva</span>" in tree_item(page, "Infrastructure")
+        )
         assert '<span class="team-place is-unset">Region not set</span>' in tree_item(page, "Windows")
     page = text_of(client.get(f"/admin/teams/{infra.id}"))
     header = re.search(r'<header class="team-header.*?</header>', page, re.S).group(0)

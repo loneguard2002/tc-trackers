@@ -580,6 +580,14 @@
       if (element.id) gone.push(element.id);
       element.parentNode.removeChild(element);
     });
+    // A group of choices (a region's colour) names its error on the fieldset: drop the reference with the error.
+    each(dialog.querySelectorAll("fieldset.has-error[aria-describedby]"), function (set) {
+      var kept = set.getAttribute("aria-describedby").split(" ").filter(function (ref) {
+        return ref !== "" && gone.indexOf(ref) === -1;
+      });
+      if (kept.length) set.setAttribute("aria-describedby", kept.join(" "));
+      else set.removeAttribute("aria-describedby");
+    });
     each(dialog.querySelectorAll(".field.has-error"), function (field) { field.classList.remove("has-error"); });
     each(dialog.querySelectorAll("[aria-invalid]"), function (control) {
       control.removeAttribute("aria-invalid");

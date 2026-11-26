@@ -63,7 +63,9 @@ def test_without_a_colour_a_new_region_takes_the_next_and_an_edit_keeps_its_own(
 def test_a_colour_outside_the_set_is_refused(client, logged_in_admin, db, colour):
     response = post(client, "/admin/regions", {"code": "EMEA", "name": "Europe", "colour": colour})
     assert response.status_code == 400
-    assert REGION_COLOUR_REQUIRED in response.get_data(as_text=True)
+    html = response.get_data(as_text=True)
+    assert REGION_COLOUR_REQUIRED in html
+    assert re.findall(r'value="\d" checked', html) == []  # no colour looks chosen beside "Choose a colour."
     assert db.scalars(select(Region)).all() == []
 
 

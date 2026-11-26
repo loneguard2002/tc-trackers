@@ -13,7 +13,7 @@
 </div>
 {#- The colour the region's code shows in, everywhere it appears: one of the set colours, as swatches. -#}
 {% set colour_errors = errors.get('colour', []) %}
-{% set chosen = (values.get('colour') or default_colour)|string %}
+{% set chosen = (default_colour if values.get('colour') is none else values.get('colour'))|string %}
 <fieldset class="field region-colours{{ ' has-error' if colour_errors }}"{% if colour_errors %} aria-describedby="{{ prefix }}-colour-error"{% endif %}>
   <legend class="field-label">Colour</legend>
   <div class="swatches">
