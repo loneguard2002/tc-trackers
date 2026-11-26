@@ -78,6 +78,7 @@ def load_config(overrides: dict | None = None) -> dict:
         "SESSION_COOKIE_SAMESITE": "Lax",
         "SESSION_COOKIE_SECURE": _cookie_secure(os.getenv("SESSION_COOKIE_SECURE")),
         "PERMANENT_SESSION_LIFETIME": 60 * 60 * 8,
+        "TEAMS_DEFAULT_VIEW": "new",  # the Teams pages' view until a person picks one (tracker/teams/view_choice.py)
     }
     if overrides:
         config.update(overrides)

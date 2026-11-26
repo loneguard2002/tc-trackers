@@ -8,6 +8,7 @@
     {{ title_crumb([(url_for('teams.index'), 'Teams'), (url_for('teams.view', team_id=team.id), team.name)], 'Higher teams') }}
     <p class="page-lede">The teams {{ team.name }} sits under. People in a higher team reach this team's trackers.</p>
   </div>
+  <div class="teams-head-actions">{% include "teams/_view_switch.html" %}</div>
 </header>
 <div class="settings settings-narrow">
   {% if errors %}

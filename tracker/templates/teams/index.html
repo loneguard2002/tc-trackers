@@ -9,6 +9,7 @@
     <h1>Teams <span class="count-pill title-count">{{ team_total }}<span class="sr-only"> teams</span></span></h1>
     <p class="page-lede">People in a team reach the team's trackers, and the trackers of every team below it, with their role in the team.</p>
   </div>
+  <div class="teams-head-actions">{% include "teams/_view_switch.html" %}</div>
 </header>
 <div class="teams-layout">
   {% include "teams/_tree.html" %}

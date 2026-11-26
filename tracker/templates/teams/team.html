@@ -13,6 +13,7 @@
     {{ title_crumb([(url_for('teams.index'), 'Teams')], team.name) }}
     <p class="page-lede">{{ team.description or "People in this team reach its trackers, and the trackers of every team below it." }}</p>
   </div>
+  <div class="teams-head-actions">{% include "teams/_view_switch.html" %}</div>
 </header>
 <div class="teams-layout">
   {% include "teams/_tree.html" %}

@@ -1,0 +1,7 @@
+{#- The switch between the Teams pages' New and Classic views (tracker/teams/view_choice.py); the choice is kept in the
+    session. Expects ``view_urls`` and ``active_view``. -#}
+<nav class="view-switch" aria-label="Teams view">
+  {%- for key, label in (('new', 'New view'), ('classic', 'Classic view')) %}
+  <a href="{{ view_urls[key] }}"{% if active_view == key %} aria-current="page"{% endif %}>{{ label }}</a>
+  {%- endfor %}
+</nav>
