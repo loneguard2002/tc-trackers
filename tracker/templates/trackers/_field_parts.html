@@ -20,10 +20,10 @@
 
 {% macro label_pair() -%}
 <div class="field-pair">
-  {% call field('Unit being counted', 'One unit of progress, used in chart labels and figures.', 'unit_label') %}
+  {% call field('Unit being counted', 'One unit of progress, shown in charts and figures.', 'unit_label') %}
   <input id="unit_label" name="unit_label" value="{{ form.get('unit_label', '') }}" placeholder="For example, thin clients" aria-describedby="unit_label-help">
   {% endcall %}
-  {% call field('Grouping label', 'What the groups are called. It also names the groups tab.', 'group_label') %}
+  {% call field('Grouping label', 'What the groups and their tab are called.', 'group_label') %}
   <input id="group_label" name="group_label" value="{{ form.get('group_label', '') }}" placeholder="For example, Location" aria-describedby="group_label-help">
   {% endcall %}
 </div>
