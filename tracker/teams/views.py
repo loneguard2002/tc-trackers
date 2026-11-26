@@ -47,7 +47,7 @@ from ..models import (
 from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
-from .overview import chart, member_counts, tracker_counts
+from .overview import chart, chart_order, member_counts, reach_people, tracker_counts
 from .people import TeamPerson, reach_counts, team_people
 from .tracker_moves import (
     TEAM_DELETED_MESSAGE,
@@ -181,8 +181,16 @@ def _render_index(form, errors: list[str], status: int):
     rows = load_team_rows(db)
     view = chosen_view()
     extra = {}
-    if view == "new":  # the hierarchy as a chart, each team with its members and trackers
-        extra = {"nodes": chart(rows), "members": member_counts(db), "tracker_totals": tracker_counts(db)}
+    if view == "new":  # the hierarchy as a chart, each team with its members and trackers, and the New team panel
+        nodes = chart(rows)
+        extra = {
+            "nodes": nodes,
+            "members": member_counts(db),
+            "tracker_totals": tracker_counts(db),
+            "sit_choices": chart_order(nodes),
+            "reach_lists": reach_people(db, rows),
+            "panel_open": bool(errors) or request.args.get("new") == "1",
+        }
     page = render_template(
         "teams/index_new.html" if view == "new" else "teams/index.html",
         **_tree_context(rows, None),

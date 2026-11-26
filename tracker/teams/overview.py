@@ -12,8 +12,9 @@ from typing import NamedTuple
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..auth import ROLE_ORDER
 from ..models import TeamMember, Tracker, User
-from .tree import TeamRow, sorted_by_name
+from .tree import TeamRow, ancestors, sorted_by_name
 
 FOLD_FROM_DEPTH = 3  # the top level is depth 1
 FOLD_OVER = 8  # a team at that depth or deeper with more teams below it than this shows them folded
@@ -50,6 +51,15 @@ def chart(rows: list[TeamRow]) -> list[ChartNode]:
     return build(None, 1, frozenset())
 
 
+def chart_order(nodes: list[ChartNode], depth: int = 1) -> list[tuple[TeamRow, int]]:
+    """The chart's teams top down, each with its depth (1 for the top level), as the chart lists them."""
+    found: list[tuple[TeamRow, int]] = []
+    for node in nodes:
+        found.append((node.row, depth))
+        found.extend(chart_order(node.children, depth + 1))
+    return found
+
+
 def member_counts(session: Session) -> dict[int, int]:
     """Team id to its number of active direct members."""
     return dict(
@@ -71,3 +81,32 @@ def tracker_counts(session: Session) -> dict[int, int]:
             .group_by(Tracker.team_id)
         ).all()
     )
+
+
+class ReachPerson(NamedTuple):
+    name: str
+    role: str  # the highest role the person reaches the team with
+    team_name: str  # the team that role comes from: the team itself, or the nearest team above holding it
+
+
+def reach_people(session: Session, rows: list[TeamRow]) -> dict[int, list[ReachPerson]]:
+    """Team id to every active person in it or in a team above it, once each, with their highest role: Owners first,
+    then Editors, then Viewers, each by name. A team placed under it would be reached by the same people."""
+    names = {row.id: row.name for row in rows}
+    held: dict[int, list[tuple[int, str, str]]] = {}  # team id to (user id, name, role) for its active members
+    for team_id, user_id, full_name, role in session.execute(
+        select(TeamMember.team_id, User.id, User.full_name, TeamMember.role)
+        .join(User, User.id == TeamMember.user_id)
+        .where(User.status == "active")
+    ):
+        held.setdefault(team_id, []).append((user_id, full_name, role))
+    found: dict[int, list[ReachPerson]] = {}
+    for row in rows:
+        best: dict[int, ReachPerson] = {}  # by user id: two people can share a name
+        for team_id in [row.id, *ancestors(rows, row.id)]:  # nearest first, so a tie keeps the nearest team
+            for user_id, full_name, role in held.get(team_id, []):
+                kept = best.get(user_id)
+                if kept is None or ROLE_ORDER[role] > ROLE_ORDER[kept.role]:
+                    best[user_id] = ReachPerson(full_name, role, names[team_id])
+        found[row.id] = sorted(best.values(), key=lambda p: (-ROLE_ORDER[p.role], p.name.casefold(), p.name))
+    return found

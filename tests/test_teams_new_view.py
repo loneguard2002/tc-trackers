@@ -4,6 +4,9 @@ page with its access map, the Add a member panel and Where it sits (database).""
 from __future__ import annotations
 
 import html as html_lib
+import re
+
+from conftest import post
 
 from tracker.teams.overview import FOLD_OVER, chart
 from tracker.teams.tree import TeamRow, load_team_rows
@@ -88,8 +91,82 @@ def test_the_chart_marks_also_under_and_folds(client, logged_in_admin, team_fact
     team_factory("Shared", parents=(alpha, beta))
     html = page(client, "/admin/teams?view=new")
     assert "Also under Beta" in html
-    assert html.count(">Shared<") == 1
+    chart_html = html.split("data-chart", 1)[1].split("</section>", 1)[0]
+    assert chart_html.count(">Shared<") == 1  # once in the chart (the New team panel lists it too)
 
 
 def test_an_empty_chart_says_so(client, logged_in_admin):
     assert "No teams yet." in page(client, "/admin/teams?view=new")
+
+
+# --- The New team panel ---------------------------------------------------------------------------------------------
+
+
+def _panel(html: str) -> str:
+    return re.search(r'<aside id="new-team-panel".*?</aside>', html, re.S).group(0)
+
+
+def test_the_panel_opens_on_request_and_lists_where_a_team_can_sit(client, logged_in_admin, team_factory):
+    top = team_factory("Global Markets")
+    rates = team_factory("EMEA Rates", parent=top)
+    team_factory("London Swaps", parent=rates)
+    team_factory("APAC Desk", parent=top)
+    assert re.search(r'<aside id="new-team-panel"[^>]*hidden', page(client, "/admin/teams?view=new"))
+    panel = _panel(page(client, "/admin/teams?view=new&new=1"))
+    assert "hidden" not in panel.split(">", 1)[0]
+    choices = re.findall(r'name="parent_id" value="(\d*)"[^>]*>\s*<span[^>]*>([^<]+)</span>', panel)
+    assert [name for _, name in choices] == ["Top level", "Global Markets", "APAC Desk", "EMEA Rates", "London Swaps"]
+    assert 'class="sit-choice depth-3"' in panel  # London Swaps, indented two levels
+    assert "You can put it under a second team from its Where it sits page." in panel
+
+
+def test_the_panel_says_who_reaches_the_new_team(client, logged_in_admin, team_factory, user_factory, add_member):
+    top = team_factory("Global Markets")
+    rates = team_factory("EMEA Rates", parent=top)
+    add_member(rates, user_factory(full_name="Priya Nair"), "owner")
+    add_member(top, user_factory(full_name="Sam Ortiz"), "viewer")
+    add_member(top, user_factory(full_name="Gone Person", status="disabled"), "owner")
+    panel = _panel(page(client, "/admin/teams?view=new&new=1"))
+    reach = re.search(rf'<ul class="reach-list" data-reach-for="{rates.id}"[^>]*>(.*?)</ul>', panel, re.S).group(1)
+    assert re.findall(r"<li>([^<]+)</li>", reach) == [
+        "Priya Nair · Owner · EMEA Rates",
+        "Sam Ortiz · Viewer · Global Markets",
+    ]
+    assert 'data-reach-for="">Only the members you add' in panel
+
+
+def test_the_reach_list_shows_five_then_a_count(client, logged_in_admin, team_factory, user_factory, add_member):
+    top = team_factory("Big")
+    for n in range(7):
+        add_member(top, user_factory(full_name=f"Person {n}"), "viewer")
+    panel = _panel(page(client, "/admin/teams?view=new&new=1"))
+    reach = re.search(rf'data-reach-for="{top.id}"[^>]*>(.*?)</ul>', panel, re.S).group(1)
+    assert reach.count("<li>") == 6 and "and 2 more" in reach
+
+
+def test_a_refused_create_shows_the_new_view_with_the_panel_open_and_the_input_kept(
+    client, logged_in_admin, team_factory, region_factory
+):
+    team_factory("Desk")
+    region = region_factory("EMEA")
+    page(client, "/admin/teams?view=new")  # the choice is kept in the session
+    response = post(client, "/admin/teams", {"name": "Desk", "parent_id": "", "region_id": str(region.id)})
+    assert response.status_code == 400
+    html = html_lib.unescape(response.get_data(as_text=True))
+    panel = _panel(html)
+    assert "hidden" not in panel.split(">", 1)[0] and 'value="Desk"' in panel
+    assert "already" in html and "data-chart" in html
+
+
+def test_the_panel_offers_each_team_s_place_for_filling_in(
+    client, logged_in_admin, team_factory, region_factory, location_factory
+):
+    region = region_factory("EMEA")
+    london = location_factory(region, "London", "GB", code="LON")
+    rates = team_factory("EMEA Rates", location_id=london.id)
+    panel = _panel(page(client, "/admin/teams?view=new&new=1"))
+    assert re.search(
+        rf'value="{rates.id}" data-team-name="EMEA Rates" '
+        rf'data-place-region="{region.id}" data-place-location="{london.id}"',
+        panel,
+    )

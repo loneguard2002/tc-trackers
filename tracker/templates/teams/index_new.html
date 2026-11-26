@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% from "macros.html" import icon %}
+{% from "macros.html" import csrf_field, icon %}
 {% from "teams/_chart.html" import chart_level with context %}
 {% block head_extra %}
+  <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='teams-new.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% block content %}
@@ -12,19 +13,75 @@
   </div>
   <div class="teams-head-actions">
     {% include "teams/_view_switch.html" %}
+    <a class="button primary" href="{{ url_for('teams.index', new=1) }}#new-team-panel" data-new-team>{{ icon('plus') }}New team</a>
   </div>
 </header>
-<section class="settings-section org-chart-card" aria-labelledby="chart-title">
-  <header class="settings-section-head org-chart-head">
-    <h2 id="chart-title">Hierarchy</h2>
-    <label class="sr-only" for="chart-search">Find a team or person</label>
-    <input id="chart-search" class="tree-filter" type="search" placeholder="Find a team or person" autocomplete="off" data-chart-search hidden>
-  </header>
-  {% if nodes %}
-  <div class="org-chart-scroll" data-chart>{{ chart_level(nodes, true) }}</div>
-  <p class="org-chart-note">A team under two teams shows under one of them, marked “Also under” the other; people in either team reach it.</p>
-  {% else %}
-  <p class="empty-note">No teams yet.</p>
-  {% endif %}
-</section>
+<div class="teams-new-layout">
+  <section class="settings-section org-chart-card" aria-labelledby="chart-title">
+    <header class="settings-section-head org-chart-head">
+      <h2 id="chart-title">Hierarchy</h2>
+      <label class="sr-only" for="chart-search">Find a team or person</label>
+      <input id="chart-search" class="tree-filter" type="search" placeholder="Find a team or person" autocomplete="off" data-chart-search hidden>
+    </header>
+    {% if nodes %}
+    <div class="org-chart-scroll" data-chart>{{ chart_level(nodes, true) }}</div>
+    <p class="org-chart-note">A team under two teams shows under one of them, marked “Also under” the other; people in either team reach it.</p>
+    {% else %}
+    <p class="empty-note">No teams yet.</p>
+    {% endif %}
+  </section>
+
+  {#- The New team panel: three steps, then who reaches the new team. Opened by New team (teams-new.js), or by the
+      address ?new=1 without JavaScript and after a refused create. -#}
+  <aside id="new-team-panel" class="settings-section new-team-panel" aria-labelledby="new-team-title"{% if not panel_open %} hidden{% endif %}>
+    <header class="settings-section-head new-team-head">
+      <h2 id="new-team-title">New team</h2>
+      <a class="tool-button" href="{{ url_for('teams.index') }}" data-panel-close title="Close">{{ icon('close') }}<span class="sr-only">Close</span></a>
+    </header>
+    {% if errors %}
+    <div class="form-alert" role="alert">
+      <strong>Please correct the following:</strong>
+      <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    <form class="new-team-form" method="post" action="{{ url_for('teams.create') }}">
+      {{ csrf_field(csrf_token()) }}
+      <div class="new-team-step">
+        <label class="field-label" for="name"><span class="step-number" aria-hidden="true">1</span>Name</label>
+        <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required autocomplete="off" data-new-name>
+        <label class="field-label new-team-sub" for="description">Description <span class="muted">(optional)</span></label>
+        <textarea id="description" name="description" rows="2" maxlength="500">{{ form.get('description', '') }}</textarea>
+      </div>
+      <fieldset class="new-team-step">
+        <legend class="field-label"><span class="step-number" aria-hidden="true">2</span>Where it sits</legend>
+        <label class="sit-choice depth-0"><input type="radio" name="parent_id" value="" data-team-name=""{{ ' checked' if not selected_parent }}>
+          <span>Top level</span></label>
+        {% for row, depth in sit_choices %}
+        {% set place = places.get(row.id) %}
+        <label class="sit-choice depth-{{ depth }}"><input type="radio" name="parent_id" value="{{ row.id }}" data-team-name="{{ row.name }}" data-place-region="{{ place.region_id if place else '' }}" data-place-location="{{ (place.location_id or '') if place else '' }}"{{ ' checked' if selected_parent == row.id|string }}>
+          <span>{{ row.name }}</span></label>
+        {% endfor %}
+        <p class="field-help">You can put it under a second team from its Where it sits page.</p>
+      </fieldset>
+      <fieldset class="new-team-step">
+        <legend class="field-label"><span class="step-number" aria-hidden="true">3</span>Region and location</legend>
+        <p class="field-help" data-place-hint hidden>Filled from <span data-place-from></span>.</p>
+        {% include "teams/_place_fields.html" %}
+      </fieldset>
+      <div class="new-team-reach">
+        <strong>Who reaches it straight away</strong>
+        <p class="reach-list" data-reach-for=""{% if selected_parent %} hidden{% endif %}>Only the members you add.</p>
+        {% for row, depth in sit_choices %}
+        {% set people = reach_lists.get(row.id, []) %}
+        <ul class="reach-list" data-reach-for="{{ row.id }}"{% if selected_parent != row.id|string %} hidden{% endif %}>
+          {%- for p in people[:5] %}<li>{{ p.name }} · {{ p.role|title }} · {{ p.team_name }}</li>{% endfor -%}
+          {%- if people|length > 5 %}<li>and {{ people|length - 5 }} more</li>{% endif -%}
+          {%- if not people %}<li>No one yet: only the members you add</li>{% endif -%}
+        </ul>
+        {% endfor %}
+      </div>
+      <button class="button primary new-team-submit" type="submit" data-create-label>{{ icon('plus') }}<span>Create team</span></button>
+    </form>
+  </aside>
+</div>
 {% endblock %}
