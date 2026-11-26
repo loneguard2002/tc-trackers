@@ -11,7 +11,7 @@ from playwright.sync_api import expect
 from test_report_page_browser import RECORDER
 from test_teams_new_view import swaps  # noqa: F401  (the fixture)
 
-from tracker.models import Team, TeamMember
+from tracker.models import Team
 from tracker.teams.tree import load_team_rows
 
 pytestmark = pytest.mark.browser
@@ -39,7 +39,14 @@ def test_the_chart_search_marks_a_matching_team(admin_page, live_server, swaps):
     clean(admin_page)
 
 
-def test_new_team_form_opens_in_place_and_fills_the_place(admin_page, live_server, db, swaps, region_factory, location_factory):  # noqa: F811
+def test_new_team_form_opens_in_place_and_fills_the_place(
+    admin_page,
+    live_server,
+    db,
+    swaps,  # noqa: F811
+    region_factory,
+    location_factory,
+):
     region = region_factory("EMEA")
     london = location_factory(region, "London", "GB", code="LON")
     rates = swaps["rates"]
@@ -81,6 +88,7 @@ def test_structure_search_filters_teams(admin_page, live_server, swaps, team_fac
     expect(card.locator(".structure-node", has_text="Global Markets")).to_be_visible()  # its parents stay
     expect(card.locator(".structure-node", has_text="Other Desk")).to_be_hidden()
     clean(admin_page)
+
 
 def test_the_chart_draws_a_dotted_line_from_the_other_higher_team(admin_page, live_server, team_factory):
     alpha, beta = team_factory("Alpha"), team_factory("Beta")
@@ -142,5 +150,3 @@ def test_no_page_scrolls_sideways_at_phone_width(admin_page, live_server, swaps)
         admin_page.goto(f"{live_server}{url}")
         assert admin_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), url
     clean(admin_page)
-
-
