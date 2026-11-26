@@ -20,6 +20,7 @@ from ..ids import parse_id
 from ..models import EmailTemplate, Recipient, ReportSend, User
 from ..report import views as report_views
 from ..report.build import build_report, default_report_week
+from ..report.render import RenderBusy
 from ..trackers.views import _refuse_if_archived
 from . import bp, sending, smtp
 from .compose import (
@@ -226,7 +227,7 @@ def test_send(tracker_id: int):
     user = current_user()
     try:
         sending.send_test(get_session(), tracker, week, user, datetime.now(timezone.utc))
-    except smtp.MailError as exc:
+    except (smtp.MailError, RenderBusy) as exc:
         flash(f"The test email could not be sent: {exc}", "danger")
     else:
         flash(f"A test email was sent to {user.email}.", "success")

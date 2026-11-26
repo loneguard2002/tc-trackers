@@ -5,19 +5,21 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from flask import Response, abort, g, jsonify, render_template, request, session
+from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
-from ..auth import require_tracker_role
+from ..auth import current_user, require_tracker_role
 from ..auth.roles import ROLE_ORDER
 from ..db import get_session
 from ..engine.weeks import week_endings
 from ..trackers.targets import target_history
-from . import bp
+from . import bp, limits
 from .build import build_report, compute_position, current_report_week
 from .chart_data import chart_payload
 from .charts import cumulative_chart, remaining_chart, remaining_glance_chart, weekly_chart
 from .dashboard import build_dashboard
-from .render import html_to_pdf, html_to_png, render_print_dashboard_html, render_print_html
+from .render import RenderBusy, html_to_pdf, html_to_png, render_print_dashboard_html, render_print_html
+
+EXPORT_WAIT_SECONDS = 3  # short, so a download waiting for its turn does not hold a request thread for long
 
 
 def today() -> date:
@@ -144,10 +146,22 @@ def _print_html(tracker) -> tuple[str, date]:
     return render_print_html(report), report.week_ending
 
 
+def _back_to_report(tracker, message: str):
+    """A refused download: back to the report it came from, with the reason."""
+    flash(message, "warning")
+    args = {name: request.args[name] for name in ("week", "view") if request.args.get(name)}
+    return redirect(url_for("report.view", tracker_id=tracker.id, **args))
+
+
 def _export(tracker_id: int, extension: str, convert, mimetype: str) -> Response:
     tracker = g.tracker
+    if not limits.allow(get_session(), current_user().id):
+        return _back_to_report(tracker, limits.LIMIT_MESSAGE)
     html, week_ending = _print_html(tracker)
-    data = convert(html)
+    try:
+        data = convert(html, wait=EXPORT_WAIT_SECONDS)
+    except RenderBusy as busy:
+        return _back_to_report(tracker, str(busy))
     filename = f"{_slug(tracker.name)}-week-ending-{week_ending.isoformat()}.{extension}"
     response = Response(data, mimetype=mimetype)
     response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'

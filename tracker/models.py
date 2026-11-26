@@ -527,6 +527,18 @@ class LoginFailure(Base):
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ExportRequest(Base):
+    """One PDF or PNG report download, counted by the per-person export limit (report/limits.py). Kept in the database
+    so every worker shares one count; rows older than an hour are deleted."""
+
+    __tablename__ = "export_requests"
+    __table_args__ = (Index("ix_export_requests_user_id_at", "user_id", "at"), Index("ix_export_requests_at", "at"))
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class FeedbackRequest(Base):
     """One idea or problem sent by a signed-in person; a conversation with the people who run the application."""
 

@@ -183,8 +183,8 @@ def test_the_downloads_and_data_ignore_the_session(client, db, small_tracker, vi
 
 def test_the_export_routes_ignore_the_view_kept_for_the_page(client, db, small_tracker, viewer, monkeypatch):
     seen = []
-    monkeypatch.setattr("tracker.report.views.html_to_pdf", lambda html: seen.append(html) or b"%PDF")
-    monkeypatch.setattr("tracker.report.views.html_to_png", lambda html: seen.append(html) or b"PNG")
+    monkeypatch.setattr("tracker.report.views.html_to_pdf", lambda html, **_: seen.append(html) or b"%PDF")
+    monkeypatch.setattr("tracker.report.views.html_to_png", lambda html, **_: seen.append(html) or b"PNG")
     seed(db, small_tracker)
     for view in ("new", "classic"):
         with client.session_transaction() as session:
@@ -833,7 +833,7 @@ def exported(client, monkeypatch, tracker, extension, query=""):
     """The document the PDF or PNG route would convert, caught before Chromium runs."""
     seen = {}
     name = "html_to_pdf" if extension == "pdf" else "html_to_png"
-    monkeypatch.setattr(f"tracker.report.views.{name}", lambda html: seen.setdefault("html", html) and b"x")
+    monkeypatch.setattr(f"tracker.report.views.{name}", lambda html, **_: seen.setdefault("html", html) and b"x")
     response = client.get(f"/trackers/{tracker.id}/report.{extension}?week={WEEKS[1].isoformat()}{query}")
     assert response.status_code == 200
     return seen["html"]

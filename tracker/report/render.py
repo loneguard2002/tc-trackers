@@ -1,8 +1,16 @@
-"""Standalone report rendering: a self-contained HTML document, converted to PDF or PNG with headless Chromium."""
+"""Standalone report rendering: a self-contained HTML document, converted to PDF or PNG with headless Chromium.
+
+Each conversion starts its own Chromium, which takes far more memory than an ordinary page. ``RENDERS_AT_ONCE`` caps
+the conversions running together in one process (Gunicorn runs two), so a burst of downloads can neither use up the
+memory nor hold every request thread while ordinary pages wait. A conversion that cannot start within its wait raises
+``RenderBusy``.
+"""
 
 from __future__ import annotations
 
 import os
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 from flask import current_app, render_template
@@ -12,6 +20,29 @@ from .build import Report
 
 A4_PORTRAIT_WIDTH = 794  # CSS pixels at 96 dpi
 RENDER_TIMEOUT_MS = 20_000
+RENDERS_AT_ONCE = 1  # per process
+DEFAULT_WAIT_SECONDS = 10  # an emailed report waits this long for its turn
+BUSY_MESSAGE = "A report is already being prepared. Try again in a moment."
+
+_slots = threading.BoundedSemaphore(RENDERS_AT_ONCE)
+
+
+class RenderBusy(ValueError):
+    """No conversion slot came free in time. A ``ValueError``, so the email screens show its message like their other
+    reasons a send cannot go ahead."""
+
+    def __init__(self) -> None:
+        super().__init__(BUSY_MESSAGE)
+
+
+@contextmanager
+def _render_slot(wait: float):
+    if not _slots.acquire(timeout=wait):
+        raise RenderBusy()
+    try:
+        yield
+    finally:
+        _slots.release()
 
 
 def render_print_html(report: Report) -> str:
@@ -55,9 +86,9 @@ def _open(playwright, width: int, height: int, html: str):
     return browser, page
 
 
-def html_to_pdf(html: str) -> bytes:
-    """Render ``html`` to an A4 PDF."""
-    with sync_playwright() as playwright:
+def html_to_pdf(html: str, wait: float = DEFAULT_WAIT_SECONDS) -> bytes:
+    """Render ``html`` to an A4 PDF, waiting up to ``wait`` seconds for a free slot."""
+    with _render_slot(wait), sync_playwright() as playwright:
         browser, page = _open(playwright, A4_PORTRAIT_WIDTH, 1123, html)
         try:
             return page.pdf(format="A4", print_background=True)
@@ -65,9 +96,9 @@ def html_to_pdf(html: str) -> bytes:
             browser.close()
 
 
-def html_to_png(html: str, width: int = 1100) -> bytes:
-    """Render ``html`` to a full-page PNG ``width`` CSS pixels wide."""
-    with sync_playwright() as playwright:
+def html_to_png(html: str, width: int = 1100, wait: float = DEFAULT_WAIT_SECONDS) -> bytes:
+    """Render ``html`` to a full-page PNG ``width`` CSS pixels wide, waiting up to ``wait`` seconds for a free slot."""
+    with _render_slot(wait), sync_playwright() as playwright:
         browser, page = _open(playwright, width, 800, html)
         try:
             return page.screenshot(full_page=True, type="png")
