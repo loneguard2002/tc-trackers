@@ -132,7 +132,9 @@ def test_new_view_index_opens_on_the_first_top_level_team(client, logged_in_admi
 def test_new_view_index_without_teams_offers_the_form(client, logged_in_admin):
     html = page(client, "/admin/teams?view=new")
     assert "No teams yet." in html
-    assert re.search(r'<form id="new-team-form"[^>]*>', html) and not re.search(r'<form id="new-team-form"[^>]*hidden', html)
+    assert re.search(r'<form id="new-team-form"[^>]*>', html) and not re.search(
+        r'<form id="new-team-form"[^>]*hidden', html
+    )
 
 
 def test_structure_card_shows_each_team_once(client, logged_in_admin, team_factory):
@@ -211,10 +213,12 @@ def test_the_role_select_posts_to_update_member_and_works_without_javascript(cli
     assert post(client, f"/admin/teams/{team.id}/members/{ana.id}", {"role": "owner"}).status_code == 302
     assert db.get(TeamMember, (team.id, ana.id)).role == "owner"
 
+
 def test_the_other_tabs_and_edit_details_render_in_the_new_view(client, logged_in_admin, swaps):
     team = swaps["team"]
     assert 'id="trackers-table"' in team_page(client, team, "trackers")
     assert 'action="/admin/teams/%d/rename"' % team.id in page(client, f"/admin/teams/{team.id}?view=new&edit=1")
+
 
 # --- Add a member ---------------------------------------------------------------------------------------------------
 
@@ -231,12 +235,14 @@ def test_a_refused_add_shows_the_new_view_with_the_message(client, logged_in_adm
     html = html_lib.unescape(response.get_data(as_text=True))
     assert ALREADY_MEMBER_MESSAGE in html and '<section class="family"' in html and 'id="people-table"' in html
 
+
 def test_a_team_holding_sets_shows_the_refusal_instead_of_the_panel(client, logged_in_user, give_set, team_factory):
     team = team_factory("Holders")
     give_set(["manage_teams"], user=logged_in_user)
     give_set(["view_activity"], team=team)
     html = team_page(client, team)
     assert TEAM_WITH_SETS_MESSAGE in html and 'action="/admin/teams/%d/members"' % team.id not in html
+
 
 # --- Where it sits --------------------------------------------------------------------------------------------------
 
@@ -349,7 +355,11 @@ def test_team_header_figures(client, logged_in_admin, swaps):
 def test_ladder_shows_path_this_team_and_below(client, logged_in_admin, swaps):
     rates = swaps["rates"]
     lad = _ladder(page(client, f"/admin/teams/{rates.id}?view=new"))
-    assert text_of(lad).index("Global Markets") < text_of(lad).index("EMEA Rates this team") < text_of(lad).index("London Swaps")
+    assert (
+        text_of(lad).index("Global Markets")
+        < text_of(lad).index("EMEA Rates this team")
+        < text_of(lad).index("London Swaps")
+    )
     assert f'href="/admin/teams/{swaps["top"].id}"' in lad and f'href="/admin/teams/{swaps["team"].id}"' in lad
 
 
@@ -379,8 +389,12 @@ def test_only_two_tabs_and_below_tab_falls_back(client, logged_in_admin, swaps):
 
 def test_put_an_existing_team_below_uses_indented_options(client, logged_in_admin, swaps):
     html = page(client, f"/admin/teams/{swaps['rates'].id}?view=new")
-    form = re.search(r'<form class="below-form"[^>]*action="/admin/teams/%d/below".*?</form>' % swaps["rates"].id, html, re.S).group(0)
-    assert re.search(r'<option value="%d"[^>]*disabled[^>]*>[^<]*London Swaps \(already below\)' % swaps["team"].id, form)
+    form = re.search(
+        r'<form class="below-form"[^>]*action="/admin/teams/%d/below".*?</form>' % swaps["rates"].id, html, re.S
+    ).group(0)
+    assert re.search(
+        r'<option value="%d"[^>]*disabled[^>]*>[^<]*London Swaps \(already below\)' % swaps["team"].id, form
+    )
     assert re.search(r'<option value="%d"[^>]*disabled[^>]*>[^<]*EMEA Rates \(this team\)' % swaps["rates"].id, form)
 
 
@@ -396,7 +410,7 @@ def test_people_how_they_get_access(client, logged_in_admin, swaps):
 def test_role_column(client, logged_in_admin, swaps):
     html = page(client, f"/admin/teams/{swaps['team'].id}?view=new")
     tom = _row_of(html, "Tom Becker")
-    assert '<select' in tom and "Sees as Editor through a team above" in text_of(tom)
+    assert "<select" in tom and "Sees as Editor through a team above" in text_of(tom)
     priya = _row_of(html, "Priya Nair")
     assert "<select" not in priya and "Owner" in text_of(priya) and "Change in EMEA Rates" in text_of(priya)
 
@@ -404,7 +418,11 @@ def test_role_column(client, logged_in_admin, swaps):
 def test_filters_hide_empty_groups(client, logged_in_admin, team_factory, user_factory, add_member):
     team = team_factory("Solo")
     add_member(team, user_factory(), "viewer")
-    tools = re.search(r'<div class="list-tools">.*?</div>\s*<div class="section-table', page(client, f"/admin/teams/{team.id}?view=new"), re.S).group(0)
+    tools = re.search(
+        r'<div class="list-tools">.*?</div>\s*<div class="section-table',
+        page(client, f"/admin/teams/{team.id}?view=new"),
+        re.S,
+    ).group(0)
     assert "Everyone" in tools and "Members of this team" in tools and "Through a team above" not in tools
 
 
@@ -450,21 +468,34 @@ def test_create_with_also_under_makes_a_shared_team(client, logged_in_admin, db,
     alpha, beta = team_factory("Alpha"), team_factory("Beta")
     region = region_factory("EMEA")
     page(client, f"/admin/teams/{alpha.id}?view=new")
-    response = post(client, "/admin/teams", {"name": "Rates Ops", "parent_id": str(alpha.id), "also_parent_id": str(beta.id), "region_id": str(region.id)})
+    response = post(
+        client,
+        "/admin/teams",
+        {"name": "Rates Ops", "parent_id": str(alpha.id), "also_parent_id": str(beta.id), "region_id": str(region.id)},
+    )
     assert response.status_code == 302
     team = db.scalar(select(Team).where(Team.name == "Rates Ops"))
     assert _links(db, team.id) == sorted([alpha.id, beta.id])
-    entries = {(e.action, e.detail.get("parent")) for e in db.scalars(select(AuditLog).where(AuditLog.entity_id == str(team.id)))}
+    entries = {
+        (e.action, e.detail.get("parent"))
+        for e in db.scalars(select(AuditLog).where(AuditLog.entity_id == str(team.id)))
+    }
     assert ("team_created", "Alpha") in entries and ("team_parent_added", "Beta") in entries
 
 
 def test_also_under_same_as_sits_under_makes_one_link(client, logged_in_admin, db, team_factory, region_factory):
     alpha = team_factory("Alpha")
     region = region_factory("EMEA")
-    post(client, "/admin/teams", {"name": "Solo", "parent_id": str(alpha.id), "also_parent_id": str(alpha.id), "region_id": str(region.id)})
+    post(
+        client,
+        "/admin/teams",
+        {"name": "Solo", "parent_id": str(alpha.id), "also_parent_id": str(alpha.id), "region_id": str(region.id)},
+    )
     team = db.scalar(select(Team).where(Team.name == "Solo"))
     assert _links(db, team.id) == [alpha.id]
-    assert not db.scalar(select(AuditLog).where(AuditLog.entity_id == str(team.id), AuditLog.action == "team_parent_added"))
+    assert not db.scalar(
+        select(AuditLog).where(AuditLog.entity_id == str(team.id), AuditLog.action == "team_parent_added")
+    )
 
 
 def test_refused_create_keeps_what_was_entered(client, logged_in_admin, team_factory, region_factory, location_factory):
@@ -472,14 +503,27 @@ def test_refused_create_keeps_what_was_entered(client, logged_in_admin, team_fac
     region = region_factory("EMEA")
     geneva = location_factory(region, "Geneva", "CH")
     page(client, f"/admin/teams/{alpha.id}?view=new")
-    response = post(client, "/admin/teams", {"name": "Beta", "parent_id": str(alpha.id), "also_parent_id": str(beta.id), "region_id": str(region.id), "location_id": str(geneva.id), "description": "Kept"})
+    response = post(
+        client,
+        "/admin/teams",
+        {
+            "name": "Beta",
+            "parent_id": str(alpha.id),
+            "also_parent_id": str(beta.id),
+            "region_id": str(region.id),
+            "location_id": str(geneva.id),
+            "description": "Kept",
+        },
+    )
     assert response.status_code == 400
     form = _form(html_lib.unescape(response.get_data(as_text=True)))
     assert "hidden" not in form.split(">", 1)[0]
     assert 'value="Beta"' in form and ">Kept</textarea>" in form
     assert re.search(rf'<option value="{alpha.id}"[^>]*selected', _select(form, "parent_id"))
     assert re.search(rf'<option value="{beta.id}"[^>]*selected', _select(form, "also_parent_id"))
-    assert re.search(rf'<option value="{region.id}"\s+selected', form) and re.search(rf'<option value="{geneva.id}"\s+selected', form)
+    assert re.search(rf'<option value="{region.id}"\s+selected', form) and re.search(
+        rf'<option value="{geneva.id}"\s+selected', form
+    )
 
 
 def test_sits_under_preselects_the_viewed_team(client, logged_in_admin, swaps):

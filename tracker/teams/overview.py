@@ -12,16 +12,8 @@ from typing import NamedTuple
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..auth import ROLE_ORDER
 from ..models import TeamMember, Tracker, User
-from .tree import TeamRow, ancestors, descendants, sorted_by_name
-
-# What each role allows, in the role guide's words (tracker/auth/role_guide.py), for the Add a member panel.
-ROLE_SUMMARY = {
-    "viewer": "Opens the report and downloads it.",
-    "editor": "Also records entries, writes the weekly update, keeps risks and targets.",
-    "owner": "Also changes locations, settings and sends the report email.",
-}
+from .tree import TeamRow, sorted_by_name
 
 FOLD_FROM_DEPTH = 3  # the top level is depth 1
 FOLD_OVER = 8  # a team at that depth or deeper with more teams below it than this shows them folded
@@ -60,15 +52,6 @@ def chart(rows: list[TeamRow]) -> list[ChartNode]:
     return build(None, 1, frozenset())
 
 
-def chart_order(nodes: list[ChartNode], depth: int = 1) -> list[tuple[TeamRow, int]]:
-    """The chart's teams top down, each with its depth (1 for the top level), as the chart lists them."""
-    found: list[tuple[TeamRow, int]] = []
-    for node in nodes:
-        found.append((node.row, depth))
-        found.extend(chart_order(node.children, depth + 1))
-    return found
-
-
 MAX_CHAINS = 6
 
 
@@ -97,24 +80,6 @@ def paths_to(rows: list[TeamRow], team_id: int, parent_ids: frozenset[int] | Non
     return chains[:MAX_CHAINS]
 
 
-def ancestor_levels(rows: list[TeamRow], team_id: int) -> dict[int, int]:
-    """Each team above the team to how many levels up it is by the shortest path (1 for a higher team)."""
-    by_id = {row.id: row for row in rows}
-    levels: dict[int, int] = {}
-    current, level, seen = [team_id], 0, {team_id}
-    while current:
-        level += 1
-        above = []
-        for team in current:
-            for parent_id in by_id[team].parent_ids if team in by_id else ():
-                if parent_id not in seen and parent_id in by_id:
-                    seen.add(parent_id)
-                    levels[parent_id] = level
-                    above.append(parent_id)
-        current = above
-    return levels
-
-
 def member_counts(session: Session) -> dict[int, int]:
     """Team id to its number of active direct members."""
     return dict(
@@ -135,44 +100,4 @@ def tracker_counts(session: Session) -> dict[int, int]:
             .where(Tracker.status != "archived", Tracker.team_id.is_not(None))
             .group_by(Tracker.team_id)
         ).all()
-    )
-
-
-class ReachPerson(NamedTuple):
-    name: str
-    role: str  # the highest role the person reaches the team with
-    team_name: str  # the team that role comes from: the team itself, or the nearest team above holding it
-
-
-def reach_people(session: Session, rows: list[TeamRow]) -> dict[int, list[ReachPerson]]:
-    """Team id to every active person in it or in a team above it, once each, with their highest role: Owners first,
-    then Editors, then Viewers, each by name. A team placed under it would be reached by the same people."""
-    names = {row.id: row.name for row in rows}
-    held: dict[int, list[tuple[int, str, str]]] = {}  # team id to (user id, name, role) for its active members
-    for team_id, user_id, full_name, role in session.execute(
-        select(TeamMember.team_id, User.id, User.full_name, TeamMember.role)
-        .join(User, User.id == TeamMember.user_id)
-        .where(User.status == "active")
-    ):
-        held.setdefault(team_id, []).append((user_id, full_name, role))
-    found: dict[int, list[ReachPerson]] = {}
-    for row in rows:
-        best: dict[int, ReachPerson] = {}  # by user id: two people can share a name
-        for team_id in [row.id, *ancestors(rows, row.id)]:  # nearest first, so a tie keeps the nearest team
-            for user_id, full_name, role in held.get(team_id, []):
-                kept = best.get(user_id)
-                if kept is None or ROLE_ORDER[role] > ROLE_ORDER[kept.role]:
-                    best[user_id] = ReachPerson(full_name, role, names[team_id])
-        found[row.id] = sorted(best.values(), key=lambda p: (-ROLE_ORDER[p.role], p.name.casefold(), p.name))
-    return found
-
-
-def reach_trackers(session: Session, rows: list[TeamRow], team_id: int) -> list[str]:
-    """The names of the active trackers a member of the team reaches: the team's and those of every team below it."""
-    return list(
-        session.scalars(
-            select(Tracker.name)
-            .where(Tracker.team_id.in_(descendants(rows, team_id)), Tracker.status != "archived")
-            .order_by(func.lower(Tracker.name), Tracker.id)
-        )
     )

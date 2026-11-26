@@ -49,14 +49,9 @@ from . import bp
 from .impact import move_impact
 from .layout import ladder, tree_options
 from .overview import (
-    ROLE_SUMMARY,
-    ancestor_levels,
     chart,
-    chart_order,
     member_counts,
     paths_to,
-    reach_people,
-    reach_trackers,
     tracker_counts,
 )
 from .people import TeamPerson, reach_counts, team_people
@@ -185,7 +180,12 @@ def _tree_context(rows: list[TeamRow], current_id: int | None) -> dict:
 def _structure_context(db, rows: list[TeamRow], current_id: int | None, new_open: bool = False) -> dict:
     """What the New view's Structure card needs beyond ``_tree_context`` (reach, places, search, current_id), which
     every Teams page passes too (spec 2026-11-26-teams-simple-redesign-design.md 4.2 and 4.3)."""
-    return {"nodes": chart(rows), "team_options": tree_options(rows), "team_names": team_labels(rows), "new_open": new_open}
+    return {
+        "nodes": chart(rows),
+        "team_options": tree_options(rows),
+        "team_names": team_labels(rows),
+        "new_open": new_open,
+    }
 
 
 def _parent_choice(rows: list[TeamRow], text: str | None) -> str:
@@ -223,7 +223,9 @@ def index():
     if chosen_view() == "new":  # the New view opens on the first top-level team; with none, the empty page
         tops = sorted_by_name(row for row in load_team_rows(get_session()) if not row.parent_ids)
         if tops:
-            return redirect(url_for("teams.view", team_id=tops[0].id, new="1" if request.args.get("new") == "1" else None))
+            return redirect(
+                url_for("teams.view", team_id=tops[0].id, new="1" if request.args.get("new") == "1" else None)
+            )
     return _render_index({}, [], 200)
 
 
@@ -260,7 +262,13 @@ def create():
     )
     errors = [
         e
-        for e in (name_error(db, Team, name, "team"), description_error(description), parent_error, also_error, place_error)
+        for e in (
+            name_error(db, Team, name, "team"),
+            description_error(description),
+            parent_error,
+            also_error,
+            place_error,
+        )
         if e
     ]
     if errors:
@@ -371,44 +379,6 @@ def _tracker_rows(db, team_id: int) -> list[TrackerRow]:
     ):
         codes.setdefault(tracker_id, []).append(code)
     return [TrackerRow(tracker, line or "", codes.get(tracker.id, [])) for tracker, line in found]
-
-
-def _new_team_context(db, rows: list[TeamRow], team: Team, people: list[PersonRow]) -> dict:
-    """What a team's page needs in the New view: the chains of teams above it, its members, the people reaching it
-    from each team above (nearest first, each person with the role held there), and whose role here is outranked."""
-    labels = team_labels(rows)
-    levels = ancestor_levels(rows, team.id)
-    groups: dict[int, list[tuple[TeamPerson, str]]] = {}
-    outranked: dict[int, tuple[str, str]] = {}
-    for row in people:
-        for inherit in row.person.inherited:
-            groups.setdefault(inherit.team_id, []).append((row.person, inherit.role))
-        if row.person.direct_role is not None and row.person.inherited:
-            top = max(row.person.inherited, key=lambda inherit: ROLE_ORDER[inherit.role])  # the nearest on a tie
-            if ROLE_ORDER[top.role] > ROLE_ORDER[row.person.direct_role]:
-                outranked[row.person.user.id] = (top.role, top.team_name)
-    from_above = [
-        (
-            labels[above],
-            "team above" if levels.get(above) == 1 else f"{levels.get(above)} levels up",
-            above,
-            sorted(groups[above], key=lambda item: (item[0].user.full_name.casefold(), item[0].user.id)),
-        )
-        for above in ancestors(rows, team.id)
-        if above in groups
-    ]
-    members = member_counts(db)
-    return {
-        "chains": paths_to(rows, team.id),
-        "members": [row for row in people if row.person.direct_role is not None],
-        "from_above": from_above,
-        "outranked": outranked,
-        "reach_down": members,
-        "member_total": members.get(team.id, 0),
-        "tracker_total": tracker_counts(db).get(team.id, 0),
-        "reached_trackers": reach_trackers(db, rows, team.id),
-        "role_summary": ROLE_SUMMARY,
-    }
 
 
 def _simple_team_context(db, rows: list[TeamRow], team: Team) -> dict:
