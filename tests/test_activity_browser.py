@@ -208,3 +208,28 @@ def test_the_wide_table_stays_reachable_on_a_desktop_window(page, live_server, d
             frame.evaluate("el => getComputedStyle(el).overflowX") == "auto"
         )
     _clean(page)
+
+
+def test_without_javascript_a_wide_activity_table_scrolls_inside_its_wrapper(
+    browser, live_server, db, user_factory, tracker_factory
+):
+    ann = user_factory(full_name="Ann Admin", email="ann.admin@example.com", is_admin=True)
+    jordan = user_factory(full_name="Jordan Lee", email="jordan.lee@example.com", status="deleted")
+    mary = user_factory(full_name="Mary-Jane Smith", email="mary-jane.smith@example.com")
+    alexandria = user_factory(
+        full_name="Alexandria Montgomery-Smith", email="alexandria.montgomery-smith@example-corporation.example.com"
+    )
+    db.add_all(deletion_entries(ann, jordan, tracker_factory(name="Desktop rollout"), mary, alexandria))
+    db.commit()
+    context = browser.new_context(java_script_enabled=False, viewport={"width": 1024, "height": 900})
+    try:
+        page = context.new_page()
+        browser_sign_in(page, live_server, ann)
+        page.goto(f"{live_server}/admin/activity")
+        frame = page.locator("[data-table-frame]")
+        # Without lists.js nothing marks a wide table, so the wrapper must scroll (or the table fit); it must not clip.
+        overflow = frame.evaluate("el => getComputedStyle(el).overflowX")
+        assert overflow in ("auto", "scroll") or frame.evaluate("el => el.scrollWidth <= el.clientWidth"), overflow
+        assert overflow != "clip"
+    finally:
+        context.close()

@@ -249,7 +249,10 @@ def test_clear_filters_clears_q_and_filters_but_keeps_sort_and_size(client, logg
 def test_the_no_match_line_offers_clear_filters(client, logged_in_admin, db):
     add(db)
     body = text_of(client.get(URL, query_string={"q": "nomatch-at-all", "sort": "actor"}))
-    assert 'No activity matches. <a href="/admin/activity?sort=actor">Clear filters</a>' in body
+    assert (
+        '<p class="list-no-match">No activity matches. '
+        '<a class="button button-small" href="/admin/activity?sort=actor">Clear filters</a></p>'
+    ) in body
     assert "Clear filters" not in text_of(client.get(URL))
 
 
@@ -449,3 +452,24 @@ def test_entries_without_a_person_show_a_dash(client, logged_in_admin, db, user_
     performed, affected = cells_of(body, only_affected)[1:3]
     assert performed.strip() == "–"
     assert "jordan.lee@example.com" in affected
+
+
+def test_rows_equal_on_the_sorted_column_keep_the_newest_first_order(client, logged_in_admin, db, user_factory):
+    ann, bob = user_factory(full_name="Ann Ames"), user_factory(full_name="Bob Burns")
+    rows = {
+        (who.id, hour): add(db, user_id=who.id, at=at(5, hour), action="login")
+        for who in (ann, bob)
+        for hour in (8, 10, 12)
+    }
+    newest_first = lambda who: [rows[(who.id, hour)].id for hour in (12, 10, 8)]  # noqa: E731
+    ascending = ids_on(text_of(client.get(URL + "?sort=actor&size=100")))
+    descending = ids_on(text_of(client.get(URL + "?sort=-actor&size=100")))
+    # The administrator's own sign-in rows (if any) are not among these ids.
+    assert [i for i in ascending if i in {r.id for r in rows.values()}] == newest_first(ann) + newest_first(bob)
+    assert [i for i in descending if i in {r.id for r in rows.values()}] == newest_first(bob) + newest_first(ann)
+
+
+def test_the_header_line_does_not_repeat_the_footer_count(client, logged_in_admin, db):
+    add(db)
+    body = text_of(client.get(URL))
+    assert " in all." not in body and "Showing 1 of 1 entry" in " ".join(body.split())

@@ -79,3 +79,33 @@ def test_on_a_phone_nothing_scrolls_sideways(page, live_server, db, tracker_fact
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     expect(page.locator(".entry-table td[data-label='Quantity']").first).to_be_attached()
     _clean(page)
+
+
+def test_a_week_heading_stays_at_the_top_while_a_long_week_scrolls(
+    page, live_server, db, tracker_factory, user_factory, grant
+):
+    tracker, user = _seed(db, tracker_factory, user_factory, grant, weeks=1)
+    group = db.query(Group).filter_by(tracker_id=tracker.id).one()
+    ending = date(2026, 1, 2)
+    for n in range(80):
+        db.add(
+            CompletionEntry(
+                tracker_id=tracker.id,
+                group_id=group.id,
+                entry_date=ending,
+                week_ending=ending,
+                quantity=1,
+                note=f"long-{n}",
+            )
+        )
+    db.commit()
+    page.set_viewport_size({"width": 1280, "height": 700})
+    _open(page, live_server, user, tracker)
+    heading = page.locator(".week-block[open] .entry-table thead th").first
+    expect(heading).to_be_visible()
+    assert heading.evaluate("el => getComputedStyle(el).position") == "sticky"
+    page.evaluate("document.querySelector('.entry-table tbody tr:nth-child(40)').scrollIntoView({block: 'center'})")
+    top = heading.evaluate("el => el.getBoundingClientRect().top")
+    topbar = page.evaluate("document.querySelector('.topbar, header').getBoundingClientRect().height")
+    assert 0 <= top <= topbar + 80, top  # pinned under the top bar, not scrolled out of view
+    _clean(page)

@@ -125,6 +125,8 @@ def index():
         )
 
     total = db.scalar(joined(select(func.count(AuditLog.id)))) or 0
+    # Without a search or filter every entry matches, so the second count is not needed.
+    overall = (db.scalar(select(func.count(AuditLog.id))) or 0) if conditions else total
     state = clamp_page(state, total)
     order = {
         "time": AuditLog.at,
@@ -132,7 +134,8 @@ def index():
         "action": func.lower(_action_order()),
         "tracker": func.lower(Tracker.name),
     }[state.sort]
-    tie_break = AuditLog.id.desc() if state.sort == DEFAULT_SORT and state.descending else AuditLog.id.asc()
+    # Rows equal on the sorted column keep the default order (newest first), whichever way the column runs.
+    tie_break = (AuditLog.at.desc(), AuditLog.id.desc())
     rows = db.execute(
         joined(
             select(
@@ -146,7 +149,7 @@ def index():
                 Tracker.name,
             )
         )
-        .order_by((order.desc() if state.descending else order.asc()).nulls_last(), tie_break)
+        .order_by((order.desc() if state.descending else order.asc()).nulls_last(), *tie_break)
         .limit(state.size)
         .offset((state.page - 1) * state.size)
     ).all()
@@ -225,7 +228,7 @@ def index():
         actions=sorted(ACTION_LABELS.items(), key=lambda item: item[1]),
         state=state,
         total=total,
-        overall=db.scalar(select(func.count(AuditLog.id))) or 0,
+        overall=overall,
         clear_url=clear_url,
         keep_args=keep,
         first=first,

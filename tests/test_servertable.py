@@ -163,10 +163,10 @@ def test_footer_text_for_a_middle_page(render):
 
 def test_footer_ends_are_disabled_spans_not_links(render):
     first = footer(render, page=1)
-    assert '<span class="pager-button is-disabled" aria-disabled="true">Previous</span>' in first
+    assert '<span class="pager-button is-disabled">Previous</span>' in first
     assert 'rel="prev"' not in first
     last = footer(render, page=13)
-    assert '<span class="pager-button is-disabled" aria-disabled="true">Next</span>' in last
+    assert '<span class="pager-button is-disabled">Next</span>' in last
     assert "Showing 301–312 of 312 entries" in last
 
 

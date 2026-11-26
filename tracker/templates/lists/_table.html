@@ -64,6 +64,12 @@
 <p class="list-no-match" data-no-match hidden>{{ text }}{% if target_id %} {{ clear_filters(target_id) }}{% endif %}</p>
 {%- endmacro %}
 
+{# The no-match line of a table sorted, paged and searched on the server: the look of no_match, shown by the server
+   when no row matches. ``clear_url`` puts a Clear filters button in the line when filters are in use. #}
+{% macro server_no_match(text, clear_url=none) -%}
+<p class="list-no-match">{{ text }}{% if clear_url %} <a class="button button-small" href="{{ clear_url }}">Clear filters</a>{% endif %}</p>
+{%- endmacro %}
+
 {# The one footer under a table (``table_id``): on the left the count in [data-pager-count], "Showing 3 of 3
    locations · 3 active" ("Showing 1–25 of 30 locations · 28 active" when the matches fill more than one page), on
    the right the <nav> [data-pager-controls] (Rows per page, Previous, the page numbers and Next), which lists.js shows only when
@@ -93,15 +99,15 @@
 
 {# The footer under a table paged on the server: the same markup and wording as table_pager. ``state`` is the TableState
    and ``total`` the number of rows (or, for a table paged by groups of rows, of groups) the search matches; ``first``
-   and ``last`` are the numbers of the first and last of those on this page. "Showing 26–50 of 312 entries"; for one
-   page "Showing 3 of 40 entries": as lists.js writes it, the matches fill more than one page (``total`` more than
-   ``state.size``) or they do not; then the count is of the matches ("Showing 3") and of all the rows there are without
-   the search and filters (``overall``, which is ``total`` when not given; "Showing 0 of 40 entries" when none match). ``noun_first`` puts the noun before the range ("Showing
-   weeks 1–10 of 23"). ``extra`` is the text after the "·" ("214 entries"). ``page_url(n)`` gives the link of page n.
-   ``size_form`` is a mapping of the other address keys to keep (q, sort, filters) as hidden inputs of the Rows per
-   page form, or none for a table with no such control. The controls show when more than one page exists (and, with the
-   Rows per page control, whenever the rows would fill more than the smallest page, so that a larger size can be
-   undone). The rows per page is read from ``state.size`` and the pages are counted from it. #}
+   and ``last`` are the numbers of the first and last of those on this page. When the matches fill more than one page
+   (``total`` more than ``state.size``) the count is a range, "Showing 26–50 of 312 entries"; otherwise it is "Showing 3
+   of 40 entries", the number of matches and of all the rows there are without the search and filters (``overall``,
+   which is ``total`` when not given). ``noun_first`` puts the noun before the range ("Showing weeks 1–10 of 23").
+   ``extra`` is the text after the "·" ("214 entries"). ``page_url(n)`` gives the link of page n. ``size_form`` is a
+   mapping of the other address keys to keep (q, sort, filters) as hidden inputs of the Rows per page form, or none
+   for a table with no such control. The controls show when more than one page exists (and, with the Rows per page
+   control, whenever the rows would fill more than the smallest page, so that a larger size can be undone). The rows
+   per page is read from ``state.size`` and the pages are counted from it. #}
 {% macro server_pager(state, total, noun_plural, noun_one, page_url, size_form, first, last, extra='', noun_first=False, overall=none) -%}
 {% set all = total if overall is none else overall %}
 {% set pages = [1, (total / state.size)|round(0, 'ceil')|int]|max %}
@@ -119,7 +125,7 @@
     </form>
     {% endif %}
     {% if current > 1 %}<a class="pager-button" href="{{ page_url(current - 1) }}" rel="prev">Previous</a>
-    {%- else %}<span class="pager-button is-disabled" aria-disabled="true">Previous</span>{% endif %}
+    {%- else %}<span class="pager-button is-disabled">Previous</span>{% endif %}
     <span class="pager-pages">
       {%- for n in page_numbers(current, pages) -%}
       {%- if n is none %}<span class="pager-gap">…</span>
@@ -127,7 +133,7 @@
       {%- endfor -%}
     </span>
     {% if current < pages %}<a class="pager-button" href="{{ page_url(current + 1) }}" rel="next">Next</a>
-    {%- else %}<span class="pager-button is-disabled" aria-disabled="true">Next</span>{% endif %}
+    {%- else %}<span class="pager-button is-disabled">Next</span>{% endif %}
   </nav>
   {% endif %}
 </div>

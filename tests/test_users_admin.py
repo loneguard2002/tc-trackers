@@ -750,7 +750,7 @@ def test_access_page_header_and_sections(client, user_manager, user_factory, tea
         )
         assert f'id="{card}"' in raw
     admin_page = _visible(client, admin)
-    assert "All 9 permissions come from being an administrator." in admin_page
+    assert "All 10 permissions come from being an administrator." in admin_page
 
 
 def test_access_page_lists_region_grants_of_active_and_disabled_people(

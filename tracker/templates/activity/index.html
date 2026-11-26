@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, field, icon %}
-{% from "lists/_table.html" import server_pager, server_sort_header %}
+{% from "lists/_table.html" import server_no_match, server_pager, server_sort_header %}
 {% macro person(name, email, deleted) -%}
 {% if name %}{{ name }}<span class="member-email">{{ email }}</span>{% if deleted %}<span class="badge badge-muted">Deleted</span>{% endif %}{% else %}–{% endif %}
 {%- endmacro %}
@@ -15,7 +15,7 @@
     <header class="settings-section-head has-action">
       <div>
         <h2 id="section-activity">Activity log</h2>
-        <p>{{ 'Filtered entries' if filtered else 'All entries' }}, {{ total }} in all. Times are UTC.</p>
+        <p>{{ 'Filtered entries' if filtered else 'All entries' }}. Times are UTC.</p>
       </div>
       {% if filtered %}<a class="button" href="{{ clear_url }}">Clear filters</a>{% endif %}
     </header>
@@ -84,7 +84,7 @@
       </table>
     </div>
     {% else %}
-    <p class="empty-note">No activity matches.{% if filtered %} <a href="{{ clear_url }}">Clear filters</a>{% endif %}</p>
+    {{ server_no_match('No activity matches.', clear_url if filtered else none) }}
     {% endif %}
     {{ server_pager(state, total, 'entries', 'entry', page_url, size_form, first, last, overall=overall) }}
     {% if current_user and current_user.is_admin %}
