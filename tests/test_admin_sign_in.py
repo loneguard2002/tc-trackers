@@ -41,6 +41,8 @@ def test_the_page_shows_the_limits_and_who_is_blocked(client, db, logged_in_admi
     assert "5 of 5" in html and "2 of 20" in html
     assert "Blocked until" in html and "18 left" in html
     assert 'value="5"' in html and 'value="20"' in html  # the limits form shows the saved values
+    assert "Account limit" in html and "per email address in 5 minutes" in html
+    assert "Address limit" in html and "per IP address in 5 minutes" in html
 
 
 def test_the_menu_counts_who_is_blocked_for_administrators(client, db, logged_in_admin):
