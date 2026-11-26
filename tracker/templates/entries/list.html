@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import bar, csrf_field, icon, tool_link %}
+{% from "lists/_table.html" import server_pager, server_sort_header %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='entries.js', v=app_version) }}" defer></script>
 {% endblock %}
@@ -19,6 +20,7 @@
     {# The list's filters, so Record comes back to the list as it was. #}
     {% if week_arg %}<input type="hidden" name="filter_week" value="{{ week_arg }}">{% endif %}
     {% if selected_group is not none %}<input type="hidden" name="filter_group" value="{{ selected_group }}">{% endif %}
+    {% for name, value in page_args.items() %}<input type="hidden" name="filter_{{ name }}" value="{{ value }}">{% endfor %}
     <header class="settings-section-head">
       <div>
         <h2 id="section-record">Record completions</h2>
@@ -60,22 +62,26 @@
         <h2 id="section-entries">Entries</h2>
         <p>Every completion recorded, newest week first. Use Edit to correct an entry; delete only entries recorded by mistake.</p>
       </div>
-      <a class="button button-small" href="{{ url_for('entries.entries_csv', tracker_id=tracker.id, week=week_arg, group=selected_group) }}">{{ icon('download') }}Download CSV</a>
+      <a class="button button-small" href="{{ csv_url }}">{{ icon('download') }}Download CSV</a>
     </header>
     <div class="entry-filters">
       <nav class="chips" aria-labelledby="chips-label">
         <span class="chip-label" id="chips-label">{{ unit[:1]|upper ~ unit[1:] }} recorded by {{ label|lower }}</span>
-        <a class="chip" href="{{ url_for('entries.list_entries', tracker_id=tracker.id, week=week_arg) }}"{% if selected_group is none %} aria-current="true"{% endif %}>All {{ label|plural|lower }}<span class="chip-count">{{ chip_counts.values()|sum|num }}</span></a>
+        <a class="chip" href="{{ link(group=none, page=1) }}"{% if selected_group is none %} aria-current="true"{% endif %}>All {{ label|plural|lower }}<span class="chip-count">{{ chip_counts.values()|sum|num }}</span></a>
         {% for grp in group_list if not grp.retired or chip_counts.get(grp.id) %}
-        <a class="chip" href="{{ url_for('entries.list_entries', tracker_id=tracker.id, week=week_arg, group=grp.id) }}"{% if grp.id == selected_group %} aria-current="true"{% endif %}>{{ grp.name }}<span class="chip-count">{{ chip_counts.get(grp.id, 0)|num }}</span></a>
+        <a class="chip" href="{{ link(group=grp.id, page=1) }}"{% if grp.id == selected_group %} aria-current="true"{% endif %}>{{ grp.name }}<span class="chip-count">{{ chip_counts.get(grp.id, 0)|num }}</span></a>
         {% endfor %}
       </nav>
       <form class="entry-week" method="get" action="{{ url_for('entries.list_entries', tracker_id=tracker.id) }}">
         {% if selected_group is not none %}<input type="hidden" name="group" value="{{ selected_group }}">{% endif %}
+        {% if 'sort' in keep_args %}<input type="hidden" name="sort" value="{{ keep_args['sort'] }}">{% endif %}
+        <label class="sr-only" for="entry-q">Search entries</label>
+        <input id="entry-q" type="search" name="q" value="{{ state.q }}" maxlength="200" autocomplete="off" placeholder="Search location or note">
         <label class="sr-only" for="week">Week ending</label>
         <select id="week" name="week" data-autosubmit><option value="">All weeks</option>
           {% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if selected_week == w }}>Week ending {{ format_date(w) }}</option>{% endfor %}</select>
-        <button class="button button-small" type="submit" data-autosubmit-fallback>Show</button>
+        <button class="button button-small" type="submit">Apply</button>
+        {% if state.q %}<a class="button button-small" href="{{ clear_url }}">Clear search</a>{% endif %}
       </form>
     </div>
     {% if by_week %}
@@ -87,7 +93,7 @@
       <details class="week-block"{% if loop.index <= 3 %} open{% endif %}>
         <summary>
           <span class="week-block-title">Week ending {{ format_date(w) }}{% if in_progress %}<span class="tag">In progress</span>{% endif %}</span>
-          {% if selected_group is none and target %}
+          {% if selected_group is none and not state.q and target %}
           {% set gap = total - target %}
           {% set low = gap < 0 and not in_progress %}
           <span class="week-block-sum"><strong>{{ total|num }}</strong> of {{ target|num }} target
@@ -101,16 +107,21 @@
         </summary>
         <div class="week-block-body">
           <table class="entry-table">
-            <thead><tr><th scope="col">Date</th><th scope="col">{{ label }}</th><th scope="col" class="num">Quantity</th><th scope="col">Note</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+            <thead><tr>
+            {{ server_sort_header('Date', 'date', state, sort_urls['date']) }}
+            {{ server_sort_header(label, 'location', state, sort_urls['location']) }}
+            {{ server_sort_header('Quantity', 'quantity', state, sort_urls['quantity'], 'num') }}
+            {{ server_sort_header('Note', 'note', state, sort_urls['note']) }}
+            <th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
             <tbody>
             {% for e in items %}
             {% set where = groups[e.group_id].name if e.group_id in groups else e.group_id %}
             {% if recorded and e.id == recorded.entry %}<tr class="is-new" data-entry="{{ e.id }}">{% else %}<tr>{% endif %}
-              <td class="entry-date">{{ e.entry_date.strftime('%a %d %b') }}</td>
-              <td>{{ where }}</td>
-              <td class="num">{{ e.quantity|num }}</td>
-              <td class="entry-note">{{ e.note }}</td>
-              <td class="cell-actions">{% if active %}
+              <td class="entry-date" data-label="Date">{{ e.entry_date.strftime('%a %d %b') }}</td>
+              <td data-label="{{ label }}">{{ where }}</td>
+              <td class="num" data-label="Quantity">{{ e.quantity|num }}</td>
+              <td class="entry-note" data-label="Note">{{ e.note }}</td>
+              <td class="cell-actions" data-label="">{% if active %}
                 {{ tool_link(url_for('entries.edit_entry', tracker_id=tracker.id, entry_id=e.id), 'edit', 'Edit ' ~ e.quantity ~ ' for ' ~ where ~ ' on ' ~ format_date(e.entry_date)) }}
                 <form class="entry-delete" method="post" action="{{ url_for('entries.delete_entry', tracker_id=tracker.id, entry_id=e.id) }}"
                   data-confirm="Delete {{ e.quantity }} for {{ where }} on {{ format_date(e.entry_date) }}? This cannot be undone." data-inline-confirm>
@@ -124,15 +135,15 @@
             {% endfor %}
             </tbody>
           </table>
-          {% if items|length < count %}<p class="section-note">Showing the latest {{ items|length }} of {{ count }} entries this week. Choose this week above to see them all.</p>{% endif %}
         </div>
       </details>
       {% endfor %}
     </div>
-    {% if capped %}<p class="section-foot-note">Showing the latest {{ list_limit }} entries only. Choose a week or a {{ label|lower }} to see older entries; Download CSV includes every matching entry.</p>{% endif %}
     {% else %}
-    <p class="empty-note">No entries match these filters.</p>
+    <p class="empty-note">No entries match these filters.{% if state.q %} <a href="{{ clear_url }}">Clear search</a>{% endif %}</p>
     {% endif %}
+    {{ server_pager(state, week_total, 'weeks', 'week', page_url, none, first_week_number, last_week_number,
+        extra=matching_entries ~ (' entry' if matching_entries == 1 else ' entries'), noun_first=True, overall=overall_weeks) }}
   </section>
 </div>
 {% endblock %}

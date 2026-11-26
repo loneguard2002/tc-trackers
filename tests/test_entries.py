@@ -179,7 +179,8 @@ def test_entries_location_chips_count_and_filter(client, db, tracker_factory, us
     assert '<span class="chip-label" id="chips-label">Devices recorded by location</span>' in html
     # The columns are named on screen, not only for screen readers.
     assert '<thead class="sr-only">' not in html
-    assert '<th scope="col">Date</th><th scope="col">Location</th><th scope="col" class="num">Quantity</th>' in html
+    assert '<th scope="col" aria-sort="descending"><a class="sort-button" href="' in html
+    assert ">Location<" in html and 'class="num" aria-sort="none"' in html
     html = client.get(entry_url(tracker) + f"?group={other.id}").get_data(as_text=True)
     assert "at B" in html and "at A" not in html
     assert "<strong>3</strong> recorded at Site B" in html
@@ -268,17 +269,189 @@ def test_entries_csv_follows_the_filters(client, db, tracker_factory, user_facto
     assert len(lines) == 2 and lines[1].endswith(",later")
 
 
-def test_entries_list_says_when_it_is_capped(client, db, tracker_factory, user_factory, grant, monkeypatch):
-    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
-    monkeypatch.setattr("tracker.entries.views.LIST_LIMIT", 2)
-    for day in ("2026-10-14", "2026-10-15"):
-        post(client, entry_url(tracker, "/new"), entry_form(group, day))
-    assert "Showing the latest" not in client.get(entry_url(tracker)).get_data(as_text=True)
-    post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-16"))
+def weekly_entries(db, tracker, group, weeks: int, per_week: int = 1, user=None, note="n"):
+    """``per_week`` entries in each of ``weeks`` weeks ending on Fridays, from 2026-01-02; returns the week endings."""
+    endings = [date(2026, 1, 2) + timedelta(weeks=n) for n in range(weeks)]
+    for n, ending in enumerate(endings):
+        for k in range(per_week):
+            db.add(
+                CompletionEntry(
+                    tracker_id=tracker.id,
+                    group_id=group.id,
+                    entry_date=ending - timedelta(days=k % 5),
+                    week_ending=ending,
+                    quantity=1 + k,
+                    note=f"{note} {n}-{k}",
+                    created_by=user.id if user else None,
+                )
+            )
+    db.commit()
+    return endings
+
+
+def long_tracker(db, tracker_factory, user_factory, grant, client):
+    return setup_editor(
+        db,
+        tracker_factory,
+        user_factory,
+        grant,
+        client,
+        first_week_ending=date(2026, 1, 2),
+        last_week_ending=date(2026, 12, 25),
+    )
+
+
+def shown_weeks(html: str) -> list[str]:
+    return re.findall(r'week-block-title">Week ending (\d\d \w{3} 2026)<', html)
+
+
+def test_entries_page_by_weeks_with_the_standard_footer(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    weekly_entries(db, tracker, group, 23, per_week=2)
     html = client.get(entry_url(tracker)).get_data(as_text=True)
-    assert "Showing the latest 2 entries only." in html
-    assert "Download CSV includes every matching entry." in html
-    assert "Showing the latest 2 of 3 entries this week." in html  # the week total still counts all three
+    assert len(shown_weeks(html)) == 10 and shown_weeks(html)[0] == "05 Jun 2026"  # the newest 10 of 23
+    assert "Showing weeks 1–10 of 23 · 46 entries" in " ".join(html.split())
+    assert "Rows per page" not in html and 'aria-label="Page 3"' in html
+    html = client.get(entry_url(tracker, "?page=3")).get_data(as_text=True)
+    assert len(shown_weeks(html)) == 3 and shown_weeks(html)[-1] == "02 Jan 2026"
+    assert "Showing weeks 21–23 of 23 · 46 entries" in " ".join(html.split())
+    assert shown_weeks(client.get(entry_url(tracker, "?page=99")).get_data(as_text=True)) == shown_weeks(html)
+
+
+def test_a_week_on_the_page_shows_every_entry(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    weekly_entries(db, tracker, group, 1, per_week=600)
+    html = client.get(entry_url(tracker)).get_data(as_text=True)
+    assert html.count('class="entry-date"') == 600 and "Showing the latest" not in html
+    assert "Showing 1 of 1 week · 600 entries" in " ".join(html.split())
+
+
+def test_entries_search_matches_location_names_and_notes(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    other = Group(tracker_id=tracker.id, name="Harbour 100%", baseline=1)
+    db.add(other)
+    db.commit()
+    weekly_entries(db, tracker, group, 3, note="routine")
+    weekly_entries(db, tracker, other, 1, note="harbour work")
+    by_name = client.get(entry_url(tracker, "?q=harbour+100%25")).get_data(as_text=True)
+    assert "harbour work" in by_name and "routine" not in by_name
+    by_note = client.get(entry_url(tracker, "?q=ROUTINE")).get_data(as_text=True)
+    assert "routine 0-0" in by_note and "harbour work" not in by_note
+    # A percent sign or underscore matches itself only; a quote does not break the query.
+    flat = " ".join(client.get(entry_url(tracker, "?q=%25")).get_data(as_text=True).split())
+    assert "Showing 1 of 3 weeks · 1 entry" in flat  # only the location whose name holds a percent sign
+    assert "routine" not in client.get(entry_url(tracker, "?q=r_utine")).get_data(as_text=True)
+    assert client.get(entry_url(tracker, "?q=%27%22%5C")).status_code == 200
+
+
+def test_the_footer_counts_only_the_weeks_and_entries_that_match(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    other = Group(tracker_id=tracker.id, name="Site B", baseline=1)
+    db.add(other)
+    db.commit()
+    weekly_entries(db, tracker, group, 12, per_week=2, note="alpha")
+    weekly_entries(db, tracker, other, 2, per_week=3, note="beta")  # the first two weeks also have Site B entries
+    flat = lambda url: " ".join(client.get(entry_url(tracker, url)).get_data(as_text=True).split())  # noqa: E731
+    assert "Showing weeks 1–10 of 12 · 30 entries" in flat("")
+    assert "Showing 2 of 12 weeks · 6 entries" in flat(f"?group={other.id}")
+    assert "Showing 2 of 12 weeks · 6 entries" in flat("?q=beta")
+    assert "Showing 1 of 12 weeks · 3 entries" in flat(f"?group={other.id}&week=2026-01-09&q=beta")
+    assert "Showing 0 of 12 weeks · 0 entries" in flat(f"?group={group.id}&q=beta")
+    # A week is never split: filtering to a location keeps every matching entry of each week it shows.
+    html = client.get(entry_url(tracker, f"?group={other.id}")).get_data(as_text=True)
+    assert html.count("beta ") == 6
+
+
+def test_the_chips_follow_the_search_and_the_week(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    other = Group(tracker_id=tracker.id, name="Site B", baseline=1)
+    db.add(other)
+    db.commit()
+    weekly_entries(db, tracker, group, 2, per_week=2, note="alpha")  # 1 + 2 = 3 a week
+    weekly_entries(db, tracker, other, 2, per_week=1, note="beta")  # 1 a week
+    html = client.get(entry_url(tracker, "?q=alpha")).get_data(as_text=True)
+    assert 'aria-current="true">All locations<span class="chip-count">6</span>' in html
+    assert 'Site B<span class="chip-count">0</span>' in html
+    assert f'href="/trackers/{tracker.id}/entries?group={other.id}&amp;q=alpha"' in html  # the chip keeps the search
+    html = client.get(entry_url(tracker, "?week=2026-01-02&q=alpha")).get_data(as_text=True)
+    assert 'aria-current="true">All locations<span class="chip-count">3</span>' in html
+
+
+def test_sorting_orders_the_rows_inside_each_week_and_the_weeks_stay_newest_first(
+    client, db, tracker_factory, user_factory, grant
+):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    weekly_entries(db, tracker, group, 2, per_week=3)  # quantities 1, 2, 3 in each week
+    html = client.get(entry_url(tracker, "?sort=quantity")).get_data(as_text=True)
+    assert shown_weeks(html) == ["09 Jan 2026", "02 Jan 2026"]
+    assert re.findall(r'class="num" data-label="Quantity">(\d)<', html) == ["1", "2", "3", "1", "2", "3"]
+    html = client.get(entry_url(tracker, "?sort=-quantity")).get_data(as_text=True)
+    assert shown_weeks(html) == ["09 Jan 2026", "02 Jan 2026"]
+    assert re.findall(r'class="num" data-label="Quantity">(\d)<', html) == ["3", "2", "1", "3", "2", "1"]
+    assert re.findall(
+        r'class="num" data-label="Quantity">(\d)<', client.get(entry_url(tracker)).get_data(as_text=True)
+    )[:3] == [
+        "1",
+        "2",
+        "3",
+    ]  # newest first by date: the entry dated on the Friday has quantity 1
+    assert 'aria-sort="descending"><a class="sort-button"' in html
+    assert f'href="/trackers/{tracker.id}/entries?sort=quantity"' in html  # a click on the sorted column reverses it
+    assert client.get(entry_url(tracker, "?sort=bogus")).status_code == 200
+
+
+def test_sort_by_location_uses_the_location_name(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    other = Group(tracker_id=tracker.id, name="Alpha site", baseline=1)
+    db.add(other)
+    db.commit()
+    weekly_entries(db, tracker, group, 1, note="at A")
+    weekly_entries(db, tracker, other, 1, note="at alpha")
+    html = client.get(entry_url(tracker, "?sort=location")).get_data(as_text=True)
+    assert html.index("at alpha") < html.index("at A ")
+
+
+def test_entry_cells_carry_labels_for_the_phone_cards(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    weekly_entries(db, tracker, group, 1)
+    html = client.get(entry_url(tracker)).get_data(as_text=True)
+    for label in ("Date", "Location", "Quantity", "Note"):
+        assert f'data-label="{label}"' in html
+
+
+def test_every_link_keeps_the_search_sort_and_page(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    weekly_entries(db, tracker, group, 12, note="alpha")
+    html = client.get(entry_url(tracker, f"?q=alpha&sort=-note&page=2&group={group.id}")).get_data(as_text=True)
+    assert 'name="filter_q" value="alpha"' in html and 'name="filter_sort" value="-note"' in html
+    assert 'name="filter_page" value="2"' in html
+    csv_link = html.split("/entries.csv")[1].split('"')[0]
+    assert f"group={group.id}" in csv_link and "q=alpha" in csv_link
+    form = html[html.index('class="entry-week"') :].split("</form>")[0]
+    assert 'name="q" value="alpha"' in form and 'name="sort" value="-note"' in form and 'name="group"' in form
+
+
+def test_a_refused_record_keeps_the_search_sort_and_page(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    weekly_entries(db, tracker, group, 12, note="alpha")
+    filters = {"filter_q": "alpha", "filter_sort": "-note", "filter_page": "2", "filter_group": str(group.id)}
+    response = post(client, entry_url(tracker, "/new"), {**entry_form(group, "2026-01-07", "0"), **filters})
+    assert response.status_code == 400
+    html = response.get_data(as_text=True)
+    assert 'name="filter_q" value="alpha"' in html and 'name="filter_page" value="2"' in html
+    assert "Showing weeks 11–12 of 12" in " ".join(html.split())
+    response = post(client, entry_url(tracker, "/new"), {**entry_form(group, "2026-01-07", "2"), **filters})
+    assert response.status_code == 302
+    location = response.headers["Location"]
+    assert "q=alpha" in location and "sort=-note" in location and "page=2" in location
+
+
+def test_entries_csv_takes_the_search(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = setup_editor(db, tracker_factory, user_factory, grant, client)
+    post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-14", "5", note="first batch"))
+    post(client, entry_url(tracker, "/new"), entry_form(group, "2026-10-21", "6", note="second batch"))
+    lines = client.get(entry_url(tracker, ".csv?q=SECOND")).get_data(as_text=True).splitlines()
+    assert len(lines) == 2 and lines[1].endswith(",second batch")
 
 
 def test_risk_register_matches_the_report_order(client, db, tracker_factory, user_factory, grant):

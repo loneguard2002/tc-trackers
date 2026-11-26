@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import dataclasses
 import io
 import re
 import unicodedata
@@ -22,7 +23,7 @@ from flask import (
     session,
     url_for,
 )
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
@@ -43,6 +44,7 @@ from ..ids import parse_id
 from ..mail import smtp
 from ..models import CalendarReminder, CompletionEntry, Group, ReportInput, ReportSend, Risk, Tracker, User, Week
 from ..report.build import compute_position, default_report_week, select_top_risks
+from ..servertable import DEFAULT_SIZE, clamp_page, like_pattern, read_state, sort_changes, state_args
 from ..trackers.forms import RAG_VALUES, parse_date
 from ..trackers.views import _jsonable, _ordered_groups, _refuse_if_archived
 from . import bp
@@ -60,7 +62,10 @@ from .forms import (
 )
 from .week_bar import deadline, next_reminder, short_date, week_state
 
-LIST_LIMIT = 500
+# Entries page by weeks, so that a week is never split; the pager counts weeks.
+WEEKS_PER_PAGE = 10
+SORT_KEYS = ("date", "location", "quantity", "note")
+DEFAULT_SORT, DEFAULT_DESCENDING = "date", True
 
 
 def _audit(db, tracker: Tracker, action: str, entity: str, entity_id, detail: dict | None = None) -> None:
@@ -82,12 +87,17 @@ def _page(tracker: Tracker, title: str) -> dict:
 # --- Entries -------------------------------------------------------------------------------------------------
 
 
-def _entry_filters(tracker: Tracker, week: date | None, group_id: int | None) -> list:
+def _entry_filters(tracker: Tracker, week: date | None, group_id: int | None, q: str = "") -> list:
     conditions = [CompletionEntry.tracker_id == tracker.id]
     if week is not None:
         conditions.append(CompletionEntry.week_ending == week)
     if group_id is not None:
         conditions.append(CompletionEntry.group_id == group_id)
+    if q:
+        pattern = like_pattern(q)
+        # The search reads the location's name and the note.
+        named = select(Group.id).where(Group.tracker_id == tracker.id, Group.name.ilike(pattern, escape="\\"))
+        conditions.append(or_(CompletionEntry.group_id.in_(named), CompletionEntry.note.ilike(pattern, escape="\\")))
     return conditions
 
 
@@ -107,6 +117,14 @@ def list_entries(tracker_id: int):
     return _render_list(tracker, recorded=recorded)
 
 
+def _list_source():
+    """Where the list's filters, search, sort and page are read from: the address, or, for a refused Record, the
+    ``filter_`` fields the form was sent with."""
+    if request.method == "POST":
+        return {key: request.form.get(f"filter_{key}") for key in ("week", "group", "q", "sort", "page")}
+    return request.args
+
+
 def _render_list(tracker: Tracker, form=None, errors: list[str] | None = None, recorded=None, status: int = 200):
     """The Entries page. ``form`` and ``errors`` refill a refused quick-add; ``recorded`` keeps the location and date
     of the last Record and names the entry it added."""
@@ -114,35 +132,50 @@ def _render_list(tracker: Tracker, form=None, errors: list[str] | None = None, r
     today = date.today()
     current = in_progress_week(today, tracker.week_ending_weekday)
     # A refused Record comes back with the list filtered as it was when the form was sent.
-    week = parse_date(request.args.get("week") or request.form.get("filter_week"))
-    group_id = parse_id(request.args.get("group") or request.form.get("filter_group"))
-    conditions = _entry_filters(tracker, week, group_id)
-    # One row beyond the limit tells the page whether older entries were left out.
-    entries = db.scalars(
-        select(CompletionEntry)
+    source = _list_source()
+    week = parse_date(source.get("week"))
+    group_id = parse_id(source.get("group"))
+    # ``state`` is what the address carries; the rows per page do not apply, the pager counts weeks.
+    state = dataclasses.replace(read_state(source, SORT_KEYS, DEFAULT_SORT, DEFAULT_DESCENDING), size=DEFAULT_SIZE)
+    conditions = _entry_filters(tracker, week, group_id, state.q)
+    # The matching weeks, newest first, with each one's quantity and number of entries; they page the list and give
+    # the week totals, which cover every matching entry.
+    matching = db.execute(
+        select(CompletionEntry.week_ending, func.sum(CompletionEntry.quantity), func.count())
         .where(*conditions)
-        .order_by(CompletionEntry.week_ending.desc(), CompletionEntry.entry_date.desc(), CompletionEntry.id.desc())
-        .limit(LIST_LIMIT + 1)
+        .group_by(CompletionEntry.week_ending)
+        .order_by(CompletionEntry.week_ending.desc())
     ).all()
-    capped = len(entries) > LIST_LIMIT
-    by_week: dict[date, list[CompletionEntry]] = {}
-    for entry in entries[:LIST_LIMIT]:
-        by_week.setdefault(entry.week_ending, []).append(entry)
-    # Week totals cover every matching entry, including any beyond the list limit.
-    totals = {
-        week_ending: (int(total), count)
-        for week_ending, total, count in db.execute(
-            select(CompletionEntry.week_ending, func.sum(CompletionEntry.quantity), func.count())
-            .where(*conditions)
-            .group_by(CompletionEntry.week_ending)
-        )
-    }
+    paged = clamp_page(dataclasses.replace(state, size=WEEKS_PER_PAGE), len(matching))
+    state = dataclasses.replace(state, page=paged.page)
+    first = (paged.page - 1) * WEEKS_PER_PAGE
+    page_weeks = matching[first : first + WEEKS_PER_PAGE]
+    totals = {week_ending: (int(total), count) for week_ending, total, count in matching}
+    order = {
+        "date": CompletionEntry.entry_date,
+        "location": func.lower(Group.name),
+        "quantity": CompletionEntry.quantity,
+        "note": func.lower(CompletionEntry.note),
+    }[state.sort]
+    tie_break = (
+        CompletionEntry.id.desc() if state.sort == DEFAULT_SORT and state.descending else CompletionEntry.id.asc()
+    )
+    by_week: dict[date, list[CompletionEntry]] = {week_ending: [] for week_ending, _, _ in page_weeks}
+    if by_week:
+        entries = db.scalars(
+            select(CompletionEntry)
+            .join(Group, Group.id == CompletionEntry.group_id)
+            .where(*conditions, CompletionEntry.week_ending.in_(list(by_week)))
+            .order_by(order.desc() if state.descending else order.asc(), tie_break)
+        ).all()
+        for entry in entries:
+            by_week[entry.week_ending].append(entry)
     targets = dict(db.execute(select(Week.week_ending, Week.target).where(Week.tracker_id == tracker.id)).all())
-    # Location chips total the quantity recorded in the chosen week, across every location.
+    # Location chips total the quantity recorded in the chosen week that matches the search, across every location.
     chip_counts = dict(
         db.execute(
             select(CompletionEntry.group_id, func.sum(CompletionEntry.quantity))
-            .where(*_entry_filters(tracker, week, None))
+            .where(*_entry_filters(tracker, week, None, state.q))
             .group_by(CompletionEntry.group_id)
         ).all()
     )
@@ -154,6 +187,20 @@ def _render_list(tracker: Tracker, form=None, errors: list[str] | None = None, r
         form = {"group_id": str(group_id) if group_id is not None else "", "entry_date": today.isoformat()}
         if recorded:
             form = {"group_id": str(recorded["group_id"]), "entry_date": recorded["entry_date"]}
+    week_arg = week.isoformat() if week else None
+
+    def link(group=group_id, **changes) -> str:
+        """The address of this list with ``changes`` to its search, sort or page, keeping the filters."""
+        return url_for(
+            "entries.list_entries",
+            tracker_id=tracker.id,
+            week=week_arg,
+            group=group,
+            **state_args(state, DEFAULT_SORT, DEFAULT_DESCENDING, **changes),
+        )
+
+    shown = sum(count for _, _, count in page_weeks)
+    matching_entries = sum(count for _, _, count in matching)
     return render_template(
         "entries/list.html",
         form=form,
@@ -172,8 +219,26 @@ def _render_list(tracker: Tracker, form=None, errors: list[str] | None = None, r
         current_week=current,
         today=today,
         format_date=format_date,
-        capped=capped,
-        list_limit=LIST_LIMIT,
+        state=paged,
+        keep_args=state_args(state, DEFAULT_SORT, DEFAULT_DESCENDING, page=1),
+        page_args=state_args(state, DEFAULT_SORT, DEFAULT_DESCENDING),
+        link=link,
+        page_url=lambda page: link(page=page),
+        sort_urls={key: link(**sort_changes(state, key)) for key in SORT_KEYS},
+        clear_url=link(q="", page=1),
+        week_total=len(matching),
+        # Weeks with entries, whatever the search and filters (the footer's "of N weeks" when one page holds them all).
+        overall_weeks=db.scalar(
+            select(func.count(func.distinct(CompletionEntry.week_ending))).where(
+                CompletionEntry.tracker_id == tracker.id
+            )
+        )
+        or 0,
+        first_week_number=first + 1,
+        last_week_number=first + len(page_weeks),
+        matching_entries=matching_entries,
+        shown_entries=shown,
+        csv_url=url_for("entries.entries_csv", tracker_id=tracker.id, week=week_arg, group=group_id, q=state.q or None),
         **_page(tracker, "Entries"),
     ), status
 
@@ -190,10 +255,11 @@ def entries_csv(tracker_id: int):
     tracker, db = g.tracker, get_session()
     week = parse_date(request.args.get("week"))
     group_id = parse_id(request.args.get("group"))
+    q = read_state(request.args, SORT_KEYS, DEFAULT_SORT, DEFAULT_DESCENDING).q
     names = {grp.id: grp.name for grp in _ordered_groups(db, tracker)}
     entries = db.scalars(
         select(CompletionEntry)
-        .where(*_entry_filters(tracker, week, group_id))
+        .where(*_entry_filters(tracker, week, group_id, q))
         .order_by(CompletionEntry.entry_date.desc(), CompletionEntry.id.desc())
     ).all()
     out = io.StringIO()
@@ -301,12 +367,19 @@ def new_entry(tracker_id: int):
     # Back to the list as it was filtered, with the form ready for the next entry.
     filter_week = parse_date(request.form.get("filter_week"))
     filter_group = parse_id(request.form.get("filter_group"))
+    kept = read_state(
+        {key: request.form.get(f"filter_{key}") for key in ("q", "sort", "page")},
+        SORT_KEYS,
+        DEFAULT_SORT,
+        DEFAULT_DESCENDING,
+    )
     return redirect(
         url_for(
             "entries.list_entries",
             tracker_id=tracker.id,
             week=filter_week.isoformat() if filter_week else None,
             group=filter_group,
+            **state_args(kept, DEFAULT_SORT, DEFAULT_DESCENDING),
         )
     )
 

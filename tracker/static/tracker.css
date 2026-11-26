@@ -1162,7 +1162,8 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 }
 @keyframes entry-new { to { background: transparent; } }
 .entry-filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
-.entry-week { display: flex; align-items: center; gap: 8px; margin: 0; }
+.entry-week { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
+.entry-week input[type="search"] { width: auto; min-width: 14rem; padding: 6px 10px; font-size: .875rem; }
 .entry-week select { width: auto; min-width: 13rem; padding: 6px 10px; font-size: .875rem; }
 .week-block + .week-block { border-top: 1px solid var(--border); }
 .week-block > summary { display: grid; grid-template-columns: minmax(13rem, 1.2fr) minmax(10rem, 1fr) minmax(80px, 1fr) 6rem; align-items: center; gap: 8px 18px; padding: 12px 20px; list-style: none; cursor: pointer; }
