@@ -67,7 +67,14 @@ def app():
     """A fresh app per test. Its connection pool is closed when the test ends: left to the garbage collector, the
     pools of several parallel workers together exceed the server's connection limit."""
     application = create_app(
-        {"TESTING": True, "SECRET_KEY": "test", "DATABASE_URL": DATABASE_URL, "SESSION_COOKIE_SECURE": False}
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test",
+            "DATABASE_URL": DATABASE_URL,
+            "SESSION_COOKIE_SECURE": False,
+            # The team tests check the Classic view's pages; the New view's tests ask for it (?view=new).
+            "TEAMS_DEFAULT_VIEW": "classic",
+        }
     )
     yield application
     engine = _state.get("engine")

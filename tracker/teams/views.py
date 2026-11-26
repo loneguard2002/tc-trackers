@@ -47,6 +47,7 @@ from ..models import (
 from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
+from .overview import chart, member_counts, tracker_counts
 from .people import TeamPerson, reach_counts, team_people
 from .tracker_moves import (
     TEAM_DELETED_MESSAGE,
@@ -74,6 +75,7 @@ from .tree import (
     team_choices,
     team_labels,
 )
+from .view_choice import chosen_view, switch_urls
 
 CYCLE_MESSAGE = "A team cannot be placed under itself or under a team below it."
 ALREADY_UNDER = "{team} is already under {parent}."
@@ -175,10 +177,18 @@ def _parent_choice(rows: list[TeamRow], text: str | None) -> str:
 
 
 def _render_index(form, errors: list[str], status: int):
-    rows = load_team_rows(get_session())
+    db = get_session()
+    rows = load_team_rows(db)
+    view = chosen_view()
+    extra = {}
+    if view == "new":  # the hierarchy as a chart, each team with its members and trackers
+        extra = {"nodes": chart(rows), "members": member_counts(db), "tracker_totals": tracker_counts(db)}
     page = render_template(
-        "teams/index.html",
+        "teams/index_new.html" if view == "new" else "teams/index.html",
         **_tree_context(rows, None),
+        **extra,
+        view_urls=switch_urls("teams.index"),
+        active_view=view,
         choices=team_choices(get_session()),
         place_choices=location_choices(get_session()),
         selected_parent=form.get("parent_id", "") if form else _parent_choice(rows, request.args.get("parent")),
@@ -329,6 +339,8 @@ def _render_team(
     page = render_template(
         "teams/team.html",
         **context,
+        view_urls=switch_urls("teams.view", team_id=team.id, tab=tab if tab in TEAM_TABS and tab != "people" else None),
+        active_view=chosen_view(),
         existing_teams=[(row.id, row.name) for row in sorted_by_name(rows) if row.id not in excluded],
         team=team,
         under=_higher_teams(labels, _row(rows, team).parent_ids),
@@ -592,6 +604,8 @@ def _render_parents(
         impact = move_impact(db, team, current | {parent_id} if action == "add" else current - {parent_id})
     page = render_template(
         "teams/parents.html",
+        view_urls=switch_urls("teams.parents", team_id=team.id),
+        active_view=chosen_view(),
         team=team,
         higher=[(row.id, row.name) for row in sorted_by_name(row for row in rows if row.id in current)],
         choices=[(row.id, row.name) for row in sorted_by_name(rows) if row.id not in below | current],

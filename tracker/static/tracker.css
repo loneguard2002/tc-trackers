@@ -1935,6 +1935,43 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .feedback-closed { margin: 0; padding-top: 12px; border-top: 1px solid var(--border); }
 .feedback-table .feedback-new-reply { margin-left: 6px; }
 
+/* --- Teams, New view (docs/superpowers/specs/2026-11-26-teams-new-view-design.md) ---------------------------------- */
+.teams-head-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.org-chart-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.org-chart-head .tree-filter { width: min(100%, 260px); margin: 0; }
+.org-chart-scroll { overflow-x: auto; padding: 8px 4px 16px; }
+.org-chart-note { margin: 0; padding: 0 20px 16px; color: var(--muted); font-size: .8125rem; }
+/* The chart: each list is a row of teams; the lines are borders on pseudo-elements, 2px in the field border colour. */
+.org-chart, .org-chart ul { position: relative; display: flex; justify-content: center; margin: 0; padding: 22px 0 0; list-style: none; }
+.org-chart { padding-top: 0; min-width: max-content; }
+.org-chart li { position: relative; display: flex; flex-direction: column; align-items: center; padding: 22px 6px 0; }
+.org-chart > li { padding-top: 0; }
+.org-chart li::before, .org-chart li::after { content: ""; position: absolute; top: 0; right: 50%; width: 50%; height: 22px; border-top: 2px solid var(--field-border); }
+.org-chart li::after { right: auto; left: 50%; border-left: 2px solid var(--field-border); }
+.org-chart li:only-child::before { display: none; }
+.org-chart li:only-child::after { border-top: 0; }
+.org-chart li:first-child::before, .org-chart li:last-child::after { border: 0; }
+.org-chart li:last-child::before { border-right: 2px solid var(--field-border); border-radius: 0 6px 0 0; }
+.org-chart li:first-child::after { border-radius: 6px 0 0 0; }
+.org-chart > li::before, .org-chart > li::after { display: none; }
+.org-chart ul::before { content: ""; position: absolute; top: 0; left: 50%; height: 22px; border-left: 2px solid var(--field-border); }
+.org-node { display: flex; flex-direction: column; gap: 3px; min-width: 150px; max-width: 220px; padding: 10px 12px; border: 1px solid var(--field-border); border-radius: 10px; background: var(--surface); color: var(--text); text-decoration: none; }
+.org-node:hover { border-color: var(--primary); }
+.org-node-name { font-size: .9375rem; }
+.org-node-place, .org-node-counts { color: var(--muted); font-size: .8125rem; }
+.org-node-also { align-self: flex-start; margin-top: 2px; padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--warning) 14%, var(--surface)); color: var(--text); font-size: .75rem; font-weight: 700; }
+.org-fold { display: flex; flex-direction: column; align-items: center; }
+.org-fold > summary { margin-top: 10px; padding: 2px 10px; border: 1px dashed var(--field-border); border-radius: 999px; color: var(--primary); font-size: .8125rem; font-weight: 700; cursor: pointer; }
+/* A search marks the teams it matches (teams-new.js). */
+.org-chart li.is-match > .org-node { border: 2px solid var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
+@media (max-width: 640px) {
+  .org-chart, .org-chart ul { display: block; min-width: 0; padding: 0; }
+  .org-chart ul { margin-left: 10px; padding-left: 14px; border-left: 2px solid var(--field-border); }
+  .org-chart li { display: block; padding: 8px 0 0; }
+  .org-chart li::before, .org-chart li::after, .org-chart ul::before { display: none; }
+  .org-node { max-width: none; }
+  .org-fold { display: block; }
+}
 /* Status at a glance, below the answer card: tiles, status strip, risks, locations. Scoped so the classic view is untouched. */
 .report-glance { --g-actual: #1260d0; --g-plan: #008f82; --g-forecast: #c27a00; display: grid; gap: 16px; max-width: 1280px; }
 [data-theme="dark"] .report-glance { --g-actual: #5b8ff0; --g-plan: #22a596; --g-forecast: #b8801c; }
