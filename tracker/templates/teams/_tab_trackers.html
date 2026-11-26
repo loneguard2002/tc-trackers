@@ -1,0 +1,52 @@
+{#- A team's Trackers tab, shared by the Classic and New views. -#}
+{% from "macros.html" import csrf_field, icon, people_count %}
+{% from "lists/_table.html" import code_badge, search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
+    <div id="tab-trackers">
+    <section class="list-panel team-panel" id="trackers" aria-labelledby="section-trackers">
+      <h2 class="sr-only" id="section-trackers">Trackers</h2>
+      <div class="list-tools">
+        {% if trackers %}
+        {{ search_box('trackers-table', 'Search trackers') }}
+        {{ status_filters('trackers-table', 'trackers', (('all', 'All'), ('active', 'Active'), ('archived', 'Archived')), {'all': trackers|length, 'active': active_trackers, 'archived': trackers|length - active_trackers}) }}
+        {{ clear_filters('trackers-table') }}
+        {% endif %}
+        <a class="button list-tools-action" href="{{ url_for('teams.view', team_id=team.id, tab='trackers', add=1) }}"{% if picking %} aria-current="true"{% endif %}>{{ icon('plus') }}Add trackers</a>
+      </div>
+      {% if picking %}{% include "teams/_tracker_picker.html" %}{% endif %}
+      {% if trackers %}
+      <div class="section-table list-table">
+        <table id="trackers-table" class="card-rows" data-state-prefix="trackers-">
+          <thead><tr>
+            {{ sort_header('Tracker', 'tracker', default=True) }}
+            {{ sort_header('Business line', 'line') }}
+            {{ sort_header('Regions', 'regions') }}
+            {{ sort_header('Status', 'status') }}
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr></thead>
+          <tbody>
+          {% for row in trackers %}
+          {% set t = row.tracker %}
+          {% set archived = t.status == 'archived' %}
+          <tr{% if archived %} class="is-retired"{% endif %} data-search="{{ (t.name ~ ' ' ~ row.business_line ~ ' ' ~ row.regions|join(' ') ~ ' ' ~ t.status)|lower }}" data-status="{{ t.status }}" data-sort-tracker="{{ t.name }}" data-sort-line="{{ row.business_line }}" data-sort-regions="{{ row.regions|join(', ') }}" data-sort-status="{{ t.status }}">
+            <td class="list-name">{{ t.name }}</td>
+            <td>{% if row.business_line %}{{ row.business_line }}{% else %}<span class="muted">None</span>{% endif %}</td>
+            <td>{% if row.regions %}<span class="team-regions">{% for code in row.regions %}{{ code_badge(code, colour=region_colour(code)) }}{% endfor %}</span>{% else %}<span class="muted">None</span>{% endif %}</td>
+            <td>{% if archived %}<span class="badge badge-muted">Archived</span>{% else %}<span class="badge badge-success">Active</span>{% endif %}</td>
+            <td class="cell-actions"><div class="row-tools"><a class="button button-small row-edit" href="{{ url_for('trackers.roles', tracker_id=t.id) }}">{{ icon('key') }}Access<span class="sr-only"> for {{ t.name }}</span></a>
+              <form method="post" action="{{ url_for('trackers.set_team', tracker_id=t.id) }}"
+                data-confirm="Remove {{ t.name }} from {{ team.name }}? It moves to no team and keeps its regions. {% if active_people %}Anyone who reaches it only through {{ team.name }} or a team above it loses that access.{% else %}No one reaches it through {{ team.name }}, so no one's access changes.{% endif %}">
+                {{ csrf_field(csrf_token()) }}<input type="hidden" name="team_id" value=""><input type="hidden" name="next" value="team"><input type="hidden" name="team" value="{{ team.id }}">
+                <button class="tool-button is-danger" type="submit" title="Remove {{ t.name }} from {{ team.name }}">{{ icon('close') }}<span class="sr-only">Remove {{ t.name }} from {{ team.name }}</span></button>
+              </form></div></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {{ no_match('No trackers match the search.', 'trackers-table') }}
+      </div>
+      {{ table_pager('trackers-table', 'trackers', 'tracker', trackers|length, active=active_trackers) }}
+      {% else %}
+      <p class="empty-note">No trackers are in this team.</p>
+      {% endif %}
+    </section>
+    </div>

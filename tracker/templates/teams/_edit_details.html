@@ -1,0 +1,24 @@
+{#- A team's Edit details form, shared by the Classic and New views. Expects alert, form, team, tab and
+    place_choices. -#}
+{% from "macros.html" import csrf_field, field %}
+      <header class="team-header team-edit">
+        {{ alert }}
+        <h2>Edit details</h2>
+        <form method="post" action="{{ url_for('teams.rename', team_id=team.id) }}">
+          {{ csrf_field(csrf_token()) }}
+          {% if tab != 'people' %}<input type="hidden" name="tab" value="{{ tab }}">{% endif %}
+          <div class="field-stack">
+            {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
+            <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
+            {% endcall %}
+            {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
+            <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
+            {% endcall %}
+            {% include "teams/_place_fields.html" %}
+          </div>
+          <div class="team-edit-foot">
+            <a class="button" href="{{ url_for('teams.view', team_id=team.id, tab=tab if tab != 'people' else none) }}">Cancel</a>
+            <button class="button primary" type="submit">Save details</button>
+          </div>
+        </form>
+      </header>

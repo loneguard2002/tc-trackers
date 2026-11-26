@@ -1981,6 +1981,58 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .reach-list { margin: 0; padding-left: 18px; }
 p.reach-list { padding-left: 0; color: var(--muted); }
 .new-team-submit { align-self: stretch; justify-content: center; min-height: 44px; }
+/* A team's page: the access map, then People as members and people from teams above. */
+.team-card-new { margin-bottom: 16px; }
+.team-header-new { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.team-header-actions { display: flex; align-items: center; gap: 8px; }
+.team-menu { position: relative; }
+.team-menu > summary { list-style: none; }
+.team-menu > summary::-webkit-details-marker { display: none; }
+.team-menu-body { position: absolute; right: 0; z-index: 20; display: flex; flex-direction: column; gap: 4px; width: 280px; margin-top: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--raised); box-shadow: var(--card-shadow), 0 8px 24px rgba(7, 26, 61, .18); }
+.team-menu-body a, .team-menu-danger { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 10px; border: 0; border-radius: 6px; background: none; color: var(--text); font: inherit; text-align: left; text-decoration: none; cursor: pointer; }
+.team-menu-body a:hover, .team-menu-danger:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.team-menu-danger { width: 100%; color: var(--danger); }
+.team-menu-note { margin: 0; padding: 8px 10px; color: var(--muted); font-size: .8125rem; }
+.access-map { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
+.access-map-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.access-map-head h2 { margin: 0; font-size: 1rem; }
+.access-map-head p { margin: 0; color: var(--muted); font-size: .875rem; }
+.access-chain { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.access-chain > li { display: flex; flex: 1 1 180px; align-items: center; gap: 10px; }
+.access-chain > li:not(:last-child)::after { content: "→"; color: var(--muted); font-size: 1.2rem; }
+.chain-node { display: flex; flex: 1; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--text) 3%, var(--surface)); color: var(--text); text-decoration: none; }
+a.chain-node:hover { border-color: var(--primary); }
+.chain-node.is-here { border: 2px solid var(--primary); background: color-mix(in srgb, var(--primary) 9%, var(--surface)); }
+.chain-node.is-below { border-style: dashed; border-color: var(--field-border); background: var(--surface); }
+.chain-level { color: var(--muted); font-size: .6875rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.chain-node.is-here .chain-level { color: var(--primary); }
+.chain-note { color: var(--muted); font-size: .8125rem; }
+.chain-node.is-here .chain-note { color: var(--text); }
+.team-people-new { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px; }
+.team-people-lists { display: flex; flex: 999 1 560px; flex-direction: column; gap: 16px; min-width: 0; }
+.team-group-head { padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.team-group-head h3 { margin: 0; font-size: 1rem; }
+.team-group-head p { margin: 2px 0 0; color: var(--muted); font-size: .8125rem; }
+.member-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 18px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+.member-row:last-child { border-bottom: 0; }
+.member-main { display: flex; flex: 1 1 200px; flex-direction: column; gap: 4px; min-width: 0; }
+.member-who { display: flex; flex-direction: column; }
+.member-email { color: var(--muted); font-size: .8125rem; overflow-wrap: anywhere; }
+.outranked-note { align-self: flex-start; padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--warning) 14%, var(--surface)); color: var(--text); font-size: .8125rem; font-weight: 600; }
+.role-switch { display: flex; align-items: center; gap: 8px; }
+.role-switch fieldset { display: flex; margin: 0; padding: 0; border: 1px solid var(--field-border); border-radius: 8px; overflow: hidden; }
+.role-switch label { position: relative; display: flex; }
+.role-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.role-switch label span { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; font-size: .8125rem; font-weight: 600; cursor: pointer; }
+.role-switch label + label span { border-left: 1px solid var(--field-border); }
+.role-switch input:checked + span { background: var(--primary); color: var(--primary-text); }
+.role-switch input:focus-visible + span { outline: 2px solid var(--focus-ring); outline-offset: -4px; }
+.from-team { margin: 0; padding: 12px 18px 2px; color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.member-row.is-inherited .member-avatar { background: color-mix(in srgb, var(--text) 8%, var(--surface)); color: var(--muted); }
+.role-pill { padding: 3px 12px; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, var(--surface)); font-size: .8125rem; font-weight: 700; }
+.role-pill.role-owner { background: color-mix(in srgb, var(--success) 14%, var(--surface)); }
+.role-pill.role-editor { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); }
+.from-change { min-width: 150px; font-size: .8125rem; }
 /* A search marks the teams it matches (teams-new.js). */
 .org-chart li.is-match > .org-node { border: 2px solid var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
 @media (max-width: 640px) {
