@@ -8,6 +8,7 @@
   --card-shadow: 0 1px 2px rgba(7, 26, 61, .08), 0 2px 8px rgba(7, 26, 61, .06);
   --topbar-bg: #071a3d; --focus-ring: #1260d0; --focus-ring-on-dark: #9cc2ff;
   --radius: 10px; --topbar-height: 68px; --sidebar-width: 248px;
+  --tab-active-bg: color-mix(in srgb, var(--primary) 14%, var(--bg)); --tab-active-text: #0b4aa6;
 }
 [data-theme="dark"] {
   color-scheme: dark;
@@ -15,6 +16,7 @@
   --card-shadow: none;
   --primary: #6ea6ff; --primary-text: #0f1115; --success: #3ccf98; --warning: #f2a93b; --danger: #f27387; --info: #6ea6ff;
   --focus-ring: #6ea6ff;
+  --tab-active-bg: color-mix(in srgb, var(--primary) 24%, var(--bg)); --tab-active-text: var(--primary);
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
@@ -616,9 +618,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 :is(.tabs, .subnav, .week-strip, .tracker-cards)::before { left: 0; margin-right: calc(-40px - var(--row-gap)); background: linear-gradient(to right, var(--fade-bg), transparent); }
 :is(.tabs, .subnav, .week-strip, .tracker-cards)::after { right: 0; margin-left: calc(-40px - var(--row-gap)); background: linear-gradient(to left, var(--fade-bg), transparent); }
 .more-before::before, .more-after::after { opacity: 1; }
-.tab { flex: none; margin-bottom: -1px; padding: 10px 12px; border-bottom: 2px solid transparent; color: var(--muted); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: color .15s, border-color .15s; }
+.tab { flex: none; margin-bottom: -1px; padding: 10px 12px; border-bottom: 2px solid transparent; border-radius: 8px 8px 0 0; color: var(--muted); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: color .15s, border-color .15s, background-color .15s; }
 .tab:hover { color: var(--text); border-bottom-color: var(--border); }
-.tab.active { color: var(--text); border-bottom-color: var(--primary); }
+/* The open tab is filled as well as underlined, so it stands out in both themes (text 5:1 on its fill). */
+.tab.active { color: var(--tab-active-text); border-bottom-color: var(--primary); background: var(--tab-active-bg); }
 .tabs[aria-label="Tracker sections"] .tab { display: inline-flex; align-items: center; gap: 6px; }
 .tab .icon { width: 16px; height: 16px; flex: none; }
 .tab.active .icon { color: var(--primary); }
