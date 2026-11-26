@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, field, icon, rag_dot %}
 {% from "lists/_table.html" import search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
+{% from "mail/_placeholders.html" import placeholder_table %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='email.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='placeholder-table.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% block content %}
@@ -69,18 +71,7 @@
         <textarea class="code-input" id="body_html" name="body_html" rows="11" required aria-describedby="body_html-help">{{ values.body_html }}</textarea>
         {% endcall %}
         <div class="field">
-          <span class="field-label" id="placeholders-label">Insert a placeholder</span>
-          <div class="placeholder-chips" role="group" aria-labelledby="placeholders-label" data-placeholder-chips hidden>
-            {% for name, description in placeholders.items() %}<button class="placeholder-chip" type="button" data-insert="{{ name }}" title="{{ description }}">{{ name }}</button>{% endfor %}
-          </div>
-          <details class="placeholder-help" data-placeholder-help>
-            <summary>Placeholders</summary>
-            <dl>
-              {% for name, description in placeholders.items() %}
-              <dt><code>{% raw %}{{{% endraw %}{{ name }}{% raw %}}}{% endraw %}</code></dt><dd>{{ description }}</dd>
-              {% endfor %}
-            </dl>
-          </details>
+          {{ placeholder_table(placeholders, preview.context if preview else {}, 'body_html', 'repeat', blocks) }}
           <p class="warn-box" data-unknown data-known="{{ placeholders.keys()|join(' ') }}"{% if not unknown %} hidden{% endif %}>
             {%- if unknown %}Unknown placeholders will be sent as written: {{ unknown|join(', ') }}.{% endif %}</p>
         </div>

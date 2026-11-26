@@ -48,6 +48,26 @@ PLACEHOLDERS: dict[str, str] = {
 BLOCK_PLACEHOLDERS = ("figures", "this_week", "needed_from_you", "risks")
 
 DEFAULT_SUBJECT = "{{summary}}"
+
+# Made-up figures for one week of a made-up tracker: the examples on Email settings, which belongs to no tracker.
+SAMPLE_CONTEXT: dict[str, str] = {
+    "summary": (
+        "Network refresh | 06/11/26 : Green | 25 (+5 v +3) of 180 devices done (14%) | 155 left | 3 risks (1 new - red)"
+    ),
+    "tracker_name": "Network refresh",
+    "week_ending": fmt_date(date(2026, 11, 6)),
+    "status": "Green",
+    "verdict": "On track to finish 2 weeks before the target",
+    "percent_complete": fmt_pct(0.14),
+    "completed": "25",
+    "total_scope": "180",
+    "remaining": "155",
+    "forecast_date": fmt_date(date(2027, 3, 12)),
+    "target_date": fmt_date(date(2027, 3, 26)),
+    "headline": "Site B cut-over complete",
+    "decisions": "None",
+    "report_link": "https://tracker.example.com/trackers/12/report?week=2026-11-06",
+}
 DEFAULT_BODY = "{{figures}}\n{{this_week}}\n{{needed_from_you}}\n{{risks}}\n"  # the chart and link come after
 
 REPORT_SUBJECT_KEY = "report_email_subject"  # the app setting holding the one subject every tracker's email uses

@@ -16,7 +16,15 @@ from ..db import get_session
 from ..feedback import mail as feedback_mail
 from ..feedback import settings as feedback_settings
 from ..mail import access
-from ..mail.compose import BLOCK_PLACEHOLDERS, PLACEHOLDERS, REPORT_SUBJECT_KEY, report_subject, unknown_placeholders
+from ..mail.compose import (
+    BLOCK_PLACEHOLDERS,
+    PLACEHOLDERS,
+    REPORT_SUBJECT_KEY,
+    SAMPLE_CONTEXT,
+    render_subject,
+    report_subject,
+    unknown_placeholders,
+)
 from ..models import AppSetting
 from . import bp
 
@@ -146,6 +154,11 @@ def smtp():
         max_reminder_days=access.MAX_REMINDER_DAYS,
         unknown=unknown_placeholders(report_subject(db)),
         placeholders={name: text for name, text in PLACEHOLDERS.items() if name not in BLOCK_PLACEHOLDERS},
+        known=list(PLACEHOLDERS),
+        blocks=BLOCK_PLACEHOLDERS,
+        sample=SAMPLE_CONTEXT,
+        sample_subject=render_subject(report_subject(db), SAMPLE_CONTEXT),
+        max_subject=MAX_REPORT_SUBJECT,
         modes=SMTP_AUTH_MODES,
         server_locked=not is_admin,
         locked_message=SERVER_LOCKED_MESSAGE,

@@ -1,6 +1,7 @@
-// Email: placeholder chips insert at the cursor, an unknown placeholder is flagged as you type, and the preview
-// redraws from the template on the page (with the chosen week's values) before it is saved. Without JavaScript the
-// preview shows the saved template and the placeholder list stays open to read.
+// Email: an unknown placeholder is flagged as you type, and the preview redraws from the template on the page (with the
+// chosen week's values) before it is saved. Without JavaScript the preview shows the saved template. The placeholder
+// table's Insert buttons (placeholder-table.js) put placeholders into the body and fire an input event, which redraws
+// the preview here.
 (function () {
   "use strict";
 
@@ -18,7 +19,6 @@
   // Message parts that are ready-made HTML: inserted as they are in the body, and as nothing in the subject.
   var blocks = preview && preview.dataset.blocks ? preview.dataset.blocks.split(" ") : [];
   var saved = { subject: subject.value, body: body.value };
-  var last = body;
 
   function escapeHtml(text) {
     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
@@ -64,25 +64,6 @@
     var shown = fill(body.value, true).replace(/\sstyle=("[^"]*"|'[^']*')/g, "");
     frame.srcdoc = preview.dataset.shell.replace(preview.dataset.mark, shown);
   }
-
-  // The subject is read-only (an administrator sets it for every tracker), so chips always go into the body.
-  body.addEventListener("focus", function () { last = body; });
-
-  var chips = form.querySelector("[data-placeholder-chips]");
-  var help = form.querySelector("[data-placeholder-help]");
-  chips.hidden = false;
-  if (help) help.hidden = true;
-  chips.querySelectorAll("[data-insert]").forEach(function (chip) {
-    chip.addEventListener("click", function () {
-      var token = "{{" + chip.dataset.insert + "}}";
-      var start = last.selectionStart === null ? last.value.length : last.selectionStart;
-      var end = last.selectionEnd === null ? start : last.selectionEnd;
-      last.value = last.value.slice(0, start) + token + last.value.slice(end);
-      last.focus();
-      last.selectionStart = last.selectionEnd = start + token.length;
-      refresh();
-    });
-  });
 
   form.addEventListener("input", function () { refresh(false); });
   refresh(true);

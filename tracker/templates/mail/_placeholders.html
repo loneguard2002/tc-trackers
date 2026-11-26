@@ -1,0 +1,24 @@
+{#- The placeholder table on Email settings (the report subject) and on a tracker's Email tab (the message body): each
+    placeholder with what it gives and an example, and an Insert button that placeholder-table.js reveals. The button
+    shows "✓ Inserted" while the placeholder is in the field. ``mode`` "toggle" (the subject) makes that button remove
+    it again; "repeat" (the body, where a placeholder may well appear twice) makes it insert another copy. -#}
+{% macro placeholder_table(placeholders, examples, target, mode, blocks=()) -%}
+<div class="placeholder-table" data-placeholder-table data-target="{{ target }}" data-mode="{{ mode }}">
+  <h3 class="placeholder-table-title" id="{{ target }}-placeholders">Placeholders</h3>
+  <div class="placeholder-table-frame">
+    <table class="placeholder-list" aria-labelledby="{{ target }}-placeholders">
+      <thead><tr><th scope="col">Placeholder</th><th scope="col">What it gives</th><th scope="col">Example</th><th scope="col"><span class="sr-only">Insert</span></th></tr></thead>
+      <tbody>
+      {% for name, description in placeholders.items() %}
+      <tr data-placeholder="{{ name }}">
+        <td class="ph-name"><code>{{ '{{' ~ name ~ '}}' }}</code></td>
+        <td class="ph-what">{{ description }}</td>
+        <td class="ph-example">{% if name in blocks %}<span class="muted">A block in the email</span>{% else %}{{ examples.get(name, '') }}{% endif %}</td>
+        <td class="ph-action"><button class="button button-small ph-button" type="button" data-insert="{{ name }}" aria-label="Insert {{ '{{' ~ name ~ '}}' }}" hidden><span class="ph-label-insert">Insert</span><span class="ph-label-done">✓ Inserted</span><span class="ph-label-again">{{ 'Remove' if mode == 'toggle' else 'Insert again' }}</span></button></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{%- endmacro %}
