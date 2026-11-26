@@ -26,9 +26,13 @@
   <div class="stat"><span class="stat-label">Failed sign-ins</span>
     <span class="stat-value">{{ failures_last_day }}</span>
     <span class="stat-sub">in the last 24 hours</span></div>
-  <div class="stat"><span class="stat-label">Limits</span>
-    <span class="stat-value">{{ limits.account_attempts }} <small>/ {{ limits.address_attempts }}</small></span>
-    <span class="stat-sub">per account / per address in {{ limits.window_minutes }} minute{{ 's' if limits.window_minutes != 1 }}</span></div>
+  {% set window = limits.window_minutes ~ ' minute' ~ ('s' if limits.window_minutes != 1 else '') %}
+  <div class="stat"><span class="stat-label">Account limit</span>
+    <span class="stat-value">{{ limits.account_attempts }} <small>failures</small></span>
+    <span class="stat-sub">per email address in {{ window }}</span></div>
+  <div class="stat"><span class="stat-label">Address limit</span>
+    <span class="stat-value">{{ limits.address_attempts }} <small>failures</small></span>
+    <span class="stat-sub">per IP address in {{ window }}</span></div>
 </section>
 
 <div class="settings">
