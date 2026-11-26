@@ -74,6 +74,7 @@ def app():
     if engine is not None:  # sign-in failures now live in the database; one test's must never throttle the next
         with engine.begin() as connection:
             connection.execute(text("DELETE FROM login_failures"))
+            connection.execute(text("DELETE FROM export_requests"))  # and one test's downloads never limit the next
     get_engine(application).dispose()
 
 
