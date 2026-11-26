@@ -87,7 +87,7 @@ def test_the_chart_page_shows_each_team_with_its_counts(
         add_member(team, user_factory(status=status), "viewer")
     tracker_factory(name="Live", team_id=team.id)
     tracker_factory(name="Old", team_id=team.id, status="archived")
-    html = page(client, "/admin/teams?view=new")
+    html = page(client, "/admin/teams/structure?view=new")
     assert "data-chart" in html and "London Swaps" in html
     assert "2 members · 1 tracker" in html
 
@@ -95,7 +95,7 @@ def test_the_chart_page_shows_each_team_with_its_counts(
 def test_the_chart_marks_also_under_and_folds(client, logged_in_admin, team_factory):
     alpha, beta = team_factory("Alpha"), team_factory("Beta")
     team_factory("Shared", parents=(alpha, beta))
-    html = page(client, "/admin/teams?view=new")
+    html = page(client, "/admin/teams/structure?view=new")
     assert "Also under Beta" in html
     chart_html = html.split("data-chart", 1)[1].split("</section>", 1)[0]
     assert chart_html.count(">Shared<") == 1  # once in the chart (the New team panel lists it too)
@@ -104,7 +104,7 @@ def test_the_chart_marks_also_under_and_folds(client, logged_in_admin, team_fact
 def test_the_chart_carries_the_dotted_lines_data(client, logged_in_admin, team_factory):
     alpha, beta = team_factory("Alpha"), team_factory("Beta")
     shared = team_factory("Shared", parents=(alpha, beta))
-    html = page(client, "/admin/teams?view=new")
+    html = page(client, "/admin/teams/structure?view=new")
     assert f'data-team-id="{shared.id}" data-also-ids="{beta.id}"' in html  # a dotted line from Beta, the other
     assert f'data-team-id="{alpha.id}">' in html  # no other higher team, no line
     assert "data-chart-links" in html
@@ -112,7 +112,57 @@ def test_the_chart_carries_the_dotted_lines_data(client, logged_in_admin, team_f
 
 
 def test_an_empty_chart_says_so(client, logged_in_admin):
-    assert "No teams yet." in page(client, "/admin/teams?view=new")
+    assert "No teams yet." in page(client, "/admin/teams/structure?view=new")
+
+
+# --- The Structure card and the index (simple redesign) -------------------------------------------------------------
+
+
+def _card(html: str) -> str:
+    return re.search(r'<aside class="settings-section structure-card".*?</aside>', html, re.S).group(0)
+
+
+def test_new_view_index_opens_on_the_first_top_level_team(client, logged_in_admin, team_factory):
+    team_factory("Zeta")
+    alpha = team_factory("Alpha")
+    response = client.get("/admin/teams?view=new")
+    assert response.status_code == 302 and response.headers["Location"].endswith(f"/admin/teams/{alpha.id}")
+
+
+def test_new_view_index_without_teams_offers_the_form(client, logged_in_admin):
+    html = page(client, "/admin/teams?view=new")
+    assert "No teams yet." in html
+    assert re.search(r'<form id="new-team-form"[^>]*>', html) and not re.search(r'<form id="new-team-form"[^>]*hidden', html)
+
+
+def test_structure_card_shows_each_team_once(client, logged_in_admin, team_factory):
+    alpha, beta = team_factory("Alpha"), team_factory("Beta")
+    team_factory("Shared", parents=(alpha, beta))
+    card = _card(page(client, f"/admin/teams/{alpha.id}?view=new"))
+    assert card.count(">Shared<") == 1
+    assert "Also under Beta" in card
+    assert "The number is how many people reach a team through teams." in card
+
+
+def test_structure_card_marks_the_current_team_and_counts_people(
+    client, logged_in_admin, team_factory, user_factory, add_member
+):
+    team = team_factory("Desk")
+    add_member(team, user_factory(), "viewer")
+    add_member(team, user_factory(status="disabled"), "viewer")
+    card = _card(page(client, f"/admin/teams/{team.id}?view=new"))
+    node = re.search(r'<a class="structure-node"[^>]*aria-current="page"[^>]*>.*?</a>', card, re.S).group(0)
+    assert ">Desk<" in node and "1 person" in node
+
+
+def test_whole_structure_route_shows_the_chart(client, logged_in_admin, team_factory):
+    team_factory("Desk")
+    html = page(client, "/admin/teams/structure?view=new")
+    assert "data-chart" in html and "Back to teams" in html
+
+
+def test_whole_structure_needs_manage_teams(client, logged_in_user):
+    assert client.get("/admin/teams/structure").status_code == 403
 
 
 # --- The New team panel ---------------------------------------------------------------------------------------------
@@ -120,72 +170,6 @@ def test_an_empty_chart_says_so(client, logged_in_admin):
 
 def _panel(html: str) -> str:
     return re.search(r'<aside id="new-team-panel".*?</aside>', html, re.S).group(0)
-
-
-def test_the_panel_opens_on_request_and_lists_where_a_team_can_sit(client, logged_in_admin, team_factory):
-    top = team_factory("Global Markets")
-    rates = team_factory("EMEA Rates", parent=top)
-    team_factory("London Swaps", parent=rates)
-    team_factory("APAC Desk", parent=top)
-    assert re.search(r'<aside id="new-team-panel"[^>]*hidden', page(client, "/admin/teams?view=new"))
-    panel = _panel(page(client, "/admin/teams?view=new&new=1"))
-    assert "hidden" not in panel.split(">", 1)[0]
-    choices = re.findall(r'name="parent_id" value="(\d*)"[^>]*>\s*<span[^>]*>([^<]+)</span>', panel)
-    assert [name for _, name in choices] == ["Top level", "Global Markets", "APAC Desk", "EMEA Rates", "London Swaps"]
-    assert 'class="sit-choice depth-3"' in panel  # London Swaps, indented two levels
-    assert "You can put it under a second team from its Where it sits page." in panel
-
-
-def test_the_panel_says_who_reaches_the_new_team(client, logged_in_admin, team_factory, user_factory, add_member):
-    top = team_factory("Global Markets")
-    rates = team_factory("EMEA Rates", parent=top)
-    add_member(rates, user_factory(full_name="Priya Nair"), "owner")
-    add_member(top, user_factory(full_name="Sam Ortiz"), "viewer")
-    add_member(top, user_factory(full_name="Gone Person", status="disabled"), "owner")
-    panel = _panel(page(client, "/admin/teams?view=new&new=1"))
-    reach = re.search(rf'<ul class="reach-list" data-reach-for="{rates.id}"[^>]*>(.*?)</ul>', panel, re.S).group(1)
-    assert re.findall(r"<li>([^<]+)</li>", reach) == [
-        "Priya Nair · Owner · EMEA Rates",
-        "Sam Ortiz · Viewer · Global Markets",
-    ]
-    assert 'data-reach-for="">Only the members you add' in panel
-
-
-def test_the_reach_list_shows_five_then_a_count(client, logged_in_admin, team_factory, user_factory, add_member):
-    top = team_factory("Big")
-    for n in range(7):
-        add_member(top, user_factory(full_name=f"Person {n}"), "viewer")
-    panel = _panel(page(client, "/admin/teams?view=new&new=1"))
-    reach = re.search(rf'data-reach-for="{top.id}"[^>]*>(.*?)</ul>', panel, re.S).group(1)
-    assert reach.count("<li>") == 6 and "and 2 more" in reach
-
-
-def test_a_refused_create_shows_the_new_view_with_the_panel_open_and_the_input_kept(
-    client, logged_in_admin, team_factory, region_factory
-):
-    team_factory("Desk")
-    region = region_factory("EMEA")
-    page(client, "/admin/teams?view=new")  # the choice is kept in the session
-    response = post(client, "/admin/teams", {"name": "Desk", "parent_id": "", "region_id": str(region.id)})
-    assert response.status_code == 400
-    html = html_lib.unescape(response.get_data(as_text=True))
-    panel = _panel(html)
-    assert "hidden" not in panel.split(">", 1)[0] and 'value="Desk"' in panel
-    assert "already" in html and "data-chart" in html
-
-
-def test_the_panel_offers_each_team_s_place_for_filling_in(
-    client, logged_in_admin, team_factory, region_factory, location_factory
-):
-    region = region_factory("EMEA")
-    london = location_factory(region, "London", "GB", code="LON")
-    rates = team_factory("EMEA Rates", location_id=london.id)
-    panel = _panel(page(client, "/admin/teams?view=new&new=1"))
-    assert re.search(
-        rf'value="{rates.id}" data-team-name="EMEA Rates" '
-        rf'data-place-region="{region.id}" data-place-location="{london.id}"',
-        panel,
-    )
 
 
 # --- A team's page --------------------------------------------------------------------------------------------------
@@ -425,4 +409,4 @@ def test_classic_shows_a_move_preview_as_a_move(client, logged_in_admin, team_fa
 def test_odd_query_keys_do_not_break_the_switch(client, logged_in_admin, team_factory, query):
     team = team_factory("Desk")
     for url in ("/admin/teams", f"/admin/teams/{team.id}", f"/admin/teams/{team.id}/parents"):
-        page(client, f"{url}?view=new&{query}")
+        page(client, f"{url}?view=new&{query}", 302 if url == "/admin/teams" else 200)  # the index opens Desk

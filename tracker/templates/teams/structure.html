@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{#- Whole structure (spec 4.9): for now the organisation chart of the earlier New view, with its search and dotted
+    lines; PR 3 replaces it with the full-screen left-to-right picture. -#}
+{% from "macros.html" import title_crumb %}
+{% from "teams/_chart.html" import chart_level with context %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='teams-new.js', v=app_version) }}" defer></script>
+{% endblock %}
+{% block content %}
+<header class="list-head">
+  <div>
+    {{ title_crumb([(url_for('teams.index'), 'Teams')], 'Whole structure') }}
+    <p class="page-lede">Solid lines show where a team sits. Dotted lines show another team it also sits under.</p>
+  </div>
+  <div class="teams-head-actions"><a class="button" href="{{ url_for('teams.index') }}">Back to teams</a></div>
+</header>
+<section class="settings-section org-chart-card" aria-labelledby="chart-title">
+  <header class="settings-section-head org-chart-head">
+    <h2 id="chart-title">Hierarchy</h2>
+    <div class="org-chart-tools">
+      <label class="org-links-toggle" data-links-toggle hidden><input type="checkbox" id="chart-links" checked> Show “also under” lines</label>
+      <label class="sr-only" for="chart-search">Find a team or person</label>
+      <input id="chart-search" class="tree-filter" type="search" placeholder="Find a team or person" autocomplete="off" data-chart-search hidden>
+    </div>
+  </header>
+  {% if nodes %}
+  <div class="org-chart-scroll" data-chart>
+    <div class="org-chart-stage" data-chart-stage>
+      <svg class="org-links" aria-hidden="true" focusable="false" data-chart-links></svg>
+      {{ chart_level(nodes, true) }}
+    </div>
+  </div>
+  <p class="org-chart-note">A team under two teams shows under one of them, marked “Also under” the other, with a dotted line from the other; people in either team reach it.</p>
+  {% else %}
+  <p class="empty-note">No teams yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
