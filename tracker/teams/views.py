@@ -185,7 +185,7 @@ def _tree_context(rows: list[TeamRow], current_id: int | None) -> dict:
 def _structure_context(db, rows: list[TeamRow], current_id: int | None, new_open: bool = False) -> dict:
     """What the New view's Structure card needs beyond ``_tree_context`` (reach, places, search, current_id), which
     every Teams page passes too (spec 2026-11-26-teams-simple-redesign-design.md 4.2 and 4.3)."""
-    return {"nodes": chart(rows), "team_options": tree_options(rows), "new_open": new_open}
+    return {"nodes": chart(rows), "team_options": tree_options(rows), "team_names": team_labels(rows), "new_open": new_open}
 
 
 def _parent_choice(rows: list[TeamRow], text: str | None) -> str:

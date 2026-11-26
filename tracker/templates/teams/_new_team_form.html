@@ -12,7 +12,7 @@
   <select id="parent_id" name="parent_id" aria-describedby="parent_id-help" data-sits-under>
     <option value="" data-team-name="" {{ 'selected' if not selected_parent }}>Top level</option>
     {% for o in team_options %}{% set p = places.get(o.id) %}
-    <option value="{{ o.id }}" data-team-name="{{ o.label|trim }}" data-place-region="{{ p.region_id if p else '' }}" data-place-location="{{ (p.location_id or '') if p else '' }}" {{ 'selected' if selected_parent == o.id|string }}>{{ o.label }}</option>
+    <option value="{{ o.id }}" data-team-name="{{ team_names[o.id] }}" data-place-region="{{ p.region_id if p else '' }}" data-place-location="{{ (p.location_id or '') if p else '' }}" {{ 'selected' if selected_parent == o.id|string }}>{{ o.label }}</option>
     {% endfor %}
   </select>
   {% endcall %}
