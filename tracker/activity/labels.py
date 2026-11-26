@@ -25,6 +25,7 @@ ACTION_LABELS: dict[str, str] = {
     "user_approved": "User approved",
     "user_disabled": "User disabled",
     "user_enabled": "User enabled",
+    "user_sessions_ended": "Sessions ended",
     "password_reset": "Password reset",
     "sign_in_switched": "Sign-in switched to Microsoft",
     "user_admin_changed": "Administrator flag changed",

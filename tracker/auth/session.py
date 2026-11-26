@@ -1,4 +1,5 @@
-"""Session handling: the session stores the user id, a fingerprint of the password (and the CSRF token)."""
+"""Session handling: the session stores the user id, a fingerprint of the password and the session version (and the
+CSRF token)."""
 
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ import hmac
 from functools import wraps
 
 from flask import abort, current_app, g, has_request_context, redirect, request, session, url_for
+from sqlalchemy import update
 
 from ..db import get_session
 from ..models import User
@@ -15,10 +17,25 @@ SESSION_KEY = "auth"
 
 
 def session_key(user: User, secret: str | bytes) -> str:
-    """A keyed fingerprint of the user's password hash. A new password changes it, which ends every session started
-    with the old password; a Microsoft account has no password, so its fingerprint does not change."""
+    """A keyed fingerprint of the user's password hash and session version. A new password changes it, which ends every
+    session started with the old password; so does a raised session version (sign-out, End sessions), which also ends
+    the sessions of a Microsoft account, whose missing password never changes.
+
+    Version 0 keeps the fingerprint used before there were versions, so the sessions open when this was deployed stay
+    signed in.
+    """
     key = secret.encode() if isinstance(secret, str) else secret
-    return hmac.new(key, (user.password_hash or "").encode(), hashlib.sha256).hexdigest()
+    message = user.password_hash or ""
+    if user.session_version:
+        message += f"\x00{user.session_version}"
+    return hmac.new(key, message.encode(), hashlib.sha256).hexdigest()
+
+
+def end_sessions(db, user: User) -> None:
+    """End every session the user has, on every device: copies of the session cookie included. Raised in the database,
+    so two at once both count; the caller commits."""
+    db.execute(update(User).where(User.id == user.id).values(session_version=User.session_version + 1))
+    db.refresh(user, attribute_names=["session_version"])
 
 
 def login_user(user: User) -> None:
@@ -31,6 +48,13 @@ def login_user(user: User) -> None:
 
 
 def logout_user() -> None:
+    """Sign out. The session version is raised as well, so a copy of the session cookie stops working too; this signs
+    the person out on their other devices."""
+    user = current_user()
+    if user is not None:
+        db = get_session()
+        end_sessions(db, user)
+        db.commit()
     session.clear()
     g.pop("current_user", None)
 
