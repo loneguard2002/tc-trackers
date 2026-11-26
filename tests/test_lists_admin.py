@@ -168,7 +168,7 @@ def test_admin_adds_a_region_and_a_location_and_both_are_logged(client, logged_i
     assert [e.entity for e in logged] == ["region", "location"]
     assert [e.entity_id for e in logged] == [str(region.id), str(location.id)]
     assert all(e.tracker_id is None and e.user_id == logged_in_admin.id for e in logged)
-    assert logged[0].detail == {"region": "EMEA"}
+    assert logged[0].detail == {"region": "EMEA", "colour": "Blue"}  # the first colour, as none is chosen
     assert logged[1].detail == {"location": "Geneva, Switzerland", "code": "GVA", "region": "EMEA"}
     page = text_of(client.get("/admin/regions"))
     assert "<h1>Regions</h1>" in page
@@ -516,7 +516,12 @@ def test_regions_table_lists_counts_and_status(client, logged_in_admin, region_f
         assert attribute in row
     assert 'data-sort-name="Europe, Middle East and Africa"' in row and 'data-sort-status="active"' in row
     edit = json.loads(html.unescape(re.search(r"data-edit='([^']*)'", row).group(1)))
-    assert edit == {"code": "EMEA", "name": "Europe, Middle East and Africa", "action": f"/admin/regions/{emea.id}"}
+    assert edit == {
+        "code": "EMEA",
+        "name": "Europe, Middle East and Africa",
+        "colour": 1,
+        "action": f"/admin/regions/{emea.id}",
+    }
     assert 'href="/admin/teams"' in row
     assert f'<a class="count-pill" href="/admin/locations?region={emea.id}">2<' in row
     assert f'href="/admin/regions/{emea.id}/edit" data-dialog-open="edit"' in row

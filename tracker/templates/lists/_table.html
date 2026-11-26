@@ -5,8 +5,9 @@
 
 {# A short code in a badge with a coloured square before it. ``fallback`` (for example the first letters of a city)
    is shown muted when no code is set. #}
-{% macro code_badge(code, fallback='') -%}
-{% if code %}<span class="code-badge"><span class="code-badge-mark" aria-hidden="true"></span>{{ code }}</span>
+{#- ``colour`` (1 to 8) marks a region's code in its colour (tracker/lists/region_colours.py). -#}
+{% macro code_badge(code, fallback='', colour=none) -%}
+{% if code %}<span class="code-badge{{ ' region-c' ~ colour if colour }}"><span class="code-badge-mark" aria-hidden="true"></span>{{ code }}</span>
 {%- else %}<span class="code-badge is-fallback" title="Code not set"><span class="code-badge-mark" aria-hidden="true"></span>{{ fallback }}<span class="sr-only"> (code not set)</span></span>{% endif %}
 {%- endmacro %}
 

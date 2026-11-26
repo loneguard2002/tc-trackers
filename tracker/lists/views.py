@@ -24,6 +24,7 @@ from ..naming import MAX_NAME_LENGTH, name_error
 from . import bp
 from .catalogue import REGION_CHOICE_ERROR, location_label
 from .countries import COUNTRIES, country_name, flag_path, parse_country
+from .region_colours import REGION_COLOURS, colour_name, next_colour
 
 # Regions, locations and business lines: administrators and ``manage_lists`` holders. A region's Access screen
 # (``lists.access``) stays with administrators, since a region grant gives access to trackers.
@@ -42,6 +43,7 @@ MAX_CODE_LENGTH = 20
 REGION_CODE_REQUIRED = "Enter a region code."
 REGION_CODE_TOO_LONG = f"A region code can be at most {MAX_CODE_LENGTH} characters."
 REGION_CODE_TAKEN = "A region with that code already exists."
+REGION_COLOUR_REQUIRED = "Choose a colour."
 LOCATION_CODE_REQUIRED = "Enter a location code."
 LOCATION_CODE_FORMAT = "A location code is 2 to 6 letters, such as LON."
 LOCATION_CODE_TAKEN = "A location with that code already exists."
@@ -119,15 +121,20 @@ def _summary(errors: FieldErrors) -> list[str]:
     return [message for messages in errors.values() for message in messages]
 
 
-def _region_errors(code: str, name: str, exclude_id: int | None = None) -> FieldErrors:
+def _region_errors(submitted: dict, exclude_id: int | None = None) -> FieldErrors:
     db = get_session()
+    code, name = submitted["code"], submitted["name"]
     if not code:
         code_error = REGION_CODE_REQUIRED
     elif len(code) > MAX_CODE_LENGTH:
         code_error = REGION_CODE_TOO_LONG
     else:
         code_error = REGION_CODE_TAKEN if name_error(db, Region, code, "region", exclude_id, Region.code) else None
-    found = {"code": code_error, "name": name_error(db, Region, name, "region", exclude_id)}
+    found = {
+        "code": code_error,
+        "name": name_error(db, Region, name, "region", exclude_id),
+        "colour": REGION_COLOUR_REQUIRED if submitted.get("colour") == 0 else None,
+    }
     return {field: [error] for field, error in found.items() if error}
 
 
@@ -175,7 +182,13 @@ def _tab_counts() -> dict[str, int]:
 
 
 def _region_form() -> dict:
-    return {"code": request.form.get("code", "").strip(), "name": request.form.get("name", "").strip()}
+    form = {"code": request.form.get("code", "").strip(), "name": request.form.get("name", "").strip()}
+    # One of the set colours, numbered from 1 (0 for anything else, which asks for a colour). Left out, a new region
+    # takes the next colour and an edited one keeps its own.
+    if "colour" in request.form:
+        colour = request.form["colour"].strip()
+        form["colour"] = int(colour) if colour.isdigit() and 1 <= int(colour) <= len(REGION_COLOURS) else 0
+    return form
 
 
 def _location_form() -> dict:
@@ -228,6 +241,8 @@ def _render_regions(
         tracker_counts=trackers,
         people_counts=people,
         region_in_use=REGION_IN_USE,
+        region_colours=REGION_COLOURS,
+        new_colour=next_colour(db),
         dialog=dialog,
         editing=editing,
         form=form or {},
@@ -261,7 +276,8 @@ def new_region():
 @manage_lists_required
 def edit_region(region_id: int):
     region = _or_404(Region, region_id)
-    return _render_regions(200, form={"code": region.code, "name": region.name}, dialog="edit", edit_id=region.id)
+    form = {"code": region.code, "name": region.name, "colour": region.colour}
+    return _render_regions(200, form=form, dialog="edit", edit_id=region.id)
 
 
 @bp.post("/regions")
@@ -269,18 +285,23 @@ def edit_region(region_id: int):
 def create_region():
     db = get_session()
     submitted = _region_form()
-    errors = _region_errors(submitted["code"], submitted["name"])
+    errors = _region_errors(submitted)
     if errors:
         return _render_regions(400, field_errors=errors, form=submitted, dialog="add")
-    region = Region(**submitted)
+    region = Region(**{"colour": next_colour(db), **submitted})
     db.add(region)
     try:
         db.flush()
-        _log(action="region_created", entity="region", entity_id=region.id, detail={"region": region.code})
+        _log(
+            action="region_created",
+            entity="region",
+            entity_id=region.id,
+            detail={"region": region.code, "colour": colour_name(region.colour)},
+        )
         db.commit()
     except IntegrityError:  # the same code or name was taken at the same moment
         db.rollback()
-        errors = _region_errors(submitted["code"], submitted["name"]) or {"code": [REGION_CODE_TAKEN]}
+        errors = _region_errors(submitted) or {"code": [REGION_CODE_TAKEN]}
         return _render_regions(400, field_errors=errors, form=submitted, dialog="add")
     flash(f"Added the region {region.code}.", "success")
     return _to_regions(f"region-{region.id}")
@@ -309,7 +330,7 @@ def update_region(region_id: int):
         _set_retired(region, action, "region", code, "region", {"region": code})
         return _to_regions(f"region-{region.id}")
     submitted = _region_form()
-    errors = _region_errors(submitted["code"], submitted["name"], region.id)
+    errors = _region_errors(submitted, region.id)
     if errors:
         return _render_regions(400, field_errors=errors, form=submitted, dialog="edit", edit_id=region.id)
     before, after = _changed(region, submitted)
@@ -318,6 +339,8 @@ def update_region(region_id: int):
         return _to_regions(f"region-{region.id}")
     for field, value in after.items():
         setattr(region, field, value)
+    if "colour" in before:  # the Activity log names the colour, not its number
+        before["colour"], after["colour"] = colour_name(before["colour"]), colour_name(after["colour"])
     _log(
         action="region_changed", entity="region", entity_id=region.id, detail={"region": code, **change(before, after)}
     )
@@ -325,7 +348,7 @@ def update_region(region_id: int):
         db.commit()
     except IntegrityError:
         db.rollback()
-        errors = _region_errors(submitted["code"], submitted["name"], region.id) or {"code": [REGION_CODE_TAKEN]}
+        errors = _region_errors(submitted, region.id) or {"code": [REGION_CODE_TAKEN]}
         return _render_regions(400, field_errors=errors, form=submitted, dialog="edit", edit_id=region.id)
     flash(f"Saved the region {region.code}.", "success")
     return _to_regions(f"region-{region.id}")

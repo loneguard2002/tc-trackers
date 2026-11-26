@@ -348,7 +348,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tracker-card-titles { display: grid; gap: 2px; flex: 1; min-width: 0; }
 /* The tracker's regions, top right of the card, so they can be picked out at a glance. */
 .card-regions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; align-self: flex-start; max-width: 40%; margin: 0; padding: 0; list-style: none; }
-.region-pill { padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--primary) 45%, var(--surface)); border-radius: 999px; background: color-mix(in srgb, var(--primary) 10%, var(--surface)); color: var(--primary); font-size: .75rem; font-weight: 700; letter-spacing: .04em; line-height: 1.4; white-space: nowrap; }
+.region-pill { padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--region, var(--primary)) 45%, var(--surface)); border-radius: 999px; background: color-mix(in srgb, var(--region, var(--primary)) 10%, var(--surface)); color: var(--primary); font-size: .75rem; font-weight: 700; letter-spacing: .04em; line-height: 1.4; white-space: nowrap; }
+/* A region with a colour: its mark carries the colour and the code keeps the text colour, so every colour reads. */
+.region-pill[class*="region-c"] { display: inline-flex; align-items: center; gap: 5px; color: var(--text); }
+.region-pill[class*="region-c"]::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--region); }
 .region-pill-unset { border-style: dashed; border-color: var(--border); background: var(--surface); color: var(--muted); font-weight: 600; letter-spacing: 0; }
 .tracker-card-status { margin: 2px 0 0; font-size: .8125rem; }
 .tracker-card-status .status-word { font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
@@ -960,6 +963,7 @@ input[type="file"]::file-selector-button { margin-right: 10px; padding: 5px 12px
 .team-place { color: var(--muted); font-size: .8125rem; }
 .team-also { flex-basis: 100%; color: var(--muted); font-size: .8125rem; overflow-wrap: anywhere; }
 .team-place.is-unset, .team-header-place.is-unset { font-style: italic; }
+.region-mark { display: inline-block; flex: none; width: 8px; height: 8px; margin-right: 5px; border-radius: 2px; background: var(--region); vertical-align: 1px; }
 .team-move { align-items: flex-end; }
 .team-add { padding: 16px 20px; border-top: 1px solid var(--border); }
 .team-add { align-items: start; }
@@ -1528,8 +1532,8 @@ a.sort-button { text-decoration: none; }
 th[aria-sort="ascending"] .sort-button, th[aria-sort="descending"] .sort-button { color: var(--text); }
 th[aria-sort="ascending"] .sort-button .icon path:first-child, th[aria-sort="descending"] .sort-button .icon path:last-child { opacity: 1; }
 th[aria-sort="ascending"] .sort-button .icon path:last-child, th[aria-sort="descending"] .sort-button .icon path:first-child { opacity: 0; }
-.code-badge { display: inline-flex; align-items: center; gap: 7px; padding: 2px 9px 2px 7px; border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); border-radius: 6px; background: color-mix(in srgb, var(--primary) 8%, var(--surface)); color: var(--text); font: 700 .8125rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .03em; white-space: nowrap; }
-.code-badge-mark { flex: none; width: 10px; height: 10px; border-radius: 2px; background: var(--primary); }
+.code-badge { display: inline-flex; align-items: center; gap: 7px; padding: 2px 9px 2px 7px; border: 1px solid color-mix(in srgb, var(--region, var(--primary)) 30%, var(--border)); border-radius: 6px; background: color-mix(in srgb, var(--region, var(--primary)) 8%, var(--surface)); color: var(--text); font: 700 .8125rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .03em; white-space: nowrap; }
+.code-badge-mark { flex: none; width: 10px; height: 10px; border-radius: 2px; background: var(--region, var(--primary)); }
 .code-badge.is-fallback { border-style: dashed; border-color: var(--border); background: transparent; color: var(--muted); font-weight: 600; }
 .code-badge.is-fallback .code-badge-mark { background: var(--muted); opacity: .5; }
 .list-table tr.is-retired .code-badge-mark { background: var(--muted); }
@@ -1995,3 +1999,20 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .glance-target-text { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
 @media (max-width: 520px) { .glance-target { grid-template-columns: auto 1fr; } .glance-target-text { grid-column: 2; } }
 .report-glance .chart-swatch-actual { background: var(--g-actual); } .report-glance .chart-swatch-plan { background: var(--g-plan); } .report-glance .chart-swatch-forecast { background: var(--g-forecast); }
+
+/* The eight region colours (tracker/lists/region_colours.py), as --region for the mark, border and tint of a region's
+   code; the dataviz reference palette, stepped for the dark theme. The code's text keeps the text colour. */
+.region-c1 { --region: #2a78d6; } .region-c2 { --region: #eb6834; } .region-c3 { --region: #1baf7a; } .region-c4 { --region: #eda100; }
+.region-c5 { --region: #e87ba4; } .region-c6 { --region: #008300; } .region-c7 { --region: #6250d6; } .region-c8 { --region: #e34948; }
+[data-theme="dark"] .region-c1 { --region: #3987e5; } [data-theme="dark"] .region-c2 { --region: #d95926; }
+[data-theme="dark"] .region-c3 { --region: #199e70; } [data-theme="dark"] .region-c4 { --region: #c98500; }
+[data-theme="dark"] .region-c5 { --region: #d55181; } [data-theme="dark"] .region-c6 { --region: #008300; }
+[data-theme="dark"] .region-c7 { --region: #9085e9; } [data-theme="dark"] .region-c8 { --region: #e66767; }
+/* The colour choice on a region's Add and Edit forms: a row of swatches; the chosen one is ringed. */
+.region-colours { min-width: 0; margin: 14px 0 0; padding: 0; border: 0; }
+.swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+.swatch { position: relative; display: inline-flex; cursor: pointer; }
+.swatch input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; }
+.swatch-mark { width: 30px; height: 30px; border: 3px solid var(--surface); border-radius: 8px; background: var(--region); box-shadow: 0 0 0 1px var(--field-border); }
+.swatch input:checked + .swatch-mark { box-shadow: 0 0 0 2px var(--text); }
+.swatch input:focus-visible + .swatch-mark { outline: 2px solid var(--focus-ring); outline-offset: 3px; }

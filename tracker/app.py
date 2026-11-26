@@ -33,6 +33,7 @@ from .feedback import settings as feedback_settings
 from .formatting import register_filters
 from .importer import bp as importer_bp
 from .lists import bp as lists_bp
+from .lists.region_colours import region_colour
 from .mail import bp as mail_bp
 from .models import Tracker, User
 from .permsets import bp as permsets_bp
@@ -133,6 +134,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     # What each tracker role can do (trackers/_role_guide.html), from one list of rows.
     app.jinja_env.globals["role_guide_rows"] = role_guide_rows
     app.jinja_env.globals["role_guide_notes"] = ROLE_NOTES
+    app.jinja_env.globals["region_colour"] = region_colour  # a region code's colour, 1 to 8
     if app.config.get("TESTING"):
         app.jinja_env.undefined = StrictUndefined
     install_csrf(app)

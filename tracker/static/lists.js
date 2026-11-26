@@ -623,8 +623,10 @@
 
   function openAdd(dialog) {
     clearErrors(dialog);
-    var fields = dialog.querySelectorAll(".list-dialog-body input:not([type=hidden]), .list-dialog-body select");
+    var fields = dialog.querySelectorAll(".list-dialog-body input:not([type=hidden]):not([type=radio]), .list-dialog-body select");
     each(fields, function (field) { field.value = ""; });
+    // A choice (a region's colour) goes back to the one the page offered.
+    each(dialog.querySelectorAll(".list-dialog-body input[type=radio]"), function (radio) { radio.checked = radio.defaultChecked; });
     showFlags(dialog);
     showModal(dialog);
   }
@@ -644,7 +646,7 @@
         option.disabled = !own;
       });
     }
-    ["region_id", "code", "name", "city", "country_code"].forEach(function (name) {
+    ["region_id", "code", "name", "colour", "city", "country_code"].forEach(function (name) {
       var field = form.elements.namedItem(name);
       if (!field || !Object.prototype.hasOwnProperty.call(data, name)) return;
       field.value = data[name] === null ? "" : String(data[name]);

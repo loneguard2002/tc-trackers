@@ -49,7 +49,7 @@
         {{ alert }}
         <div class="team-header-text">
           <div class="team-pills">
-            {% if place %}<span class="team-pill team-header-place"><strong>{{ place.region_code }}</strong>{% if place.location %}{{ icon('pin') }}{{ place.location }}{% endif %}</span>{% else %}<span class="team-pill team-header-place is-unset">Region not set</span>{% endif %}
+            {% if place %}<span class="team-pill team-header-place">{% set colour = region_colour(place.region_code) %}{% if colour %}<span class="region-mark region-c{{ colour }}" aria-hidden="true"></span>{% endif %}<strong>{{ place.region_code }}</strong>{% if place.location %}{{ icon('pin') }}{{ place.location }}{% endif %}</span>{% else %}<span class="team-pill team-header-place is-unset">Region not set</span>{% endif %}
             <span class="team-pill">{% if under %}Under {% for id, name in under %}{{ ' and ' if loop.last and not loop.first else (', ' if not loop.first else '') }}<a href="{{ url_for('teams.view', team_id=id) }}">{{ name }}</a>{% endfor %}{% else %}Top level{% endif %}</span>
           </div>
         </div>
@@ -252,7 +252,7 @@
           <tr{% if archived %} class="is-retired"{% endif %} data-search="{{ (t.name ~ ' ' ~ row.business_line ~ ' ' ~ row.regions|join(' ') ~ ' ' ~ t.status)|lower }}" data-status="{{ t.status }}" data-sort-tracker="{{ t.name }}" data-sort-line="{{ row.business_line }}" data-sort-regions="{{ row.regions|join(', ') }}" data-sort-status="{{ t.status }}">
             <td class="list-name">{{ t.name }}</td>
             <td>{% if row.business_line %}{{ row.business_line }}{% else %}<span class="muted">None</span>{% endif %}</td>
-            <td>{% if row.regions %}<span class="team-regions">{% for code in row.regions %}{{ code_badge(code) }}{% endfor %}</span>{% else %}<span class="muted">None</span>{% endif %}</td>
+            <td>{% if row.regions %}<span class="team-regions">{% for code in row.regions %}{{ code_badge(code, colour=region_colour(code)) }}{% endfor %}</span>{% else %}<span class="muted">None</span>{% endif %}</td>
             <td>{% if archived %}<span class="badge badge-muted">Archived</span>{% else %}<span class="badge badge-success">Active</span>{% endif %}</td>
             <td class="cell-actions"><div class="row-tools"><a class="button button-small row-edit" href="{{ url_for('trackers.roles', tracker_id=t.id) }}">{{ icon('key') }}Access<span class="sr-only"> for {{ t.name }}</span></a>
               <form method="post" action="{{ url_for('trackers.set_team', tracker_id=t.id) }}"
