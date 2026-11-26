@@ -112,8 +112,19 @@
       {% endcall %}
       {% endfor %}
     </section>
+    <section class="settings-section span-all" aria-labelledby="section-downloads">
+      <header class="settings-section-head">
+        <h2 id="section-downloads">Report downloads</h2>
+        <p>Each PDF or PNG download starts a browser on the server, which takes far more memory than a page. This limit stops one person from overloading it. The server also draws only one report at a time in each process; that is fixed. Changes apply to the next download and are recorded in Activity.</p>
+      </header>
+      {% set name = 'downloads_per_minute' %}{% set low, high = download_range %}
+      {% call setting('Downloads per person per minute', 'PDF and PNG downloads one person may make in any minute; the next is refused with a message. ' ~ low ~ ' to ' ~ high ~ '.', name) %}
+      <input id="{{ name }}" name="{{ name }}" type="number" inputmode="numeric" min="{{ low }}" max="{{ high }}" step="1" value="{{ form[name] }}" required aria-describedby="{{ name }}-help{{ ' ' ~ name ~ '-error' if errors.get(name) }}"{% if errors.get(name) %} aria-invalid="true"{% endif %}>
+      {% if errors.get(name) %}<p class="field-error" id="{{ name }}-error">{{ errors[name] }}</p>{% endif %}
+      {% endcall %}
+    </section>
     <div class="settings-actions span-all">
-      <button class="button primary" type="submit">Save limits</button>
+      <button class="button primary" type="submit">Save</button>
     </div>
   </form>
 </div>

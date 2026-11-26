@@ -10,7 +10,7 @@ from conftest import post, sign_in
 from sqlalchemy import func, select
 
 from tracker.mail import sending
-from tracker.models import ExportRequest, Recipient, ReportSend
+from tracker.models import AppSetting, ExportRequest, Recipient, ReportSend
 from tracker.report import limits, render, views
 from tracker.report.render import BUSY_MESSAGE, RenderBusy
 
@@ -77,8 +77,24 @@ def test_ten_downloads_a_minute_then_the_next_is_refused(client, db, small_track
     response = _download(client, small_tracker, week="2026-09-11", view="new")
     assert response.status_code == 302
     assert response.headers["Location"].endswith(f"/trackers/{small_tracker.id}/report?week=2026-09-11&view=new")
-    assert limits.LIMIT_MESSAGE in client.get(response.headers["Location"]).get_data(as_text=True)
+    assert limits.limit_message(10) in client.get(response.headers["Location"]).get_data(as_text=True)
     assert len(renders) == 10 and _counted(db, viewer) == 10  # the refused one is not drawn or counted
+
+
+def test_a_saved_limit_applies_to_the_next_download(client, db, small_tracker, viewer, renders):
+    db.add(AppSetting(key=limits.SETTING_KEY, value="2"))
+    db.commit()
+    assert [_download(client, small_tracker).status_code for _ in range(3)] == [200, 200, 302]
+    assert "You have downloaded 2 reports in the last minute." in client.get(
+        f"/trackers/{small_tracker.id}/report"
+    ).get_data(as_text=True)
+
+
+@pytest.mark.parametrize("stored", ["0", "61", "abc", ""])
+def test_an_unreadable_saved_limit_falls_back_to_ten(db, stored):
+    db.add(AppSetting(key=limits.SETTING_KEY, value=stored))
+    db.flush()
+    assert limits.load_per_minute(db) == 10
 
 
 def test_downloads_older_than_a_minute_do_not_count(client, db, small_tracker, viewer, renders):

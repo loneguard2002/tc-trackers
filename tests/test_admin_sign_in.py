@@ -67,7 +67,11 @@ def test_a_holder_of_the_permission_can_unblock_and_change_the_limits(client, db
     post(client, PAGE + "/unblock", {"kind": "account", "value": "blocked@example.com"})
     assert db.scalar(select(func.count()).select_from(LoginFailure)) == 0
     assert _audit(db, "sign_in_unblocked")[0].user_id == logged_in_user.id
-    post(client, PAGE, {"account_attempts": "7", "address_attempts": "20", "window_minutes": "5"})
+    post(
+        client,
+        PAGE,
+        {"account_attempts": "7", "address_attempts": "20", "window_minutes": "5", "downloads_per_minute": "10"},
+    )
     assert _audit(db, "sign_in_limits_changed")[0].user_id == logged_in_user.id
 
 
@@ -102,7 +106,7 @@ def test_unblock_refuses_a_bad_request(client, logged_in_admin, data):
 
 
 def test_saving_the_limits_stores_and_records_them(client, db, logged_in_admin):
-    data = {"account_attempts": "4", "address_attempts": "20", "window_minutes": "10"}
+    data = {"account_attempts": "4", "address_attempts": "20", "window_minutes": "10", "downloads_per_minute": "10"}
     assert post(client, PAGE, data).status_code == 302
     stored = dict(db.execute(select(AppSetting.key, AppSetting.value)).all())
     assert stored["login_account_attempts"] == "4" and stored["login_window_minutes"] == "10"
@@ -114,16 +118,50 @@ def test_saving_the_limits_stores_and_records_them(client, db, logged_in_admin):
 
 
 def test_unchanged_limits_are_not_recorded(client, db, logged_in_admin):
-    data = {"account_attempts": "5", "address_attempts": "20", "window_minutes": "5"}
+    data = {"account_attempts": "5", "address_attempts": "20", "window_minutes": "5", "downloads_per_minute": "10"}
     response = post(client, PAGE, data, follow_redirects=True)
     assert "The limits are unchanged." in response.get_data(as_text=True)
     assert _audit(db, "sign_in_limits_changed") == []
 
 
 def test_limits_out_of_range_are_refused_and_nothing_is_saved(client, db, logged_in_admin):
-    data = {"account_attempts": "1", "address_attempts": "20", "window_minutes": "5"}
+    data = {"account_attempts": "1", "address_attempts": "20", "window_minutes": "5", "downloads_per_minute": "10"}
     response = post(client, PAGE, data)
     html = response.get_data(as_text=True)
     assert response.status_code == 400
     assert "Enter a whole number from 3 to 50." in html and 'aria-invalid="true"' in html
+    assert db.scalar(select(func.count()).select_from(AppSetting).where(AppSetting.key.like("login_%"))) == 0
+
+
+def _limits(**changes) -> dict[str, str]:
+    return {
+        "account_attempts": "5",
+        "address_attempts": "20",
+        "window_minutes": "5",
+        "downloads_per_minute": "10",
+    } | changes
+
+
+def test_the_page_shows_the_download_limit(client, logged_in_admin):
+    html = client.get(PAGE).get_data(as_text=True)
+    assert "Report downloads" in html and 'name="downloads_per_minute"' in html and 'value="10"' in html
+
+
+def test_saving_the_download_limit_stores_and_records_only_it(client, db, logged_in_admin):
+    response = post(client, PAGE, _limits(downloads_per_minute="4"), follow_redirects=True)
+    assert "Limits saved." in response.get_data(as_text=True)
+    assert db.scalar(select(AppSetting.value).where(AppSetting.key == "export_downloads_per_minute")) == "4"
+    (entry,) = _audit(db, "download_limit_changed")
+    assert entry.user_id == logged_in_admin.id
+    assert entry.detail == {"before": {"per_minute": 10}, "after": {"per_minute": 4}}
+    assert _audit(db, "sign_in_limits_changed") == []
+    assert 'value="4"' in client.get(PAGE).get_data(as_text=True)
+
+
+@pytest.mark.parametrize("value", ["0", "61", "ten", ""])
+def test_a_download_limit_out_of_range_is_refused_and_nothing_is_saved(client, db, logged_in_admin, value):
+    response = post(client, PAGE, _limits(account_attempts="4", downloads_per_minute=value))
+    html = response.get_data(as_text=True)
+    assert response.status_code == 400
+    assert "Enter a whole number from 1 to 60." in html and 'id="downloads_per_minute-error"' in html
     assert db.scalar(select(func.count()).select_from(AppSetting).where(AppSetting.key.like("login_%"))) == 0

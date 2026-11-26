@@ -3,6 +3,9 @@
 For administrators and holders of the Manage sign-in protection permission. The page names each account (the email
 entered) and address (the client's IP) with failures in the last day: the table keeps them for a day, then deletes
 them. They can change the limits and unblock an account or address at once; both are written to the activity log.
+
+The same form holds the per-person limit on PDF and PNG report downloads (report/limits.py): another limit that stops
+one person from overloading the server, trusted to the same people.
 """
 
 from __future__ import annotations
@@ -12,9 +15,14 @@ from flask import abort, flash, redirect, render_template, request, url_for
 from ..audit import change, record
 from ..auth import current_user, permission_required, throttle
 from ..db import get_session
+from ..report import limits as export_limits
 from . import bp
 
 KIND_NAMES = {"account": "Account", "address": "Address"}
+
+
+def _form(limits: throttle.Limits, per_minute: int) -> dict[str, str]:
+    return {**{name: str(value) for name, value in limits.as_dict().items()}, export_limits.FIELD: str(per_minute)}
 
 
 def _page(limits: throttle.Limits, form: dict | None = None, errors: dict | None = None, status: int = 200):
@@ -33,9 +41,10 @@ def _page(limits: throttle.Limits, form: dict | None = None, errors: dict | None
             current_page="sign_in",
             page_title="Sign-in protection",
             limits=limits,
-            form=form or {name: str(value) for name, value in limits.as_dict().items()},
+            form=form or _form(limits, export_limits.load_per_minute(db)),
             errors=errors or {},
             fields=throttle.LIMIT_FIELDS,
+            download_range=(export_limits.LOWEST, export_limits.HIGHEST),
             now=now,
             rows=rows,
             blocked=blocked,
@@ -55,26 +64,43 @@ def sign_in_protection():
     if request.method == "GET":
         return _page(before)
     limits, errors = throttle.parse_limits(request.form)
-    if limits is None:
-        form = {name: request.form.get(name, "") for name in throttle.LIMIT_FIELDS}
+    per_minute, download_error = export_limits.parse_per_minute(request.form.get(export_limits.FIELD))
+    if download_error:
+        errors[export_limits.FIELD] = download_error
+    if errors:
+        form = {name: request.form.get(name, "") for name in (*throttle.LIMIT_FIELDS, export_limits.FIELD)}
         return _page(before, form, errors, 400)
-    if limits == before:
+    before_per_minute = export_limits.load_per_minute(db)
+    if limits == before and per_minute == before_per_minute:
         flash("The limits are unchanged.", "info")
         return redirect(url_for("admin.sign_in_protection"))
-    old, new = before.as_dict(), limits.as_dict()
-    changed = [name for name in throttle.LIMIT_FIELDS if old[name] != new[name]]
-    throttle.save_limits(db, limits)
-    record(
-        db,
-        user_id=current_user().id,
-        tracker_id=None,
-        action="sign_in_limits_changed",
-        entity="app_settings",
-        entity_id="sign_in_limits",
-        detail=change({name: old[name] for name in changed}, {name: new[name] for name in changed}),
-    )
+    actor = current_user().id
+    if limits != before:
+        old, new = before.as_dict(), limits.as_dict()
+        changed = [name for name in throttle.LIMIT_FIELDS if old[name] != new[name]]
+        throttle.save_limits(db, limits)
+        record(
+            db,
+            user_id=actor,
+            tracker_id=None,
+            action="sign_in_limits_changed",
+            entity="app_settings",
+            entity_id="sign_in_limits",
+            detail=change({name: old[name] for name in changed}, {name: new[name] for name in changed}),
+        )
+    if per_minute != before_per_minute:
+        export_limits.save_per_minute(db, per_minute)
+        record(
+            db,
+            user_id=actor,
+            tracker_id=None,
+            action="download_limit_changed",
+            entity="app_settings",
+            entity_id=export_limits.SETTING_KEY,
+            detail=change({"per_minute": before_per_minute}, {"per_minute": per_minute}),
+        )
     db.commit()
-    flash("Sign-in limits saved. They apply to the next attempt.", "success")
+    flash("Limits saved. They apply to the next attempt.", "success")
     return redirect(url_for("admin.sign_in_protection"))
 
 
