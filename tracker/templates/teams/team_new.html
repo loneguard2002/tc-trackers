@@ -4,6 +4,7 @@
     page uses. -#}
 {% from "macros.html" import csrf_field, icon, title_crumb %}
 {% from "trackers/_role_guide.html" import role_guide_foldout %}
+{% from "teams/_structure.html" import structure_card with context %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
@@ -16,13 +17,10 @@
   <span class="member-email">{{ user.email }}</span></span>
 {%- endmacro %}
 {% block content %}
-<header class="list-head">
-  <div>
-    {{ title_crumb([(url_for('teams.index'), 'Teams')], team.name) }}
-    <p class="page-lede">{{ team.description or "People in this team reach its trackers, and the trackers of every team below it." }}</p>
-  </div>
-  <div class="teams-head-actions">{% include "teams/_view_switch.html" %}</div>
-</header>
+{% include "teams/_simple_head.html" %}
+<div class="teams-simple-layout">
+  {{ structure_card() }}
+  <div class="teams-simple-main">
 
 <div class="settings-section team-card team-card-new">
   {% set alert %}{% if errors and not picking %}<div class="form-alert team-alert" role="alert">
@@ -198,4 +196,6 @@
 {% else %}
 {% include "teams/_tab_trackers.html" %}
 {% endif %}
+  </div>
+</div>
 {% endblock %}

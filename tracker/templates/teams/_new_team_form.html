@@ -1,0 +1,28 @@
+{#- The New team form in the Structure card (spec 4.3). Hidden unless ``new_open``; teams-new.js opens it in place.
+    Expects new_form (what was typed), selected_parent, team_options, places, place_choices and form (for the Region
+    and Location fields, which start on the team being viewed). -#}
+{% from "macros.html" import csrf_field, field, icon %}
+<form id="new-team-form" class="new-team-form" method="post" action="{{ url_for('teams.create') }}"{% if not new_open %} hidden{% endif %}>
+  {{ csrf_field(csrf_token()) }}
+  <h3 class="new-team-title">New team</h3>
+  {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
+  <input id="name" name="name" value="{{ new_form.get('name', '') }}" maxlength="100" required aria-describedby="name-help" data-new-name>
+  {% endcall %}
+  {% call field('Sits under', 'The team it belongs to. Its members will reach the new team.', 'parent_id') %}
+  <select id="parent_id" name="parent_id" aria-describedby="parent_id-help" data-sits-under>
+    <option value="" data-team-name="" {{ 'selected' if not selected_parent }}>Top level</option>
+    {% for o in team_options %}{% set p = places.get(o.id) %}
+    <option value="{{ o.id }}" data-team-name="{{ o.label|trim }}" data-place-region="{{ p.region_id if p else '' }}" data-place-location="{{ (p.location_id or '') if p else '' }}" {{ 'selected' if selected_parent == o.id|string }}>{{ o.label }}</option>
+    {% endfor %}
+  </select>
+  {% endcall %}
+  <p class="field-help" data-place-hint hidden>Filled from <span data-place-from></span>.</p>
+  {% include "teams/_place_fields.html" %}
+  {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
+  <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ new_form.get('description', '') }}</textarea>
+  {% endcall %}
+  <div class="new-team-actions">
+    <a class="button" href="{{ url_for('teams.view', team_id=current_id) if current_id else url_for('teams.index') }}" data-new-team-cancel>Cancel</a>
+    <button class="button primary" type="submit">{{ icon('plus') }}Create team</button>
+  </div>
+</form>

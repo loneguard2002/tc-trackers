@@ -1,0 +1,38 @@
+{#- The Structure card of the Teams New view (spec 2026-11-26-teams-simple-redesign-design.md 4.2): every team once,
+    under its main higher team, with how many people reach it through teams. Expects the keys of
+    ``_structure_context``: nodes, reach, places, search, current_id, team_options and new_open. -#}
+{% from "macros.html" import icon, people_count %}
+{% macro structure_level(nodes) -%}
+<ul class="structure-tree">
+  {% for node in nodes %}
+  {% set id = node.row.id %}
+  {% set place = places.get(id) %}
+  <li data-search="{{ search.get(id, '') }}">
+    <a class="structure-node" href="{{ url_for('teams.view', team_id=id) }}"{% if id == current_id %} aria-current="page"{% endif %}>
+      <span class="structure-name">{{ node.row.name }}</span>
+      <span class="structure-count">{{ people_count(reach.get(id, 0)) }}</span>
+      {% if place %}<span class="structure-place">{% set colour = region_colour(place.region_code) %}{% if colour %}<span class="region-mark region-c{{ colour }}" aria-hidden="true"></span>{% endif %}{{ place.region_code }}{% if place.city %} · {{ place.city }}{% endif %}</span>{% endif %}
+      {% if node.also_under %}<span class="structure-also">Also under {{ node.also_under|join(', ') }}</span>{% endif %}
+    </a>
+    {% if node.children %}{{ structure_level(node.children) }}{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{%- endmacro %}
+{% macro structure_card() -%}
+<aside class="settings-section structure-card" aria-labelledby="structure-title">
+  <header class="structure-head">
+    <h2 id="structure-title">Structure</h2>
+    <a class="button primary button-small" href="{{ url_for('teams.view', team_id=current_id, new=1) if current_id else url_for('teams.index', new=1) }}#new-team-form" data-new-team>{{ icon('plus') }}New team</a>
+    <label class="sr-only" for="structure-search">Find a team or person</label>
+    <input id="structure-search" class="tree-filter structure-search" type="search" placeholder="Find a team or person" autocomplete="off" data-tree-filter hidden>
+  </header>
+  {% if not editing|default(false) %}{% include "teams/_new_team_form.html" %}{% endif %}
+  {% if nodes %}
+  <div class="structure-body" data-tree>{{ structure_level(nodes) }}</div>
+  {% else %}
+  <p class="empty-note">No teams yet.</p>
+  {% endif %}
+  <p class="structure-foot">The number is how many people reach a team through teams. A team under two teams shows once, under its main team.</p>
+</aside>
+{%- endmacro %}

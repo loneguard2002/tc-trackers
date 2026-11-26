@@ -47,6 +47,7 @@ from ..models import (
 from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
+from .layout import tree_options
 from .overview import (
     ROLE_SUMMARY,
     ancestor_levels,
@@ -181,6 +182,12 @@ def _tree_context(rows: list[TeamRow], current_id: int | None) -> dict:
     }
 
 
+def _structure_context(db, rows: list[TeamRow], current_id: int | None, new_open: bool = False) -> dict:
+    """What the New view's Structure card needs beyond ``_tree_context`` (reach, places, search, current_id), which
+    every Teams page passes too (spec 2026-11-26-teams-simple-redesign-design.md 4.2 and 4.3)."""
+    return {"nodes": chart(rows), "team_options": tree_options(rows), "new_open": new_open}
+
+
 def _parent_choice(rows: list[TeamRow], text: str | None) -> str:
     """The id (as text) of the parent to preselect, or an empty string for the top level."""
     parent_id = parse_id(text)
@@ -191,27 +198,17 @@ def _render_index(form, errors: list[str], status: int):
     db = get_session()
     rows = load_team_rows(db)
     view = chosen_view()
-    extra = {}
-    if view == "new":  # the hierarchy as a chart, each team with its members and trackers, and the New team panel
-        nodes = chart(rows)
-        extra = {
-            "nodes": nodes,
-            "members": member_counts(db),
-            "tracker_totals": tracker_counts(db),
-            "sit_choices": chart_order(nodes),
-            "reach_lists": reach_people(db, rows),
-            "panel_open": bool(errors) or request.args.get("new") == "1",
-        }
     page = render_template(
         "teams/index_new.html" if view == "new" else "teams/index.html",
         **_tree_context(rows, None),
-        **extra,
+        **(_structure_context(db, rows, None, new_open=True) if view == "new" else {}),
         view_urls=switch_urls("teams.index"),
         active_view=view,
         choices=team_choices(get_session()),
         place_choices=location_choices(get_session()),
         selected_parent=form.get("parent_id", "") if form else _parent_choice(rows, request.args.get("parent")),
         form=form,
+        new_form=form or {},
         errors=errors,
         team_total=len(rows),
         page_title="Teams",
@@ -223,7 +220,29 @@ def _render_index(form, errors: list[str], status: int):
 @bp.get("")
 @permission_required("manage_teams")
 def index():
+    if chosen_view() == "new":  # the New view opens on the first top-level team; with none, the empty page
+        tops = sorted_by_name(row for row in load_team_rows(get_session()) if not row.parent_ids)
+        if tops:
+            return redirect(url_for("teams.view", team_id=tops[0].id, new="1" if request.args.get("new") == "1" else None))
     return _render_index({}, [], 200)
+
+
+@bp.get("/structure")
+@permission_required("manage_teams")
+def structure():
+    """Whole structure (spec 4.9); until PR 3, the organisation chart of the earlier New view."""
+    db = get_session()
+    rows = load_team_rows(db)
+    return render_template(
+        "teams/structure.html",
+        nodes=chart(rows),
+        members=member_counts(db),
+        tracker_totals=tracker_counts(db),
+        search=_tree_context(rows, None)["search"],
+        places=team_places(db),
+        page_title="Whole structure",
+        current_page="teams",
+    )
 
 
 @bp.post("")
@@ -397,6 +416,10 @@ def _render_team(
     page = render_template(
         "teams/team_new.html" if view == "new" else "teams/team.html",
         **(_new_team_context(db, rows, team, people) if view == "new" else {}),
+        **(_structure_context(db, rows, team.id, new_open=request.args.get("new") == "1") if view == "new" else {}),
+        new_form={},
+        selected_parent=str(team.id),
+        team_total=len(rows),
         **context,
         view_urls=switch_urls("teams.view", team_id=team.id, tab=tab if tab in TEAM_TABS and tab != "people" else None),
         active_view=view,
