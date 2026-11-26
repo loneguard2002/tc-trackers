@@ -26,6 +26,11 @@ def switch_urls(endpoint: str, **values) -> dict[str, str]:
     form was sent (a refusal shown again), ``endpoint`` with ``values``, the page the form belongs to."""
     if request.method == "GET" and request.endpoint:
         endpoint = request.endpoint
-        values = {key: value for key, value in request.args.items() if key != "view"}
+        # url_for treats "endpoint" and keys starting with "_" as its own options, so a query cannot pass them on.
+        values = {
+            key: value
+            for key, value in request.args.items()
+            if key != "view" and key != "endpoint" and not key.startswith("_")
+        }
         values.update(request.view_args or {})
     return {view: url_for(endpoint, **values, view=view) for view in VIEWS}

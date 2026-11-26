@@ -107,6 +107,25 @@
     update();
   }
 
+  // A member's role switch: a click saves the role at once; with the keyboard, arrow keys only choose (each would
+  // otherwise save the roles passed on the way) and the Set role button, shown then, saves.
+  each(document.querySelectorAll("form.role-switch"), function (roleForm) {
+    var save = roleForm.querySelector("[data-autosubmit-fallback]");
+    var byPointer = false;
+    if (save) save.hidden = true;
+    roleForm.addEventListener("pointerdown", function () { byPointer = true; });
+    each(roleForm.querySelectorAll("input[data-role-choice]"), function (radio) {
+      radio.addEventListener("change", function () {
+        if (byPointer) {
+          roleForm.submit();
+        } else if (save) {
+          save.hidden = false;
+        }
+        byPointer = false;
+      });
+    });
+  });
+
   // The Add a member preview follows the chosen person and role.
   each(document.querySelectorAll(".add-member-form"), function (addForm) {
     var person = addForm.querySelector("[data-preview-source]");

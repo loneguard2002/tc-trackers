@@ -120,7 +120,7 @@
           {{ csrf_field(csrf_token()) }}
           <fieldset>
             <legend class="sr-only">Role for {{ u.full_name }}</legend>
-            {% for r in roles %}<label><input type="radio" name="role" value="{{ r }}"{{ ' checked' if row.person.direct_role == r }} data-autosubmit><span>{{ r|title }}</span></label>{% endfor %}
+            {% for r in roles %}<label><input type="radio" name="role" value="{{ r }}"{{ ' checked' if row.person.direct_role == r }} data-role-choice><span>{{ r|title }}</span></label>{% endfor %}
           </fieldset>
           <button class="button button-small" type="submit" data-autosubmit-fallback>Set role</button>
         </form>
