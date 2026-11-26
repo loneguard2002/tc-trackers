@@ -357,8 +357,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .card-ring { position: relative; flex: none; width: 60px; height: 60px; }
 .card-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .card-ring circle { fill: none; stroke-width: 10; }
-.ring-track { stroke: color-mix(in srgb, var(--text) 10%, var(--surface)); }
-.ring-short { stroke: color-mix(in srgb, var(--danger) 35%, transparent); }
+.ring-track { stroke: color-mix(in srgb, var(--text) 30%, var(--surface)); }
+.ring-short { stroke: color-mix(in srgb, var(--danger) 55%, var(--surface)); }
 .ring-done { stroke: var(--primary); stroke-linecap: round; }
 .card-ring.is-ahead .ring-done { stroke: var(--success); }
 .ring-tick { stroke: var(--text); stroke-width: 4; stroke-linecap: round; }
@@ -369,10 +369,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tracker-card-when { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
 .card-timeline { display: block; width: 100%; height: auto; overflow: visible; }
 .card-timeline text { fill: var(--muted); font-size: 11px; font-weight: 600; }
-.tl-track { fill: color-mix(in srgb, var(--text) 10%, var(--surface)); }
-.tl-elapsed { fill: color-mix(in srgb, var(--primary) 30%, var(--surface)); }
+.tl-track { fill: color-mix(in srgb, var(--text) 30%, var(--surface)); }
+.tl-elapsed { fill: color-mix(in srgb, var(--primary) 65%, var(--surface)); }
 .tl-month { stroke: var(--field-border); stroke-width: 1; }
-.tl-late { fill: color-mix(in srgb, var(--danger) 30%, transparent); }
+.tl-late { fill: color-mix(in srgb, var(--danger) 55%, transparent); }
 .tl-today { stroke: var(--text); stroke-width: 2; }
 .tl-target { fill: var(--text); }
 .tl-forecast { fill: var(--success); stroke: var(--surface); stroke-width: 2; }
@@ -1308,7 +1308,7 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .segmented label:has(input:disabled:not(:checked)) { opacity: .45; }
 .period-timeline { margin-top: 2px; }
 .timeline { display: block; width: 100%; height: 46px; overflow: visible; }
-.timeline-week { fill: color-mix(in srgb, var(--text) 10%, transparent); }
+.timeline-week { fill: color-mix(in srgb, var(--text) 30%, transparent); }
 .timeline-done { fill: color-mix(in srgb, var(--primary) 70%, var(--surface)); }
 .timeline-now { fill: var(--primary); }
 .timeline-mark { stroke-width: 1.5; vector-effect: non-scaling-stroke; }
@@ -1928,7 +1928,7 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .glance-tile-sub.tone-success { color: var(--success); } .glance-tile-sub.tone-danger { color: var(--danger); }
 .glance-spark { height: 28px; } .glance-spark-line { stroke: var(--g-actual); } .glance-spark-dot { fill: var(--g-actual); }
 .glance-rate-bar { height: 12px; } .glance-rate-mark { fill: var(--text); }
-.glance-timeline { height: 24px; } .glance-timeline-line { stroke: color-mix(in srgb, var(--text) 25%, transparent); }
+.glance-timeline { height: 24px; } .glance-timeline-line { stroke: color-mix(in srgb, var(--text) 50%, transparent); }
 .glance-timeline-target { fill: var(--text); } .glance-timeline-forecast { fill: var(--g-forecast); }
 /* The chart across the full width; Status and Top risks side by side under it, each two tile columns wide. */
 .glance-main { display: grid; gap: 16px; }
