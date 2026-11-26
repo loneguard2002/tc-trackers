@@ -81,7 +81,8 @@ def test_every_tracker_page_shows_your_role_and_the_table(client, logged_in_user
     grant(logged_in_user, tracker, role)
     html = _page(client, f"/trackers/{tracker.id}/report")
     assert f"Your role: <strong>{role.title()}</strong>" in html
-    assert f'href="/trackers/{tracker.id}/role-guide" data-role-guide>What each role can do</a>' in html
+    assert f'href="/trackers/{tracker.id}/role-guide" data-role-guide title="What each role can do">' in html
+    assert '<span class="sr-only">What each role can do</span></a>' in html  # an information icon, named for readers
     dialog = unescape(re.search(r'<dialog id="role-guide-dialog".*?</dialog>', html, re.S).group(0))
     for text in ROW_TEXTS:  # in the tracker's own words: the test tracker calls its groups "Location"
         assert text.replace("group", "location") in dialog
