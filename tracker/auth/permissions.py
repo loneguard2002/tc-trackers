@@ -43,11 +43,16 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
         "Manage feedback",
         "Read, reply to and change the status of feedback in Admin › Feedback.",
     ),
+    "manage_sign_in_protection": (
+        "Manage sign-in protection",
+        "See which accounts and addresses the limit on failed sign-ins blocks, unblock them and change the limits in "
+        "Admin › Sign-in protection.",
+    ),
 }
 
 # How the Permission sets screen groups the permissions on each card. Every permission appears in exactly one group.
 PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("People and teams", ("manage_users", "manage_teams")),
+    ("People and teams", ("manage_users", "manage_teams", "manage_sign_in_protection")),
     ("Lists", ("manage_lists",)),
     ("Trackers", ("create_trackers", "import_workbooks", "view_all_trackers")),
     ("Application", ("manage_email_settings", "view_activity", "manage_feedback")),

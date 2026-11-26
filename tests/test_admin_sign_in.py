@@ -27,7 +27,7 @@ def test_anonymous_people_go_to_sign_in(client, db):
 
 
 @pytest.mark.parametrize("path", [PAGE, PAGE + "/unblock"])
-def test_only_administrators_reach_the_page(client, logged_in_user, path):
+def test_people_without_the_permission_are_refused(client, logged_in_user, path):
     response = post(client, path, {"kind": "account", "value": "x"}) if path.endswith("unblock") else client.get(path)
     assert response.status_code == 403
 
@@ -49,8 +49,26 @@ def test_the_menu_counts_who_is_blocked_for_administrators(client, db, logged_in
     assert "Sign-in protection" in html and "blocked now" in html
 
 
-def test_the_menu_link_is_for_administrators_only(client, logged_in_user):
+def test_the_menu_link_is_only_for_those_who_may_open_the_page(client, logged_in_user):
     assert "Sign-in protection" not in client.get("/").get_data(as_text=True)
+
+
+def test_the_permission_opens_the_page_and_the_menu_link(client, db, logged_in_user, give_set):
+    give_set(["manage_sign_in_protection"], user=logged_in_user)
+    _fail(db, "account", "blocked@example.com", 5)
+    assert client.get(PAGE).status_code == 200
+    html = client.get("/").get_data(as_text=True)
+    assert "Sign-in protection" in html and "blocked now" in html
+
+
+def test_a_holder_of_the_permission_can_unblock_and_change_the_limits(client, db, logged_in_user, give_set):
+    give_set(["manage_sign_in_protection"], user=logged_in_user)
+    _fail(db, "account", "blocked@example.com", 5)
+    post(client, PAGE + "/unblock", {"kind": "account", "value": "blocked@example.com"})
+    assert db.scalar(select(func.count()).select_from(LoginFailure)) == 0
+    assert _audit(db, "sign_in_unblocked")[0].user_id == logged_in_user.id
+    post(client, PAGE, {"account_attempts": "7", "address_attempts": "20", "window_minutes": "5"})
+    assert _audit(db, "sign_in_limits_changed")[0].user_id == logged_in_user.id
 
 
 def test_an_empty_page_says_so(client, db, logged_in_admin):

@@ -1,8 +1,8 @@
 """Admin › Sign-in protection: the limits on failed sign-ins, who they block now, and the failures of the last day.
 
-Administrators only. The page names each account (the email entered) and address (the client's IP) with failures in the
-last day: the table keeps them for a day, then deletes them. An administrator can change the limits and unblock an
-account or address at once; both are written to the activity log.
+For administrators and holders of the Manage sign-in protection permission. The page names each account (the email
+entered) and address (the client's IP) with failures in the last day: the table keeps them for a day, then deletes
+them. They can change the limits and unblock an account or address at once; both are written to the activity log.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from flask import abort, flash, redirect, render_template, request, url_for
 
 from ..audit import change, record
-from ..auth import admin_required, current_user, throttle
+from ..auth import current_user, permission_required, throttle
 from ..db import get_session
 from . import bp
 
@@ -48,7 +48,7 @@ def _page(limits: throttle.Limits, form: dict | None = None, errors: dict | None
 
 
 @bp.route("/sign-in-protection", methods=["GET", "POST"])
-@admin_required
+@permission_required("manage_sign_in_protection")
 def sign_in_protection():
     db = get_session()
     before = throttle.load_limits(db)
@@ -79,7 +79,7 @@ def sign_in_protection():
 
 
 @bp.post("/sign-in-protection/unblock")
-@admin_required
+@permission_required("manage_sign_in_protection")
 def sign_in_unblock():
     kind = request.form.get("kind", "")
     value = request.form.get("value", "")

@@ -32,6 +32,7 @@ def test_permission_names_in_order():
         "view_all_trackers",
         "view_activity",
         "manage_feedback",
+        "manage_sign_in_protection",
     ]
 
 

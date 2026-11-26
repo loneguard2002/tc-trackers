@@ -84,7 +84,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     @app.context_processor
     def sign_in_context():
         """The number of accounts and addresses blocked now, for the count beside Sign-in protection; asked only when
-        the menu shows it (administrators)."""
+        the menu shows it (to holders of Manage sign-in protection)."""
 
         def signin_blocked_count() -> int:
             db = get_session()
