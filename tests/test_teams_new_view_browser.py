@@ -3,6 +3,8 @@ and phone width, each without a Content Security Policy violation or a script er
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from conftest import browser_sign_in
 from playwright.sync_api import expect
@@ -85,6 +87,54 @@ def test_the_add_preview_follows_the_person_and_role(admin_page, live_server, sw
     )
     panel.locator(".role-card", has_text="Editor").click()
     expect(panel.locator(".add-preview")).to_contain_text("Kim Patel will be an Editor on 2 trackers")
+    clean(admin_page)
+
+
+def test_the_chart_draws_a_dotted_line_from_the_other_higher_team(admin_page, live_server, team_factory):
+    alpha, beta = team_factory("Alpha"), team_factory("Beta")
+    shared = team_factory("Shared", parents=(alpha, beta))
+    team_factory("Solo", parent=alpha)
+    admin_page.goto(f"{live_server}/admin/teams")
+    lines = admin_page.locator("[data-chart-links] path")
+    expect(lines).to_have_count(1)
+    assert lines.get_attribute("data-from") == str(beta.id) and lines.get_attribute("data-to") == str(shared.id)
+    # The line starts at Beta's box and ends at Shared's, below it.
+    beta_box = admin_page.locator(f'.org-node[data-team-id="{beta.id}"]').bounding_box()
+    shared_box = admin_page.locator(f'.org-node[data-team-id="{shared.id}"]').bounding_box()
+    end = admin_page.locator("[data-chart-links] circle").bounding_box()
+    assert abs(end["y"] + end["height"] / 2 - shared_box["y"]) < 3
+    assert shared_box["y"] > beta_box["y"] + beta_box["height"]
+    # Pointing at Shared lights its line and marks Beta.
+    admin_page.locator(f'.org-node[data-team-id="{shared.id}"]').hover()
+    expect(lines).to_have_class("is-lit")
+    expect(admin_page.locator(f'.org-node[data-team-id="{beta.id}"]')).to_have_class(re.compile("is-linked"))
+    # The switch hides the lines, and the choice is kept.
+    toggle = admin_page.get_by_label("Show “also under” lines")
+    expect(toggle).to_be_checked()
+    toggle.uncheck()
+    expect(lines).to_be_hidden()
+    admin_page.reload()
+    expect(admin_page.get_by_label("Show “also under” lines")).not_to_be_checked()
+    expect(admin_page.locator("[data-chart-links] path")).to_be_hidden()
+    clean(admin_page)
+
+
+def test_no_switch_without_a_team_under_two_teams(admin_page, live_server, swaps):  # noqa: F811
+    admin_page.goto(f"{live_server}/admin/teams")
+    expect(admin_page.locator(".org-node").first).to_be_visible()
+    expect(admin_page.locator("[data-links-toggle]")).to_be_hidden()
+    expect(admin_page.locator("[data-chart-links] path")).to_have_count(0)
+    clean(admin_page)
+
+
+def test_the_dotted_lines_are_left_out_at_phone_width(admin_page, live_server, team_factory):
+    alpha, beta = team_factory("Alpha"), team_factory("Beta")
+    team_factory("Shared", parents=(alpha, beta))
+    admin_page.set_viewport_size({"width": 390, "height": 844})
+    admin_page.goto(f"{live_server}/admin/teams")
+    expect(admin_page.get_by_text("Also under Beta")).to_be_visible()
+    expect(admin_page.locator("[data-chart-links]")).to_be_hidden()
+    expect(admin_page.locator("[data-links-toggle]")).to_be_hidden()
     clean(admin_page)
 
 

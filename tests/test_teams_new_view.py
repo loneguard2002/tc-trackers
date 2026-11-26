@@ -51,6 +51,7 @@ def test_a_team_under_two_teams_shows_once_with_also_under(db, team_factory):
     team_factory("Shared", parents=(beta, alpha))
     shared = [node for node in walk(chart(load_team_rows(db))) if node.row.name == "Shared"]
     assert len(shared) == 1 and shared[0].also_under == ["Beta"]  # under Alpha, the first by name
+    assert shared[0].also_ids == (beta.id,)  # for the dotted line from Beta
     alpha_node = next(node for node in chart(load_team_rows(db)) if node.row.name == "Alpha")
     assert [child.row.name for child in alpha_node.children] == ["Shared"]
 
@@ -98,6 +99,16 @@ def test_the_chart_marks_also_under_and_folds(client, logged_in_admin, team_fact
     assert "Also under Beta" in html
     chart_html = html.split("data-chart", 1)[1].split("</section>", 1)[0]
     assert chart_html.count(">Shared<") == 1  # once in the chart (the New team panel lists it too)
+
+
+def test_the_chart_carries_the_dotted_lines_data(client, logged_in_admin, team_factory):
+    alpha, beta = team_factory("Alpha"), team_factory("Beta")
+    shared = team_factory("Shared", parents=(alpha, beta))
+    html = page(client, "/admin/teams?view=new")
+    assert f'data-team-id="{shared.id}" data-also-ids="{beta.id}"' in html  # a dotted line from Beta, the other
+    assert f'data-team-id="{alpha.id}">' in html  # no other higher team, no line
+    assert "data-chart-links" in html
+    assert re.search(r'<label class="org-links-toggle" data-links-toggle hidden>', html)  # shown by the script
 
 
 def test_an_empty_chart_says_so(client, logged_in_admin):

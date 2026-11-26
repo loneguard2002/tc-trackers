@@ -21,11 +21,19 @@
     <header class="settings-section-head org-chart-head">
       <h2 id="chart-title">Hierarchy</h2>
       <label class="sr-only" for="chart-search">Find a team or person</label>
-      <input id="chart-search" class="tree-filter" type="search" placeholder="Find a team or person" autocomplete="off" data-chart-search hidden>
+      <div class="org-chart-tools">
+        <label class="org-links-toggle" data-links-toggle hidden><input type="checkbox" id="chart-links" checked> Show “also under” lines</label>
+        <input id="chart-search" class="tree-filter" type="search" placeholder="Find a team or person" autocomplete="off" data-chart-search hidden>
+      </div>
     </header>
     {% if nodes %}
-    <div class="org-chart-scroll" data-chart>{{ chart_level(nodes, true) }}</div>
-    <p class="org-chart-note">A team under two teams shows under one of them, marked “Also under” the other; people in either team reach it.</p>
+    <div class="org-chart-scroll" data-chart>
+      <div class="org-chart-stage" data-chart-stage>
+        <svg class="org-links" aria-hidden="true" focusable="false" data-chart-links></svg>
+        {{ chart_level(nodes, true) }}
+      </div>
+    </div>
+    <p class="org-chart-note">A team under two teams shows under one of them, marked “Also under” the other, with a dotted line from the other; people in either team reach it.</p>
     {% else %}
     <p class="empty-note">No teams yet.</p>
     {% endif %}

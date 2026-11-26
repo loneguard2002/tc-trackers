@@ -32,18 +32,19 @@ class ChartNode(NamedTuple):
     children: list[ChartNode]
     also_under: list[str]  # the other higher teams' names, by name: the team shows once, under the first
     folded: bool  # its children show folded, as "+N teams"
+    also_ids: tuple[int, ...] = ()  # the same other higher teams' ids, for the chart's dotted lines
 
 
 def chart(rows: list[TeamRow]) -> list[ChartNode]:
     """The top-level teams, each with the teams below it. A team under several teams sits under the first by name
-    and names the others in ``also_under``."""
+    and names the others in ``also_under`` (their ids in ``also_ids``)."""
     by_id = {row.id: row for row in rows}
     placed_under: dict[int | None, list[TeamRow]] = {}
-    also: dict[int, list[str]] = {}
+    also: dict[int, list[TeamRow]] = {}
     for row in rows:
         parents = sorted_by_name(by_id[parent_id] for parent_id in row.parent_ids if parent_id in by_id)
         placed_under.setdefault(parents[0].id if parents else None, []).append(row)
-        also[row.id] = [parent.name for parent in parents[1:]]
+        also[row.id] = parents[1:]
 
     def build(parent_id: int | None, depth: int, path: frozenset[int]) -> list[ChartNode]:
         nodes = []
@@ -52,7 +53,8 @@ def chart(rows: list[TeamRow]) -> list[ChartNode]:
                 continue
             children = build(row.id, depth + 1, path | {row.id})
             folded = depth >= FOLD_FROM_DEPTH and len(children) > FOLD_OVER
-            nodes.append(ChartNode(row, children, also[row.id], folded))
+            others = also[row.id]
+            nodes.append(ChartNode(row, children, [o.name for o in others], folded, tuple(o.id for o in others)))
         return nodes
 
     return build(None, 1, frozenset())

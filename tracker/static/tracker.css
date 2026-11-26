@@ -1939,6 +1939,19 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .teams-head-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
 .org-chart-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
 .org-chart-head .tree-filter { width: min(100%, 260px); margin: 0; }
+.org-chart-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.org-links-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: .8125rem; }
+.org-links-toggle[hidden] { display: none; }
+.org-links-toggle input { flex: none; width: auto; margin: 0; padding: 0; }
+/* The dotted lines to a team from its other higher teams (teams-new.js), drawn behind the boxes. */
+.org-chart-stage { position: relative; min-width: max-content; }
+.org-chart-stage .org-node { position: relative; z-index: 1; }
+.org-links { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.org-links path { fill: none; stroke: var(--warning); stroke-width: 2; stroke-dasharray: 6 5; opacity: .8; }
+.org-links circle { fill: var(--warning); opacity: .8; }
+.org-links .is-lit { opacity: 1; stroke-width: 3; }
+.org-chart-stage.links-off .org-links { display: none; }
+.org-chart-stage .org-node.is-linked { border-color: var(--warning); box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 35%, transparent); }
 .org-chart-scroll { overflow-x: auto; padding: 8px 4px 16px; }
 .org-chart-note { margin: 0; padding: 0 20px 16px; color: var(--muted); font-size: .8125rem; }
 /* The chart: each list is a row of teams; the lines are borders on pseudo-elements, 2px in the field border colour. */
@@ -2079,6 +2092,8 @@ a.chain-node:hover { border-color: var(--primary); }
 .org-chart li.is-match > .org-node { border: 2px solid var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
 @media (max-width: 640px) {
   .org-chart, .org-chart ul { display: block; min-width: 0; padding: 0; }
+  .org-chart-stage { min-width: 0; }
+  .org-links, .org-links-toggle { display: none; }
   .org-chart ul { margin-left: 10px; padding-left: 14px; border-left: 2px solid var(--field-border); }
   .org-chart li { display: block; padding: 8px 0 0; }
   .org-chart li::before, .org-chart li::after, .org-chart ul::before { display: none; }

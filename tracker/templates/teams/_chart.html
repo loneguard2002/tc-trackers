@@ -1,13 +1,13 @@
 {#- The Teams hierarchy as an organisation chart (the New view): nested lists whose lines are drawn by tracker.css; at
     phone width the same lists read as an indented outline. Expects ``search``, ``places``, ``members`` and
-    ``tracker_totals``. -#}
+    ``tracker_totals``. teams-new.js draws a dotted line from each other higher team (``data-also-ids``) to the team. -#}
 {% macro counted(n, noun) %}{{ n }} {{ noun if n == 1 else noun ~ 's' }}{% endmacro %}
 {% macro chart_level(nodes, root=false) -%}
 <ul{% if root %} class="org-chart"{% endif %}>
   {% for node in nodes %}
   {% set id = node.row.id %}
   <li data-search="{{ search.get(id, '') }}">
-    <a class="org-node" href="{{ url_for('teams.view', team_id=id) }}">
+    <a class="org-node" href="{{ url_for('teams.view', team_id=id) }}" data-team-id="{{ id }}"{% if node.also_ids %} data-also-ids="{{ node.also_ids|join(' ') }}"{% endif %}>
       <strong class="org-node-name">{{ node.row.name }}</strong>
       {% set place = places.get(id) %}
       {% if place %}<span class="org-node-place">{% set colour = region_colour(place.region_code) %}{% if colour %}<span class="region-mark region-c{{ colour }}" aria-hidden="true"></span>{% endif %}{{ place.region_code }}{% if place.city %} · {{ place.city }}{% endif %}</span>{% endif %}
