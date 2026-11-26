@@ -106,4 +106,22 @@
     nameInput.addEventListener("input", update);
     update();
   }
+
+  // The Add a member preview follows the chosen person and role.
+  each(document.querySelectorAll(".add-member-form"), function (addForm) {
+    var person = addForm.querySelector("[data-preview-source]");
+    var personText = addForm.querySelector("[data-preview-person]");
+    var roleText = addForm.querySelector("[data-preview-role-text]");
+    function preview() {
+      var option = person.options[person.selectedIndex];
+      if (option) personText.textContent = option.getAttribute("data-name");
+      var role = addForm.querySelector("input[name='role']:checked");
+      if (role) roleText.textContent = role.getAttribute("data-preview-role");
+    }
+    person.addEventListener("change", preview);
+    each(addForm.querySelectorAll("input[name='role']"), function (radio) {
+      radio.addEventListener("change", preview);
+    });
+    preview();
+  });
 })();

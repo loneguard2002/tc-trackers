@@ -9,9 +9,10 @@ import re
 import pytest
 from conftest import post
 
+from tracker.auth.guards import TEAM_WITH_SETS_MESSAGE
 from tracker.models import TeamMember
 from tracker.teams.overview import FOLD_OVER, chart
-from tracker.teams.tree import TeamRow, load_team_rows
+from tracker.teams.tree import ALREADY_MEMBER_MESSAGE, TeamRow, load_team_rows
 
 
 def page(client, url: str, status: int = 200) -> str:
@@ -270,3 +271,61 @@ def test_the_other_tabs_and_edit_details_render_in_the_new_view(client, logged_i
     )
     assert 'id="trackers-table"' in team_page(client, team, "trackers")
     assert 'action="/admin/teams/%d/rename"' % team.id in page(client, f"/admin/teams/{team.id}?view=new&edit=1")
+
+
+# --- Add a member ---------------------------------------------------------------------------------------------------
+
+
+def _add_panel(html: str) -> str:
+    return re.search(r'<aside id="add-member".*?</aside>', html, re.S).group(0)
+
+
+def test_the_panel_explains_each_role(client, logged_in_admin, swaps):
+    panel = _add_panel(team_page(client, swaps["team"]))
+    cards = re.findall(
+        r'name="role" value="(\w+)"[^>]*>\s*<span class="role-card-text"><strong>(\w+)</strong><span>([^<]+)</span>',
+        panel,
+    )
+    assert cards == [
+        ("viewer", "Viewer", "Opens the report and downloads it."),
+        ("editor", "Editor", "Also records entries, writes the weekly update, keeps risks and targets."),
+        ("owner", "Owner", "Also changes locations, settings and sends the report email."),
+    ]
+    assert 'value="viewer" checked' in panel  # the least access to start with
+
+
+def test_the_preview_names_the_trackers(client, logged_in_admin, swaps, tracker_factory):
+    tracker_factory(name="Old rollout", team_id=swaps["team"].id, status="archived")
+    panel = _add_panel(team_page(client, swaps["rates"]))
+    text = re.sub(r"<[^>]+>", "", re.search(r'<p class="add-preview".*?</p>', panel, re.S).group(0))
+    assert (
+        re.sub(r"\s+", " ", text)
+        .strip()
+        .endswith("will be a Viewer on 2 trackers: Rates laptop refresh, Swaps desk rollout.")
+    )
+    assert f'action="/admin/teams/{swaps["rates"].id}/members"' in panel
+
+
+def test_the_preview_counts_past_three(client, logged_in_admin, team_factory, tracker_factory):
+    team = team_factory("Many")
+    for name in ("A", "B", "C", "D", "E"):
+        tracker_factory(name=f"Tracker {name}", team_id=team.id)
+    panel = _add_panel(team_page(client, team))
+    assert "Tracker A, Tracker B, Tracker C and 2 more" in re.sub(r"<[^>]+>", "", panel)
+
+
+def test_a_refused_add_shows_the_new_view_with_the_message(client, logged_in_admin, swaps):
+    team, ana = swaps["team"], swaps["people"]["Ana Silva"]
+    team_page(client, team)  # the New view is kept in the session
+    response = post(client, f"/admin/teams/{team.id}/members", {"user_id": str(ana.id), "role": "viewer"})
+    assert response.status_code == 400
+    html = html_lib.unescape(response.get_data(as_text=True))
+    assert ALREADY_MEMBER_MESSAGE in html and '<aside id="add-member"' in html and "access-chain" in html
+
+
+def test_a_team_holding_sets_shows_the_refusal_instead_of_the_panel(client, logged_in_user, give_set, team_factory):
+    team = team_factory("Holders")
+    give_set(["manage_teams"], user=logged_in_user)
+    give_set(["view_activity"], team=team)
+    panel = _add_panel(team_page(client, team))
+    assert TEAM_WITH_SETS_MESSAGE in panel and "<form" not in panel

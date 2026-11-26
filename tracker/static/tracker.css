@@ -2033,6 +2033,20 @@ a.chain-node:hover { border-color: var(--primary); }
 .role-pill.role-owner { background: color-mix(in srgb, var(--success) 14%, var(--surface)); }
 .role-pill.role-editor { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); }
 .from-change { min-width: 150px; font-size: .8125rem; }
+.add-member-panel { flex: 1 1 320px; min-width: 0; margin: 0; padding: 16px 18px; border: 2px solid var(--primary); }
+.add-member-panel h3 { margin: 0 0 12px; font-size: 1rem; }
+.add-member-form { display: flex; flex-direction: column; gap: 14px; }
+.add-member-person { display: flex; flex-direction: column; gap: 6px; }
+.add-member-person select, .add-member-person input { width: 100%; box-sizing: border-box; }
+.role-cards { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; border: 0; }
+.role-card { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--field-border); border-radius: 8px; cursor: pointer; }
+.role-card:has(input:checked) { border: 2px solid var(--primary); padding: 9px 11px; background: color-mix(in srgb, var(--primary) 7%, var(--surface)); }
+.role-card input { margin-top: 3px; }
+.role-card-text { display: flex; flex-direction: column; gap: 2px; font-size: .875rem; }
+.role-card-text span { color: var(--muted); }
+.add-preview { margin: 0; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--text) 6%, var(--surface)); font-size: .875rem; line-height: 1.5; }
+.add-member-submit { justify-content: center; min-height: 44px; }
+.add-member-panel .role-guide-foldout { margin-top: 14px; }
 /* A search marks the teams it matches (teams-new.js). */
 .org-chart li.is-match > .org-node { border: 2px solid var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
 @media (max-width: 640px) {

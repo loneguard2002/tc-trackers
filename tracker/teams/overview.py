@@ -14,7 +14,14 @@ from sqlalchemy.orm import Session
 
 from ..auth import ROLE_ORDER
 from ..models import TeamMember, Tracker, User
-from .tree import TeamRow, ancestors, sorted_by_name
+from .tree import TeamRow, ancestors, descendants, sorted_by_name
+
+# What each role allows, in the role guide's words (tracker/auth/role_guide.py), for the Add a member panel.
+ROLE_SUMMARY = {
+    "viewer": "Opens the report and downloads it.",
+    "editor": "Also records entries, writes the weekly update, keeps risks and targets.",
+    "owner": "Also changes locations, settings and sends the report email.",
+}
 
 FOLD_FROM_DEPTH = 3  # the top level is depth 1
 FOLD_OVER = 8  # a team at that depth or deeper with more teams below it than this shows them folded
@@ -156,3 +163,14 @@ def reach_people(session: Session, rows: list[TeamRow]) -> dict[int, list[ReachP
                     best[user_id] = ReachPerson(full_name, role, names[team_id])
         found[row.id] = sorted(best.values(), key=lambda p: (-ROLE_ORDER[p.role], p.name.casefold(), p.name))
     return found
+
+
+def reach_trackers(session: Session, rows: list[TeamRow], team_id: int) -> list[str]:
+    """The names of the active trackers a member of the team reaches: the team's and those of every team below it."""
+    return list(
+        session.scalars(
+            select(Tracker.name)
+            .where(Tracker.team_id.in_(descendants(rows, team_id)), Tracker.status != "archived")
+            .order_by(func.lower(Tracker.name), Tracker.id)
+        )
+    )
