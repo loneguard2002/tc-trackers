@@ -318,6 +318,7 @@ def require_tracker_role(min_role: str):
             g.tracker, g.role = tracker, role
             return view(*args, tracker_id=tracker_id, **kwargs)
 
+        wrapped.required_role = min_role  # read by tests/test_role_guide.py
         return wrapped
 
     return decorator

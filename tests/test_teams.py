@@ -422,7 +422,8 @@ def test_people_list_direct_members_before_those_from_teams_above(
 def test_team_page_has_no_details_section_and_edits_in_the_header(client, logged_in_admin, team_factory, place):
     team = team_factory(name="Windows")
     raw = raw_of(client.get(f"/admin/teams/{team.id}"))
-    assert "<details" not in raw and 'id="details"' not in raw
+    # The only fold-out is the role guide on the People tab.
+    assert "<details" not in raw.replace('<details class="role-guide-foldout">', "") and 'id="details"' not in raw
     bad = post(client, f"/admin/teams/{team.id}/rename", {"name": "", **place})
     assert bad.status_code == 400 and 'class="team-header team-edit"' in raw_of(bad)
     assert "Edit details" in raw and f"/admin/teams/{team.id}/parents" in raw and "Higher teams" in raw

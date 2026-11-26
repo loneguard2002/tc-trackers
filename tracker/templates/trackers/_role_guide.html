@@ -1,0 +1,30 @@
+{#- What each tracker role can do: one table, shown beside a tracker's tabs (a pop-up and its own page) and where roles
+    are given (the Access tab, a team's People tab, a region's Access page). The rows come from
+    tracker/auth/role_guide.py. ``tracker`` (optional) gives the table the tracker's own name for its groups. -#}
+{% from "macros.html" import icon %}
+{% macro role_guide_table(tracker=none) -%}
+{% set label = tracker.group_label if tracker and tracker.group_label else none %}
+<div class="section-table role-guide">
+  <table class="table role-guide-table">
+    <thead><tr><th scope="col"><span class="sr-only">What</span></th><th scope="col">Viewer</th><th scope="col">Editor</th><th scope="col">Owner</th></tr></thead>
+    <tbody>
+      {% for row in role_guide_rows(label, label|plural if label else none) %}
+      <tr>
+        <th scope="row">{{ row.text }}</th>
+        {% for role in ('viewer', 'editor', 'owner') %}
+        <td class="role-guide-mark">{% if row[role] %}{{ icon('check') }}<span class="sr-only">{{ role|title }}: yes</span>{% else %}<span class="role-guide-no" aria-hidden="true">–</span><span class="sr-only">{{ role|title }}: no</span>{% endif %}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<ul class="role-guide-notes">{% for note in role_guide_notes %}<li>{{ note }}</li>{% endfor %}</ul>
+{%- endmacro %}
+
+{% macro role_guide_foldout(tracker=none) -%}
+<details class="role-guide-foldout">
+  <summary>What each role can do</summary>
+  {{ role_guide_table(tracker) }}
+</details>
+{%- endmacro %}

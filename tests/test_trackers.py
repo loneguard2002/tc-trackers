@@ -243,7 +243,8 @@ def test_groups_page_shows_progress_totals_and_retired_in_the_one_table(client, 
     make_group(db, tracker, name="Old site", baseline=0, retired=True, sort_order=3)
     add_entry(db, tracker, first, date(2026, 9, 1), 4, date(2026, 9, 4))
     html = client.get(f"/trackers/{tracker.id}/groups").get_data(as_text=True)
-    assert html.count("<table") == 1 and "Retired locations (" not in html
+    # One locations table; the other is the role guide in the pop-up beside the tracker's tabs.
+    assert html.count("<table") - html.count("role-guide-table") == 1 and "Retired locations (" not in html
     assert html.index("Site A") < html.index("Site B") < html.index("Old site")  # the owner's order, retired in place
     assert 'data-status="retired"' in html and 'data-status="active"' in html
     assert "rag-dot rag-dot-red" in html and "4 of 10" in html

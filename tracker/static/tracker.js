@@ -303,3 +303,21 @@
     if (field.form) field.form.addEventListener("submit", function () { show(false); });
   });
 })();
+
+// "What each role can do" beside a tracker's tabs opens the table in a pop-up. Without a modal dialog, or with a
+// modifier key, the link opens the table's own page.
+(function () {
+  "use strict";
+
+  var dialog = document.getElementById("role-guide-dialog");
+  var link = document.querySelector("a[data-role-guide]");
+  if (!dialog || !link || typeof dialog.showModal !== "function") return;
+  link.addEventListener("click", function (event) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    dialog.showModal();
+  });
+  Array.prototype.forEach.call(dialog.querySelectorAll("[data-close]"), function (button) {
+    button.addEventListener("click", function () { dialog.close(); });
+  });
+})();

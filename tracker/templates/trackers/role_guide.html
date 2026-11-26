@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% from "trackers/_role_guide.html" import role_guide_table %}
+{% block content %}
+<h1>{{ tracker.name }}</h1>
+{% include "trackers/_nav.html" %}
+<section class="settings-section role-guide-page" aria-labelledby="role-guide-heading">
+  <header class="settings-section-head">
+    <h2 id="role-guide-heading">What each role can do</h2>
+    <p>Your role on this tracker is shown beside its tabs.</p>
+  </header>
+  {{ role_guide_table(tracker) }}
+</section>
+{% endblock %}

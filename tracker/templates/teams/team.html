@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "trackers/_role_guide.html" import role_guide_foldout %}
 {% from "macros.html" import csrf_field, field, icon, people_count, title_crumb %}
 {% from "lists/_table.html" import code_badge, search_box, status_filters, clear_filters, sort_header, no_match, table_pager %}
 {% from "teams/_tracker_regions.html" import regions_after %}
@@ -85,6 +86,7 @@
     <div id="tab-people">
     <section class="list-panel team-panel" id="people" aria-labelledby="section-people">
       <h2 class="sr-only" id="section-people">People</h2>
+      <div class="team-add-panel">{{ role_guide_foldout() }}</div>
       {% if not can_add %}
       <p class="team-add-panel team-add-note">{{ add_refusal }}</p>
       {% elif candidates %}
