@@ -155,8 +155,10 @@ def _back_to_report(tracker, message: str):
 
 def _export(tracker_id: int, extension: str, convert, mimetype: str) -> Response:
     tracker = g.tracker
-    if not limits.allow(get_session(), current_user().id):
-        return _back_to_report(tracker, limits.LIMIT_MESSAGE)
+    db = get_session()
+    per_minute = limits.load_per_minute(db)
+    if not limits.allow(db, current_user().id, per_minute):
+        return _back_to_report(tracker, limits.limit_message(per_minute))
     html, week_ending = _print_html(tracker)
     try:
         data = convert(html, wait=EXPORT_WAIT_SECONDS)
