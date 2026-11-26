@@ -11,7 +11,7 @@ from conftest import post
 from sqlalchemy import select
 
 from tracker.auth.guards import SELF_PROMOTION_MESSAGE, TEAM_WITH_SETS_MESSAGE
-from tracker.models import AuditLog, TeamMember
+from tracker.models import AuditLog, Team, TeamMember, TeamParent
 from tracker.teams.overview import FOLD_OVER, chart
 from tracker.teams.tree import ALREADY_MEMBER_MESSAGE, TeamRow, load_team_rows
 from tracker.teams.views import CYCLE_MESSAGE
@@ -429,3 +429,61 @@ def test_inactive_members_listed_not_counted(client, logged_in_admin, swaps, use
 def test_trackers_tab_says_what_members_also_see(client, logged_in_admin, swaps):
     html = page(client, f"/admin/teams/{swaps['top'].id}?view=new&tab=trackers")
     assert "Members also see 2 trackers of the 2 teams below." in text_of(html)
+
+
+# --- The New team form (simple redesign, spec 4.3) -------------------------------------------------------------------
+
+
+def _form(html: str) -> str:
+    return re.search(r'<form id="new-team-form".*?</form>', html, re.S).group(0)
+
+
+def _select(form: str, name: str) -> str:
+    return re.search(rf'<select id="{name}" name="{name}".*?</select>', form, re.S).group(0)
+
+
+def _links(db, team_id):
+    return sorted(db.scalars(select(TeamParent.parent_id).where(TeamParent.team_id == team_id)))
+
+
+def test_create_with_also_under_makes_a_shared_team(client, logged_in_admin, db, team_factory, region_factory):
+    alpha, beta = team_factory("Alpha"), team_factory("Beta")
+    region = region_factory("EMEA")
+    page(client, f"/admin/teams/{alpha.id}?view=new")
+    response = post(client, "/admin/teams", {"name": "Rates Ops", "parent_id": str(alpha.id), "also_parent_id": str(beta.id), "region_id": str(region.id)})
+    assert response.status_code == 302
+    team = db.scalar(select(Team).where(Team.name == "Rates Ops"))
+    assert _links(db, team.id) == sorted([alpha.id, beta.id])
+    entries = {(e.action, e.detail.get("parent")) for e in db.scalars(select(AuditLog).where(AuditLog.entity_id == str(team.id)))}
+    assert ("team_created", "Alpha") in entries and ("team_parent_added", "Beta") in entries
+
+
+def test_also_under_same_as_sits_under_makes_one_link(client, logged_in_admin, db, team_factory, region_factory):
+    alpha = team_factory("Alpha")
+    region = region_factory("EMEA")
+    post(client, "/admin/teams", {"name": "Solo", "parent_id": str(alpha.id), "also_parent_id": str(alpha.id), "region_id": str(region.id)})
+    team = db.scalar(select(Team).where(Team.name == "Solo"))
+    assert _links(db, team.id) == [alpha.id]
+    assert not db.scalar(select(AuditLog).where(AuditLog.entity_id == str(team.id), AuditLog.action == "team_parent_added"))
+
+
+def test_refused_create_keeps_what_was_entered(client, logged_in_admin, team_factory, region_factory, location_factory):
+    alpha, beta = team_factory("Alpha"), team_factory("Beta")
+    region = region_factory("EMEA")
+    geneva = location_factory(region, "Geneva", "CH")
+    page(client, f"/admin/teams/{alpha.id}?view=new")
+    response = post(client, "/admin/teams", {"name": "Beta", "parent_id": str(alpha.id), "also_parent_id": str(beta.id), "region_id": str(region.id), "location_id": str(geneva.id), "description": "Kept"})
+    assert response.status_code == 400
+    form = _form(html_lib.unescape(response.get_data(as_text=True)))
+    assert "hidden" not in form.split(">", 1)[0]
+    assert 'value="Beta"' in form and ">Kept</textarea>" in form
+    assert re.search(rf'<option value="{alpha.id}"[^>]*selected', _select(form, "parent_id"))
+    assert re.search(rf'<option value="{beta.id}"[^>]*selected', _select(form, "also_parent_id"))
+    assert re.search(rf'<option value="{region.id}"\s+selected', form) and re.search(rf'<option value="{geneva.id}"\s+selected', form)
+
+
+def test_sits_under_preselects_the_viewed_team(client, logged_in_admin, swaps):
+    form = _form(page(client, f"/admin/teams/{swaps['rates'].id}?view=new&new=1"))
+    assert "hidden" not in form.split(">", 1)[0]
+    assert re.search(rf'<option value="{swaps["rates"].id}"[^>]*selected', _select(form, "parent_id"))
+    assert "No second team" in _select(form, "also_parent_id")

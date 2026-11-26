@@ -16,6 +16,12 @@
     {% endfor %}
   </select>
   {% endcall %}
+  {% call field('Also under', 'Optional: makes it a shared team, reached by the members of both teams.', 'also_parent_id') %}
+  <select id="also_parent_id" name="also_parent_id" aria-describedby="also_parent_id-help">
+    <option value="" {{ 'selected' if not new_form.get('also_parent_id') }}>No second team</option>
+    {% for o in team_options %}<option value="{{ o.id }}" {{ 'selected' if new_form.get('also_parent_id') == o.id|string }}>{{ o.label }}</option>{% endfor %}
+  </select>
+  {% endcall %}
   <p class="field-help" data-place-hint hidden>Filled from <span data-place-from></span>.</p>
   {% include "teams/_place_fields.html" %}
   {% call field('Description', 'Optional, at most 500 characters.', 'description') %}

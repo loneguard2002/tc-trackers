@@ -252,14 +252,21 @@ def create():
     name = request.form.get("name", "").strip()
     description = request.form.get("description", "").strip()
     parent, parent_error = parse_team_id(db, request.form.get("parent_id"))
+    also, also_error = parse_team_id(db, request.form.get("also_parent_id"))  # the New view's Also under
+    if also is not None and parent is not None and also.id == parent.id:
+        also = None  # the same team twice is one link
     region, location, place_error = parse_place(
         db, request.form.get("region_id"), request.form.get("location_id"), None, None
     )
     errors = [
-        e for e in (name_error(db, Team, name, "team"), description_error(description), parent_error, place_error) if e
+        e
+        for e in (name_error(db, Team, name, "team"), description_error(description), parent_error, also_error, place_error)
+        if e
     ]
     if errors:
-        return _render_index(request.form, errors, 400)
+        return _refuse_create(parent, errors)
+    actor = current_user()
+    before = snapshot_access(db, actor) if also is not None else None
     parent_path = team_labels(load_team_rows(db)).get(parent.id, parent.name) if parent else None
     place = _place_text(region, location)
     team = Team(name=name, description=description, region_id=region.id, location_id=location.id if location else None)
@@ -269,15 +276,31 @@ def create():
         if parent:
             db.add(TeamParent(team_id=team.id, parent_id=parent.id))
             db.flush()
+        if also is not None:
+            db.add(TeamParent(team_id=team.id, parent_id=also.id))
+            db.flush()
+            if raises_own_access(db, actor, before):  # a new team has no trackers, so this holds; checked all the same
+                db.rollback()
+                return _refuse_create(parent, [SELF_PROMOTION_MESSAGE])
         record(
             db,
-            user_id=current_user().id,
+            user_id=actor.id,
             tracker_id=None,
             action="team_created",
             entity="team",
             entity_id=team.id,
             detail={"name": name, "parent": parent_path, "location": place},
         )
+        if also is not None:
+            record(
+                db,
+                user_id=actor.id,
+                tracker_id=None,
+                action="team_parent_added",
+                entity="team",
+                entity_id=team.id,
+                detail={"team": name, "parent": also.name},
+            )
         db.commit()
     except IntegrityError:  # the same name was taken, or the parent, region or location deleted, at the same moment
         db.rollback()
@@ -286,9 +309,22 @@ def create():
             or parse_place(db, request.form.get("region_id"), request.form.get("location_id"), None, None)[2]
             or TEAM_CHOICE_ERROR
         )
-        return _render_index(request.form, [error], 400)
+        return _refuse_create(parse_team_id(db, request.form.get("parent_id"))[0], [error])
     flash(f"Created the team {name}.", "success")
     return _to_team(team)
+
+
+def _refuse_create(parent: Team | None, errors: list[str]):
+    """A refused create, shown again with what was typed: in the New view on the Sits under team's page (else the
+    first top-level team's) with the New team form open; in Classic, or with no team at all, on the index."""
+    if chosen_view() == "new":
+        team = parent
+        if team is None:
+            tops = sorted_by_name(row for row in load_team_rows(get_session()) if not row.parent_ids)
+            team = get_session().get(Team, tops[0].id) if tops else None
+        if team is not None:
+            return _render_team(team, errors, 400, form=request.form, new_form=request.form)
+    return _render_index(request.form, errors, 400)
 
 
 # --- A team's page --------------------------------------------------------------------------------------------------
@@ -411,6 +447,7 @@ def _render_team(
     tab: str = "people",
     picking: bool = False,
     picked: frozenset[int] = frozenset(),
+    new_form=None,
 ):
     """The team's page with one tab open; ``picking`` opens the Trackers tab's picker, whose ``picked`` boxes are
     ticked, and shows ``errors`` there instead of in the header."""
@@ -445,9 +482,13 @@ def _render_team(
     page = render_template(
         "teams/team_new.html" if view == "new" else "teams/team.html",
         **(_simple_team_context(db, rows, team) if view == "new" else {}),
-        **(_structure_context(db, rows, team.id, new_open=request.args.get("new") == "1") if view == "new" else {}),
-        new_form={},
-        selected_parent=str(team.id),
+        **(
+            _structure_context(db, rows, team.id, new_open=new_form is not None or request.args.get("new") == "1")
+            if view == "new"
+            else {}
+        ),
+        new_form=new_form or {},
+        selected_parent=new_form.get("parent_id", "") if new_form is not None else str(team.id),
         team_total=len(rows),
         **context,
         view_urls=switch_urls("teams.view", team_id=team.id, tab=tab if tab in TEAM_TABS and tab != "people" else None),
