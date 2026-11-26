@@ -443,7 +443,8 @@ def test_a_refused_record_keeps_the_search_sort_and_page(client, db, tracker_fac
     response = post(client, entry_url(tracker, "/new"), {**entry_form(group, "2026-01-07", "2"), **filters})
     assert response.status_code == 302
     location = response.headers["Location"]
-    assert "q=alpha" in location and "sort=-note" in location and "page=2" in location
+    # The new entry may be on another page, so the list returns to page 1.
+    assert "q=alpha" in location and "sort=-note" in location and "page=" not in location
 
 
 def test_entries_csv_takes_the_search(client, db, tracker_factory, user_factory, grant):
@@ -1205,3 +1206,121 @@ def test_past_updates_name_a_missing_preparer_as_a_former_user(db, tracker_facto
     }
     [row] = _past_updates(db, [week], saved)
     assert row["prepared_by"] == "a former user"
+
+
+def add_entries(db, tracker, rows):
+    """``rows`` is (group, days before the week ending 2026-01-09, quantity, note)."""
+    for group, days, quantity, note in rows:
+        db.add(
+            CompletionEntry(
+                tracker_id=tracker.id,
+                group_id=group.id,
+                entry_date=date(2026, 1, 9) - timedelta(days=days),
+                week_ending=date(2026, 1, 9),
+                quantity=quantity,
+                note=note,
+            )
+        )
+    db.commit()
+
+
+def positions(html: str, *needles: str) -> list[int]:
+    return [html.index(needle) for needle in needles]
+
+
+def test_rows_equal_on_the_sorted_column_keep_the_newest_first_order(client, db, tracker_factory, user_factory, grant):
+    tracker, _, site_a = long_tracker(db, tracker_factory, user_factory, grant, client)
+    alpha = Group(tracker_id=tracker.id, name="Alpha site", baseline=1)
+    db.add(alpha)
+    db.commit()
+    add_entries(
+        db,
+        tracker,
+        [
+            (site_a, 3, 1, "beta old"),
+            (site_a, 0, 1, "beta new"),
+            (alpha, 4, 1, "alpha old"),
+            (alpha, 1, 1, "alpha new"),
+        ],
+    )
+    default_order = ("beta new", "alpha new", "beta old", "alpha old")  # newest date first
+    for sort, expected in (
+        ("location", ("alpha new", "alpha old", "beta new", "beta old")),
+        ("-location", ("beta new", "beta old", "alpha new", "alpha old")),
+        ("quantity", default_order),  # every quantity is equal, so each row keeps the default order
+        ("-quantity", default_order),
+    ):
+        html = client.get(entry_url(tracker, f"?sort={sort}")).get_data(as_text=True)
+        order = positions(html, *expected)
+        assert order == sorted(order), sort
+
+
+def test_location_and_note_sort_ignore_case_and_read_numbers_naturally(
+    client, db, tracker_factory, user_factory, grant
+):
+    tracker, _, site_a = long_tracker(db, tracker_factory, user_factory, grant, client)
+    ld5, ld10 = (
+        Group(tracker_id=tracker.id, name="LD5", baseline=1),
+        Group(tracker_id=tracker.id, name="ld10", baseline=1),
+    )
+    db.add_all([ld5, ld10])
+    db.commit()
+    add_entries(db, tracker, [(ld10, 0, 1, "Item 10"), (ld5, 1, 1, "item 5"), (site_a, 2, 1, "item 2")])
+    html = client.get(entry_url(tracker, "?sort=location")).get_data(as_text=True)
+    order = positions(html, 'Location">LD5<', 'Location">ld10<', 'Location">Site A<')
+    assert order == sorted(order)
+    html = client.get(entry_url(tracker, "?sort=-location")).get_data(as_text=True)
+    order = positions(html, 'Location">Site A<', 'Location">ld10<', 'Location">LD5<')
+    assert order == sorted(order)
+    html = client.get(entry_url(tracker, "?sort=note")).get_data(as_text=True)
+    order = positions(html, ">item 2<", ">item 5<", ">Item 10<")
+    assert order == sorted(order)
+
+
+def test_entries_with_no_note_come_last_in_both_directions(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    add_entries(db, tracker, [(group, 0, 1, ""), (group, 1, 2, "bravo"), (group, 2, 3, "alpha"), (group, 3, 4, "")])
+    for sort, expected in (("note", [3, 2, 1, 4]), ("-note", [2, 3, 1, 4])):
+        html = client.get(entry_url(tracker, f"?sort={sort}")).get_data(as_text=True)
+        # The empty notes (quantities 1 and 4) follow the written ones, newest first.
+        assert [int(n) for n in re.findall(r'class="num" data-label="Quantity">(\d)<', html)] == expected, sort
+
+
+def test_entries_clear_filters_drops_search_location_and_week_and_keeps_the_sort(
+    client, db, tracker_factory, user_factory, grant
+):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    weekly_entries(db, tracker, group, 2, note="alpha")
+    plain = client.get(entry_url(tracker)).get_data(as_text=True)
+    assert "Clear filters" not in plain and "Clear search" not in plain
+    keep = f"/trackers/{tracker.id}/entries?sort=-quantity"
+    for query in (
+        f"?sort=-quantity&q=alpha&group={group.id}&week=2026-01-02",
+        "?sort=-quantity&q=alpha",
+        f"?sort=-quantity&group={group.id}",
+        "?sort=-quantity&week=2026-01-02",
+    ):
+        html = client.get(entry_url(tracker, query)).get_data(as_text=True)
+        assert f'<a class="button button-small" href="{keep}">Clear filters</a>' in html, query
+    assert "Clear search" not in html
+
+
+def test_the_no_match_line_uses_the_table_look_and_offers_clear_filters(
+    client, db, tracker_factory, user_factory, grant
+):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    weekly_entries(db, tracker, group, 1, note="alpha")
+    html = client.get(entry_url(tracker, "?q=nomatch&sort=note")).get_data(as_text=True)
+    assert (
+        f'<p class="list-no-match">No entries match these filters. '
+        f'<a class="button button-small" href="/trackers/{tracker.id}/entries?sort=note">Clear filters</a></p>'
+    ) in html
+    html = client.get(entry_url(tracker, "?week=2025-12-26")).get_data(as_text=True)
+    assert 'class="list-no-match"' in html
+
+
+def test_the_pager_controls_that_cannot_be_used_are_plain_text(client, db, tracker_factory, user_factory, grant):
+    tracker, _, group = long_tracker(db, tracker_factory, user_factory, grant, client)
+    weekly_entries(db, tracker, group, 12)
+    html = client.get(entry_url(tracker)).get_data(as_text=True)
+    assert '<span class="pager-button is-disabled">Previous</span>' in html and "aria-disabled" not in html

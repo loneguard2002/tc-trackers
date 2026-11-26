@@ -624,7 +624,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 :root { --subnav-height: 42px; --sticky-top: var(--topbar-height); }
 /* Sticky table headings must not cover a control reached with Shift+Tab (WCAG 2.4.11). Only on pages with such
    headings: the section links of the other pages land by their own scroll-margin. */
-html:has(:is(.list-table, .user-table, .section-table[data-table-frame]) thead th) { scroll-padding-top: calc(var(--sticky-top) + 3rem); }
+html:has(:is(.list-table, .user-table, .entry-table, .section-table[data-table-frame]) thead th) { scroll-padding-top: calc(var(--sticky-top) + 3rem); }
 /* Where a table's heading row sticks: under the top bar, and under the sub-navigation too on a page that has one. */
 main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-height)); }
 .subnav { position: sticky; top: var(--topbar-height); z-index: 20; display: flex; align-items: center; gap: 24px; height: var(--subnav-height); margin: -24px 0 20px; border-bottom: 1px solid var(--border); background: var(--bg); box-shadow: -8px 0 0 var(--bg), 8px 0 0 var(--bg); overflow-x: auto; scrollbar-width: none; }
@@ -1186,7 +1186,7 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .entry-table td:nth-child(2) { width: 14rem; }
 .entry-table .num { width: 5rem; font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
 .entry-note { color: var(--muted); overflow-wrap: anywhere; }
-.entry-table thead th { padding: 8px 12px 6px; color: var(--muted); font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-align: left; text-transform: uppercase; }
+.entry-table thead th { position: sticky; top: var(--sticky-top); z-index: 2; background: var(--surface); padding: 8px 12px 6px; color: var(--muted); font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-align: left; text-transform: uppercase; }
 .entry-table thead th:first-child { padding-left: 0; }
 .entry-table thead th:last-child { padding-right: 0; }
 .entry-table thead th.num { text-align: right; }
@@ -1483,7 +1483,8 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 :is(.list-table, .user-table, .section-table[data-table-frame]) thead th { position: sticky; top: var(--sticky-top); z-index: 2; background: var(--surface); }
 .set-panel .section-table[data-table-frame] thead th { position: static; }  /* the side panel scrolls on its own */
 @media (min-width: 721px) {
-  :is(.section-table:has(.card-rows), .section-table[data-table-frame]) { overflow-x: clip; }
+  /* Only once scripts run: without lists.js nothing marks a wide table, so it keeps its own sideways scroll. */
+  .has-js :is(.section-table:has(.card-rows), .section-table[data-table-frame]) { overflow-x: clip; }
   :is(.section-table:has(.card-rows), .section-table[data-table-frame]).is-wide { overflow-x: auto; }  /* set by lists.js when the table does not fit */
   .set-panel .section-table[data-table-frame] { overflow-x: auto; }
   /* A wrapper that scrolls sideways is the sticky container, so its headings would sit var(--sticky-top) down over the rows. */

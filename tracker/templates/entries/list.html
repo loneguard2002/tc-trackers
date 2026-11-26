@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import bar, csrf_field, icon, tool_link %}
-{% from "lists/_table.html" import server_pager, server_sort_header %}
+{% from "lists/_table.html" import server_no_match, server_pager, server_sort_header %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='entries.js', v=app_version) }}" defer></script>
 {% endblock %}
@@ -81,7 +81,7 @@
         <select id="week" name="week" data-autosubmit><option value="">All weeks</option>
           {% for w in weeks %}<option value="{{ w.isoformat() }}" {{ 'selected' if selected_week == w }}>Week ending {{ format_date(w) }}</option>{% endfor %}</select>
         <button class="button button-small" type="submit">Apply</button>
-        {% if state.q %}<a class="button button-small" href="{{ clear_url }}">Clear search</a>{% endif %}
+        {% if filtered %}<a class="button button-small" href="{{ clear_url }}">Clear filters</a>{% endif %}
       </form>
     </div>
     {% if by_week %}
@@ -140,7 +140,7 @@
       {% endfor %}
     </div>
     {% else %}
-    <p class="empty-note">No entries match these filters.{% if state.q %} <a href="{{ clear_url }}">Clear search</a>{% endif %}</p>
+    {{ server_no_match('No entries match these filters.', clear_url if filtered else none) }}
     {% endif %}
     {{ server_pager(state, week_total, 'weeks', 'week', page_url, none, first_week_number, last_week_number,
         extra=matching_entries ~ (' entry' if matching_entries == 1 else ' entries'), noun_first=True, overall=overall_weeks) }}

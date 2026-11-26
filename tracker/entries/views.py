@@ -101,6 +101,30 @@ def _entry_filters(tracker: Tracker, week: date | None, group_id: int | None, q:
     return conditions
 
 
+def _text_key(text: str) -> list:
+    """A sort key for text as lists.js compares it: ignoring case and accents, numbers inside the text in natural
+    order (LD5 before LD10)."""
+    plain = "".join(c for c in unicodedata.normalize("NFKD", text.casefold()) if not unicodedata.combining(c))
+    # re.split puts the digit runs at the odd places, so a number is only ever compared with a number.
+    return [int(part) if n % 2 else part for n, part in enumerate(re.split(r"(\d+)", plain))]
+
+
+def _sorted_entries(entries: list[CompletionEntry], sort: str, descending: bool, names: dict[int, str]) -> list:
+    """One week's entries ordered by a column, as the browser tables order theirs: text ignoring case with natural
+    numbers, empty values last in both directions, and rows equal on the column in the order given (newest first)."""
+    if sort == "date":
+        return sorted(entries, key=lambda e: e.entry_date, reverse=descending)
+    if sort == "quantity":
+        return sorted(entries, key=lambda e: e.quantity, reverse=descending)
+
+    def text(entry: CompletionEntry) -> str:
+        return names.get(entry.group_id, "") if sort == "location" else (entry.note or "")
+
+    filled = [e for e in entries if text(e).strip()]
+    empty = [e for e in entries if not text(e).strip()]
+    return sorted(filled, key=lambda e: _text_key(text(e)), reverse=descending) + empty
+
+
 # The quick-add form's last Record on this browser: {"tracker", "group_id", "entry_date", "entry", "message"}.
 QUICK_ADD_KEY = "quick_add"
 
@@ -151,25 +175,20 @@ def _render_list(tracker: Tracker, form=None, errors: list[str] | None = None, r
     first = (paged.page - 1) * WEEKS_PER_PAGE
     page_weeks = matching[first : first + WEEKS_PER_PAGE]
     totals = {week_ending: (int(total), count) for week_ending, total, count in matching}
-    order = {
-        "date": CompletionEntry.entry_date,
-        "location": func.lower(Group.name),
-        "quantity": CompletionEntry.quantity,
-        "note": func.lower(CompletionEntry.note),
-    }[state.sort]
-    tie_break = (
-        CompletionEntry.id.desc() if state.sort == DEFAULT_SORT and state.descending else CompletionEntry.id.asc()
-    )
+    groups = _ordered_groups(db, tracker)
+    names = {grp.id: grp.name for grp in groups}
     by_week: dict[date, list[CompletionEntry]] = {week_ending: [] for week_ending, _, _ in page_weeks}
     if by_week:
+        # Loaded newest first; the sort below is stable, so rows equal on the sorted column keep this order.
         entries = db.scalars(
             select(CompletionEntry)
-            .join(Group, Group.id == CompletionEntry.group_id)
             .where(*conditions, CompletionEntry.week_ending.in_(list(by_week)))
-            .order_by(order.desc() if state.descending else order.asc(), tie_break)
+            .order_by(CompletionEntry.entry_date.desc(), CompletionEntry.id.desc())
         ).all()
         for entry in entries:
             by_week[entry.week_ending].append(entry)
+        for items in by_week.values():
+            items[:] = _sorted_entries(items, state.sort, state.descending, names)
     targets = dict(db.execute(select(Week.week_ending, Week.target).where(Week.tracker_id == tracker.id)).all())
     # Location chips total the quantity recorded in the chosen week that matches the search, across every location.
     chip_counts = dict(
@@ -179,7 +198,6 @@ def _render_list(tracker: Tracker, form=None, errors: list[str] | None = None, r
             .group_by(CompletionEntry.group_id)
         ).all()
     )
-    groups = _ordered_groups(db, tracker)
     weeks = [w for w in week_endings(tracker.first_week_ending, tracker.last_week_ending) if w <= (current or today)]
     if week is not None and week not in weeks:
         weeks.append(week)
@@ -199,6 +217,17 @@ def _render_list(tracker: Tracker, form=None, errors: list[str] | None = None, r
             **state_args(state, DEFAULT_SORT, DEFAULT_DESCENDING, **changes),
         )
 
+    if week is None and group_id is None and not state.q:
+        overall_weeks = len(matching)  # nothing filtered: every week with entries matches
+    else:
+        overall_weeks = (
+            db.scalar(
+                select(func.count(func.distinct(CompletionEntry.week_ending))).where(
+                    CompletionEntry.tracker_id == tracker.id
+                )
+            )
+            or 0
+        )
     shown = sum(count for _, _, count in page_weeks)
     matching_entries = sum(count for _, _, count in matching)
     return render_template(
@@ -225,15 +254,15 @@ def _render_list(tracker: Tracker, form=None, errors: list[str] | None = None, r
         link=link,
         page_url=lambda page: link(page=page),
         sort_urls={key: link(**sort_changes(state, key)) for key in SORT_KEYS},
-        clear_url=link(q="", page=1),
+        filtered=bool(state.q or group_id is not None or week is not None),
+        clear_url=url_for(
+            "entries.list_entries",
+            tracker_id=tracker.id,
+            **state_args(state, DEFAULT_SORT, DEFAULT_DESCENDING, q="", page=1),
+        ),
         week_total=len(matching),
         # Weeks with entries, whatever the search and filters (the footer's "of N weeks" when one page holds them all).
-        overall_weeks=db.scalar(
-            select(func.count(func.distinct(CompletionEntry.week_ending))).where(
-                CompletionEntry.tracker_id == tracker.id
-            )
-        )
-        or 0,
+        overall_weeks=overall_weeks,
         first_week_number=first + 1,
         last_week_number=first + len(page_weeks),
         matching_entries=matching_entries,
@@ -379,7 +408,8 @@ def new_entry(tracker_id: int):
             tracker_id=tracker.id,
             week=filter_week.isoformat() if filter_week else None,
             group=filter_group,
-            **state_args(kept, DEFAULT_SORT, DEFAULT_DESCENDING),
+            # The new entry may fall on another page, so the list returns to page 1.
+            **state_args(kept, DEFAULT_SORT, DEFAULT_DESCENDING, page=1),
         )
     )
 
