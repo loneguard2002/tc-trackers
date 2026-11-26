@@ -1977,7 +1977,7 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .glance-chip-green { color: var(--success); } .glance-chip-amber { color: var(--warning); } .glance-chip-red { color: var(--danger); }
 .glance-risks { margin: 12px 0 0; }
 .glance-risk-title { overflow-wrap: anywhere; }
-.glance-key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: .8rem; }
+.glance-key { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 18px; margin: 16px 0 0; padding: 0; list-style: none; font-size: .85rem; }
 .glance-key li { display: inline-flex; align-items: center; gap: 6px; }
 .glance-locations .report-check { margin: 12px 0 0; }
 .glance-locations-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 32px; margin: 14px 0 0; padding: 0; list-style: none; }
