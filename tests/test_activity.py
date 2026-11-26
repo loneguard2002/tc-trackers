@@ -180,18 +180,19 @@ def test_search_matches_detail_only_where_the_viewer_may_read_it(
     client, db, user_factory, give_set, tracker_factory, grant
 ):
     secret, shared = tracker_factory(name="Secret rollout"), tracker_factory(name="Shared rollout")
+    holder = user_factory()
     add(db, tracker_id=secret.id, action="entry_created", detail={"note": "zirconium"})  # never shown to them
-    hidden = add(db, tracker_id=secret.id, action="role_set", detail={"note": "zirconium"})  # shown: Manage teams
+    # Their own role change on a tracker they cannot open: shown, as their own action, with its detail hidden.
+    hidden = add(db, user_id=holder.id, tracker_id=secret.id, action="role_set", detail={"note": "zirconium"})
     visible = add(db, tracker_id=shared.id, action="entry_created", detail={"note": "zirconium"})
     untracked = add(db, action="team_created", detail={"note": "zirconium"})
-    holder = user_factory()
     give_set(["view_activity", "manage_teams"], user=holder)
     grant(holder, shared, "viewer")
     sign_in(client, holder)
     ids = ids_on(text_of(client.get(URL, query_string={"q": "zirconium"})))
-    # Not the role change on the tracker they cannot open (its detail is not searched), nor its entry (not shown).
+    # Not their role change on the tracker they cannot open (its detail is not searched), nor its entry (not shown).
     assert sorted(ids) == sorted([visible.id, untracked.id])
-    # The tracker's name still matches the role change they may see, and the row still hides its detail.
+    # The tracker's name still matches their own role change, and the row still hides its detail.
     body = text_of(client.get(URL, query_string={"q": "Secret rollout"}))
     assert ids_on(body) == [hidden.id] and "zirconium" not in body and HIDDEN in body
     assert "Showing 1 of 3 entries" in body

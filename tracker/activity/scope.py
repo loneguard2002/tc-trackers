@@ -63,13 +63,13 @@ ACTION_AREAS: dict[str, tuple[str, ...]] = {
             "tracker_archived",
             "tracker_created",
             "tracker_imported",
+            # Who can open a tracker: for its own people only, not for those who hand out roles (the owner's ruling).
+            "role_set",
+            "role_removed",
+            "tracker_team_changed",
         ),
         _TRACKER,
     ),
-    # Who can open a tracker: its people, and those who hand out roles.
-    "role_set": (TRACKER, "manage_teams"),
-    "role_removed": (TRACKER, "manage_teams"),
-    "tracker_team_changed": (TRACKER, "manage_teams"),
     # Users and sign-in.
     **dict.fromkeys(
         (
