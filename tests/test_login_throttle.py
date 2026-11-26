@@ -9,7 +9,7 @@ from tracker.app import create_app
 from tracker.auth import throttle
 from tracker.auth.throttle import KEEP_FAILURES, Limits
 from tracker.db import get_engine
-from tracker.models import AppSetting, LoginFailure
+from tracker.models import AppSetting, AuditLog, LoginFailure
 
 
 def _rows(db) -> set[tuple[str, str]]:
@@ -18,10 +18,9 @@ def _rows(db) -> set[tuple[str, str]]:
 
 def test_blocks_after_attempts_and_clears(db):
     limits = Limits(account_attempts=5)
-    for _ in range(4):
-        throttle.fail(db, "account", "k@example.com")
+    assert [throttle.fail(db, limits, "account", "k@example.com") for _ in range(4)] == [False] * 4
     assert not throttle.blocked(db, limits, "account", "k@example.com")
-    throttle.fail(db, "account", "k@example.com")
+    assert throttle.fail(db, limits, "account", "k@example.com")  # the fifth starts the block
     assert throttle.blocked(db, limits, "account", "k@example.com")
     assert not throttle.blocked(db, limits, "account", "other@example.com")
     assert not throttle.blocked(db, limits, "address", "k@example.com")  # the kinds are counted apart
@@ -36,7 +35,7 @@ def test_failures_outside_the_window_do_not_count(db):
     db.flush()
     assert not throttle.blocked(db, limits, "account", "k")
     for _ in range(3):
-        throttle.fail(db, "account", "k")
+        throttle.fail(db, limits, "account", "k")
     assert throttle.blocked(db, limits, "account", "k")
 
 
@@ -44,7 +43,7 @@ def test_a_new_failure_deletes_those_older_than_a_day(db):
     db.add(LoginFailure(kind="account", value="old", at=func.now() - KEEP_FAILURES - timedelta(minutes=1)))
     db.add(LoginFailure(kind="account", value="recent", at=func.now() - timedelta(hours=1)))
     db.flush()
-    throttle.fail(db, "address", "10.0.0.1")
+    throttle.fail(db, Limits(), "address", "10.0.0.1")
     assert _rows(db) == {("account", "recent"), ("address", "10.0.0.1")}
 
 
@@ -109,6 +108,13 @@ def test_unreadable_saved_limits_fall_back_to_the_defaults(db):
     assert throttle.load_limits(db) == Limits(account_attempts=5, address_attempts=20, window_minutes=10)
 
 
+def test_the_email_to_administrators_is_on_unless_switched_off(db):
+    assert throttle.load_limits(db).email_admins
+    db.add(AppSetting(key="login_block_email", value="off"))
+    db.flush()
+    assert not throttle.load_limits(db).email_admins
+
+
 def test_summaries_say_who_is_blocked_and_until_when(db):
     limits = Limits(account_attempts=3, window_minutes=5)
     for minutes_ago in (4, 3, 2, 1):
@@ -130,7 +136,33 @@ def test_summaries_say_who_is_blocked_and_until_when(db):
 
 
 def test_parse_limits_checks_each_range():
-    limits, errors = throttle.parse_limits({"account_attempts": "4", "address_attempts": "30", "window_minutes": "15"})
+    form = {"account_attempts": "4", "address_attempts": "30", "window_minutes": "15", "email_admins": "on"}
+    limits, errors = throttle.parse_limits(form)
     assert limits == Limits(4, 30, 15) and errors == {}
+    limits, _ = throttle.parse_limits({**form, "email_admins": ""})  # an unticked box is not sent at all
+    assert limits == Limits(4, 30, 15, email_admins=False)
     limits, errors = throttle.parse_limits({"account_attempts": "2", "address_attempts": "x", "window_minutes": "61"})
     assert limits is None and set(errors) == {"account_attempts", "address_attempts", "window_minutes"}
+
+
+def test_a_block_is_recorded_once_when_it_starts(client, db, user_factory):
+    user = user_factory()
+    for _ in range(7):  # the sixth and seventh are refused before the password is checked
+        post(client, "/login", {"email": user.email, "password": "wrong-password"})
+    (entry,) = db.scalars(select(AuditLog).where(AuditLog.action == "sign_in_blocked"))
+    assert entry.entity_id == "account" and entry.user_id is None
+    assert entry.detail == {"account": user.email, "failures": 5, "window_minutes": 5}
+
+
+def test_the_new_block_count_runs_from_the_last_visit(db):
+    limits = Limits()
+    throttle.record_block(db, limits, "account", "a@example.com")
+    throttle.record_block(db, limits, "address", "10.0.0.9")
+    db.commit()
+    assert throttle.new_block_count(db) == 2
+    throttle.mark_seen(db, db.scalar(select(func.now())))
+    db.commit()
+    assert throttle.new_block_count(db) == 0
+    throttle.record_block(db, limits, "account", "a@example.com")  # blocked again: counted again
+    db.commit()
+    assert throttle.new_blocks(db, throttle.seen_at(db)) == {("account", "a@example.com")}

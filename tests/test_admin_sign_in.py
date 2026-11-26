@@ -1,11 +1,13 @@
 """Admin › Sign-in protection: the limits, who is blocked, the last day's failures, unblocking."""
 
+import re
 from datetime import timedelta
 
 import pytest
 from conftest import TEST_PASSWORD, post
 from sqlalchemy import func, select
 
+from tracker.auth import throttle
 from tracker.models import AppSetting, AuditLog, LoginFailure
 
 PAGE = "/admin/sign-in-protection"
@@ -43,10 +45,32 @@ def test_the_page_shows_the_limits_and_who_is_blocked(client, db, logged_in_admi
     assert 'value="5"' in html and 'value="20"' in html  # the limits form shows the saved values
 
 
-def test_the_menu_counts_who_is_blocked_for_administrators(client, db, logged_in_admin):
-    _fail(db, "account", "blocked@example.com", 5)
+def _block(db, kind: str, value: str) -> None:
+    _fail(db, kind, value, throttle.Limits().attempts(kind))
+    throttle.record_block(db, throttle.Limits(), kind, value)
+    db.commit()
+
+
+def _menu_count(client) -> str | None:
     html = client.get("/").get_data(as_text=True)
-    assert "Sign-in protection" in html and "blocked now" in html
+    found = re.search(r'Sign-in protection</span><span class="nav-count"[^>]*>(\d+)', html)
+    return found and found.group(1)
+
+
+def test_the_menu_counts_blocks_until_an_administrator_opens_the_page(client, db, logged_in_admin):
+    _block(db, "account", "blocked@example.com")
+    _block(db, "address", "10.0.4.17")
+    assert _menu_count(client) == "2"
+    html = client.get(PAGE).get_data(as_text=True)
+    assert html.count('badge-info">New<') == 4  # each in Blocked now and in the last 24 hours
+    assert _menu_count(client) is None
+    assert 'badge-info">New<' not in client.get(PAGE).get_data(as_text=True)  # on the first visit only
+
+
+def test_a_block_that_has_ended_still_counts_until_seen(client, db, logged_in_admin):
+    throttle.record_block(db, throttle.Limits(), "account", "gone@example.com")  # its failures have left the window
+    db.commit()
+    assert _menu_count(client) == "1"
 
 
 def test_the_menu_link_is_only_for_those_who_may_open_the_page(client, logged_in_user):
@@ -55,10 +79,9 @@ def test_the_menu_link_is_only_for_those_who_may_open_the_page(client, logged_in
 
 def test_the_permission_opens_the_page_and_the_menu_link(client, db, logged_in_user, give_set):
     give_set(["manage_sign_in_protection"], user=logged_in_user)
-    _fail(db, "account", "blocked@example.com", 5)
+    _block(db, "account", "blocked@example.com")
+    assert _menu_count(client) == "1"
     assert client.get(PAGE).status_code == 200
-    html = client.get("/").get_data(as_text=True)
-    assert "Sign-in protection" in html and "blocked now" in html
 
 
 def test_a_holder_of_the_permission_can_unblock_and_change_the_limits(client, db, logged_in_user, give_set):
@@ -106,7 +129,13 @@ def test_unblock_refuses_a_bad_request(client, logged_in_admin, data):
 
 
 def test_saving_the_limits_stores_and_records_them(client, db, logged_in_admin):
-    data = {"account_attempts": "4", "address_attempts": "20", "window_minutes": "10", "downloads_per_minute": "10"}
+    data = {
+        "account_attempts": "4",
+        "address_attempts": "20",
+        "window_minutes": "10",
+        "downloads_per_minute": "10",
+        "email_admins": "on",
+    }
     assert post(client, PAGE, data).status_code == 302
     stored = dict(db.execute(select(AppSetting.key, AppSetting.value)).all())
     assert stored["login_account_attempts"] == "4" and stored["login_window_minutes"] == "10"
@@ -118,7 +147,13 @@ def test_saving_the_limits_stores_and_records_them(client, db, logged_in_admin):
 
 
 def test_unchanged_limits_are_not_recorded(client, db, logged_in_admin):
-    data = {"account_attempts": "5", "address_attempts": "20", "window_minutes": "5", "downloads_per_minute": "10"}
+    data = {
+        "account_attempts": "5",
+        "address_attempts": "20",
+        "window_minutes": "5",
+        "downloads_per_minute": "10",
+        "email_admins": "on",
+    }
     response = post(client, PAGE, data, follow_redirects=True)
     assert "The limits are unchanged." in response.get_data(as_text=True)
     assert _audit(db, "sign_in_limits_changed") == []
@@ -130,7 +165,8 @@ def test_limits_out_of_range_are_refused_and_nothing_is_saved(client, db, logged
     html = response.get_data(as_text=True)
     assert response.status_code == 400
     assert "Enter a whole number from 3 to 50." in html and 'aria-invalid="true"' in html
-    assert db.scalar(select(func.count()).select_from(AppSetting).where(AppSetting.key.like("login_%"))) == 0
+    saved = select(func.count()).select_from(AppSetting).where(AppSetting.key.like("login_%"))
+    assert db.scalar(saved.where(AppSetting.key != throttle.SEEN_KEY)) == 0  # only the page's last visit is kept
 
 
 def _limits(**changes) -> dict[str, str]:
@@ -139,6 +175,7 @@ def _limits(**changes) -> dict[str, str]:
         "address_attempts": "20",
         "window_minutes": "5",
         "downloads_per_minute": "10",
+        "email_admins": "on",
     } | changes
 
 
@@ -164,4 +201,14 @@ def test_a_download_limit_out_of_range_is_refused_and_nothing_is_saved(client, d
     html = response.get_data(as_text=True)
     assert response.status_code == 400
     assert "Enter a whole number from 1 to 60." in html and 'id="downloads_per_minute-error"' in html
-    assert db.scalar(select(func.count()).select_from(AppSetting).where(AppSetting.key.like("login_%"))) == 0
+    saved = select(func.count()).select_from(AppSetting).where(AppSetting.key.like("login_%"))
+    assert db.scalar(saved.where(AppSetting.key != throttle.SEEN_KEY)) == 0  # only the page's last visit is kept
+
+
+def test_switching_the_email_off_is_stored_and_recorded(client, db, logged_in_admin):
+    data = _limits(email_admins="")  # the box unticked
+    assert post(client, PAGE, data).status_code == 302
+    assert db.scalar(select(AppSetting.value).where(AppSetting.key == "login_block_email")) == "off"
+    (entry,) = _audit(db, "sign_in_limits_changed")
+    assert entry.detail == {"before": {"email_admins": True}, "after": {"email_admins": False}}
+    assert "checked" not in client.get(PAGE).get_data(as_text=True).split('id="email_admins"')[1].split(">")[0]

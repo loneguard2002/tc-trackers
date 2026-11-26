@@ -83,18 +83,18 @@ def create_app(overrides: dict | None = None) -> Flask:
 
     @app.context_processor
     def sign_in_context():
-        """The number of accounts and addresses blocked now, for the count beside Sign-in protection; asked only when
-        the menu shows it (to holders of Manage sign-in protection)."""
+        """The accounts and addresses blocked since someone last opened Sign-in protection, for the count beside it in
+        the menu; asked only when the menu shows it (to holders of Manage sign-in protection)."""
 
-        def signin_blocked_count() -> int:
+        def signin_new_blocks() -> int:
             db = get_session()
             try:
-                return throttle.blocked_count(db, throttle.load_limits(db))
+                return throttle.new_block_count(db)
             except SQLAlchemyError:  # the error page must still draw when the database is the problem
                 db.rollback()
                 return 0
 
-        return {"signin_blocked_count": signin_blocked_count}
+        return {"signin_new_blocks": signin_new_blocks}
 
     @app.context_processor
     def feedback_context():

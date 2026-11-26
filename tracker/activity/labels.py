@@ -19,6 +19,8 @@ ACTION_LABELS: dict[str, str] = {
     "sign_in_limits_changed": "Sign-in limits changed",
     "sign_in_unblocked": "Sign-in unblocked",
     "download_limit_changed": "Download limit changed",
+    "sign_in_blocked": "Sign-in blocked",
+    "sign_in_alert_sent": "Sign-in block emailed",
     "user_created": "User created",
     "user_approved": "User approved",
     "user_disabled": "User disabled",

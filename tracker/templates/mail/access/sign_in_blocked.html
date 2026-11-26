@@ -1,0 +1,20 @@
+{#- To the holders of Manage sign-in protection when a failed sign-in starts a block (tracker/mail/sign_in_alerts.py): everyone blocked
+    when it is sent. -#}
+{% extends "mail/access/_layout.html" %}
+{% from "mail/access/_parts.html" import button, infosec_line %}
+{% block body %}
+{% set th = "padding: 6px 12px 6px 0; border-bottom: 1px solid #b4c1d3; color: #4f5d75;" %}
+{% set td = "padding: 6px 12px 6px 0; border-bottom: 1px solid #dfe6f1;" %}
+<p style="margin: 0 0 14px;">Hello,</p>
+<p style="margin: 0 0 14px;">Too many failed sign-ins have blocked {{ 'this account or address' if rows|length == 1 else 'these accounts and addresses' }} from signing in with a password ({{ sent }}):</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 0 0 6px; font-size: 14px; line-height: 20px;">
+<tr><th align="left" style="{{ th }}">Type</th><th align="left" style="{{ th }}">Account or address</th><th align="left" style="{{ th }}">Failures</th><th align="left" style="{{ th }}">Blocked until</th></tr>
+{% for row in rows %}<tr><td style="{{ td }}">{{ kind_names[row.kind] }}</td><td style="{{ td }} font-weight: bold;">{{ row.value }}</td><td style="{{ td }}">{{ row.in_window }} in {{ limits.window_minutes }} min</td><td style="{{ td }}">{{ row.unblocks_at.strftime('%H:%M') }} UTC</td></tr>
+{% endfor %}</table>
+<p style="margin: 14px 0 0;">A block ends on its own. If the person is known and only mistyped, you can unblock them now.</p>
+{{ button(app_url ~ "/admin/sign-in-protection", "Open Sign-in protection") }}
+{% endblock %}
+{% block footer %}
+<p style="margin: 0;">You get this because you can manage sign-in protection in Progress Tracker. At most one of these emails goes out every {{ gap_minutes }} minutes; the menu counts every block. You can switch these emails off on Sign-in protection.</p>
+{{ infosec_line("Many blocks, or an account or address you do not recognise? Tell the Infosec team:", infosec) }}
+{% endblock %}
