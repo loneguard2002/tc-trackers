@@ -89,6 +89,8 @@ def test_the_form_needs_a_signed_in_person(client):
 def test_the_form_page_carries_the_copy(client, sender):
     page = client.get("/feedback/new?page=/trackers&title=Trackers").get_data(as_text=True)
     for text in (
+        "Feedback on this page",
+        "Share an idea",
         "An idea",
         "Something is wrong",
         "In one line",
@@ -97,10 +99,16 @@ def test_the_form_page_carries_the_copy(client, sender):
         "Screenshots and files",
         "Up to 5 files, 5 MB each: pictures, PDF, Word, Excel or text.",
         "Send this page with it",
-        "Sent as Sam Taylor (sam@example.com) from your account, so the reply comes back to you.",
-        "Send feedback",
+        "Replies go to <span>sam@example.com</span>",
+        "Send idea",
     ):
         assert text in page
+    assert 'data-problem="Report a problem"' in page and 'data-problem="Send report"' in page
+
+
+def test_a_refused_problem_keeps_its_title_and_button(client, sender):
+    page = send(client, {"kind": "problem", "details": " "}).get_data(as_text=True)
+    assert ">Report a problem</h2>" in page and ">Send report</button>" in page
     assert 'enctype="multipart/form-data"' in page
 
 

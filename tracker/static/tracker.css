@@ -1728,7 +1728,30 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .feedback-files li { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
 .feedback-file-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .feedback-file-size { color: var(--muted); font-size: .8125rem; white-space: nowrap; }
-.feedback-page-line, .feedback-sender { margin: 6px 0 0; }
+.feedback-page-line { margin: 6px 0 0; }
+/* The pop-up's header: the page it is about, the title for the chosen kind, then the two kinds as tabs across the
+   full width. The tabs are radio buttons, so the form works without JavaScript. */
+.feedback-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 12px; padding-bottom: 0; background: color-mix(in srgb, var(--text) 3%, var(--surface)); }
+.feedback-eyebrow { margin: 0; color: var(--muted); font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.list-dialog-head.feedback-head h2 { font-size: 1.2rem; }
+.feedback-kinds { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 10px 6px 0 0; }
+.feedback-kinds label { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; margin: 0; padding: 0 8px; border-bottom: 3px solid transparent; color: var(--muted); font-size: .875rem; font-weight: 600; text-align: center; cursor: pointer; }
+.feedback-kinds label:hover { color: var(--text); }
+.feedback-kinds input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.feedback-kinds label:has(input:checked) { border-bottom-color: var(--primary); color: var(--text); }
+.feedback-kinds label:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; border-radius: 6px 6px 0 0; }
+.feedback-kinds .icon { flex: none; width: 17px; height: 17px; }
+/* The footer says where the reply goes, beside the buttons; on a phone it takes a line of its own above them. */
+.feedback-foot { align-items: center; }
+.feedback-reply-to { margin: 0 auto 0 0; min-width: 0; color: var(--muted); font-size: .8125rem; overflow-wrap: anywhere; }
+.feedback-reply-to span { display: block; color: var(--text); }
+@media (max-width: 720px) {
+  .feedback-reply-to { flex-basis: 100%; }
+  /* Each tab as wide as its words plus an equal share of the rest, so "Something is wrong" stays on one line. */
+  .feedback-kinds { display: flex; }
+  .feedback-kinds label { flex: 1 1 auto; gap: 6px; padding: 0 4px; white-space: nowrap; }
+}
+@media (max-width: 380px) { .feedback-kinds .icon { display: none; } }
 .feedback-reference { margin: 0; font-weight: 700; }
 .feedback-summary { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow-wrap: anywhere; }
 .feedback-sent p { margin: 0; }

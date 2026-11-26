@@ -43,7 +43,10 @@ def test_the_link_opens_the_pop_up_and_the_form_works(page, live_server, user_fa
     expect(dialog.get_by_text("Tell us more")).to_be_visible()
     expect(dialog.locator("[data-feedback-page-line]")).to_contain_text("Trackers")
 
+    expect(dialog.locator("#feedback-dialog-title")).to_have_text("Share an idea")
     dialog.get_by_text("Something is wrong").click()
+    expect(dialog.locator("#feedback-dialog-title")).to_have_text("Report a problem")
+    expect(dialog.locator('button[type="submit"]')).to_have_text("Send report")
     expect(dialog.locator("[data-feedback-details-label]")).to_have_text("What happened?")
     expect(dialog.locator("#feedback-details")).to_have_attribute(
         "placeholder", "What you did, what you expected, and what happened instead."
@@ -57,7 +60,7 @@ def test_the_link_opens_the_pop_up_and_the_form_works(page, live_server, user_fa
     expect(dialog.locator("[data-feedback-list]")).to_contain_text("screenshot.png")
 
     dialog.locator("#feedback-summary").fill("Add a dark chart theme")
-    dialog.get_by_role("button", name="Send feedback").click()
+    dialog.get_by_role("button", name="Send idea").click()
     expect(dialog.locator("#feedback-dialog-title")).to_have_text("Thank you, Sam")
     expect(dialog).to_contain_text("Reference FB-0001")
     expect(dialog).to_contain_text("Add a dark chart theme")
@@ -80,7 +83,7 @@ def test_a_refused_form_stays_in_the_pop_up_with_its_files(page, live_server, us
     page.evaluate(PASTE_A_PICTURE)
     dialog.locator("#feedback-summary").fill("It is blank")
     dialog.locator("#feedback-details").evaluate("el => el.removeAttribute('required')")
-    dialog.get_by_role("button", name="Send feedback").click()
+    dialog.get_by_role("button", name="Send report").click()
     expect(dialog.get_by_text("Say what happened.")).to_be_visible()
     expect(dialog.locator("[data-feedback-list]")).to_contain_text("screenshot.png")
     assert db.scalars(select(FeedbackRequest)).all() == []

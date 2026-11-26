@@ -1,25 +1,39 @@
-{% from "macros.html" import icon %}
-{% from "lists/_table.html" import list_dialog, dialog_field, described_by %}
+{% from "macros.html" import csrf_field, icon %}
+{% from "lists/_table.html" import dialog_field, described_by %}
 {# The feedback form as a list-dialog: the pop-up feedback.js opens, and the page of its own without JavaScript. The
-   copy for each kind sits in data attributes, for feedback.js to swap when the switch changes. #}
+   kind is chosen with the two tabs in the header; the title, the details' copy and the send button's label for each
+   kind sit in data attributes, for feedback.js to swap when the choice changes. #}
 {% macro feedback_form(form, errors, field_errors, sender, cancel_url) -%}
 {% set problem = form.kind == 'problem' %}
 {% set summary_errors = field_errors.get('summary', []) %}
 {% set details_errors = field_errors.get('details', []) %}
 {% set file_errors = field_errors.get('files', []) %}
 {% set details_help = 'Steps to see it again help us fix it sooner.' if problem else 'Optional. A sentence or two is plenty.' %}
-{% call list_dialog('feedback', 'Feedback on this page', url_for('feedback.send'), true, errors, 'Send feedback', cancel_url, '', 'multipart/form-data') %}
+<dialog id="feedback-dialog" class="list-dialog feedback-dialog" aria-labelledby="feedback-dialog-title" open data-reopen>
+  <form method="post" action="{{ url_for('feedback.send') }}" enctype="multipart/form-data">
+    {{ csrf_field(csrf_token()) }}
+    <header class="list-dialog-head feedback-head">
+      <div class="feedback-head-text">
+        <p class="feedback-eyebrow">Feedback on this page</p>
+        <h2 id="feedback-dialog-title" data-feedback-title data-idea="Share an idea" data-problem="Report a problem">{{ 'Report a problem' if problem else 'Share an idea' }}</h2>
+      </div>
+      <a class="tool-button" href="{{ cancel_url }}" data-dialog-close title="Close">{{ icon('close') }}<span class="sr-only">Close</span></a>
+      <div class="feedback-kinds" role="radiogroup" aria-label="What is it?">
+        <label><input type="radio" name="kind" value="idea"{{ ' checked' if not problem }}>{{ icon('idea') }}An idea</label>
+        <label><input type="radio" name="kind" value="problem"{{ ' checked' if problem }}>{{ icon('warning') }}Something is wrong</label>
+      </div>
+    </header>
+    <div class="list-dialog-body">
+{% if errors %}
+<div class="form-alert" role="alert">
+  <strong>Please correct the following:</strong>
+  <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
 <input type="hidden" name="page_title" value="{{ form.page_title }}" data-feedback-page-title>
 <input type="hidden" name="page_url" value="{{ form.page_url }}">
 <input type="hidden" name="back" value="{{ form.back }}">
 <input type="hidden" name="browser" value="{{ form.browser }}" data-feedback-browser>
-<div class="field">
-  <span class="field-label" id="feedback-kind-label">What is it?</span>
-  <div class="segmented" role="radiogroup" aria-labelledby="feedback-kind-label">
-    <label><input type="radio" name="kind" value="idea"{{ ' checked' if not problem }}>An idea</label>
-    <label><input type="radio" name="kind" value="problem"{{ ' checked' if problem }}>Something is wrong</label>
-  </div>
-</div>
 {% call dialog_field('In one line', 'At most 150 characters.', 'feedback-summary', summary_errors) %}
 <input id="feedback-summary" name="summary" value="{{ form.summary }}" maxlength="150" required autocomplete="off" aria-describedby="{{ described_by('feedback-summary', 'At most 150 characters.', summary_errors) }}"{% if summary_errors %} aria-invalid="true"{% endif %}>
 {% endcall %}
@@ -53,6 +67,12 @@
   </label>
   <p class="field-help feedback-page-line" id="feedback-page-line" data-feedback-page-line{% if not form.with_page %} hidden{% endif %}>{% if form.page_title %}<span data-feedback-page-text>{{ form.page_title }}</span>{% endif %}{% if form.page_title and form.browser %} · {% endif %}{% if form.browser %}<span data-feedback-browser-text>{{ form.browser }}</span>{% endif %}</p>
 </div>
-<p class="field-help feedback-sender">Sent as {{ sender.full_name }} ({{ sender.email }}) from your account, so the reply comes back to you.</p>
-{% endcall %}
+    </div>
+    <footer class="list-dialog-foot feedback-foot">
+      <p class="feedback-reply-to">Replies go to <span>{{ sender.email }}</span></p>
+      <a class="button" href="{{ cancel_url }}" data-dialog-close>Cancel</a>
+      <button class="button primary" type="submit" data-feedback-submit data-idea="Send idea" data-problem="Send report">{{ 'Send report' if problem else 'Send idea' }}</button>
+    </footer>
+  </form>
+</dialog>
 {%- endmacro %}
