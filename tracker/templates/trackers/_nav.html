@@ -24,7 +24,7 @@
   {% if can('manage_teams') %}{{ tab('trackers.roles', 'Access', 'key') }}{% endif %}
 </nav>
 {% if g.role %}
-<p class="tracker-role">Your role: <strong>{{ g.role|title }}{% if current_user and current_user.is_admin %} (administrator){% endif %}</strong> · <a href="{{ url_for('trackers.role_guide', tracker_id=tracker.id) }}" data-role-guide>What each role can do</a></p>
+<p class="tracker-role">Your role: <strong>{{ g.role|title }}{% if current_user and current_user.is_admin %} (administrator){% endif %}</strong> <a class="role-guide-info" href="{{ url_for('trackers.role_guide', tracker_id=tracker.id) }}" data-role-guide title="What each role can do">{{ icon('info') }}<span class="sr-only">What each role can do</span></a></p>
 {% endif %}
 </div>
 {% if g.role and request.endpoint != 'trackers.role_guide' %}

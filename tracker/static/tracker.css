@@ -732,6 +732,9 @@ main:has(.subnav) { --sticky-top: calc(var(--topbar-height) + var(--subnav-heigh
 .tabs-bar > .tabs { flex: 1 1 auto; min-width: 0; margin: 0; border-bottom: 0; }
 .tracker-role { margin: 0 0 10px auto; color: var(--muted); font-size: .8125rem; white-space: nowrap; }
 .tracker-role strong { color: var(--text); }
+/* The information icon beside the role opens what each role can do. */
+.role-guide-info { display: inline-flex; vertical-align: -3px; margin-left: 2px; color: var(--primary); border-radius: 50%; }
+.role-guide-info .icon { width: 16px; height: 16px; }
 /* The rows read as sentences, not as column headings: they wrap, in ordinary text. */
 .role-guide .role-guide-table tbody th { color: var(--text); font-size: .875rem; font-weight: 400; letter-spacing: normal; text-transform: none; white-space: normal; }
 .role-guide-table thead th:not(:first-child), .role-guide-mark { width: 5rem; text-align: center; }
