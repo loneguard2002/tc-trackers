@@ -1,8 +1,9 @@
 """Composing the report email: placeholders, subject, HTML and plain-text bodies, inline chart and PDF.
 
-Trust model: the template body is HTML authored by tracker owners, who are trusted users, so it is inserted as
-written. Placeholder VALUES come from report data entered by editors and are untrusted, so ``render_placeholders``
-HTML-escapes every value.
+Trust model: the template body is HTML written by a tracker's owners. The owner role can come with a team or region, and
+the email goes out under the organisation's own sender, so the body is cleaned (``clean_body``) when it is saved and
+again whenever an email is built: only formatting, lists, tables and ``https:``/``mailto:`` links survive. Placeholder
+VALUES come from report data entered by editors and are untrusted, so ``render_placeholders`` HTML-escapes every value.
 """
 
 from __future__ import annotations
@@ -11,8 +12,10 @@ import html
 import re
 from datetime import date
 from email.message import EmailMessage
+from html.parser import HTMLParser
 from types import SimpleNamespace
 
+import nh3
 from flask import render_template
 from markupsafe import Markup
 
@@ -208,11 +211,95 @@ def html_to_text(markup: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]+", " ", text)).strip()
 
 
-def render_email_html(report: Report, template: EmailTemplate | None, link: str, chart_src: str) -> tuple[str, str]:
-    """The ``(subject, html)`` pair; ``chart_src`` is ``cid:remaining-chart`` in the email, a data URI in previews."""
+# What an owner's template may hold (audit 2026-11-25, Medium 1): text formatting, headings, lists, tables and links. A
+# link goes to an https: or mailto: address, or is {{report_link}}; anything else loses its address.
+BODY_TAGS = frozenset(
+    {"p", "br", "strong", "b", "em", "i", "u", "h2", "h3", "h4", "ul", "ol", "li"}
+    | {"table", "thead", "tbody", "tr", "th", "td", "a", "span", "div"}
+)
+# Removed with everything inside them; any other tag not allowed is removed and its text kept.
+_DROPPED_WITH_CONTENT = frozenset(
+    {"script", "style", "iframe", "object", "svg", "math", "template", "noscript", "textarea", "select", "title"}
+)
+_SAFE_LINK = re.compile(r"(?:https://|mailto:)\S", re.IGNORECASE)
+_LINK_PLACEHOLDER = re.compile(r"\{\{\s*report_link\s*\}\}")
+
+
+def safe_link(href: str) -> bool:
+    """Whether a link in the template may keep its address: https:, mailto: or the {{report_link}} placeholder."""
+    href = (href or "").strip()
+    return bool(_SAFE_LINK.match(href) or _LINK_PLACEHOLDER.fullmatch(href))
+
+
+def _keep_attribute(tag: str, name: str, value: str) -> str | None:
+    return value.strip() if tag == "a" and name == "href" and safe_link(value) else None
+
+
+def clean_body(markup: str) -> str:
+    """The template body with only what an email can carry safely: the tags in ``BODY_TAGS``, no attributes but a
+    safe link's ``href``, no comments; scripts, styles and the like go with their content. Placeholders are text and
+    stay as they are."""
+    return nh3.clean(
+        markup or "",
+        tags=set(BODY_TAGS),
+        clean_content_tags=set(_DROPPED_WITH_CONTENT),
+        attributes={"a": {"href"}},
+        attribute_filter=_keep_attribute,
+        url_schemes={"https", "mailto"},
+        link_rel=None,
+        strip_comments=True,
+    )
+
+
+class _Unsafe(HTMLParser):
+    """Collects, in plain words, what ``clean_body`` takes out of a template."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.found: list[str] = []
+
+    def _note(self, text: str) -> None:
+        if text not in self.found:
+            self.found.append(text)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag not in BODY_TAGS:
+            self._note(f"<{tag}>")
+            return
+        for name, value in attrs:
+            if tag == "a" and name == "href":
+                if not safe_link(value or ""):
+                    self._note("a link that is not https or mailto")
+            elif name.startswith("on"):
+                self._note(f"the {name} attribute")
+            else:
+                self._note(f"{name} attributes")
+
+    handle_startendtag = handle_starttag
+
+    def handle_comment(self, data: str) -> None:
+        self._note("comments")
+
+
+def removed_parts(markup: str) -> list[str]:
+    """What saving the template would remove, for the message after a save; empty when nothing is."""
+    parser = _Unsafe()
+    parser.feed(markup or "")
+    parser.close()
+    return parser.found
+
+
+def render_email_html(
+    report: Report, template: EmailTemplate | None, link: str, chart_src: str, *, clean: bool = True
+) -> tuple[str, str]:
+    """The ``(subject, html)`` pair; ``chart_src`` is ``cid:remaining-chart`` in the email, a data URI in previews.
+    The body is cleaned again here, so a template saved before cleaning existed is sent cleaned too. Only the Email
+    tab's preview frame passes ``clean=False``, for the fixed marker the page puts its own body in place of."""
     context = placeholder_context(report, link)
     subject_source = template.subject if template else DEFAULT_SUBJECT
     body_source = template.body_html if template else DEFAULT_BODY
+    if clean:
+        body_source = clean_body(body_source)
     body = render_placeholders(body_source, context)
     page = render_template(
         "mail/email_body.html",

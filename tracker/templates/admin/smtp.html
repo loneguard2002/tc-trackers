@@ -5,6 +5,7 @@
 {% macro locked(key) %}{% if server_locked %}readonly{% else %}name="{{ key }}"{% endif %}{% endmacro %}
 {% block head_extra %}
   <script src="{{ url_for('static', filename='placeholder-table.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='domain-list.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% block content %}
 <h1>Email settings</h1>
@@ -79,6 +80,26 @@
       <div class="setting-row setting-row-stacked">
         {{ placeholder_table(placeholders, sample, 'report_email_subject', 'toggle') }}
       </div>
+    </section>
+
+    <section class="settings-section" id="recipient-domains" aria-labelledby="section-domains">
+      <header class="settings-section-head">
+        <h2 id="section-domains">Report recipients</h2>
+        <p>Report emails go only to addresses at these domains. A recipient outside them cannot be added to a tracker, and one already on a tracker is skipped when the report is sent.</p>
+      </header>
+      {% if server_locked %}
+      <div class="setting-row">
+        <div class="setting-label">
+          <span class="setting-title" id="domains-label">Allowed domains</span>
+          <p class="setting-help">Only an administrator can change this list.</p>
+        </div>
+        <div class="setting-control"><ul class="domain-chips" aria-labelledby="domains-label">{% for d in recipient_domains %}<li class="domain-chip">@{{ d }}</li>{% endfor %}</ul></div>
+      </div>
+      {% else %}
+      {% call setting('Allowed domains', 'One per line, as it appears after the @, for example tradition.com. A sub-domain needs its own line. At least one is required; every change is recorded in Activity.', domains_key) %}
+      <textarea id="{{ domains_key }}" name="{{ domains_key }}" rows="5" required autocomplete="off" spellcheck="false" aria-describedby="{{ domains_key }}-help" data-domain-list>{{ recipient_domains|join('\n') }}</textarea>
+      {% endcall %}
+      {% endif %}
     </section>
 
     <section class="settings-section" aria-labelledby="section-access">

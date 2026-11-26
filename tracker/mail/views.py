@@ -22,16 +22,18 @@ from ..report import views as report_views
 from ..report.build import build_report, default_report_week
 from ..report.render import RenderBusy
 from ..trackers.views import _refuse_if_archived
-from . import bp, sending, smtp
+from . import bp, domains, sending, smtp
 from .compose import (
     BLOCK_PLACEHOLDERS,
     DEFAULT_BODY,
     DEFAULT_SUBJECT,
     PLACEHOLDERS,
     attachment_name,
+    clean_body,
     normalise_recipient,
     placeholder_context,
     preview_chart_src,
+    removed_parts,
     render_email_html,
     report_subject,
     unknown_placeholders,
@@ -39,6 +41,8 @@ from .compose import (
 from .compose import report_link as make_link
 
 MAX_BODY = 50_000
+EMPTY_AFTER_CLEANING = "Nothing would be left of the body once it is made safe to email. Write the message as text."
+REMOVED_NOTE = "Removed because an email cannot carry them safely:"
 
 
 def _week(tracker):
@@ -73,7 +77,8 @@ def _preview(tracker, week, values: dict) -> dict:
     chart = preview_chart_src(report)
     shown = SimpleNamespace(subject=values["subject"], body_html=values["body_html"])
     subject, page = render_email_html(report, shown, link, chart)
-    _, shell = render_email_html(report, SimpleNamespace(subject="", body_html=BODY_MARK), link, chart)
+    # The frame around the body: the marker is this module's own, so it is not cleaned away (compose.clean_body).
+    _, shell = render_email_html(report, SimpleNamespace(subject="", body_html=BODY_MARK), link, chart, clean=False)
     return {
         "subject": subject,
         "html": _for_preview(page),
@@ -125,13 +130,15 @@ def _page(tracker, week, form=None, status: int = 200):
         "body_html": form["body_html"] if form else template.body_html if template else DEFAULT_BODY,
     }
     recent = _recent_sends(db, tracker)
+    allowed = domains.allowed_domains(db)
+    recipients = db.scalars(select(Recipient).where(Recipient.tracker_id == tracker.id).order_by(Recipient.id)).all()
     return (
         render_template(
             "mail/settings.html",
             tracker=tracker,
-            recipients=db.scalars(
-                select(Recipient).where(Recipient.tracker_id == tracker.id).order_by(Recipient.id)
-            ).all(),
+            recipients=recipients,
+            blocked={r.id for r in recipients if not domains.is_allowed(r.email, allowed)},
+            allowed_domains=domains.listed(allowed),
             values=values,
             placeholders=PLACEHOLDERS,
             blocks=BLOCK_PLACEHOLDERS,
@@ -163,6 +170,9 @@ def settings(tracker_id: int):
     back = redirect(url_for("mail.settings", tracker_id=tracker.id))
     if action == "add_recipient":
         email, error = normalise_recipient(request.form.get("email", ""))
+        allowed = domains.allowed_domains(db)
+        if not error and not domains.is_allowed(email, allowed):
+            error = domains.not_allowed_message(email, allowed)
         if error:
             flash(error, "danger")
             return back
@@ -193,18 +203,29 @@ def settings(tracker_id: int):
         db.commit()
         flash("The email template has been reset to the default.", "success")
     elif action == "save_template":
-        body = request.form.get("body_html", "").strip()
-        if not body or len(body) > MAX_BODY:
+        posted = request.form.get("body_html", "").strip()
+        if not posted or len(posted) > MAX_BODY:
             flash(f"The body is required and must be at most {MAX_BODY} characters.", "danger")
-            return _page(tracker, _week(tracker), form={"body_html": body}, status=400)
+            return _page(tracker, _week(tracker), form={"body_html": posted}, status=400)
+        # Saved cleaned (compose.clean_body): only formatting, lists, tables and https or mailto links are kept.
+        removed, body = removed_parts(posted), clean_body(posted).strip()
+        if not body:
+            flash(EMPTY_AFTER_CLEANING, "danger")
+            return _page(tracker, _week(tracker), form={"body_html": posted}, status=400)
         template = db.get(EmailTemplate, tracker.id)
         if template is None:  # the subject column is no longer used: a new row holds the default
             db.add(EmailTemplate(tracker_id=tracker.id, subject=DEFAULT_SUBJECT, body_html=body))
         else:
             template.body_html = body
-        _audit(tracker, "email_template_saved", tracker.id, {"unknown_placeholders": unknown_placeholders(body)})
+        detail = {"unknown_placeholders": unknown_placeholders(body)}
+        if removed:
+            detail["removed"] = removed
+        _audit(tracker, "email_template_saved", tracker.id, detail)
         db.commit()
-        flash("Email template saved.", "success")
+        if removed:
+            flash(f"Email template saved. {REMOVED_NOTE} {', '.join(removed)}.", "warning")
+        else:
+            flash("Email template saved.", "success")
     else:
         flash("Unknown action.", "danger")
     return back

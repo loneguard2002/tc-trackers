@@ -19,7 +19,7 @@ from ..models import Recipient, ReportSend, Tracker, User
 from ..report import views as report_views
 from ..report.build import Report, build_report
 from ..report.render import html_to_pdf, render_print_html
-from . import smtp
+from . import domains, smtp
 from .compose import build_report_email, email_template, report_link
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,10 @@ logger = logging.getLogger(__name__)
 BACKOFF_MINUTES = [5, 15, 60, 240]
 MAX_ATTEMPTS = len(BACKOFF_MINUTES) + 1  # the initial send plus 4 retries
 NO_RECIPIENTS_MESSAGE = "Add at least one recipient before sending."
+NONE_ALLOWED_MESSAGE = (
+    "None of the recipients has an address at an allowed domain, so the report was not sent. "
+    "An administrator sets the allowed domains in Email settings."
+)
 ERROR_LENGTH = 300
 
 
@@ -54,7 +58,14 @@ def _link(tracker: Tracker, week_ending: date) -> str:
     return report_link(current_app.config["APP_URL"], tracker.id, week_ending)
 
 
-def _audit(session, send: ReportSend, tracker: Tracker, user_id: int | None, target_user_id: int | None = None) -> None:
+def _audit(
+    session,
+    send: ReportSend,
+    tracker: Tracker,
+    user_id: int | None,
+    target_user_id: int | None = None,
+    skipped: list[str] | None = None,
+) -> None:
     action = {"sent": "report_sent", "queued": "report_send_queued", "failed": "report_send_failed"}[send.status]
     detail = {
         "recipient_count": len(send.recipients),
@@ -66,6 +77,8 @@ def _audit(session, send: ReportSend, tracker: Tracker, user_id: int | None, tar
     }
     if send.error:
         detail["error"] = send.error
+    if skipped:
+        detail["skipped_recipients"] = skipped  # not at an allowed domain (domains.py)
     record(
         session, user_id=user_id, tracker_id=tracker.id, action=action, entity="report_send", entity_id=send.id,
         detail=detail, target_user_id=target_user_id,
@@ -81,10 +94,31 @@ def _record_failure(send: ReportSend, exc: Exception, now: datetime) -> None:
     send.next_attempt_at = None if delay is None else now + delay
 
 
-def _attempt(session, send: ReportSend, tracker: Tracker, report: Report, now: datetime, user_id: int | None) -> None:
-    """One delivery attempt for ``send``; updates its status and audits the outcome. The caller commits."""
+def _attempt(
+    session,
+    send: ReportSend,
+    tracker: Tracker,
+    report: Report,
+    now: datetime,
+    user_id: int | None,
+    skipped: list[str] | None = None,
+) -> None:
+    """One delivery attempt for ``send``; updates its status and audits the outcome. The caller commits.
+
+    The allowed domains are checked again here, so a retry never goes to a domain an administrator has taken off the
+    list since the first attempt; with none left the send fails at once."""
+    to, dropped = domains.split_recipients(list(send.recipients), domains.allowed_domains(session))
+    skipped = list(dict.fromkeys((skipped or []) + dropped))
+    if not to:
+        send.attempts += 1
+        send.status = "failed"
+        send.error = NONE_ALLOWED_MESSAGE
+        send.next_attempt_at = None
+        _audit(session, send, tracker, user_id, skipped=skipped)
+        return
+    send.recipients = to
     template = email_template(session, tracker.id)
-    msg = build_report_email(report, template, list(send.recipients), _link(tracker, send.week_ending), send.pdf or b"")
+    msg = build_report_email(report, template, to, _link(tracker, send.week_ending), send.pdf or b"")
     try:
         smtp.send_message(msg)
     except smtp.MailError as exc:
@@ -94,7 +128,7 @@ def _attempt(session, send: ReportSend, tracker: Tracker, report: Report, now: d
         send.sent_at = now
         send.error = None
         send.next_attempt_at = None
-    _audit(session, send, tracker, user_id)
+    _audit(session, send, tracker, user_id, skipped=skipped)
 
 
 def report_today(trigger: str, send_timezone: str, now: datetime) -> date:
@@ -124,9 +158,12 @@ def send_report(
 
     With ``claimed`` (a scheduled send already inserted as ``sending``) that row is filled in rather than a new one.
     """
-    recipients = recipient_emails(session, tracker)
-    if not recipients:
+    everyone = recipient_emails(session, tracker)
+    if not everyone:
         raise ValueError(NO_RECIPIENTS_MESSAGE)
+    recipients, skipped = domains.split_recipients(everyone, domains.allowed_domains(session))
+    if not recipients:
+        raise ValueError(NONE_ALLOWED_MESSAGE)
     report, pdf = _report_and_pdf(session, tracker, week_ending, report_today(trigger, tracker.send_timezone, now))
     if claimed is None:
         send = ReportSend(
@@ -145,7 +182,7 @@ def send_report(
         send.recipients = recipients
         send.pdf = pdf
     session.flush()
-    _attempt(session, send, tracker, report, now, user_id)
+    _attempt(session, send, tracker, report, now, user_id, skipped=skipped)
     session.commit()
     return send
 
