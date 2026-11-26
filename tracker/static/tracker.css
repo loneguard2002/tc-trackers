@@ -1334,11 +1334,12 @@ a.chip:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border
 .settings-section > .live-line { margin-top: auto; }
 
 /* Email: the editor and sending on the left, a preview that stays in view on the right. */
-.email-page { max-width: 1400px; container-type: inline-size; }
+.email-page { max-width: 1280px; container-type: inline-size; }
 .email-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
 .email-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-content: start; min-width: 0; }
 .email-main > .settings-section, .email-side .settings-section { margin: 0; }
 .email-side { min-width: 0; }
+.email-recent { margin: 20px 0 0; }
 @container (min-width: 1040px) {
   .email-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
   .email-side { position: sticky; top: calc(var(--topbar-height) + 64px); }
