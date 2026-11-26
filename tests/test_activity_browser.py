@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 from conftest import browser_sign_in
+from playwright.sync_api import expect
+from test_report_page_browser import RECORDER
 
 from tracker.models import AuditLog
 
@@ -101,3 +103,69 @@ def test_activity_emails_stay_whole_and_the_page_does_not_scroll_sideways(
         assert email.evaluate(LINES) == 1, (email.inner_text(), email.bounding_box())
     # The table may scroll inside its own wrapper, but the page itself must not.
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+
+def _open(page, live_server, admin, url="/admin/activity"):
+    page.add_init_script(RECORDER)
+    browser_sign_in(page, live_server, admin)
+    page.goto(f"{live_server}{url}")
+
+
+def _clean(page):
+    assert page.evaluate("window.__csp") == []
+    assert page.evaluate("window.__errors") == []
+
+
+def _entries(db, count: int, user) -> None:
+    db.add_all(
+        AuditLog(
+            user_id=user.id, action="entry_created", entity="entry", entity_id=str(n), detail={"note": f"note-{n}"}
+        )
+        for n in range(count)
+    )
+    db.commit()
+
+
+def test_typing_a_search_and_pressing_enter_filters_the_log(page, live_server, db, user_factory):
+    ann = user_factory(full_name="Ann Admin", email="ann.admin@example.com", is_admin=True)
+    _entries(db, 3, ann)
+    db.add(AuditLog(action="team_created", entity="team", entity_id="1", detail={"name": "Kestrelwing"}))
+    db.commit()
+    _open(page, live_server, ann)
+    page.fill("#filter-q", "kestrelwing")
+    page.press("#filter-q", "Enter")
+    page.wait_for_url("**q=kestrelwing**")
+    expect(page.locator("tr[data-entry]")).to_have_count(1)
+    expect(page.locator(".pager-count")).to_have_text("Showing 1–1 of 1 entry")
+    assert page.locator("a", has_text="Clear filters").count() == 1
+    _clean(page)
+
+
+def test_a_heading_click_sorts_and_page_2_opens(page, live_server, db, user_factory):
+    ann = user_factory(full_name="Ann Admin", email="ann.admin@example.com", is_admin=True)
+    _entries(db, 40, ann)
+    _open(page, live_server, ann)
+    expect(page.locator("tr[data-entry]")).to_have_count(25)
+    page.click("th a.sort-button:has-text('Time')")
+    page.wait_for_url("**sort=time**")
+    assert page.locator("th", has_text="Time").get_attribute("aria-sort") == "ascending"
+    page.click(".pager-pages a[aria-label='Page 2']")
+    page.wait_for_url("**page=2**")
+    assert "sort=time" in page.url
+    expect(page.locator("tr[data-entry]")).to_have_count(16)  # 41 entries with Ann's sign-in
+    expect(page.locator(".pager-count")).to_have_text("Showing 26–41 of 41 entries")
+    assert page.locator('.pager-pages a[aria-current="page"]').inner_text() == "2"
+    _clean(page)
+
+
+def test_on_a_phone_the_rows_are_cards_and_nothing_scrolls_sideways(page, live_server, db, user_factory):
+    ann = user_factory(full_name="Ann Admin", email="ann.admin@example.com", is_admin=True)
+    _entries(db, 5, ann)
+    page.set_viewport_size({"width": 390, "height": 900})
+    _open(page, live_server, ann)
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    assert page.locator("table.activity-table thead").is_hidden()
+    assert page.locator("tr[data-entry]").first.evaluate("el => getComputedStyle(el).display") == "flex"
+    label = page.locator("tr[data-entry] td[data-label='Action']").first
+    assert label.evaluate("el => getComputedStyle(el, '::before').content") == '"Action "'
+    _clean(page)

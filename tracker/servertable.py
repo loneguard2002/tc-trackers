@@ -13,6 +13,7 @@ from dataclasses import dataclass
 PAGE_SIZES = (25, 50, 100)
 DEFAULT_SIZE = PAGE_SIZES[0]
 MAX_QUERY_LENGTH = 200
+MAX_PAGE = 10**9
 
 
 @dataclass(frozen=True)
@@ -26,7 +27,8 @@ class TableState:
 
 def read_state(args, sort_keys: tuple[str, ...], default_sort: str, default_descending: bool) -> TableState:
     """The table's state from the request's query string; anything unusable falls back to the default."""
-    q = (args.get("q") or "").strip()[:MAX_QUERY_LENGTH]
+    # A NUL character cannot be sent to PostgreSQL in a parameter, so it is dropped rather than left to fail the search.
+    q = (args.get("q") or "").replace("\x00", "").strip()[:MAX_QUERY_LENGTH]
     raw = (args.get("sort") or "").strip()
     descending = raw.startswith("-")
     key = raw[1:] if descending else raw
@@ -38,10 +40,12 @@ def read_state(args, sort_keys: tuple[str, ...], default_sort: str, default_desc
         size = DEFAULT_SIZE
     if size not in PAGE_SIZES:
         size = DEFAULT_SIZE
-    try:
-        page = int(args.get("page", ""))
-    except (TypeError, ValueError):
-        page = 1
+    # Only ASCII digits make a page number (int() also reads others, such as Arabic-Indic ones). A number longer than
+    # any table has pages is the last page, capped so that it never reaches the database as a huge offset.
+    text = (args.get("page") or "").strip()
+    page = 1
+    if text.isascii() and text.isdigit():
+        page = MAX_PAGE if len(text) > 9 else min(int(text), MAX_PAGE)
     return TableState(q=q, sort=key, descending=descending, page=max(1, page), size=size)
 
 

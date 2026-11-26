@@ -1,4 +1,5 @@
-"""The Activity screen (spec section 7): newest first, 50 a page, filtered by person, action and date range.
+"""The Activity screen (spec section 7): newest first, paged, sorted and searched on the server, filtered by person,
+action and date range.
 
 Names, not contents (spec section 2): a viewer who is not an administrator sees every entry, but the detail of an entry
 about a tracker they cannot open is hidden; its time, people, action and tracker name stay.
@@ -10,7 +11,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import NamedTuple
 
 from flask import render_template, request, url_for
-from sqlalchemy import or_, select
+from sqlalchemy import Text, case, func, or_, select
 from sqlalchemy.orm import aliased
 
 from ..auth import current_user, has_permission, tracker_roles
@@ -19,12 +20,13 @@ from ..auth.session import admin_required
 from ..db import get_session
 from ..ids import parse_id
 from ..models import AuditLog, Tracker, User
+from ..servertable import clamp_page, like_pattern, read_state, sort_changes, state_args
 from . import bp
 from .labels import ACTION_LABELS, action_label, describe, feedback_text
 from .retention import retention_days, save_retention
 
-PAGE_SIZE = 50
-_MAX_PAGE = 10**6
+SORT_KEYS = ("time", "actor", "action", "tracker")
+DEFAULT_SORT, DEFAULT_DESCENDING = "time", True
 HIDDEN_DETAIL_MESSAGE = "Details hidden: you cannot open this tracker."
 
 
@@ -33,14 +35,6 @@ class ActivityFilters(NamedTuple):
     action: str | None
     start: date | None
     end: date | None
-    page: int
-
-
-def _page_number(value: str | None) -> int | None:
-    text = (value or "").strip()
-    if not (text.isascii() and text.isdigit()) or len(text) > 12 or int(text) > _MAX_PAGE:
-        return None
-    return int(text)
 
 
 def _date(value: str | None) -> date | None:
@@ -54,13 +48,11 @@ def parse_filters(args) -> ActivityFilters:
     """The filters in a query string; any value that cannot be read is ignored."""
     person = parse_id(args.get("person"))
     action = args.get("action", "").strip()
-    page = _page_number(args.get("page")) or 1
     return ActivityFilters(
         person=person,
         action=action if action in ACTION_LABELS else None,
         start=_date(args.get("from")),
         end=_date(args.get("to")),
-        page=max(page, 1),
     )
 
 
@@ -68,7 +60,8 @@ def _midnight(day: date) -> datetime:
     return datetime.combine(day, time.min, tzinfo=timezone.utc)
 
 
-def _query_args(filters: ActivityFilters, page: int) -> dict[str, str | int]:
+def _filter_args(filters: ActivityFilters) -> dict[str, str | int]:
+    """The filters as address keys, kept by every sort, page and size link."""
     args: dict[str, str | int] = {}
     if filters.person:
         args["person"] = filters.person
@@ -78,9 +71,12 @@ def _query_args(filters: ActivityFilters, page: int) -> dict[str, str | int]:
         args["from"] = filters.start.isoformat()
     if filters.end:
         args["to"] = filters.end.isoformat()
-    if page > 1:
-        args["page"] = page
     return args
+
+
+def _action_order():
+    """The action's label, as an SQL expression, so that sorting by Action sorts what the page shows."""
+    return case(ACTION_LABELS, value=AuditLog.action, else_=AuditLog.action)
 
 
 @bp.get("")
@@ -88,37 +84,71 @@ def _query_args(filters: ActivityFilters, page: int) -> dict[str, str | int]:
 def index():
     db = get_session()
     filters = parse_filters(request.args)
+    state = read_state(request.args, SORT_KEYS, DEFAULT_SORT, DEFAULT_DESCENDING)
     actor, affected = aliased(User), aliased(User)
-    query = (
-        select(
-            AuditLog,
-            actor.full_name,
-            actor.email,
-            actor.status,
-            affected.full_name,
-            affected.email,
-            affected.status,
-            Tracker.name,
-        )
-        .outerjoin(actor, actor.id == AuditLog.user_id)
-        .outerjoin(affected, affected.id == AuditLog.target_user_id)
-        .outerjoin(Tracker, Tracker.id == AuditLog.tracker_id)
-    )
-    if filters.person:
-        query = query.where(or_(AuditLog.user_id == filters.person, AuditLog.target_user_id == filters.person))
-    if filters.action:
-        query = query.where(AuditLog.action == filters.action)
-    if filters.start:
-        query = query.where(AuditLog.at >= _midnight(filters.start))
-    if filters.end and filters.end < date.max:
-        query = query.where(AuditLog.at < _midnight(filters.end) + timedelta(days=1))
-    rows = db.execute(
-        query.order_by(AuditLog.at.desc(), AuditLog.id.desc())
-        .limit(PAGE_SIZE + 1)
-        .offset((filters.page - 1) * PAGE_SIZE)
-    ).all()
     viewer = current_user()
     can_open = None if viewer.is_admin else tracker_roles(db, viewer)  # None: every detail is shown
+    conditions = []
+    if filters.person:
+        conditions.append(or_(AuditLog.user_id == filters.person, AuditLog.target_user_id == filters.person))
+    if filters.action:
+        conditions.append(AuditLog.action == filters.action)
+    if filters.start:
+        conditions.append(AuditLog.at >= _midnight(filters.start))
+    if filters.end and filters.end < date.max:
+        conditions.append(AuditLog.at < _midnight(filters.end) + timedelta(days=1))
+    if state.q:
+        pattern = like_pattern(state.q)
+        # The detail is searched only where the viewer may read it (spec, Call 1): an entry about a tracker they cannot
+        # open matches on its tracker name, never on its contents.
+        detail = AuditLog.detail.cast(Text).ilike(pattern, escape="\\")
+        if can_open is not None:
+            detail = detail & or_(AuditLog.tracker_id.is_(None), AuditLog.tracker_id.in_(list(can_open)))
+        conditions.append(
+            or_(
+                *(
+                    column.ilike(pattern, escape="\\")
+                    for column in (actor.full_name, actor.email, affected.full_name, affected.email, Tracker.name)
+                ),
+                detail,
+            )
+        )
+
+    def joined(query):
+        return (
+            query.select_from(AuditLog)
+            .outerjoin(actor, actor.id == AuditLog.user_id)
+            .outerjoin(affected, affected.id == AuditLog.target_user_id)
+            .outerjoin(Tracker, Tracker.id == AuditLog.tracker_id)
+            .where(*conditions)
+        )
+
+    total = db.scalar(joined(select(func.count(AuditLog.id)))) or 0
+    state = clamp_page(state, total)
+    order = {
+        "time": AuditLog.at,
+        "actor": func.lower(actor.full_name),
+        "action": func.lower(_action_order()),
+        "tracker": func.lower(Tracker.name),
+    }[state.sort]
+    tie_break = AuditLog.id.desc() if state.sort == DEFAULT_SORT and state.descending else AuditLog.id.asc()
+    rows = db.execute(
+        joined(
+            select(
+                AuditLog,
+                actor.full_name,
+                actor.email,
+                actor.status,
+                affected.full_name,
+                affected.email,
+                affected.status,
+                Tracker.name,
+            )
+        )
+        .order_by((order.desc() if state.descending else order.asc()).nulls_last(), tie_break)
+        .limit(state.size)
+        .offset((state.page - 1) * state.size)
+    ).all()
 
     def hidden(entry: AuditLog) -> bool:
         return can_open is not None and entry.tracker_id is not None and entry.tracker_id not in can_open
@@ -162,10 +192,19 @@ def index():
             affected_email,
             affected_status,
             tracker_name,
-        ) in rows[:PAGE_SIZE]
+        ) in rows
     ]
-    newer = url_for("activity.index", **_query_args(filters, filters.page - 1)) if filters.page > 1 else None
-    older = url_for("activity.index", **_query_args(filters, filters.page + 1)) if len(rows) > PAGE_SIZE else None
+    filter_args = _filter_args(filters)
+    first = (state.page - 1) * state.size + 1
+
+    def link(**changes) -> str:
+        return url_for(
+            "activity.index", **filter_args, **state_args(state, DEFAULT_SORT, DEFAULT_DESCENDING, **changes)
+        )
+
+    sort_urls = {key: link(**sort_changes(state, key)) for key in SORT_KEYS}
+    # The Rows per page form keeps the search, sort and filters; page and size are its own.
+    size_form = {**filter_args, **state_args(state, DEFAULT_SORT, DEFAULT_DESCENDING, page=1, size=25)}
     # People can share a name, and a deleted person's email may be reused by a new account, so a label carries both.
     people = [
         (id, f"{name} ({email})" + (" – deleted" if status == "deleted" else ""))
@@ -180,10 +219,15 @@ def index():
         filters=filters,
         people=people,
         actions=sorted(ACTION_LABELS.items(), key=lambda item: item[1]),
-        newer=newer,
-        older=older,
+        state=state,
+        total=total,
+        first=first,
+        last=first + len(entries) - 1,
+        sort_urls=sort_urls,
+        page_url=lambda page: link(page=page),
+        size_form=size_form,
         retention=retention_days(db),
-        filtered=any((filters.person, filters.action, filters.start, filters.end)),
+        filtered=bool(state.q or any((filters.person, filters.action, filters.start, filters.end))),
         hidden_detail=HIDDEN_DETAIL_MESSAGE,
     )
 

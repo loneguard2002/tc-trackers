@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field, field %}
+{% from "macros.html" import csrf_field, field, icon %}
+{% from "lists/_table.html" import server_pager, server_sort_header %}
 {% macro person(name, email, deleted) -%}
 {% if name %}{{ name }}<span class="member-email">{{ email }}</span>{% if deleted %}<span class="badge badge-muted">Deleted</span>{% endif %}{% else %}–{% endif %}
 {%- endmacro %}
@@ -11,11 +12,16 @@
     <header class="settings-section-head has-action">
       <div>
         <h2 id="section-activity">Activity log</h2>
-        <p>{{ 'Filtered entries' if filtered else 'All entries' }}, {{ entries|length }} shown on this page. Times are UTC.</p>
+        <p>{{ 'Filtered entries' if filtered else 'All entries' }}, {{ total }} in all. Times are UTC.</p>
       </div>
       {% if filtered %}<a class="button" href="{{ url_for('activity.index') }}">Clear filters</a>{% endif %}
     </header>
     <form class="activity-filters" method="get" action="{{ url_for('activity.index') }}">
+      {% if state.sort != 'time' or not state.descending %}<input type="hidden" name="sort" value="{{ '-' if state.descending }}{{ state.sort }}">{% endif %}
+      {% if state.size != 25 %}<input type="hidden" name="size" value="{{ state.size }}">{% endif %}
+      {% call field('Search', 'People, tracker or detail.', 'filter-q') %}
+      <input id="filter-q" type="search" name="q" value="{{ state.q }}" maxlength="200" autocomplete="off">
+      {% endcall %}
       {% call field('Person', 'Who acted or was affected.', 'filter-person') %}
       <select id="filter-person" name="person">
         <option value="">Anyone</option>
@@ -37,27 +43,27 @@
       <div class="activity-filters-go"><button class="button primary" type="submit">Apply filters</button></div>
     </form>
     {% if entries %}
-    <div class="section-table">
-      <table class="table activity-table">
+    <div class="section-table" data-table-frame>
+      <table class="table activity-table card-rows">
         <thead>
           <tr>
-            <th scope="col">Time</th>
-            <th scope="col">Performed by</th>
+            {{ server_sort_header('Time', 'time', state, sort_urls['time']) }}
+            {{ server_sort_header('Performed by', 'actor', state, sort_urls['actor']) }}
             <th scope="col">User affected</th>
-            <th scope="col">Action</th>
-            <th scope="col">Tracker</th>
+            {{ server_sort_header('Action', 'action', state, sort_urls['action']) }}
+            {{ server_sort_header('Tracker', 'tracker', state, sort_urls['tracker']) }}
             <th scope="col">Detail</th>
           </tr>
         </thead>
         <tbody>
           {% for e in entries %}
           <tr data-entry="{{ e.id }}">
-            <td class="activity-time">{{ e.at.strftime('%d %b %Y %H:%M') if e.at else '–' }}</td>
-            <td>{{ person(e.actor, e.actor_email, e.actor_deleted) }}</td>
-            <td>{{ person(e.affected, e.affected_email, e.affected_deleted) }}</td>
-            <td>{{ e.label }}</td>
-            <td>{{ e.tracker or '–' }}</td>
-            <td>
+            <td class="activity-time" data-label="Time">{{ e.at.strftime('%d %b %Y %H:%M') if e.at else '–' }}</td>
+            <td data-label="Performed by">{{ person(e.actor, e.actor_email, e.actor_deleted) }}</td>
+            <td data-label="User affected">{{ person(e.affected, e.affected_email, e.affected_deleted) }}</td>
+            <td data-label="Action">{{ e.label }}</td>
+            <td data-label="Tracker">{{ e.tracker or '–' }}</td>
+            <td data-label="Detail">
               {% if e.feedback %}
               {% if e.feedback.url %}<a href="{{ e.feedback.url }}">{{ e.feedback.reference }}</a>{% else %}{{ e.feedback.reference }}{% endif %}: {{ e.feedback.text }}
               {% elif e.hidden %}
@@ -78,12 +84,7 @@
     {% else %}
     <p class="empty-note">No activity matches.</p>
     {% endif %}
-    {% if newer or older %}
-    <div class="settings-section-foot activity-pager">
-      {% if newer %}<a class="button" href="{{ newer }}" rel="prev">Newer</a>{% endif %}
-      {% if older %}<a class="button" href="{{ older }}" rel="next">Older</a>{% endif %}
-    </div>
-    {% endif %}
+    {{ server_pager(state, total, 'entries', 'entry', page_url, size_form, first, last) }}
     {% if current_user and current_user.is_admin %}
     <form class="settings-section-foot activity-retention" method="post" action="{{ url_for('activity.retention') }}">
       {{ csrf_field(csrf_token()) }}
