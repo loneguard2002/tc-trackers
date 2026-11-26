@@ -19,23 +19,24 @@
 <p class="page-lede">Failed password sign-ins are counted for each account (the email entered) and each address (the IP address the attempt came from). When either reaches its limit within the window, sign-in is refused until older failures leave the window. Microsoft sign-in is not counted. Failures are kept for 24 hours. Times are UTC.</p>
 
 {% set blocked_accounts = blocked|selectattr('kind', 'equalto', 'account')|list|length %}
-<section class="stat-band sign-in-summary" aria-label="Sign-in summary">
-  <div class="stat"><span class="stat-label">Blocked now</span>
-    <span class="stat-value">{{ blocked|length }}</span>
-    <span class="stat-sub">{{ blocked_accounts }} account{{ 's' if blocked_accounts != 1 }}, {{ blocked|length - blocked_accounts }} address{{ 'es' if blocked|length - blocked_accounts != 1 }}</span></div>
-  <div class="stat"><span class="stat-label">Failed sign-ins</span>
-    <span class="stat-value">{{ failures_last_day }}</span>
-    <span class="stat-sub">in the last 24 hours</span></div>
-  {% set window = limits.window_minutes ~ ' minute' ~ ('s' if limits.window_minutes != 1 else '') %}
-  <div class="stat"><span class="stat-label">Account limit</span>
-    <span class="stat-value">{{ limits.account_attempts }} <small>failures</small></span>
-    <span class="stat-sub">per email address in {{ window }}</span></div>
-  <div class="stat"><span class="stat-label">Address limit</span>
-    <span class="stat-value">{{ limits.address_attempts }} <small>failures</small></span>
-    <span class="stat-sub">per IP address in {{ window }}</span></div>
-</section>
-
 <div class="settings">
+  {# Inside the settings column, so the band stops at the same width as the sections below it. #}
+  <section class="stat-band sign-in-summary" aria-label="Sign-in summary">
+    <div class="stat"><span class="stat-label">Blocked now</span>
+      <span class="stat-value">{{ blocked|length }}</span>
+      <span class="stat-sub">{{ blocked_accounts }} account{{ 's' if blocked_accounts != 1 }}, {{ blocked|length - blocked_accounts }} address{{ 'es' if blocked|length - blocked_accounts != 1 }}</span></div>
+    <div class="stat"><span class="stat-label">Failed sign-ins</span>
+      <span class="stat-value">{{ failures_last_day }}</span>
+      <span class="stat-sub">in the last 24 hours</span></div>
+    {% set window = limits.window_minutes ~ ' minute' ~ ('s' if limits.window_minutes != 1 else '') %}
+    <div class="stat"><span class="stat-label">Account limit</span>
+      <span class="stat-value">{{ limits.account_attempts }} <small>failures</small></span>
+      <span class="stat-sub">per email address in {{ window }}</span></div>
+    <div class="stat"><span class="stat-label">Address limit</span>
+      <span class="stat-value">{{ limits.address_attempts }} <small>failures</small></span>
+      <span class="stat-sub">per IP address in {{ window }}</span></div>
+  </section>
+
   <section class="settings-section" aria-labelledby="section-blocked">
     <header class="settings-section-head">
       <h2 id="section-blocked">Blocked now</h2>
