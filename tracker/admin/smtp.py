@@ -15,7 +15,7 @@ from ..auth import current_user, permission_required
 from ..db import get_session
 from ..feedback import mail as feedback_mail
 from ..feedback import settings as feedback_settings
-from ..mail import access
+from ..mail import access, domains
 from ..mail.compose import (
     BLOCK_PLACEHOLDERS,
     PLACEHOLDERS,
@@ -33,6 +33,7 @@ SMTP_KEYS = ("smtp_host", "smtp_port", "smtp_auth", "smtp_user", "smtp_from", "s
 SENDER_KEYS = ("smtp_from",)  # the keys a holder who is not an administrator may change
 SMTP_AUTH_MODES = ("none", "plain", "xoauth2")
 SERVER_LOCKED_MESSAGE = "Only an administrator can change the mail server and how the app signs in to it."
+DOMAINS_LOCKED_MESSAGE = "Only an administrator can change which domains report emails may go to."
 MAX_REPORT_SUBJECT = 300
 REPORT_SUBJECT_ERROR = f"The report email subject is required and must be at most {MAX_REPORT_SUBJECT} characters."
 
@@ -101,6 +102,29 @@ def smtp():
             db.merge(AppSetting(key=access.INFOSEC_KEY, value=infosec))
         if days != days_before:
             db.merge(AppSetting(key=access.REMINDER_DAYS_KEY, value=str(days)))
+        # Allowed recipient domains (audit 2026-11-25, Medium 1): administrators only; kept as they are when left out.
+        domains_before = domains.allowed_domains(db)
+        allowed = domains_before
+        if domains.KEY in request.form:
+            allowed, error = domains.parse_domains(request.form[domains.KEY])
+            if error:
+                abort(400, description=error)
+            if allowed != domains_before and not is_admin:
+                abort(400, description=DOMAINS_LOCKED_MESSAGE)
+        if allowed != domains_before:
+            db.merge(AppSetting(key=domains.KEY, value="\n".join(allowed)))
+            record(
+                db,
+                user_id=current_user().id,
+                tracker_id=None,
+                action="recipient_domains_changed",
+                entity="app_settings",
+                entity_id=domains.KEY,
+                detail={
+                    "added": [d for d in allowed if d not in domains_before],
+                    "removed": [d for d in domains_before if d not in allowed],
+                },
+            )
         if feedback_to != feedback_before:
             db.merge(AppSetting(key=feedback_settings.ADDRESS_KEY, value=", ".join(feedback_to)))
         if link != link_before:
@@ -151,6 +175,8 @@ def smtp():
         reminder_days=access.reminder_days(db),
         feedback_to=", ".join(feedback_settings.addresses(db)),
         feedback_link=feedback_settings.link_on(db),
+        recipient_domains=domains.allowed_domains(db),
+        domains_key=domains.KEY,
         max_reminder_days=access.MAX_REMINDER_DAYS,
         unknown=unknown_placeholders(report_subject(db)),
         placeholders={name: text for name, text in PLACEHOLDERS.items() if name not in BLOCK_PLACEHOLDERS},

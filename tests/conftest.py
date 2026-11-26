@@ -16,6 +16,7 @@ from tracker.app import create_app
 from tracker.auth.passwords import hash_password
 from tracker.auth.session import SESSION_KEY, session_key
 from tracker.db import get_engine
+from tracker.mail import domains as mail_domains
 from tracker.models import (
     Base,
     BusinessLine,
@@ -54,6 +55,22 @@ def alembic_config() -> Config:
     config.set_main_option("script_location", str(ROOT / "migrations"))
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
     return config
+
+
+# The tests send to made-up addresses at example.com, so it is allowed with the organisation's own domains (tracker/
+# mail/domains.py). A test about the real list asks for ``real_recipient_domains``.
+_REAL_DOMAINS = mail_domains.DEFAULT_DOMAINS
+
+
+@pytest.fixture(autouse=True)
+def _example_com_may_receive(monkeypatch):
+    monkeypatch.setattr(mail_domains, "DEFAULT_DOMAINS", (*_REAL_DOMAINS, "example.com"))
+
+
+@pytest.fixture
+def real_recipient_domains(monkeypatch):
+    monkeypatch.setattr(mail_domains, "DEFAULT_DOMAINS", _REAL_DOMAINS)
+    return list(_REAL_DOMAINS)
 
 
 @pytest.fixture(autouse=True)

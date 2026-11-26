@@ -143,6 +143,7 @@ ACTION_AREAS: dict[str, tuple[str, ...]] = {
     # Email settings.
     "smtp_settings_updated": ("manage_email_settings",),
     "feedback_settings_changed": ("manage_email_settings",),
+    "recipient_domains_changed": ("manage_email_settings",),
     # Feedback.
     **dict.fromkeys(
         ("feedback_answered", "feedback_replied", "feedback_sent", "feedback_status", "feedback_withdrawn"),
