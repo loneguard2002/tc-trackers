@@ -1972,7 +1972,7 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .new-team-step input:not([type="radio"]), .new-team-step textarea { width: 100%; box-sizing: border-box; }
 .new-team-sub { margin-top: 6px; }
 .step-number { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: 8px; border-radius: 50%; background: var(--primary); color: var(--primary-text); font-size: .75rem; font-weight: 800; }
-.sit-choice { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 8px; border-radius: 6px; font-size: .9375rem; }
+.sit-choice { display: flex; align-items: center; gap: 8px; min-height: 36px; margin: 0; padding: 0 8px; border-radius: 6px; font-size: .9375rem; font-weight: 400; }
 .sit-choice:has(input:checked) { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); font-weight: 600; }
 .sit-choice.depth-2 { padding-left: 26px; } .sit-choice.depth-3 { padding-left: 44px; } .sit-choice.depth-4 { padding-left: 62px; }
 .sit-choice.depth-5, .sit-choice.depth-6, .sit-choice.depth-7, .sit-choice.depth-8 { padding-left: 80px; }
@@ -2041,9 +2041,8 @@ a.chain-node:hover { border-color: var(--primary); }
 .role-cards { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; border: 0; }
 .role-card { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--field-border); border-radius: 8px; cursor: pointer; }
 .role-card:has(input:checked) { border: 2px solid var(--primary); padding: 9px 11px; background: color-mix(in srgb, var(--primary) 7%, var(--surface)); }
-.role-card input { margin-top: 3px; }
 .role-card-text { display: flex; flex-direction: column; gap: 2px; font-size: .875rem; }
-.role-card-text span { color: var(--muted); }
+.role-card-text span { color: var(--muted); font-weight: 400; }
 .add-preview { margin: 0; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--text) 6%, var(--surface)); font-size: .875rem; line-height: 1.5; }
 .add-member-submit { justify-content: center; min-height: 44px; }
 .add-member-panel .role-guide-foldout { margin-top: 14px; }
@@ -2060,7 +2059,10 @@ a.chain-node:hover { border-color: var(--primary); }
 .sits-diagrams figure { display: flex; flex: 1 1 260px; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
 .sits-diagrams figure.sits-after { border: 2px solid var(--primary); }
 .sits-diagrams figcaption { color: var(--muted); font-size: .6875rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.access-chain.is-small > li { flex: 0 1 auto; }
+.access-chain.is-small { flex-direction: column; align-items: flex-start; gap: 2px; }
+.access-chain.is-small + .access-chain.is-small { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.access-chain.is-small > li { flex: none; flex-direction: column; align-items: flex-start; gap: 2px; }
+.access-chain.is-small > li:not(:last-child)::after { content: "↓"; padding-left: 14px; font-size: 1rem; }
 .access-chain.is-small .chain-node { padding: 6px 10px; }
 .access-chain.is-small > li.is-new .chain-node { border: 2px dashed var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
 .sits-changes { display: flex; flex-wrap: wrap; gap: 12px; padding: 0 20px 16px; }
@@ -2068,6 +2070,11 @@ a.chain-node:hover { border-color: var(--primary); }
 .sits-change.is-gain { background: color-mix(in srgb, var(--success) 12%, var(--surface)); }
 .sits-change.is-loss { background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
 .sits-preview .move-confirm { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 0 20px 20px; }
+/* The app gives every input the full width and a field's padding; the New view's choices are radio buttons. */
+.sit-choice input, .role-card input, .role-switch input, .sits-form input[type="radio"] { flex: none; width: auto; margin: 0; padding: 0; }
+.role-card input { margin-top: 3px; }
+.member-main .member-who { flex: none; }  /* the Classic list's basis would set the height in this column */
+.add-member-panel .section-table { overflow-x: auto; }
 /* A search marks the teams it matches (teams-new.js). */
 .org-chart li.is-match > .org-node { border: 2px solid var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
 @media (max-width: 640px) {
