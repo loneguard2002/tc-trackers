@@ -420,6 +420,8 @@ def home():
         )
         cards.append(card)
     cards.sort(key=lambda c: (c["attention"], c["tracker"].name.lower()))
+    # The New tracker pop-up (trackers/_new_form.html) starts from the same defaults as the New tracker page.
+    new_tracker = _new_tracker_context(db, _defaults_form()) if has_permission(user, "create_trackers") else {}
     return render_template(
         "home.html",
         cards=cards,
@@ -428,6 +430,7 @@ def home():
         today=today,
         page_title="Trackers",
         current_page="trackers",
+        **new_tracker,
     )
 
 
@@ -649,6 +652,23 @@ def _chosen_region_ids(form) -> set[str]:
     """The ticked regions of a posted form (repeated fields) or of a form built in the view (a list)."""
     chosen = form.getlist("region_ids") if hasattr(form, "getlist") else form.get("region_ids", [])
     return {str(region_id) for region_id in chosen}
+
+
+def _new_tracker_context(db, form) -> dict:
+    """What the New tracker form needs, on its page and in the pop-up on Home: the draft, and the teams (with the
+    region each team's location is in), business lines and regions it offers."""
+    return {
+        "form": form,
+        "errors": [],
+        "tracker": None,
+        "weekdays": list(enumerate(WEEKDAYS)),
+        "weekday_locked": False,
+        "team_choices": team_choices(db),
+        "team_regions": {team_id: place.region_id for team_id, place in team_places(db).items()},
+        "business_line_choices": business_line_choices(db, None),
+        "region_choices": region_choices(db, ()),
+        "chosen_regions": _chosen_region_ids(form),
+    }
 
 
 def _render_settings(tracker: Tracker | None, form, errors: list[str], status: int = 200):

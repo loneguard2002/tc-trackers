@@ -113,3 +113,60 @@ def test_new_tracker_steps_fit_a_phone(page, live_server, user_factory, region_f
     page.get_by_role("button", name="Skip for now").click()
     expect(page.locator("[data-step-caption]")).to_have_text("Step 5 of 5: check and create")
     assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+
+
+def test_new_tracker_opens_as_a_pop_up_on_home_and_lands_on_settings(
+    page, live_server, user_factory, region_factory, business_line_factory
+):
+    region_factory("EMEA", "Europe")
+    business_line_factory()
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.goto(f"{live_server}/")
+    dialog = page.locator("#new-tracker-dialog")
+    caption = dialog.locator("[data-step-caption]")
+
+    page.get_by_role("link", name="New tracker").click()
+    expect(dialog).to_be_visible()
+    assert page.url == f"{live_server}/"  # a pop-up, not the page
+    expect(page.locator("#name")).to_be_focused()
+    page.fill("#name", "Thrown away")
+    _next(page)
+    expect(caption).to_have_text("Step 2 of 5: choose who sees it")
+    dialog.get_by_role("button", name="Cancel").click()  # closing discards the draft
+    expect(dialog).to_be_hidden()
+    expect(page.get_by_role("link", name="New tracker")).to_be_focused()
+
+    page.get_by_role("link", name="New tracker").click()
+    expect(caption).to_have_text("Step 1 of 5: name it and say what it counts")
+    expect(page.locator("#name")).to_have_value("")
+    page.fill("#name", "Pop-up tracker")
+    _next(page)
+    page.select_option("#business_line_id", label="Tradition brokerage")
+    page.get_by_label("EMEA – Europe").check()
+    _next(page)
+    page.fill("#start_date", "2026-09-04")
+    page.fill("#last_week_ending", "2026-12-25")
+    _next(page)
+    page.get_by_role("button", name="Skip for now").click()
+    expect(dialog.locator("[data-review]")).to_contain_text("Pop-up tracker")
+    page.get_by_role("button", name="Create tracker").click()
+
+    expect(page.get_by_text("Tracker created.")).to_be_visible()
+    assert page.url.endswith("/settings")
+    expect(page.locator("#name")).to_have_value("Pop-up tracker")
+
+
+def test_the_new_tracker_pop_up_fits_a_phone(page, live_server, user_factory, region_factory, business_line_factory):
+    region_factory("EMEA", "Europe")
+    business_line_factory()
+    browser_sign_in(page, live_server, user_factory(is_admin=True))
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(f"{live_server}/")
+    page.get_by_role("link", name="New tracker").click()
+    dialog = page.locator("#new-tracker-dialog")
+    expect(dialog).to_be_visible()
+    page.fill("#name", "Phone")
+    _next(page)
+    box = dialog.bounding_box()
+    assert box["x"] >= 0 and box["x"] + box["width"] <= 390
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
