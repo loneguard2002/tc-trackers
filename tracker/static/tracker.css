@@ -2047,6 +2047,27 @@ a.chain-node:hover { border-color: var(--primary); }
 .add-preview { margin: 0; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--text) 6%, var(--surface)); font-size: .875rem; line-height: 1.5; }
 .add-member-submit { justify-content: center; min-height: 44px; }
 .add-member-panel .role-guide-foldout { margin-top: 14px; }
+/* Where a team sits: the choice beside the preview (Now and After chains, then the changes). */
+.sits-layout { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px; }
+.sits-choose { flex: 1 1 320px; min-width: 0; margin: 0; }
+.sits-preview { display: flex; flex: 999 1 520px; flex-direction: column; gap: 16px; min-width: 0; }
+.sits-preview > .settings-section { margin: 0; }
+.sits-body, .sits-form { display: flex; flex-direction: column; gap: 12px; }
+.sits-body { padding: 14px 20px 20px; }
+.sits-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.sits-chips li { display: inline-flex; align-items: center; gap: 2px; padding: 2px 2px 2px 12px; border: 1px solid var(--field-border); border-radius: 999px; font-weight: 600; }
+.sits-diagrams { display: flex; flex-wrap: wrap; gap: 16px; padding: 14px 20px 20px; }
+.sits-diagrams figure { display: flex; flex: 1 1 260px; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.sits-diagrams figure.sits-after { border: 2px solid var(--primary); }
+.sits-diagrams figcaption { color: var(--muted); font-size: .6875rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.access-chain.is-small > li { flex: 0 1 auto; }
+.access-chain.is-small .chain-node { padding: 6px 10px; }
+.access-chain.is-small > li.is-new .chain-node { border: 2px dashed var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
+.sits-changes { display: flex; flex-wrap: wrap; gap: 12px; padding: 0 20px 16px; }
+.sits-change { display: flex; flex: 1 1 200px; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; background: color-mix(in srgb, var(--text) 5%, var(--surface)); font-size: .875rem; }
+.sits-change.is-gain { background: color-mix(in srgb, var(--success) 12%, var(--surface)); }
+.sits-change.is-loss { background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
+.sits-preview .move-confirm { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 0 20px 20px; }
 /* A search marks the teams it matches (teams-new.js). */
 .org-chart li.is-match > .org-node { border: 2px solid var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
 @media (max-width: 640px) {

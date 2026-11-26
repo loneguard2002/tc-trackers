@@ -81,6 +81,7 @@ from .tree import (
     descendants,
     load_team_rows,
     parse_team_id,
+    set_team_parents,
     sorted_by_name,
     team_choices,
     team_labels,
@@ -625,10 +626,10 @@ def _judge_change(rows: list[TeamRow], team: Team, action: str, text: str) -> tu
         return None, TEAM_CHOICE_ERROR, None
     current = _row(rows, team).parent_ids
     names = {"team": team.name, "parent": labels[parent_id]}
-    if action == "add":
+    if action in ("add", "move"):  # move: the chosen team becomes its only higher team
         if parent_id in descendants(rows, team.id):
             return parent_id, CYCLE_MESSAGE, None
-        if parent_id in current:
+        if parent_id in current if action == "add" else current == (parent_id,):
             return parent_id, None, ALREADY_UNDER.format(**names)
     elif parent_id not in current:
         return parent_id, None, NOT_UNDER.format(**names)
@@ -657,13 +658,23 @@ def _render_parents(
     current = frozenset(_row(rows, team).parent_ids)
     below = descendants(rows, team.id)
     impact = None
+    after = None
     if change_to is not None and not errors and notice is None:
         action, parent_id = change_to
-        impact = move_impact(db, team, current | {parent_id} if action == "add" else current - {parent_id})
+        after = {"add": current | {parent_id}, "move": frozenset({parent_id})}.get(action, current - {parent_id})
+        impact = move_impact(db, team, after)
+    view = chosen_view()
+    extra = {}
+    if view == "new":  # the chains of teams above it now and, for a change being previewed, after it
+        extra = {
+            "chains_now": paths_to(rows, team.id),
+            "chains_after": paths_to(rows, team.id, after) if after is not None else None,
+        }
     page = render_template(
-        "teams/parents.html",
+        "teams/parents_new.html" if view == "new" else "teams/parents.html",
+        **extra,
         view_urls=switch_urls("teams.parents", team_id=team.id),
-        active_view=chosen_view(),
+        active_view=view,
         team=team,
         higher=[(row.id, row.name) for row in sorted_by_name(row for row in rows if row.id in current)],
         choices=[(row.id, row.name) for row in sorted_by_name(rows) if row.id not in below | current],
@@ -684,11 +695,15 @@ def _render_parents(
 @permission_required("manage_teams")
 def parents(team_id: int):
     team = _team_or_404(team_id)
-    action = "add" if "add" in request.args else "remove" if "remove" in request.args else None
+    action = next((key for key in ("add", "remove", "move") if key in request.args), None)
+    text = request.args.get(action, "") if action else ""
+    if action is None and "to" in request.args:  # the New view's form: a team, and whether to keep the others
+        action = "move" if request.args.get("how") == "move" else "add"
+        text = request.args["to"]
     back = _back_team(request.args.get("back"))
     if action is None:
         return _render_parents(team, [], 200, back=back)
-    parent_id, error, notice = _judge_change(load_team_rows(get_session()), team, action, request.args[action].strip())
+    parent_id, error, notice = _judge_change(load_team_rows(get_session()), team, action, text.strip())
     if error:
         return _render_parents(team, [error], 400, back=back)
     if notice and back is not None:  # someone made or undid the change already: nothing to confirm
@@ -703,7 +718,7 @@ def change_parents(team_id: int):
     team = _team_or_404(team_id)
     db = get_session()
     action = request.form.get("action", "")
-    if action not in ("add", "remove"):
+    if action not in ("add", "remove", "move"):
         abort(400)
     rows = load_team_rows(db, lock=True)  # held until commit or rollback, so a concurrent change cannot form a cycle
     if team.id not in {row.id for row in rows}:
@@ -721,24 +736,34 @@ def change_parents(team_id: int):
         return redirect(url_for("teams.parents", team_id=team.id))
     actor = current_user()
     before = snapshot_access(db, actor)
+    current = set(_row(rows, team).parent_ids)
     if action == "add":
         db.execute(insert(TeamParent).values(team_id=team.id, parent_id=parent_id))
-    else:
+        changes = [("team_parent_added", parent_id)]
+    elif action == "remove":
         db.execute(delete(TeamParent).where(TeamParent.team_id == team.id, TeamParent.parent_id == parent_id))
+        changes = [("team_parent_removed", parent_id)]
+    else:  # move: the chosen team becomes the only higher team
+        set_team_parents(db, team.id, [parent_id])
+        changes = [("team_parent_removed", dropped) for dropped in sorted(current - {parent_id})]
+        changes += [("team_parent_added", parent_id)] if parent_id not in current else []
     if raises_own_access(db, actor, before):
         return _refuse(team, SELF_PROMOTION_MESSAGE, back)
     labels = team_labels(rows)
-    record(
-        db,
-        user_id=actor.id,
-        tracker_id=None,
-        action="team_parent_added" if action == "add" else "team_parent_removed",
-        entity="team",
-        entity_id=team.id,
-        detail={"team": labels[team.id], "parent": labels[parent_id]},
-    )
+    for logged_action, changed_id in changes:
+        record(
+            db,
+            user_id=actor.id,
+            tracker_id=None,
+            action=logged_action,
+            entity="team",
+            entity_id=team.id,
+            detail={"team": labels[team.id], "parent": labels[changed_id]},
+        )
     db.commit()
-    if action == "add":
+    if action == "move":
+        flash(f"Moved {team.name} under {labels[parent_id]}.", "success")
+    elif action == "add":
         flash(f"Added {team.name} under {labels[parent_id]}.", "success")
     else:
         message = f"Removed {team.name} from under {labels[parent_id]}."
