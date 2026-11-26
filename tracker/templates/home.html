@@ -52,7 +52,7 @@
 
 {% macro region_pills(c) -%}
 <ul class="card-regions" aria-label="Regions">
-  {%- for code in c.labels.regions %}<li class="region-pill">{{ code }}</li>{% else %}<li class="region-pill region-pill-unset">No region</li>{% endfor -%}
+  {%- for code in c.labels.regions %}{% set colour = region_colour(code) %}<li class="region-pill{{ ' region-c' ~ colour if colour }}">{{ code }}</li>{% else %}<li class="region-pill region-pill-unset">No region</li>{% endfor -%}
 </ul>
 {%- endmacro %}
 

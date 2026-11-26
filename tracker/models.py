@@ -74,10 +74,12 @@ Index("uq_users_email", User.email, unique=True, postgresql_where=text("status <
 
 class Region(Base):
     __tablename__ = "regions"
+    __table_args__ = (CheckConstraint("colour BETWEEN 1 AND 8", name="colour"),)
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
     code: Mapped[str] = mapped_column(Text)
     name: Mapped[str] = mapped_column(Text)
+    colour: Mapped[int] = mapped_column(SmallInteger, default=1, server_default=text("1"))  # REGION_COLOURS, from 1
     retired: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = _now()
 

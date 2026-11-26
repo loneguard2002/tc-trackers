@@ -126,8 +126,8 @@ def test_card_shows_its_regions_as_pills(client, logged_in_admin, db, tracker_fa
     tracker_factory(name="Bare")
     page = client.get("/").get_data(as_text=True)
     assert (
-        '<ul class="card-regions" aria-label="Regions"><li class="region-pill">APAC</li>'
-        '<li class="region-pill">EMEA</li></ul>' in page
+        '<ul class="card-regions" aria-label="Regions"><li class="region-pill region-c1">APAC</li>'
+        '<li class="region-pill region-c1">EMEA</li></ul>' in page
     )
     assert '<li class="region-pill region-pill-unset">No region</li>' in page
 
