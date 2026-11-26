@@ -30,7 +30,7 @@ def clean(page):
 
 
 def test_the_chart_search_marks_a_matching_team(admin_page, live_server, swaps):  # noqa: F811
-    admin_page.goto(f"{live_server}/admin/teams")
+    admin_page.goto(f"{live_server}/admin/teams/structure")
     admin_page.get_by_label("Find a team or person").fill("swaps")
     expect(admin_page.locator("li.is-match > .org-node")).to_have_count(1)
     expect(admin_page.locator("li.is-match > .org-node")).to_contain_text("London Swaps")
@@ -39,62 +39,54 @@ def test_the_chart_search_marks_a_matching_team(admin_page, live_server, swaps):
     clean(admin_page)
 
 
-def test_the_new_team_panel_fills_in_and_creates(admin_page, live_server, db, swaps, region_factory, location_factory):  # noqa: F811
+def test_new_team_form_opens_in_place_and_fills_the_place(admin_page, live_server, db, swaps, region_factory, location_factory):  # noqa: F811
     region = region_factory("EMEA")
     london = location_factory(region, "London", "GB", code="LON")
     rates = swaps["rates"]
     rates.region_id, rates.location_id = region.id, london.id
     db.commit()
-    admin_page.goto(f"{live_server}/admin/teams")
-    panel = admin_page.locator("#new-team-panel")
-    expect(panel).to_be_hidden()
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['top'].id}")
+    form = admin_page.locator("#new-team-form")
+    expect(form).to_be_hidden()
     admin_page.get_by_role("link", name="New team").click()
-    expect(panel).to_be_visible()
-    assert admin_page.url.endswith("/admin/teams")  # opened in place
+    expect(form).to_be_visible()
+    assert admin_page.url.endswith(f"/admin/teams/{swaps['top'].id}")  # opened in place
+    expect(admin_page.locator("#name")).to_be_focused()
     admin_page.locator("#name").fill("Rates Ops")
-    panel.get_by_label("EMEA Rates").check()
+    admin_page.locator("#parent_id").select_option(str(rates.id))
     expect(admin_page.locator("#region_id")).to_have_value(str(region.id))
     expect(admin_page.locator("#location_id")).to_have_value(str(london.id))
-    expect(panel.get_by_text("Filled from EMEA Rates.")).to_be_visible()
-    expect(panel.locator(f'[data-reach-for="{rates.id}"]')).to_contain_text("Priya Nair · Owner · EMEA Rates")
-    button = panel.get_by_role("button", name="Create Rates Ops under EMEA Rates")
-    expect(button).to_be_visible()
-    button.click()
-    expect(admin_page.get_by_role("heading", name="Members of Rates Ops")).to_be_visible()  # its page
+    expect(form.get_by_text("Filled from EMEA Rates.")).to_be_visible()
+    form.get_by_role("button", name="Create team").click()
+    expect(admin_page.locator("h2.team-simple-name")).to_have_text("Rates Ops")  # its page
     created = db.query(Team).filter_by(name="Rates Ops").one()
     assert next(r for r in load_team_rows(db) if r.id == created.id).parent_ids == (rates.id,)
     clean(admin_page)
 
 
-def test_a_role_saves_when_chosen(admin_page, live_server, db, swaps):  # noqa: F811
-    team, ana = swaps["team"], swaps["people"]["Ana Silva"]
-    admin_page.goto(f"{live_server}/admin/teams/{team.id}")
-    switch = admin_page.locator(f'form.role-switch[action$="/members/{ana.id}"]')
-    expect(switch.get_by_role("button", name="Set role")).to_be_hidden()
-    with admin_page.expect_navigation():
-        switch.get_by_text("Owner", exact=True).click()
-    db.expire_all()
-    assert db.get(TeamMember, (team.id, ana.id)).role == "owner"
+def test_cancel_hides_the_new_team_form(admin_page, live_server, swaps):  # noqa: F811
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['top'].id}")
+    admin_page.get_by_role("link", name="New team").click()
+    admin_page.locator("#new-team-form").get_by_role("link", name="Cancel").click()
+    expect(admin_page.locator("#new-team-form")).to_be_hidden()
     clean(admin_page)
 
 
-def test_the_add_preview_follows_the_person_and_role(admin_page, live_server, swaps, user_factory):  # noqa: F811
-    user_factory(full_name="Kim Patel")
-    admin_page.goto(f"{live_server}/admin/teams/{swaps['rates'].id}")
-    panel = admin_page.locator("#add-member")
-    panel.locator("#user_id").select_option(
-        label=next(o for o in panel.locator("#user_id option").all_inner_texts() if o.startswith("Kim Patel"))
-    )
-    panel.locator(".role-card", has_text="Editor").click()
-    expect(panel.locator(".add-preview")).to_contain_text("Kim Patel will be an Editor on 2 trackers")
+def test_structure_search_filters_teams(admin_page, live_server, swaps, team_factory):  # noqa: F811
+    team_factory("Other Desk")
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['top'].id}")
+    admin_page.get_by_label("Find a team or person").fill("swaps")
+    card = admin_page.locator(".structure-card")
+    expect(card.locator(".structure-node", has_text="London Swaps")).to_be_visible()
+    expect(card.locator(".structure-node", has_text="Global Markets")).to_be_visible()  # its parents stay
+    expect(card.locator(".structure-node", has_text="Other Desk")).to_be_hidden()
     clean(admin_page)
-
 
 def test_the_chart_draws_a_dotted_line_from_the_other_higher_team(admin_page, live_server, team_factory):
     alpha, beta = team_factory("Alpha"), team_factory("Beta")
     shared = team_factory("Shared", parents=(alpha, beta))
     team_factory("Solo", parent=alpha)
-    admin_page.goto(f"{live_server}/admin/teams")
+    admin_page.goto(f"{live_server}/admin/teams/structure")
     lines = admin_page.locator("[data-chart-links] path")
     expect(lines).to_have_count(1)
     assert lines.get_attribute("data-from") == str(beta.id) and lines.get_attribute("data-to") == str(shared.id)
@@ -120,7 +112,7 @@ def test_the_chart_draws_a_dotted_line_from_the_other_higher_team(admin_page, li
 
 
 def test_no_switch_without_a_team_under_two_teams(admin_page, live_server, swaps):  # noqa: F811
-    admin_page.goto(f"{live_server}/admin/teams")
+    admin_page.goto(f"{live_server}/admin/teams/structure")
     expect(admin_page.locator(".org-node").first).to_be_visible()
     expect(admin_page.locator("[data-links-toggle]")).to_be_hidden()
     expect(admin_page.locator("[data-chart-links] path")).to_have_count(0)
@@ -131,7 +123,7 @@ def test_the_dotted_lines_are_left_out_at_phone_width(admin_page, live_server, t
     alpha, beta = team_factory("Alpha"), team_factory("Beta")
     team_factory("Shared", parents=(alpha, beta))
     admin_page.set_viewport_size({"width": 390, "height": 844})
-    admin_page.goto(f"{live_server}/admin/teams")
+    admin_page.goto(f"{live_server}/admin/teams/structure")
     expect(admin_page.get_by_text("Also under Beta")).to_be_visible()
     expect(admin_page.locator("[data-chart-links]")).to_be_hidden()
     expect(admin_page.locator("[data-links-toggle]")).to_be_hidden()
@@ -142,8 +134,9 @@ def test_no_page_scrolls_sideways_at_phone_width(admin_page, live_server, swaps)
     admin_page.set_viewport_size({"width": 390, "height": 844})
     team = swaps["team"]
     for url in (
-        "/admin/teams?new=1",
+        f"/admin/teams/{team.id}?new=1",
         f"/admin/teams/{team.id}",
+        "/admin/teams/structure",
         f"/admin/teams/{team.id}/parents?to={swaps['top'].id}&how=move",
     ):
         admin_page.goto(f"{live_server}{url}")
@@ -151,20 +144,3 @@ def test_no_page_scrolls_sideways_at_phone_width(admin_page, live_server, swaps)
     clean(admin_page)
 
 
-def test_arrow_keys_choose_a_role_without_saving_it(admin_page, live_server, db, swaps):  # noqa: F811
-    team, lee = swaps["team"], swaps["people"]["Lee Chen"]
-    admin_page.goto(f"{live_server}/admin/teams/{team.id}")
-    switch = admin_page.locator(f'form.role-switch[action$="/members/{lee.id}"]')
-    save = switch.get_by_role("button", name="Set role")
-    expect(save).to_be_hidden()
-    switch.locator('input[value="viewer"]').focus()
-    admin_page.keyboard.press("ArrowRight")  # to Editor: chosen, not saved
-    expect(switch.locator('input[value="editor"]')).to_be_checked()
-    expect(save).to_be_visible()
-    db.expire_all()
-    assert db.get(TeamMember, (team.id, lee.id)).role == "viewer"
-    with admin_page.expect_navigation():
-        save.click()
-    db.expire_all()
-    assert db.get(TeamMember, (team.id, lee.id)).role == "editor"
-    clean(admin_page)

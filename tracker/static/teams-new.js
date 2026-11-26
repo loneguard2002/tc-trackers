@@ -1,4 +1,4 @@
-/* The Teams New view (docs/superpowers/specs/2026-11-26-teams-new-view-design.md). ES5, no inline handlers (CSP). */
+/* The Teams New view (docs/superpowers/specs/2026-11-26-teams-simple-redesign-design.md). ES5, no inline handlers (CSP). */
 (function () {
   "use strict";
 
@@ -119,32 +119,33 @@
     draw();
   });
 
-  // The New team panel: opened in place by New team; Where it sits shows who reaches the new team, fills its region
-  // and location from the team above unless the person chose them, and names both on the button.
-  var panel = document.getElementById("new-team-panel");
-  if (panel) {
-    var form = panel.querySelector("form");
-    var nameInput = form.querySelector("[data-new-name]");
-    var region = form.querySelector("[data-region-select]");
-    var location = form.querySelector("[data-location-select]");
-    var hint = form.querySelector("[data-place-hint]");
-    var label = form.querySelector("[data-create-label] span");
-    var placeChosen = Boolean(region && region.value);
+  // The New team form in the Structure card (spec 2026-11-26-teams-simple-redesign-design.md 4.3): New team opens it
+  // in place and Cancel hides it; choosing Sits under fills the region and location from that team unless the person
+  // chose them, and says where they came from.
+  var newForm = document.getElementById("new-team-form");
+  if (newForm) {
+    var nameInput = newForm.querySelector("[data-new-name]");
+    var sitsUnder = newForm.querySelector("[data-sits-under]");
+    var region = newForm.querySelector("[data-region-select]");
+    var location = newForm.querySelector("[data-location-select]");
+    var hint = newForm.querySelector("[data-place-hint]");
+    var placeChosen = false;
     var filling = false;
 
     each(document.querySelectorAll("[data-new-team]"), function (link) {
       link.addEventListener("click", function (event) {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        panel.hidden = false;
-        panel.scrollIntoView({ block: "nearest" });
+        newForm.hidden = false;
+        newForm.scrollIntoView({ block: "nearest" });
         nameInput.focus();
       });
     });
-    each(panel.querySelectorAll("[data-panel-close]"), function (link) {
+    each(newForm.querySelectorAll("[data-new-team-cancel]"), function (link) {
       link.addEventListener("click", function (event) {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        panel.hidden = true;
+        newForm.hidden = true;
       });
     });
     [region, location].forEach(function (select) {
@@ -153,87 +154,28 @@
         if (!filling) placeChosen = true;
       });
     });
-
-    function chosen() {
-      return form.querySelector("input[name='parent_id']:checked");
-    }
-
-    function update() {
-      var radio = chosen();
-      var id = radio ? radio.value : "";
-      var teamName = radio ? radio.getAttribute("data-team-name") : "";
-      each(form.querySelectorAll("[data-reach-for]"), function (list) {
-        list.hidden = list.getAttribute("data-reach-for") !== id;
+    if (sitsUnder) {
+      sitsUnder.addEventListener("change", function () {
+        var option = sitsUnder.options[sitsUnder.selectedIndex];
+        var placeRegion = option ? option.getAttribute("data-place-region") : "";
+        if (placeChosen || !region || !placeRegion) {
+          if (hint && !placeChosen) hint.hidden = true;
+          return;
+        }
+        filling = true;
+        region.value = placeRegion;
+        region.dispatchEvent(new Event("change"));
+        if (location) {
+          location.value = option.getAttribute("data-place-location") || "";
+          location.dispatchEvent(new Event("change"));
+        }
+        filling = false;
+        if (hint) {
+          hint.querySelector("[data-place-from]").textContent = option.getAttribute("data-team-name");
+          hint.hidden = false;
+        }
       });
-      var name = nameInput.value.trim() || "team";
-      label.textContent = "Create " + name + (teamName ? " under " + teamName : "");
     }
-
-    function fillPlace() {
-      var radio = chosen();
-      var placeRegion = radio ? radio.getAttribute("data-place-region") : "";
-      if (placeChosen || !region || !placeRegion) {
-        if (hint && !placeChosen) hint.hidden = true;
-        return;
-      }
-      filling = true;
-      region.value = placeRegion;
-      region.dispatchEvent(new Event("change"));
-      if (location) {
-        location.value = radio.getAttribute("data-place-location") || "";
-        location.dispatchEvent(new Event("change"));
-      }
-      filling = false;
-      if (hint) {
-        hint.querySelector("[data-place-from]").textContent = radio.getAttribute("data-team-name");
-        hint.hidden = false;
-      }
-    }
-
-    each(form.querySelectorAll("input[name='parent_id']"), function (radio) {
-      radio.addEventListener("change", function () {
-        update();
-        fillPlace();
-      });
-    });
-    nameInput.addEventListener("input", update);
-    update();
   }
 
-  // A member's role switch: a click saves the role at once; with the keyboard, arrow keys only choose (each would
-  // otherwise save the roles passed on the way) and the Set role button, shown then, saves.
-  each(document.querySelectorAll("form.role-switch"), function (roleForm) {
-    var save = roleForm.querySelector("[data-autosubmit-fallback]");
-    var byPointer = false;
-    if (save) save.hidden = true;
-    roleForm.addEventListener("pointerdown", function () { byPointer = true; });
-    each(roleForm.querySelectorAll("input[data-role-choice]"), function (radio) {
-      radio.addEventListener("change", function () {
-        if (byPointer) {
-          roleForm.submit();
-        } else if (save) {
-          save.hidden = false;
-        }
-        byPointer = false;
-      });
-    });
-  });
-
-  // The Add a member preview follows the chosen person and role.
-  each(document.querySelectorAll(".add-member-form"), function (addForm) {
-    var person = addForm.querySelector("[data-preview-source]");
-    var personText = addForm.querySelector("[data-preview-person]");
-    var roleText = addForm.querySelector("[data-preview-role-text]");
-    function preview() {
-      var option = person.options[person.selectedIndex];
-      if (option) personText.textContent = option.getAttribute("data-name");
-      var role = addForm.querySelector("input[name='role']:checked");
-      if (role) roleText.textContent = role.getAttribute("data-preview-role");
-    }
-    person.addEventListener("change", preview);
-    each(addForm.querySelectorAll("input[name='role']"), function (radio) {
-      radio.addEventListener("change", preview);
-    });
-    preview();
-  });
 })();
