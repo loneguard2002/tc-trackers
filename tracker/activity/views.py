@@ -15,7 +15,7 @@ from sqlalchemy import Text, case, func, or_, select
 from sqlalchemy.orm import aliased
 
 from ..auth import current_user, has_permission, tracker_roles
-from ..auth.permissions import permission_required
+from ..auth.permissions import permission_required, user_permissions
 from ..auth.session import admin_required
 from ..db import get_session
 from ..ids import parse_id
@@ -24,6 +24,7 @@ from ..servertable import DEFAULT_SIZE, clamp_page, like_pattern, read_state, so
 from . import bp
 from .labels import ACTION_LABELS, action_label, describe, feedback_text
 from .retention import retention_days, save_retention
+from .scope import visible_actions, visible_entries
 
 SORT_KEYS = ("time", "actor", "action", "tracker")
 DEFAULT_SORT, DEFAULT_DESCENDING = "time", True
@@ -88,7 +89,18 @@ def index():
     actor, affected = aliased(User), aliased(User)
     viewer = current_user()
     can_open = None if viewer.is_admin else tracker_roles(db, viewer)  # None: every detail is shown
-    conditions = []
+    # Only the entries the viewer may see (activity/scope.py); administrators see every entry.
+    held = user_permissions(db, viewer)
+    scope = visible_entries(viewer, held, can_open)
+    # The Action filter offers what the viewer can see: their areas' actions and the kinds of their own actions.
+    shown_actions = (
+        None
+        if scope is None
+        else visible_actions(held, bool(can_open))
+        | set(db.scalars(select(AuditLog.action).where(AuditLog.user_id == viewer.id).distinct()))
+    )
+    base = [scope] if scope is not None else []
+    conditions = list(base)
     if filters.person:
         conditions.append(or_(AuditLog.user_id == filters.person, AuditLog.target_user_id == filters.person))
     if filters.action:
@@ -125,8 +137,8 @@ def index():
         )
 
     total = db.scalar(joined(select(func.count(AuditLog.id)))) or 0
-    # Without a search or filter every entry matches, so the second count is not needed.
-    overall = (db.scalar(select(func.count(AuditLog.id))) or 0) if conditions else total
+    # Without a search or filter every entry the viewer may see matches, so the second count is not needed.
+    overall = (db.scalar(select(func.count(AuditLog.id)).where(*base)) or 0) if conditions != base else total
     state = clamp_page(state, total)
     order = {
         "time": AuditLog.at,
@@ -225,7 +237,10 @@ def index():
         entries=entries,
         filters=filters,
         people=people,
-        actions=sorted(ACTION_LABELS.items(), key=lambda item: item[1]),
+        actions=sorted(
+            ((key, label) for key, label in ACTION_LABELS.items() if shown_actions is None or key in shown_actions),
+            key=lambda item: item[1],
+        ),
         state=state,
         total=total,
         overall=overall,

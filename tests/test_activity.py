@@ -180,16 +180,18 @@ def test_search_matches_detail_only_where_the_viewer_may_read_it(
     client, db, user_factory, give_set, tracker_factory, grant
 ):
     secret, shared = tracker_factory(name="Secret rollout"), tracker_factory(name="Shared rollout")
-    hidden = add(db, tracker_id=secret.id, action="entry_created", detail={"note": "zirconium"})
+    add(db, tracker_id=secret.id, action="entry_created", detail={"note": "zirconium"})  # never shown to them
+    hidden = add(db, tracker_id=secret.id, action="role_set", detail={"note": "zirconium"})  # shown: Manage teams
     visible = add(db, tracker_id=shared.id, action="entry_created", detail={"note": "zirconium"})
     untracked = add(db, action="team_created", detail={"note": "zirconium"})
     holder = user_factory()
-    give_set(["view_activity"], user=holder)
+    give_set(["view_activity", "manage_teams"], user=holder)
     grant(holder, shared, "viewer")
     sign_in(client, holder)
     ids = ids_on(text_of(client.get(URL, query_string={"q": "zirconium"})))
-    assert sorted(ids) == sorted([visible.id, untracked.id])  # not the entry about the tracker they cannot open
-    # The tracker's name still matches, and the row still hides its detail.
+    # Not the role change on the tracker they cannot open (its detail is not searched), nor its entry (not shown).
+    assert sorted(ids) == sorted([visible.id, untracked.id])
+    # The tracker's name still matches the role change they may see, and the row still hides its detail.
     body = text_of(client.get(URL, query_string={"q": "Secret rollout"}))
     assert ids_on(body) == [hidden.id] and "zirconium" not in body and HIDDEN in body
     assert "Showing 1 of 3 entries" in body
@@ -331,7 +333,7 @@ def test_rows_with_deleted_people_or_trackers_and_any_detail_shape_render(client
     assert "Team details changed" in body
 
 
-def test_tracker_names_shown_to_a_view_activity_holder_without_access(
+def test_a_view_activity_holder_without_access_sees_nothing_of_the_tracker(
     client, db, user_factory, give_set, tracker_factory
 ):
     tracker = tracker_factory(name="Secret rollout")
@@ -340,7 +342,7 @@ def test_tracker_names_shown_to_a_view_activity_holder_without_access(
     give_set(["view_activity"], user=holder)
     sign_in(client, holder)
     assert client.get(f"/trackers/{tracker.id}").status_code == 404
-    assert "Secret rollout" in text_of(client.get(URL))
+    assert "Secret rollout" not in text_of(client.get(URL))
 
 
 def test_no_secrets_in_any_entry(client, logged_in_admin, user_factory, db):
@@ -363,7 +365,7 @@ def test_no_secrets_in_any_entry(client, logged_in_admin, user_factory, db):
 HIDDEN = "Details hidden: you cannot open this tracker."
 
 
-def test_detail_hidden_from_a_holder_who_cannot_open_the_tracker(
+def test_entries_about_a_tracker_the_holder_cannot_open_are_left_out(
     client, db, user_factory, give_set, tracker_factory, grant
 ):
     secret, shared = tracker_factory(name="Secret rollout"), tracker_factory(name="Shared rollout")
@@ -375,8 +377,9 @@ def test_detail_hidden_from_a_holder_who_cannot_open_the_tracker(
     grant(holder, shared, "viewer")
     sign_in(client, holder)
     page = text_of(client.get(URL))
-    assert "Secret rollout" in page and "4242" not in page and page.count(HIDDEN) == 1
-    assert "Shared rollout" in page and "5151" in page and "Teamwide" in page
+    assert "Secret rollout" not in page and "4242" not in page and HIDDEN not in page
+    assert "Shared rollout" in page and "5151" in page
+    assert "Teamwide" not in page  # teams are for those who manage them
 
 
 def test_administrator_sees_every_detail(client, logged_in_admin, db, tracker_factory):
