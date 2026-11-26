@@ -199,7 +199,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 
 /* Weekly report (shared by the live page, PDF and PNG renderers) */
 .muted { color: var(--muted); }
-.report { container-type: inline-size; display: grid; gap: 16px; max-width: 72rem; }
+.report { container-type: inline-size; display: grid; gap: 16px; max-width: 1280px; }
 .report-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .report-title h1, .report-title h2 { margin: 0; }
 .report-meta { flex-basis: 100%; margin: -8px 0 0; color: var(--muted); font-size: .875rem; font-weight: 600; }
@@ -271,7 +271,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 @container (max-width: 620px) {
   .report-columns { grid-template-columns: minmax(0, 1fr); }
 }
-.report-week { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.report-week { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 1280px; margin-bottom: 16px; }
 .report-week select { width: auto; min-width: 11rem; padding: 6px 10px; }
 .report-week .button { display: inline-flex; align-items: center; gap: 4px; }
 .report-week-downloads { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
@@ -1866,7 +1866,7 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .feedback-table .feedback-new-reply { margin-left: 6px; }
 
 /* Status at a glance, below the answer card: tiles, status strip, risks, locations. Scoped so the classic view is untouched. */
-.report-glance { --g-actual: #1260d0; --g-plan: #008f82; --g-forecast: #c27a00; display: grid; gap: 16px; max-width: 72rem; }
+.report-glance { --g-actual: #1260d0; --g-plan: #008f82; --g-forecast: #c27a00; display: grid; gap: 16px; max-width: 1280px; }
 [data-theme="dark"] .report-glance { --g-actual: #5b8ff0; --g-plan: #22a596; --g-forecast: #b8801c; }
 .report-glance .bar-fill { fill: var(--g-actual); }
 .report-glance .bar-start { fill: color-mix(in srgb, var(--g-actual) 45%, var(--surface)); }
