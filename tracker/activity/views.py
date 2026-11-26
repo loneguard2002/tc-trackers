@@ -20,7 +20,7 @@ from ..auth.session import admin_required
 from ..db import get_session
 from ..ids import parse_id
 from ..models import AuditLog, Tracker, User
-from ..servertable import clamp_page, like_pattern, read_state, sort_changes, state_args
+from ..servertable import DEFAULT_SIZE, clamp_page, like_pattern, read_state, sort_changes, state_args
 from . import bp
 from .labels import ACTION_LABELS, action_label, describe, feedback_text
 from .retention import retention_days, save_retention
@@ -101,6 +101,7 @@ def index():
         pattern = like_pattern(state.q)
         # The detail is searched only where the viewer may read it (spec, Call 1): an entry about a tracker they cannot
         # open matches on its tracker name, never on its contents.
+        # The detail is searched as its stored JSON text (keys and values alike).
         detail = AuditLog.detail.cast(Text).ilike(pattern, escape="\\")
         if can_open is not None:
             detail = detail & or_(AuditLog.tracker_id.is_(None), AuditLog.tracker_id.in_(list(can_open)))
@@ -204,7 +205,10 @@ def index():
 
     sort_urls = {key: link(**sort_changes(state, key)) for key in SORT_KEYS}
     # The Rows per page form keeps the search, sort and filters; page and size are its own.
-    size_form = {**filter_args, **state_args(state, DEFAULT_SORT, DEFAULT_DESCENDING, page=1, size=25)}
+    size_form = {**filter_args, **state_args(state, DEFAULT_SORT, DEFAULT_DESCENDING, page=1, size=DEFAULT_SIZE)}
+    # Clear filters empties the search and the filters and goes to page 1; the sort and the rows per page stay.
+    keep = state_args(state, DEFAULT_SORT, DEFAULT_DESCENDING, q="", page=1)
+    clear_url = url_for("activity.index", **keep)
     # People can share a name, and a deleted person's email may be reused by a new account, so a label carries both.
     people = [
         (id, f"{name} ({email})" + (" – deleted" if status == "deleted" else ""))
@@ -221,6 +225,9 @@ def index():
         actions=sorted(ACTION_LABELS.items(), key=lambda item: item[1]),
         state=state,
         total=total,
+        overall=db.scalar(select(func.count(AuditLog.id))) or 0,
+        clear_url=clear_url,
+        keep_args=keep,
         first=first,
         last=first + len(entries) - 1,
         sort_urls=sort_urls,

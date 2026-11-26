@@ -136,7 +136,7 @@ def test_typing_a_search_and_pressing_enter_filters_the_log(page, live_server, d
     page.press("#filter-q", "Enter")
     page.wait_for_url("**q=kestrelwing**")
     expect(page.locator("tr[data-entry]")).to_have_count(1)
-    expect(page.locator(".pager-count")).to_have_text("Showing 1–1 of 1 entry")
+    expect(page.locator(".pager-count")).to_have_text("Showing 1 of 5 entries")
     assert page.locator("a", has_text="Clear filters").count() == 1
     _clean(page)
 
@@ -168,4 +168,43 @@ def test_on_a_phone_the_rows_are_cards_and_nothing_scrolls_sideways(page, live_s
     assert page.locator("tr[data-entry]").first.evaluate("el => getComputedStyle(el).display") == "flex"
     label = page.locator("tr[data-entry] td[data-label='Action']").first
     assert label.evaluate("el => getComputedStyle(el, '::before').content") == '"Action "'
+    _clean(page)
+
+
+def test_the_wide_table_stays_reachable_on_a_desktop_window(page, live_server, db, user_factory):
+    ann = user_factory(
+        full_name="Alexandria Montgomery-Smith",
+        email="alexandria.montgomery-smith@example-corporation.example.com",
+        is_admin=True,
+    )
+    other = user_factory(
+        full_name="Bartholomew Featherstonehaugh",
+        email="bartholomew.featherstonehaugh@another-long-example-company.example.org",
+    )
+    db.add_all(
+        AuditLog(
+            user_id=ann.id,
+            target_user_id=other.id,
+            action="role_removed",
+            entity="user",
+            entity_id=str(n),
+            detail={"before": "owner", "after": None},
+        )
+        for n in range(4)
+    )
+    db.commit()
+    page.set_viewport_size({"width": 1024, "height": 900})
+    _open(page, live_server, ann)
+    frame = page.locator(".section-table[data-table-frame]").first
+    page.wait_for_function("document.readyState === 'complete'")
+    fits = frame.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
+    scrolls = frame.evaluate("el => getComputedStyle(el).overflowX") == "auto"
+    assert fits or scrolls
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    for width in (900, 1200):  # and again after a resize
+        page.set_viewport_size({"width": width, "height": 900})
+        page.wait_for_timeout(200)
+        assert frame.evaluate("el => el.scrollWidth <= el.clientWidth + 1") or (
+            frame.evaluate("el => getComputedStyle(el).overflowX") == "auto"
+        )
     _clean(page)

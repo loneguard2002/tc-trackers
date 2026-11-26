@@ -87,7 +87,7 @@ def test_size_and_page_and_old_page_links(client, logged_in_admin, db):
 def test_short_list_footer_has_no_page_controls(client, logged_in_admin, db):
     fill(db, 3)
     body = text_of(client.get(URL))
-    assert "Showing 1–3 of 3 entries" in body and "pager-controls" not in body
+    assert "Showing 3 of 3 entries" in body and "pager-controls" not in body
 
 
 def names_in(body: str, column: int) -> list[str]:
@@ -106,7 +106,7 @@ def test_sorting_each_key_both_ways(client, logged_in_admin, db, user_factory, t
     one = add(db, at=at(1), user_id=bob.id, tracker_id=zulu.id, action="login")  # Signed in
     two = add(db, at=at(2), user_id=ann.id, tracker_id=alpha.id, action="user_created")  # User created
     three = add(db, at=at(3), user_id=None, tracker_id=None, action="entry_created")
-    login_row = [r for r in (one, two, three)]
+    known = (one, two, three)
     assert ids_on(text_of(client.get(URL)))[:3] == [three.id, two.id, one.id]
     assert ids_on(text_of(client.get(URL + "?sort=time")))[:3] == [one.id, two.id, three.id]
     ann_bob = ids_on(text_of(client.get(URL + "?sort=actor")))
@@ -116,7 +116,7 @@ def test_sorting_each_key_both_ways(client, logged_in_admin, db, user_factory, t
     assert ids_on(text_of(client.get(URL + "?sort=tracker")))[:2] == [two.id, one.id]
     assert ids_on(text_of(client.get(URL + "?sort=-tracker")))[:2] == [one.id, two.id]
     # Action sorts by its label: "Signed in" < "User created"; the other entry's label is whatever ACTION_LABELS says.
-    labels = {r.id: ACTION_LABELS[r.action] for r in login_row}
+    labels = {r.id: ACTION_LABELS[r.action] for r in known}
     ordered = sorted(labels, key=lambda i: (labels[i].lower(), i))
     admin_rows = ids_on(text_of(client.get(URL + "?sort=action&size=100")))
     assert [i for i in admin_rows if i in labels] == ordered
@@ -162,7 +162,7 @@ def test_search_matches_names_emails_tracker_and_detail(client, logged_in_admin,
         assert ids == [wanted.id], q
     assert unrelated.id not in ids_on(text_of(client.get(URL, query_string={"q": "zanzibar"})))
     none = text_of(client.get(URL, query_string={"q": "no-such-text"}))
-    assert ids_on(none) == [] and "No activity matches" in none and "Showing 0 of 0 entries" in none
+    assert ids_on(none) == [] and "No activity matches" in none and "Showing 0 of 5 entries" in none
 
 
 def test_search_is_literal_for_wildcards_and_quotes(client, logged_in_admin, db):
@@ -192,7 +192,7 @@ def test_search_matches_detail_only_where_the_viewer_may_read_it(
     # The tracker's name still matches, and the row still hides its detail.
     body = text_of(client.get(URL, query_string={"q": "Secret rollout"}))
     assert ids_on(body) == [hidden.id] and "zirconium" not in body and HIDDEN in body
-    assert "Showing 1–1 of 1 entry" in body
+    assert "Showing 1 of 3 entries" in body
 
 
 def test_administrator_search_matches_every_detail(client, logged_in_admin, db, tracker_factory):
@@ -233,11 +233,32 @@ def test_page_links_and_size_form_carry_q_sort_and_filters(client, logged_in_adm
     assert 'name="page"' not in body.split("pager-size-form")[1].split("</form>")[0]
 
 
-def test_clear_filters_clears_q_and_shows_when_only_q_is_set(client, logged_in_admin, db):
+def test_clear_filters_clears_q_and_filters_but_keeps_sort_and_size(client, logged_in_admin, db):
     add(db)
     assert "Clear filters" not in text_of(client.get(URL))
     body = text_of(client.get(URL, query_string={"q": "login"}))
-    assert re.search(r'<a class="button" href="/admin/activity">Clear filters</a>', body)
+    assert '<a class="button" href="/admin/activity">Clear filters</a>' in body
+    query = {"q": "login", "action": "login", "from": "2026-01-01", "sort": "-actor", "size": 50, "page": 2}
+    body = text_of(client.get(URL, query_string=query))
+    assert '<a class="button" href="/admin/activity?sort=-actor&size=50">Clear filters</a>' in body
+    # The filter form's own hidden inputs carry the sort and size too, never the page.
+    assert '<input type="hidden" name="sort" value="-actor">' in body
+    assert '<input type="hidden" name="size" value="50">' in body
+
+
+def test_the_no_match_line_offers_clear_filters(client, logged_in_admin, db):
+    add(db)
+    body = text_of(client.get(URL, query_string={"q": "nomatch-at-all", "sort": "actor"}))
+    assert 'No activity matches. <a href="/admin/activity?sort=actor">Clear filters</a>' in body
+    assert "Clear filters" not in text_of(client.get(URL))
+
+
+def test_count_line_is_of_the_matches_and_of_all_entries(client, logged_in_admin, db):
+    fill(db, 60)
+    add(db, action="team_created", detail={"name": "Kestrelwing"})
+    body = text_of(client.get(URL, query_string={"q": "kestrelwing"}))
+    assert "Showing 1 of 61 entries" in body and "pager-controls" not in body
+    assert "Showing 1–25 of 61 entries" in text_of(client.get(URL))
 
 
 def test_cells_carry_data_labels_for_the_phone_cards(client, logged_in_admin, db):
