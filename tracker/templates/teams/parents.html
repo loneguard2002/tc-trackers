@@ -3,6 +3,9 @@
 {% from "teams/_changes.html" import access_changes %}
 {% block content %}
 {% set adding = change_to and change_to[0] == 'add' %}
+{#- A move (the New view's "Move it") makes the chosen team the only higher team; it can reach this page through the
+    view switch. -#}
+{% set moving = change_to and change_to[0] == 'move' %}
 <header class="list-head">
   <div>
     {{ title_crumb([(url_for('teams.index'), 'Teams'), (url_for('teams.view', team_id=team.id), team.name)], 'Higher teams') }}
@@ -63,7 +66,7 @@
   {% if impact %}
   <section class="settings-section" aria-labelledby="section-summary">
     <header class="settings-section-head">
-      <h2 id="section-summary">{% if adding %}Adding {{ team.name }} under {{ target }}{% else %}Removing {{ team.name }} from under {{ target }}{% endif %}</h2>
+      <h2 id="section-summary">{% if adding %}Adding {{ team.name }} under {{ target }}{% elif moving %}Moving {{ team.name }} under {{ target }}, and out from under every other team{% else %}Removing {{ team.name }} from under {{ target }}{% endif %}</h2>
       <p>Unchanged: members of {{ team.name }} and the teams below it keep their roles; direct roles and permission sets keep working.</p>
     </header>
   </section>
@@ -91,7 +94,7 @@
     <input type="hidden" name="action" value="{{ change_to[0] }}">
     <input type="hidden" name="parent_id" value="{{ change_to[1] }}">
     {% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
-    <button class="button primary" type="submit">{% if adding %}Add under {{ target }}{% else %}Remove from {{ target }}{% endif %}</button>
+    <button class="button primary" type="submit">{% if adding %}Add under {{ target }}{% elif moving %}Move under {{ target }}{% else %}Remove from {{ target }}{% endif %}</button>
     <a class="button" href="{% if back %}{{ url_for('teams.view', team_id=back, tab='below') }}{% else %}{{ url_for('teams.parents', team_id=team.id) }}{% endif %}">Cancel</a>
   </form>
   {% endif %}

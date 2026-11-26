@@ -250,7 +250,7 @@ def test_the_role_switch_posts_to_update_member_and_works_without_javascript(cli
         re.S,
     )
     assert (
-        form and 'name="role" value="editor" checked data-autosubmit' in form.group(1) and "Set role" in form.group(1)
+        form and 'name="role" value="editor" checked data-role-choice' in form.group(1) and "Set role" in form.group(1)
     )
     assert post(client, f"/admin/teams/{team.id}/members/{ana.id}", {"role": "owner"}).status_code == 302
     assert db.get(TeamMember, (team.id, ana.id)).role == "owner"
@@ -398,3 +398,20 @@ def test_the_classic_page_is_unchanged_by_the_new_params(client, logged_in_admin
     team = team_factory("T", parent=a)
     html = page(client, f"/admin/teams/{team.id}/parents?view=classic&add={b.id}")
     assert "Add under B" in html and "sits-after" not in html
+
+
+# --- Final review fixes ---------------------------------------------------------------------------------------------
+
+
+def test_classic_shows_a_move_preview_as_a_move(client, logged_in_admin, team_factory):
+    a, b, c = team_factory("A"), team_factory("B"), team_factory("C")
+    team = team_factory("T", parents=(a, b))
+    html = page(client, f"/admin/teams/{team.id}/parents?view=classic&to={c.id}&how=move")
+    assert "Moving T under C" in html and "Move under C" in html and "Remove from C" not in html
+
+
+@pytest.mark.parametrize("query", ["endpoint=x", "_method=DELETE", "_external=1", "_anchor=x"])
+def test_odd_query_keys_do_not_break_the_switch(client, logged_in_admin, team_factory, query):
+    team = team_factory("Desk")
+    for url in ("/admin/teams", f"/admin/teams/{team.id}", f"/admin/teams/{team.id}/parents"):
+        page(client, f"{url}?view=new&{query}")

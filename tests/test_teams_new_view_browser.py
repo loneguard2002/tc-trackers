@@ -99,3 +99,22 @@ def test_no_page_scrolls_sideways_at_phone_width(admin_page, live_server, swaps)
         admin_page.goto(f"{live_server}{url}")
         assert admin_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), url
     clean(admin_page)
+
+
+def test_arrow_keys_choose_a_role_without_saving_it(admin_page, live_server, db, swaps):  # noqa: F811
+    team, lee = swaps["team"], swaps["people"]["Lee Chen"]
+    admin_page.goto(f"{live_server}/admin/teams/{team.id}")
+    switch = admin_page.locator(f'form.role-switch[action$="/members/{lee.id}"]')
+    save = switch.get_by_role("button", name="Set role")
+    expect(save).to_be_hidden()
+    switch.locator('input[value="viewer"]').focus()
+    admin_page.keyboard.press("ArrowRight")  # to Editor: chosen, not saved
+    expect(switch.locator('input[value="editor"]')).to_be_checked()
+    expect(save).to_be_visible()
+    db.expire_all()
+    assert db.get(TeamMember, (team.id, lee.id)).role == "viewer"
+    with admin_page.expect_navigation():
+        save.click()
+    db.expire_all()
+    assert db.get(TeamMember, (team.id, lee.id)).role == "editor"
+    clean(admin_page)

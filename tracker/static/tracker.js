@@ -270,12 +270,12 @@
   }
 })();
 
-// A <select data-autosubmit>, or a radio button with it, submits its form when changed; its form's
-// [data-autosubmit-fallback] button is then hidden, because it is only needed without JavaScript.
+// A <select data-autosubmit> submits its form when changed; its form's [data-autosubmit-fallback] button is then
+// hidden, because it is only needed without JavaScript.
 (function () {
   "use strict";
 
-  Array.prototype.forEach.call(document.querySelectorAll("select[data-autosubmit], input[type=radio][data-autosubmit]"), function (select) {
+  Array.prototype.forEach.call(document.querySelectorAll("select[data-autosubmit]"), function (select) {
     var form = select.form;
     if (!form) return;
     select.addEventListener("change", function () { form.submit(); });
