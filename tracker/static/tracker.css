@@ -1496,6 +1496,7 @@ label.perm-row:hover { background: color-mix(in srgb, var(--text) 4%, var(--surf
 .title-crumb-sep { margin: 0 10px; color: var(--muted); font-weight: 400; }
 /* A count beside a page title, as on the Users page. */
 .title-count { margin-left: 8px; font-size: .875rem; vertical-align: 4px; }
+.list-page { max-width: 1280px; }
 .list-page > .form-alert { margin-bottom: 20px; }
 .list-page > .tabs { margin-top: 0; margin-bottom: 20px; }
 @media (max-width: 480px) {  /* all three tabs fit a 390 px phone, so the bar never needs to scroll */
