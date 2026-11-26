@@ -141,10 +141,14 @@
       return new File([file], name, { type: file.type });
     }
 
-    // The switch changes the details' label, help and placeholder (and whether they are needed).
+    // The tabs change the title, the send button's label and the details' label, help and placeholder (and whether
+    // the details are needed).
     function showKind() {
       var picked = dialog.querySelector('input[name="kind"]:checked');
       var kind = picked ? picked.value : "idea";
+      each(dialog.querySelectorAll("[data-feedback-title], [data-feedback-submit]"), function (element) {
+        element.textContent = element.getAttribute("data-" + kind);
+      });
       var box = dialog.querySelector("[data-feedback-details]");
       if (!box) return;
       var label = box.querySelector("[data-feedback-details-label]");
