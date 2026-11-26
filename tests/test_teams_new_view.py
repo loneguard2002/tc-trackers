@@ -8,11 +8,13 @@ import re
 
 import pytest
 from conftest import post
+from sqlalchemy import select
 
-from tracker.auth.guards import TEAM_WITH_SETS_MESSAGE
-from tracker.models import TeamMember
+from tracker.auth.guards import SELF_PROMOTION_MESSAGE, TEAM_WITH_SETS_MESSAGE
+from tracker.models import AuditLog, TeamMember
 from tracker.teams.overview import FOLD_OVER, chart
 from tracker.teams.tree import ALREADY_MEMBER_MESSAGE, TeamRow, load_team_rows
+from tracker.teams.views import CYCLE_MESSAGE
 
 
 def page(client, url: str, status: int = 200) -> str:
@@ -329,3 +331,70 @@ def test_a_team_holding_sets_shows_the_refusal_instead_of_the_panel(client, logg
     give_set(["view_activity"], team=team)
     panel = _add_panel(team_page(client, team))
     assert TEAM_WITH_SETS_MESSAGE in panel and "<form" not in panel
+
+
+# --- Where it sits --------------------------------------------------------------------------------------------------
+
+
+def test_keep_shows_both_chains_after(client, logged_in_admin, swaps, team_factory, user_factory, add_member):
+    apac = team_factory("APAC Desk", parent=swaps["top"])
+    add_member(apac, user_factory(full_name="Kai Wong"), "editor")
+    html = page(client, f"/admin/teams/{swaps['team'].id}/parents?view=new&to={apac.id}&how=add")
+    now = re.search(r'<figure class="sits-now">(.*?)</figure>', html, re.S).group(1)
+    after = re.search(r'<figure class="sits-after">(.*?)</figure>', html, re.S).group(1)
+    assert now.count('class="access-chain') == 1 and after.count('class="access-chain') == 2
+    assert re.search(r'<li class="is-new">.*?APAC Desk', after, re.S)
+    assert "Kai Wong gains Editor on Swaps desk rollout." in html
+    assert "Put London Swaps under APAC Desk too" in html
+
+
+def test_move_replaces_every_higher_team(
+    client, logged_in_admin, db, team_factory, user_factory, add_member, tracker_factory
+):
+    a, b, c = team_factory("A"), team_factory("B"), team_factory("C")
+    team = team_factory("Moving", parents=(a, b))
+    add_member(a, user_factory(full_name="Ann Above"), "viewer")
+    tracker_factory(name="Their tracker", team_id=team.id)
+    preview = page(client, f"/admin/teams/{team.id}/parents?view=new&to={c.id}&how=move")
+    assert "Ann Above loses Viewer on Their tracker." in preview and "Move Moving under C" in preview
+    response = post(client, f"/admin/teams/{team.id}/parents", {"action": "move", "parent_id": str(c.id)})
+    assert response.status_code == 302
+    assert load_team_rows(db) and next(r for r in load_team_rows(db) if r.id == team.id).parent_ids == (c.id,)
+    actions = sorted(e.action for e in db.scalars(select(AuditLog).where(AuditLog.entity_id == str(team.id))))
+    assert actions == ["team_parent_added", "team_parent_removed", "team_parent_removed"]
+
+
+def test_move_to_the_only_higher_team_is_a_notice(client, logged_in_admin, team_factory):
+    a = team_factory("A")
+    team = team_factory("Under A", parent=a)
+    html = page(client, f"/admin/teams/{team.id}/parents?view=new&to={a.id}&how=move")
+    assert "Under A is already under A." in html and "move-confirm" not in html
+
+
+def test_move_into_a_team_below_is_a_cycle(client, logged_in_admin, team_factory):
+    team = team_factory("Top")
+    below = team_factory("Below", parent=team)
+    response = post(client, f"/admin/teams/{team.id}/parents", {"action": "move", "parent_id": str(below.id)})
+    assert response.status_code == 400 and CYCLE_MESSAGE in html_lib.unescape(response.get_data(as_text=True))
+
+
+def test_move_is_refused_when_it_would_raise_own_access(
+    client, logged_in_user, db, give_set, team_factory, add_member, tracker_factory
+):
+    give_set(["manage_teams"], user=logged_in_user)
+    mine, other = team_factory("Mine"), team_factory("Other")
+    add_member(mine, logged_in_user, "owner")
+    team = team_factory("Target", parent=other)
+    tracker_factory(name="Target tracker", team_id=team.id)
+    response = post(client, f"/admin/teams/{team.id}/parents", {"action": "move", "parent_id": str(mine.id)})
+    assert response.status_code == 302
+    assert next(r for r in load_team_rows(db) if r.id == team.id).parent_ids == (other.id,)
+    follow = page(client, response.headers["Location"])
+    assert SELF_PROMOTION_MESSAGE in follow
+
+
+def test_the_classic_page_is_unchanged_by_the_new_params(client, logged_in_admin, team_factory):
+    a, b = team_factory("A"), team_factory("B")
+    team = team_factory("T", parent=a)
+    html = page(client, f"/admin/teams/{team.id}/parents?view=classic&add={b.id}")
+    assert "Add under B" in html and "sits-after" not in html

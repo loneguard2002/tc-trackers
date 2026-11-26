@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{#- Where a team sits, in the Teams New view: the teams it is under, a team to put it under (keeping the others, or
+    moving to it alone), then the chains now and after, and who gains or loses access before anything changes. Posts
+    to the routes the Classic Higher teams page uses. -#}
+{% from "macros.html" import csrf_field, icon, title_crumb %}
+{% macro chains(list, new_id=none) -%}
+{% for chain in list or [[]] %}
+<ol class="access-chain is-small">
+  {% for row in chain %}<li{% if loop.last and row.id == new_id %} class="is-new"{% endif %}><span class="chain-node"><span class="chain-name">{{ row.name }}</span></span></li>{% endfor %}
+  <li><span class="chain-node is-here"><span class="chain-name">{{ team.name }}</span></span></li>
+</ol>
+{% endfor %}
+{%- endmacro %}
+{% block content %}
+{% set action = change_to[0] if change_to else none %}
+<header class="list-head">
+  <div>
+    {{ title_crumb([(url_for('teams.index'), 'Teams'), (url_for('teams.view', team_id=team.id), team.name)], 'Where it sits') }}
+    <p class="page-lede">People in a higher team reach this team's trackers, and those of every team below it.</p>
+  </div>
+  <div class="teams-head-actions">{% include "teams/_view_switch.html" %}</div>
+</header>
+{% if errors %}
+<div class="form-alert" role="alert">
+  <strong>Please correct the following:</strong>
+  <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% if notice %}<p class="form-notice" role="status">{{ notice }}</p>{% endif %}
+{% if back and not impact %}<p><a href="{{ url_for('teams.view', team_id=back, tab='below') }}">Back to the teams below {{ back_name }}</a></p>{% endif %}
+
+<div class="sits-layout">
+  <section class="settings-section sits-choose" aria-labelledby="now-under">
+    <header class="settings-section-head"><h2 id="now-under">Now under</h2></header>
+    <div class="sits-body">
+      {% if higher %}
+      <ul class="sits-chips">
+        {% for id, name in higher %}
+        <li><a href="{{ url_for('teams.view', team_id=id) }}">{{ name }}</a>
+          <a class="tool-button is-danger" href="{{ url_for('teams.parents', team_id=team.id, remove=id, back=back) }}" title="Take {{ team.name }} out from under {{ name }}">{{ icon('close') }}<span class="sr-only">Take {{ team.name }} out from under {{ name }}</span></a></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty-note">{{ team.name }} is at the top level.</p>
+      {% endif %}
+      {% if choices %}
+      <form class="sits-form" method="get" action="{{ url_for('teams.parents', team_id=team.id) }}">
+        {% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
+        <label class="field-label" for="to">Put it under</label>
+        <select id="to" name="to">
+          {% for id, label in choices %}<option value="{{ id }}"{{ ' selected' if change_to and change_to[1] == id }}>{{ label }}</option>{% endfor %}
+        </select>
+        {% if higher %}
+        <fieldset class="role-cards">
+          <legend class="field-label">And the teams it is under now?</legend>
+          <label class="role-card"><input type="radio" name="how" value="add"{{ ' checked' if action != 'move' }}>
+            <span class="role-card-text"><strong>Keep them: under both</strong><span>People in any team above reach it.</span></span></label>
+          <label class="role-card"><input type="radio" name="how" value="move"{{ ' checked' if action == 'move' }}>
+            <span class="role-card-text"><strong>Move it: under the chosen team only</strong><span>People in the teams it leaves lose the access they gave.</span></span></label>
+        </fieldset>
+        {% endif %}
+        <button class="button" type="submit">Show what changes</button>
+      </form>
+      {% else %}
+      <p class="empty-note">No other team can take {{ team.name }}.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if impact %}
+  <div class="sits-preview">
+    <section class="settings-section" aria-labelledby="before-after">
+      <header class="settings-section-head"><h2 id="before-after">Before and after</h2></header>
+      <div class="sits-diagrams">
+        <figure class="sits-now"><figcaption>Now</figcaption>{{ chains(chains_now) }}</figure>
+        <figure class="sits-after"><figcaption>After</figcaption>{{ chains(chains_after, change_to[1] if action != 'remove' else none) }}</figure>
+      </div>
+    </section>
+    <section class="settings-section" aria-labelledby="what-changes">
+      <header class="settings-section-head">
+        <h2 id="what-changes">What changes</h2>
+        <p>On the trackers of {{ team.name }} and the teams below it{% if impact.trackers %}: {{ impact.trackers|map(attribute='name')|join(', ') }}{% endif %}. Members of {{ team.name }} keep their roles.</p>
+      </header>
+      <div class="sits-changes">
+        <div class="sits-change is-gain"><strong>Gain access · {{ impact.gains|length }}</strong>
+          {% for c in impact.gains %}<span>{{ c.user.full_name }} gains {{ c.after|title }} on {{ c.tracker.name }}.</span>{% else %}<span>No one gains access.</span>{% endfor %}</div>
+        <div class="sits-change is-loss"><strong>Lose access · {{ impact.losses|length }}</strong>
+          {% for c in impact.losses %}<span>{{ c.user.full_name }} loses {{ c.before|title }} on {{ c.tracker.name }}.</span>{% else %}<span>No one loses access.</span>{% endfor %}</div>
+        <div class="sits-change"><strong>Role changes · {{ impact.changes|length }}</strong>
+          {% for c in impact.changes %}<span>{{ c.user.full_name }} goes from {{ c.before|title }} to {{ c.after|title }} on {{ c.tracker.name }}.</span>{% else %}<span>No roles change.</span>{% endfor %}</div>
+      </div>
+      <form class="move-confirm" method="post" action="{{ url_for('teams.change_parents', team_id=team.id) }}">
+        {{ csrf_field(csrf_token()) }}
+        <input type="hidden" name="action" value="{{ action }}">
+        <input type="hidden" name="parent_id" value="{{ change_to[1] }}">
+        {% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}
+        <a class="button" href="{% if back %}{{ url_for('teams.view', team_id=back, tab='below') }}{% else %}{{ url_for('teams.parents', team_id=team.id) }}{% endif %}">Cancel</a>
+        <button class="button primary" type="submit">
+          {%- if action == 'move' %}Move {{ team.name }} under {{ target }}
+          {%- elif action == 'add' %}Put {{ team.name }} under {{ target }}{% if higher %} too{% endif %}
+          {%- else %}Take {{ team.name }} out from under {{ target }}{% endif -%}
+        </button>
+      </form>
+    </section>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
