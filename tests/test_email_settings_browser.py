@@ -108,6 +108,7 @@ def test_email_preview_follows_the_template(page, live_server, admin):
     frame = page.frame_locator("[data-preview-frame]")
     expect(frame.locator(".mail-figures")).to_be_visible()  # the default message's parts render, not escaped
     expect(frame.locator("body")).not_to_contain_text("&lt;table")
+    page.get_by_role("button", name="View code").click()  # the HTML itself; the formatted editor is the default
     page.fill("#body_html", "<p>Hello {{nope}}</p>")
     expect(page.locator("[data-unknown]")).to_have_text("Unknown placeholders will be sent as written: nope.")
     page.locator("#body_html").focus()
@@ -235,4 +236,51 @@ def test_email_settings_subject_inserts_counts_and_shows_an_example(page, live_s
     page.get_by_role("button", name="Save", exact=True).click()  # refused in the page, before the server's 400
     expect(page).to_have_url(f"{live_server}/admin/smtp")
     expect(subject).to_be_focused()
+    assert_clean(page)
+
+
+def test_the_formatted_editor_writes_safe_html_with_placeholders_as_tags(page, live_server, admin, db):
+    from tracker.models import EmailTemplate
+
+    page.goto(f"{live_server}/trackers/{admin.id}/mail")
+    rich = page.locator(".editor-rich")
+    expect(rich).to_be_visible()
+    expect(page.locator("#body_html")).to_be_hidden()
+    expect(rich.locator(".editor-ph.is-block")).to_have_count(4)  # the default body: the four blocks as tags
+    rich.click()
+    page.keyboard.press("Control+End")
+    page.keyboard.press("Enter")
+    page.keyboard.type("Thanks all")
+    page.keyboard.press("Shift+Home")
+    page.get_by_role("button", name="Bold").click()
+    page.keyboard.press("End")
+    page.locator('[data-insert="status"]').click()
+    expect(rich.locator('.editor-ph[data-ph="status"]')).to_have_count(1)
+    body = page.locator("#body_html")
+    expect(body).to_have_value(re.compile(r"<b>Thanks all.*\{\{status\}\}"))  # Chrome's Bold writes <b>, which is kept
+    frame = page.frame_locator("[data-preview-frame]")
+    expect(frame.locator("b", has_text="Thanks all")).to_be_visible()
+
+    page.get_by_role("button", name="Add link").click()
+    page.fill("#editor-link-url", "http://login.example.net")
+    page.keyboard.press("Enter")
+    expect(page.get_by_text("Links must start with https:// or mailto:")).to_be_visible()
+    page.fill("#editor-link-url", "{{report_link}}")
+    page.keyboard.press("Enter")
+    expect(body).to_have_value(re.compile(r'<a href="\{\{report_link\}\}">the live report</a>'))
+
+    page.get_by_role("button", name="View code").click()
+    expect(body).to_be_visible()
+    page.locator("#body_html").press("Control+End")
+    page.keyboard.type('<p onclick="x()">Hi</p><script>bad()</script>')
+    expect(page.locator(".editor-removed")).to_contain_text("the onclick attribute, <script>")
+    page.get_by_role("button", name="Formatted").click()
+    expect(rich).to_contain_text("Hi")
+    expect(rich.locator("script")).to_have_count(0)
+    page.get_by_role("button", name="Save template").click()
+    expect(page.get_by_text("Email template saved.")).to_be_visible()
+    saved = db.get(EmailTemplate, admin.id)
+    db.refresh(saved)
+    assert "<b>Thanks all" in saved.body_html and "{{status}}" in saved.body_html
+    assert "onclick" not in saved.body_html and "<script" not in saved.body_html
     assert_clean(page)

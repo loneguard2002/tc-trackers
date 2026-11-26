@@ -670,6 +670,8 @@ def render_settings(app, recipients):
             "mail/settings.html",
             tracker=tracker,
             recipients=recipients,
+            blocked=set(),
+            allowed_domains="example.com",
             values={"subject": "s", "body_html": "<p>x</p>"},
             placeholders=PLACEHOLDERS,
             unknown=[],

@@ -1,7 +1,8 @@
 // Placeholders (mail/_placeholders.html): the Insert buttons in each placeholder table, which show "✓ Inserted" while
 // the placeholder is in their field; on Email settings also the subject's character count, its live example and the
 // unknown-placeholder warning. Without JavaScript the table stays readable and the buttons stay hidden. Plain ES5
-// style, no modules; fields changed here fire an input event, so email.js redraws its preview.
+// style, no modules; fields changed here fire an input event, so email.js redraws its preview. On the Email tab the
+// formatted editor (email-editor.js) takes the inserts while it is shown.
 (function () {
   "use strict";
 
@@ -41,6 +42,8 @@
     buttons.forEach(function (button) {
       button.hidden = false;
       button.addEventListener("click", function () {
+        // The Email tab's formatted editor (email-editor.js) puts the placeholder in as a tag, and says so.
+        if (typeof field.insertPlaceholder === "function" && field.insertPlaceholder(button.dataset.insert)) return;
         var token = "{{" + button.dataset.insert + "}}";
         if (toggle && button.classList.contains("is-inserted")) {
           field.value = field.value.replace(tokenPattern(button.dataset.insert), "").replace(/\s{2,}/g, " ").trim();
