@@ -47,7 +47,7 @@ from ..models import (
 from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
-from .layout import tree_options
+from .layout import ladder, tree_options
 from .overview import (
     ROLE_SUMMARY,
     ancestor_levels,
@@ -375,6 +375,33 @@ def _new_team_context(db, rows: list[TeamRow], team: Team, people: list[PersonRo
     }
 
 
+def _simple_team_context(db, rows: list[TeamRow], team: Team) -> dict:
+    """What a team's page needs in the New view (spec 2026-11-26-teams-simple-redesign-design.md 4.4 and 4.5): the
+    Where it sits ladder, the teams that may be put below it, and what its members also see in the teams below."""
+    lad = ladder(rows, team.id)
+    directly_below = {below.row.id for below in lad.below}
+    above = set(ancestors(rows, team.id))
+
+    def reason(team_id: int) -> str | None:
+        if team_id == team.id:
+            return "this team"
+        if team_id in directly_below:
+            return "already below"
+        if team_id in above:
+            return "above this team, would make a loop"
+        return None
+
+    lower = descendants(rows, team.id) - {team.id}
+    lower_trackers = db.scalar(
+        select(func.count()).select_from(Tracker).where(Tracker.team_id.in_(lower), Tracker.status != "archived")
+    )
+    return {
+        "ladder": lad,
+        "below_options": tree_options(rows, reason),
+        "below_trackers": (lower_trackers or 0, len(lower)),
+    }
+
+
 def _render_team(
     team: Team,
     errors: list[str],
@@ -413,9 +440,11 @@ def _render_team(
     )
     excluded = {team.id, *(row.id for row in below), *ancestors(rows, team.id)}  # itself, direct lower, all higher
     view = chosen_view()
+    if view == "new" and tab == "below":  # the New view has no Teams below tab: the ladder shows them
+        tab = "people"
     page = render_template(
         "teams/team_new.html" if view == "new" else "teams/team.html",
-        **(_new_team_context(db, rows, team, people) if view == "new" else {}),
+        **(_simple_team_context(db, rows, team) if view == "new" else {}),
         **(_structure_context(db, rows, team.id, new_open=request.args.get("new") == "1") if view == "new" else {}),
         new_form={},
         selected_parent=str(team.id),

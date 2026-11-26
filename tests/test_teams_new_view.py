@@ -203,72 +203,18 @@ def team_page(client, team, tab: str | None = None) -> str:
     return page(client, f"/admin/teams/{team.id}?view=new" + (f"&tab={tab}" if tab else ""))
 
 
-def test_the_map_shows_the_chain_and_this_team(client, logged_in_admin, swaps):
-    html = team_page(client, swaps["team"])
-    chain = re.search(r'<ol class="access-chain">(.*?)</ol>', html, re.S).group(1)
-    assert re.findall(r'class="chain-name">([^<]+)<', chain) == ["Global Markets", "EMEA Rates", "London Swaps"]
-    assert "1 person reaches down" in chain and "2 people reach down" in chain
-    assert "4 members · 1 tracker" in chain and "Add a team below" in html
-
-
-def test_a_team_under_two_teams_shows_both_chains(client, logged_in_admin, team_factory):
-    left, right = team_factory("Left"), team_factory("Right")
-    shared = team_factory("Shared", parents=(left, right))
-    html = team_page(client, shared)
-    chains = re.findall(r'<ol class="access-chain">(.*?)</ol>', html, re.S)
-    assert [re.findall(r'class="chain-name">([^<]+)<', c)[0] for c in chains] == ["Left", "Right"]
-
-
-def test_people_are_split_into_members_and_from_teams_above(client, logged_in_admin, swaps):
-    html = team_page(client, swaps["team"])
-    members = re.search(r'<section class="[^"]*team-members".*?</section>', html, re.S).group(0)
-    assert "Members of London Swaps" in members
-    assert re.findall(r'class="member-name">([^<]+)<', members) == ["Ana Silva", "Lee Chen", "Mia Rossi", "Tom Becker"]
-    above = re.search(r'<section class="[^"]*team-from-above".*?</section>', html, re.S).group(0)
-    groups = re.findall(r'<h4 class="from-team">([^<]+)</h4>(.*?)(?=<h4|</section>)', above, re.S)
-    assert [(title, re.findall(r'class="member-name">([^<]+)<', rows)) for title, rows in groups] == [
-        ("From EMEA Rates · team above", ["Priya Nair", "Tom Becker"]),
-        ("From Global Markets · 2 levels up", ["Sam Ortiz"]),
-    ]
-
-
-def test_a_member_outranked_from_above_is_told(client, logged_in_admin, swaps):
-    assert "Editor counts: Editor of EMEA Rates, above" in team_page(client, swaps["team"])
-
-
-def test_the_role_switch_posts_to_update_member_and_works_without_javascript(client, logged_in_admin, db, swaps):
+def test_the_role_select_posts_to_update_member_and_works_without_javascript(client, logged_in_admin, db, swaps):
     team, ana = swaps["team"], swaps["people"]["Ana Silva"]
-    html = team_page(client, team)
-    form = re.search(
-        rf'<form class="role-switch" method="post" action="/admin/teams/{team.id}/members/{ana.id}">(.*?)</form>',
-        html,
-        re.S,
-    )
-    assert (
-        form and 'name="role" value="editor" checked data-role-choice' in form.group(1) and "Set role" in form.group(1)
-    )
+    row = _row_of(team_page(client, team), "Ana Silva")
+    assert f'action="/admin/teams/{team.id}/members/{ana.id}"' in row and "Set role" in row
+    assert re.search(r'<option value="editor"\s+selected', row)
     assert post(client, f"/admin/teams/{team.id}/members/{ana.id}", {"role": "owner"}).status_code == 302
     assert db.get(TeamMember, (team.id, ana.id)).role == "owner"
 
-
-def test_the_menu_holds_where_it_sits_and_delete(client, logged_in_admin, swaps, team_factory):
-    html = team_page(client, swaps["team"])
-    menu = re.search(r'<details class="team-menu">(.*?)</details>', html, re.S).group(1)
-    assert f'href="/admin/teams/{swaps["team"].id}/parents"' in menu and "Where it sits" in menu
-    assert "This team has trackers" in menu  # it cannot be deleted
-    lone = team_factory("Lone")
-    menu = re.search(r'<details class="team-menu">(.*?)</details>', team_page(client, lone), re.S).group(1)
-    assert f'action="/admin/teams/{lone.id}/delete"' in menu
-
-
 def test_the_other_tabs_and_edit_details_render_in_the_new_view(client, logged_in_admin, swaps):
     team = swaps["team"]
-    assert 'id="below-table"' not in team_page(client, team, "below") and "No teams are below this one." in team_page(
-        client, team, "below"
-    )
     assert 'id="trackers-table"' in team_page(client, team, "trackers")
     assert 'action="/admin/teams/%d/rename"' % team.id in page(client, f"/admin/teams/{team.id}?view=new&edit=1")
-
 
 # --- Add a member ---------------------------------------------------------------------------------------------------
 
@@ -277,56 +223,20 @@ def _add_panel(html: str) -> str:
     return re.search(r'<aside id="add-member".*?</aside>', html, re.S).group(0)
 
 
-def test_the_panel_explains_each_role(client, logged_in_admin, swaps):
-    panel = _add_panel(team_page(client, swaps["team"]))
-    cards = re.findall(
-        r'name="role" value="(\w+)"[^>]*>\s*<span class="role-card-text"><strong>(\w+)</strong><span>([^<]+)</span>',
-        panel,
-    )
-    assert cards == [
-        ("viewer", "Viewer", "Opens the report and downloads it."),
-        ("editor", "Editor", "Also records entries, writes the weekly update, keeps risks and targets."),
-        ("owner", "Owner", "Also changes locations, settings and sends the report email."),
-    ]
-    assert 'value="viewer" checked' in panel  # the least access to start with
-
-
-def test_the_preview_names_the_trackers(client, logged_in_admin, swaps, tracker_factory):
-    tracker_factory(name="Old rollout", team_id=swaps["team"].id, status="archived")
-    panel = _add_panel(team_page(client, swaps["rates"]))
-    text = re.sub(r"<[^>]+>", "", re.search(r'<p class="add-preview".*?</p>', panel, re.S).group(0))
-    assert (
-        re.sub(r"\s+", " ", text)
-        .strip()
-        .endswith("will be a Viewer on 2 trackers: Rates laptop refresh, Swaps desk rollout.")
-    )
-    assert f'action="/admin/teams/{swaps["rates"].id}/members"' in panel
-
-
-def test_the_preview_counts_past_three(client, logged_in_admin, team_factory, tracker_factory):
-    team = team_factory("Many")
-    for name in ("A", "B", "C", "D", "E"):
-        tracker_factory(name=f"Tracker {name}", team_id=team.id)
-    panel = _add_panel(team_page(client, team))
-    assert "Tracker A, Tracker B, Tracker C and 2 more" in re.sub(r"<[^>]+>", "", panel)
-
-
 def test_a_refused_add_shows_the_new_view_with_the_message(client, logged_in_admin, swaps):
     team, ana = swaps["team"], swaps["people"]["Ana Silva"]
     team_page(client, team)  # the New view is kept in the session
     response = post(client, f"/admin/teams/{team.id}/members", {"user_id": str(ana.id), "role": "viewer"})
     assert response.status_code == 400
     html = html_lib.unescape(response.get_data(as_text=True))
-    assert ALREADY_MEMBER_MESSAGE in html and '<aside id="add-member"' in html and "access-chain" in html
-
+    assert ALREADY_MEMBER_MESSAGE in html and '<section class="family"' in html and 'id="people-table"' in html
 
 def test_a_team_holding_sets_shows_the_refusal_instead_of_the_panel(client, logged_in_user, give_set, team_factory):
     team = team_factory("Holders")
     give_set(["manage_teams"], user=logged_in_user)
     give_set(["view_activity"], team=team)
-    panel = _add_panel(team_page(client, team))
-    assert TEAM_WITH_SETS_MESSAGE in panel and "<form" not in panel
-
+    html = team_page(client, team)
+    assert TEAM_WITH_SETS_MESSAGE in html and 'action="/admin/teams/%d/members"' % team.id not in html
 
 # --- Where it sits --------------------------------------------------------------------------------------------------
 
@@ -410,3 +320,112 @@ def test_odd_query_keys_do_not_break_the_switch(client, logged_in_admin, team_fa
     team = team_factory("Desk")
     for url in ("/admin/teams", f"/admin/teams/{team.id}", f"/admin/teams/{team.id}/parents"):
         page(client, f"{url}?view=new&{query}", 302 if url == "/admin/teams" else 200)  # the index opens Desk
+
+
+# --- The team page (simple redesign, spec 4.4 and 4.5) ---------------------------------------------------------------
+
+
+def text_of(html: str) -> str:
+    return " ".join(re.sub(r"<[^>]+>", " ", html).split())
+
+
+def _ladder(html: str) -> str:
+    return re.search(r'<section class="family".*?</section>', html, re.S).group(0)
+
+
+def _people(html: str) -> str:
+    return re.search(r'<table id="people-table".*?</table>', html, re.S).group(0)
+
+
+def _row_of(html: str, name: str) -> str:
+    return next(row for row in re.findall(r"<tr\b.*?</tr>", _people(html), re.S) if name in row)
+
+
+def test_team_header_figures(client, logged_in_admin, swaps):
+    text = text_of(page(client, f"/admin/teams/{swaps['team'].id}?view=new"))
+    assert "4 members" in text and "6 people through teams" in text and "1 tracker" in text
+
+
+def test_ladder_shows_path_this_team_and_below(client, logged_in_admin, swaps):
+    rates = swaps["rates"]
+    lad = _ladder(page(client, f"/admin/teams/{rates.id}?view=new"))
+    assert text_of(lad).index("Global Markets") < text_of(lad).index("EMEA Rates this team") < text_of(lad).index("London Swaps")
+    assert f'href="/admin/teams/{swaps["top"].id}"' in lad and f'href="/admin/teams/{swaps["team"].id}"' in lad
+
+
+def test_ladder_of_a_shared_team_has_also_sits_under(client, logged_in_admin, team_factory):
+    alpha, beta = team_factory("Alpha"), team_factory("Beta")
+    shared = team_factory("Shared", parents=(alpha, beta))
+    lad = text_of(_ladder(page(client, f"/admin/teams/{shared.id}?view=new")))
+    assert "Also sits under Beta" in lad and "Alpha" in lad
+
+
+def test_ladder_without_teams_below(client, logged_in_admin, swaps):
+    lad = text_of(_ladder(page(client, f"/admin/teams/{swaps['team'].id}?view=new")))
+    assert "No teams below" in lad and "Change where it sits" in lad
+
+
+def test_top_level_ladder_says_so(client, logged_in_admin, swaps):
+    assert "this team · top level" in text_of(_ladder(page(client, f"/admin/teams/{swaps['top'].id}?view=new")))
+
+
+def test_only_two_tabs_and_below_tab_falls_back(client, logged_in_admin, swaps):
+    html = page(client, f"/admin/teams/{swaps['team'].id}?view=new")
+    tabs = re.search(r'<nav class="tabs team-tabs".*?</nav>', html, re.S).group(0)
+    assert "People" in tabs and "Trackers" in tabs and "Teams below" not in tabs
+    html = page(client, f"/admin/teams/{swaps['team'].id}?tab=below")
+    assert re.search(r'aria-current="page">People', html)
+
+
+def test_put_an_existing_team_below_uses_indented_options(client, logged_in_admin, swaps):
+    html = page(client, f"/admin/teams/{swaps['rates'].id}?view=new")
+    form = re.search(r'<form class="below-form"[^>]*action="/admin/teams/%d/below".*?</form>' % swaps["rates"].id, html, re.S).group(0)
+    assert re.search(r'<option value="%d"[^>]*disabled[^>]*>[^<]*London Swaps \(already below\)' % swaps["team"].id, form)
+    assert re.search(r'<option value="%d"[^>]*disabled[^>]*>[^<]*EMEA Rates \(this team\)' % swaps["rates"].id, form)
+
+
+def test_people_how_they_get_access(client, logged_in_admin, swaps):
+    html = page(client, f"/admin/teams/{swaps['team'].id}?view=new")
+    assert "Member of this team" in text_of(_row_of(html, "Ana Silva"))
+    priya = _row_of(html, "Priya Nair")
+    assert "Through EMEA Rates (Owner)" in text_of(priya) and f'href="/admin/teams/{swaps["rates"].id}"' in priya
+    tom = text_of(_row_of(html, "Tom Becker"))
+    assert "Member of this team" in tom and "Through EMEA Rates (Editor)" in tom
+
+
+def test_role_column(client, logged_in_admin, swaps):
+    html = page(client, f"/admin/teams/{swaps['team'].id}?view=new")
+    tom = _row_of(html, "Tom Becker")
+    assert '<select' in tom and "Sees as Editor through a team above" in text_of(tom)
+    priya = _row_of(html, "Priya Nair")
+    assert "<select" not in priya and "Owner" in text_of(priya) and "Change in EMEA Rates" in text_of(priya)
+
+
+def test_filters_hide_empty_groups(client, logged_in_admin, team_factory, user_factory, add_member):
+    team = team_factory("Solo")
+    add_member(team, user_factory(), "viewer")
+    tools = re.search(r'<div class="list-tools">.*?</div>\s*<div class="section-table', page(client, f"/admin/teams/{team.id}?view=new"), re.S).group(0)
+    assert "Everyone" in tools and "Members of this team" in tools and "Through a team above" not in tools
+
+
+def test_people_note_names_what_is_not_listed(client, logged_in_admin, swaps):
+    assert (
+        "Administrators, people with View all trackers, regional access and roles given on a single tracker are not "
+        "listed here." in text_of(page(client, f"/admin/teams/{swaps['team'].id}?view=new"))
+    )
+
+
+def test_inactive_members_listed_not_counted(client, logged_in_admin, swaps, user_factory, add_member):
+    team = swaps["team"]
+    add_member(team, user_factory(full_name="Old Member", status="disabled"), "viewer")
+    html = page(client, f"/admin/teams/{team.id}?view=new")
+    assert "Disabled" in text_of(_row_of(html, "Old Member"))
+    text = text_of(html)
+    assert "4 members" in text and "6 people through teams" in text and "Everyone 6" in text
+    node = re.search(r'<a class="structure-node"[^>]*aria-current="page"[^>]*>.*?</a>', html, re.S).group(0)
+    assert "6 people" in node
+
+
+def test_trackers_tab_says_what_members_also_see(client, logged_in_admin, swaps):
+    html = page(client, f"/admin/teams/{swaps['top'].id}?view=new&tab=trackers")
+    assert "Members also see 2 trackers of the 2 teams below." in text_of(html)
