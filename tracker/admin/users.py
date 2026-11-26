@@ -29,7 +29,7 @@ from ..auth.guards import TEAM_WITH_SETS_MESSAGE, team_holds_sets
 from ..auth.passwords import hash_password, validate_new_password
 from ..auth.permissions import PERMISSIONS, permission_sources
 from ..auth.roles import tracker_access_routes
-from ..auth.session import login_user
+from ..auth.session import end_sessions, login_user
 from ..db import get_session
 from ..ids import in_range, parse_id
 from ..listview import list_url
@@ -146,6 +146,7 @@ def _actions(db, actor: User, user: User) -> dict[str, bool]:
         "decline": may_act and user.status == "pending",
         "enable": may_act and user.status == "disabled",
         "disable": may_act and user.status not in ("disabled", "declined") and user.id != actor.id,
+        "end_sessions": may_act and user.status == "active" and user.id != actor.id,
         "password": may_act and user.auth_source == "local",
         "switch": may_act
         and user.auth_source == "local"
@@ -528,6 +529,37 @@ def disable(user_id: int):
     db.commit()
     flash(f"{user.full_name} has been disabled.", "success")
     return redirect(_users_url())
+
+
+@bp.post("/users/<int:user_id>/end-sessions")
+@permission_required("manage_users")
+def end_user_sessions(user_id: int):
+    """Sign a person out everywhere: every session they have, and every copy of one, stops working. They can sign in
+    again at once; to keep them out, disable them. Your own sessions end with Sign out instead."""
+    user = _get_user_or_404(user_id)
+    db = get_session()
+    actor = current_user()
+    refusal = account_refusal(db, actor, user)
+    if refusal:
+        return _refuse(refusal)
+    _abort_if_deleted(user)
+    if user.id == actor.id:
+        return _refuse("Use Sign out to end your own sessions.")
+    if user.status != "active":
+        abort(400, description="Only an active person has sessions to end.")
+    end_sessions(db, user)
+    record(
+        db,
+        user_id=actor.id,
+        tracker_id=None,
+        action="user_sessions_ended",
+        entity="user",
+        entity_id=user.id,
+        target_user_id=user.id,
+    )
+    db.commit()
+    flash(f"{user.full_name} has been signed out everywhere.", "success")
+    return redirect(url_for("admin.access", user_id=user.id))
 
 
 @bp.post("/users/<int:user_id>/admin")

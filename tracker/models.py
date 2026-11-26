@@ -58,6 +58,8 @@ class User(Base):
     auth_source: Mapped[str] = mapped_column(Text, default="local", server_default="local")
     status: Mapped[str] = mapped_column(Text, default="pending", server_default="pending")
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # Raised on sign-out and by End sessions: every session started before then stops working (auth/session.py).
+    session_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = _now()
 
     @validates("email")
