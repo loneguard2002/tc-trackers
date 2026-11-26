@@ -347,7 +347,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring)
 .tracker-card-head { display: flex; gap: 14px; align-items: center; padding: 16px 18px 10px 23px; background: linear-gradient(to bottom, color-mix(in srgb, var(--tone) 9%, var(--surface)), var(--surface)); }
 .tracker-card-titles { display: grid; gap: 2px; flex: 1; min-width: 0; }
 /* The tracker's regions, top right of the card, so they can be picked out at a glance. */
-.card-regions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; align-self: flex-start; max-width: 40%; margin: 0; padding: 0; list-style: none; }
+.card-regions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; align-self: flex-start; max-width: 40%; margin: 0; padding: 0; list-style: none; }
 .region-pill { padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--region, var(--primary)) 45%, var(--surface)); border-radius: 999px; background: color-mix(in srgb, var(--region, var(--primary)) 10%, var(--surface)); color: var(--primary); font-size: .75rem; font-weight: 700; letter-spacing: .04em; line-height: 1.4; white-space: nowrap; }
 /* A region with a colour: its mark carries the colour and the code keeps the text colour, so every colour reads. */
 .region-pill[class*="region-c"] { display: inline-flex; align-items: center; gap: 5px; color: var(--text); }
