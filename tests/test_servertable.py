@@ -178,10 +178,21 @@ def test_footer_page_past_the_last_is_shown_as_the_last(render):
 
 def test_footer_one_page_has_no_controls(render):
     html = footer(render, total=3, size_form={})
-    assert "Showing 1–3 of 3 entries" in html
+    assert "Showing 3 of 3 entries" in html
     assert "pager-controls" not in html
-    assert "Showing 1–1 of 1 entry" in footer(render, total=1, size_form={})
+    assert "Showing 1 of 1 entry" in footer(render, total=1, size_form={})
     assert "Showing 0 of 0 entries" in footer(render, total=0, size_form={})
+
+
+def test_footer_one_page_counts_the_matches_of_all_the_rows(render):
+    source = "{{ server_pager(state, 3, 'entries', 'entry', page_url, none, 1, 3, overall=312) }}"
+    assert "Showing 3 of 312 entries" in footer(render, source=source)
+    none = "{{ server_pager(state, 0, 'entries', 'entry', page_url, none, 1, 0, overall=312) }}"
+    assert "Showing 0 of 312 entries" in footer(render, source=none)
+    one_of_one = "{{ server_pager(state, 1, 'entries', 'entry', page_url, none, 1, 1, overall=1) }}"
+    assert "Showing 1 of 1 entry" in footer(render, source=one_of_one)
+    many = "{{ server_pager(state, 40, 'entries', 'entry', page_url, none, 1, 25, overall=312) }}"
+    assert "Showing 1–25 of 40 entries" in footer(render, source=many)  # more than a page: of the matches only
 
 
 def test_footer_extra_text(render):
@@ -193,6 +204,10 @@ def test_footer_noun_first_for_a_table_paged_by_weeks(render):
     source = "{{ server_pager(state, 23, 'weeks', 'week', page_url, none, 1, 10, '214 entries', noun_first=True) }}"
     html = footer(render, size=10, source=source)
     assert "Showing weeks 1–10 of 23 · 214 entries" in html
+    one_page = (
+        "{{ server_pager(state, 4, 'weeks', 'week', page_url, none, 1, 4, '31 entries', noun_first=True, overall=23) }}"
+    )
+    assert "Showing 4 of 23 weeks · 31 entries" in footer(render, size=10, source=one_page)
     assert "Rows per page" not in html
     assert 'aria-current="page"' in html
 
@@ -211,5 +226,5 @@ def test_footer_size_form_keeps_the_other_keys(render):
 def test_the_size_control_stays_when_a_large_size_fits_one_page(render):
     html = footer(render, total=60, size=100, size_form={})
     assert "Rows per page" in html
-    assert "Showing 1–60 of 60 entries" in html
+    assert "Showing 60 of 60 entries" in html
     assert "Previous" in html

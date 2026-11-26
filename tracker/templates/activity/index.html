@@ -4,6 +4,9 @@
 {% macro person(name, email, deleted) -%}
 {% if name %}{{ name }}<span class="member-email">{{ email }}</span>{% if deleted %}<span class="badge badge-muted">Deleted</span>{% endif %}{% else %}–{% endif %}
 {%- endmacro %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
+{% endblock %}
 {% block content %}
 <h1>Activity</h1>
 <p class="page-lede">Every recorded change and sign-in, newest first. Entries never contain passwords or other secrets.</p>
@@ -14,11 +17,10 @@
         <h2 id="section-activity">Activity log</h2>
         <p>{{ 'Filtered entries' if filtered else 'All entries' }}, {{ total }} in all. Times are UTC.</p>
       </div>
-      {% if filtered %}<a class="button" href="{{ url_for('activity.index') }}">Clear filters</a>{% endif %}
+      {% if filtered %}<a class="button" href="{{ clear_url }}">Clear filters</a>{% endif %}
     </header>
     <form class="activity-filters" method="get" action="{{ url_for('activity.index') }}">
-      {% if state.sort != 'time' or not state.descending %}<input type="hidden" name="sort" value="{{ '-' if state.descending }}{{ state.sort }}">{% endif %}
-      {% if state.size != 25 %}<input type="hidden" name="size" value="{{ state.size }}">{% endif %}
+      {% for name, value in keep_args.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
       {% call field('Search', 'People, tracker or detail.', 'filter-q') %}
       <input id="filter-q" type="search" name="q" value="{{ state.q }}" maxlength="200" autocomplete="off">
       {% endcall %}
@@ -82,9 +84,9 @@
       </table>
     </div>
     {% else %}
-    <p class="empty-note">No activity matches.</p>
+    <p class="empty-note">No activity matches.{% if filtered %} <a href="{{ clear_url }}">Clear filters</a>{% endif %}</p>
     {% endif %}
-    {{ server_pager(state, total, 'entries', 'entry', page_url, size_form, first, last) }}
+    {{ server_pager(state, total, 'entries', 'entry', page_url, size_form, first, last, overall=overall) }}
     {% if current_user and current_user.is_admin %}
     <form class="settings-section-foot activity-retention" method="post" action="{{ url_for('activity.retention') }}">
       {{ csrf_field(csrf_token()) }}

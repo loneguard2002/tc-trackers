@@ -48,6 +48,29 @@
   // data-hide-when-reordered: lists.js hides them while a sort, a search or a status button other than the first is in
   // use, and shows the element marked data-show-when-reordered="<table id>" (the note saying why) in their place. The
   // table can also carry data-clear-sort, which makes Clear filters clear the sort as well and show while one is in use.
+  // The table's wrapper clips rather than scrolls above 720px, so that the headings can stick. A table too wide for
+  // its wrapper (a narrow window) would then lose its last columns, so the wrapper is marked is-wide and CSS lets it
+  // scroll sideways again; its headings then scroll with the page. This holds for every .section-table, whether
+  // setUpTable runs on its table or the table is one the server pages and sorts (Activity), and is measured again on
+  // resize, on load (the flags and fonts have arrived) and when the wrapper changes size (a tab's table is measured as
+  // it is first shown; a hidden table has no width). Each wrapper is watched once.
+  // (A table in a fragment that is later replaced, the side panel's, leaves its listeners and ResizeObserver behind;
+  // that is harmless at this scale.)
+  function watchWideFrame(wrapper) {
+    if (!wrapper) return;
+    function measure() {
+      wrapper.classList.remove("is-wide");
+      if (wrapper.scrollWidth > wrapper.clientWidth + 1) wrapper.classList.add("is-wide");
+    }
+    if (!wrapper.hasAttribute("data-wide-watched")) {
+      wrapper.setAttribute("data-wide-watched", "");
+      window.addEventListener("resize", measure);
+      window.addEventListener("load", measure);
+      if (window.ResizeObserver) new window.ResizeObserver(measure).observe(wrapper);
+    }
+    measure();
+  }
+
   function setUpTable(table) {
     var id = table.id;
     var body = table.tBodies[0];
@@ -319,22 +342,11 @@
       });
     })();
 
-    // The table's wrapper clips rather than scrolls above 720px, so that the headings can stick. A table too wide for
-    // its wrapper (a narrow window) would then lose its last columns, so the wrapper is marked is-wide and CSS lets it
-    // scroll sideways again; its headings then scroll with the page.
-    // (A table in a fragment that is later replaced, the side panel's, leaves its resize and load listeners and its
-    // ResizeObserver behind; that is harmless at this scale.)
     var wrapper = table.closest(".section-table");
 
     function keepWideTableReachable() {
-      if (!wrapper) return;
-      wrapper.classList.remove("is-wide");
-      if (wrapper.scrollWidth > wrapper.clientWidth + 1) wrapper.classList.add("is-wide");
+      watchWideFrame(wrapper);
     }
-    window.addEventListener("resize", keepWideTableReachable);
-    window.addEventListener("load", keepWideTableReachable);  // the flags and fonts have arrived
-    // A tab's table is measured as it is first shown; a hidden table has no width.
-    if (wrapper && window.ResizeObserver) new window.ResizeObserver(keepWideTableReachable).observe(wrapper);
 
     var headers = Array.prototype.filter.call(table.querySelectorAll("thead th"), function (header) {
       return Boolean(header.querySelector("button.sort-button[data-sort]"));
@@ -536,6 +548,8 @@
   }
 
   each(document.querySelectorAll(".list-table table[id], table[data-sortable][id]"), setUpTable);
+  // The tables lists.js does not set up (the server's own, such as Activity) still need their wide check.
+  each(document.querySelectorAll(".section-table[data-table-frame]"), watchWideFrame);
   window.trackerLists = { setUp: setUpTable };
 
   // --- Dialogs ------------------------------------------------------------------------------------------------------

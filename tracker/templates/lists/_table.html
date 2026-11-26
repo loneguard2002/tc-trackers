@@ -94,18 +94,21 @@
 {# The footer under a table paged on the server: the same markup and wording as table_pager. ``state`` is the TableState
    and ``total`` the number of rows (or, for a table paged by groups of rows, of groups) the search matches; ``first``
    and ``last`` are the numbers of the first and last of those on this page. "Showing 26–50 of 312 entries"; for one
-   page "Showing 1–3 of 3 entries" (the range always in full, as lists.js writes it; "Showing 1–1 of 1 entry"). ``noun_first`` puts the noun before the range ("Showing
+   page "Showing 3 of 40 entries": as lists.js writes it, the matches fill more than one page (``total`` more than
+   ``state.size``) or they do not; then the count is of the matches ("Showing 3") and of all the rows there are without
+   the search and filters (``overall``, which is ``total`` when not given; "Showing 0 of 40 entries" when none match). ``noun_first`` puts the noun before the range ("Showing
    weeks 1–10 of 23"). ``extra`` is the text after the "·" ("214 entries"). ``page_url(n)`` gives the link of page n.
    ``size_form`` is a mapping of the other address keys to keep (q, sort, filters) as hidden inputs of the Rows per
    page form, or none for a table with no such control. The controls show when more than one page exists (and, with the
    Rows per page control, whenever the rows would fill more than the smallest page, so that a larger size can be
    undone). The rows per page is read from ``state.size`` and the pages are counted from it. #}
-{% macro server_pager(state, total, noun_plural, noun_one, page_url, size_form, first, last, extra='', noun_first=False) -%}
+{% macro server_pager(state, total, noun_plural, noun_one, page_url, size_form, first, last, extra='', noun_first=False, overall=none) -%}
+{% set all = total if overall is none else overall %}
 {% set pages = [1, (total / state.size)|round(0, 'ceil')|int]|max %}
 {% set current = [state.page, pages]|min %}
 <div class="pager">
-  <p class="pager-count" aria-live="polite">Showing {% if total == 0 %}0 of 0 {{ noun_plural }}
-    {%- else %}{% if noun_first %}{{ noun_plural if total != 1 else noun_one }} {% endif %}{{ first }}–{{ last }} of {{ total }}{% if not noun_first %} {{ noun_plural if total != 1 else noun_one }}{% endif %}{% endif %}{% if extra %} · {{ extra }}{% endif %}</p>
+  <p class="pager-count" aria-live="polite">Showing {% if total > state.size %}{% if noun_first %}{{ noun_plural }} {% endif %}{{ first }}–{{ last }} of {{ total }}{% if not noun_first %} {{ noun_plural }}{% endif %}
+    {%- else %}{{ total }} of {{ all }} {{ noun_one if all == 1 else noun_plural }}{% endif %}{% if extra %} · {{ extra }}{% endif %}</p>
   {% if pages > 1 or (size_form is not none and total > 25) %}
   <nav class="pager-controls" aria-label="Pages of {{ noun_plural }}">
     {% if size_form is not none %}
