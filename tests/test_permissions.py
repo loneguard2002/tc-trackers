@@ -28,6 +28,7 @@ def test_permission_names_in_order():
         "manage_lists",
         "create_trackers",
         "import_workbooks",
+        "archive_trackers",
         "manage_email_settings",
         "view_all_trackers",
         "view_activity",

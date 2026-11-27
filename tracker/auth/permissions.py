@@ -36,6 +36,11 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
         "Import workbooks",
         "Use the Import workbook screen and the import confirmation, which creates a tracker.",
     ),
+    "archive_trackers": (
+        "Archive trackers",
+        "Archive the trackers they are Owner of. An archived tracker keeps its history and can still be viewed, but "
+        "nobody can change it.",
+    ),
     "manage_email_settings": ("Manage email settings", "Change the application's email (SMTP) settings."),
     "view_all_trackers": ("View all trackers", "Viewer on every tracker."),
     "view_activity": ("View activity", "Read the Activity screen."),
@@ -54,7 +59,7 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
 PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("People and teams", ("manage_users", "manage_teams", "manage_sign_in_protection")),
     ("Lists", ("manage_lists",)),
-    ("Trackers", ("create_trackers", "import_workbooks", "view_all_trackers")),
+    ("Trackers", ("create_trackers", "import_workbooks", "archive_trackers", "view_all_trackers")),
     ("Application", ("manage_email_settings", "view_activity", "manage_feedback")),
 )
 

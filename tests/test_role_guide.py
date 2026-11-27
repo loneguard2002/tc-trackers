@@ -87,6 +87,7 @@ def test_every_tracker_page_shows_your_role_and_the_table(client, logged_in_user
     for text in ROW_TEXTS:  # in the tracker's own words: the test tracker calls its groups "Location"
         assert text.replace("group", "location") in dialog
     assert "Administrators can do everything on every tracker, including archiving it." in dialog
+    assert "An Owner can archive the tracker when a permission set gives them Archive trackers." in dialog
     assert "An archived tracker cannot be changed by anyone." in dialog
 
 
