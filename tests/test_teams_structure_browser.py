@@ -221,6 +221,7 @@ def test_fit_shows_every_team_top_to_bottom_in_a_small_window(admin_page, live_s
     admin_page.set_viewport_size({"width": 1100, "height": 600})
     admin_page.goto(f"{live_server}/admin/teams/{root.id}")
     open_layer(admin_page)
+    admin_page.locator('[data-zoom="fit"]').click()  # it opens at 100%
     for direction in ("Top to bottom", "Left to right"):
         admin_page.get_by_role("button", name=direction).click()
         viewport = admin_page.locator("[data-structure-viewport]").bounding_box()
@@ -259,6 +260,8 @@ def test_fit_keeps_a_big_structure_on_screen(admin_page, live_server, team_facto
     open_layer(admin_page)
     expect(admin_page.locator(".structure-box")).to_have_count(40)
     expect(admin_page.locator("[data-structure-stats]")).to_have_text("40 teams · 5 levels shown · 0 shared")
+    expect(admin_page.locator('[data-zoom="fit"]')).to_have_attribute("aria-pressed", "false")  # it opens at 100%
+    admin_page.locator('[data-zoom="fit"]').click()
     expect(admin_page.locator('[data-zoom="fit"]')).to_have_attribute("aria-pressed", "true")
     viewport = admin_page.locator("[data-structure-viewport]").bounding_box()
     outside = [
@@ -285,7 +288,8 @@ def test_zoom_buttons_step_and_reset(admin_page, live_server, swaps):  # noqa: F
     expect(percent).to_have_text("83%")
     admin_page.locator('[data-zoom="fit"]').click()
     expect(admin_page.locator('[data-zoom="fit"]')).to_have_attribute("aria-pressed", "true")
-    expect(percent).to_have_text(f"{before}%")
+    expect(percent).not_to_have_text("83%")
+    assert before == 100 and int(percent.inner_text().rstrip("%")) <= 88  # it opened at 100%; Fit stops at 88%
     clean(admin_page)
 
 
@@ -377,12 +381,19 @@ def test_the_layer_works_at_phone_width(admin_page, live_server, swaps, team_fac
     clean(admin_page)
 
 
-def test_fit_opens_a_small_structure_at_most_at_88_percent(admin_page, live_server, swaps):  # noqa: F811
-    # The owner's ask (27 Nov 2026): 70% of the earlier 125% fit, so a few teams no longer fill the screen.
+def test_it_opens_at_100_percent_and_fit_stops_at_88(admin_page, live_server, swaps):  # noqa: F811
+    # The owner's asks (27 Nov 2026): open at 100%; Fit at most 70% of the earlier 125%.
     admin_page.set_viewport_size({"width": 1600, "height": 1000})
     admin_page.goto(f"{live_server}/admin/teams/{swaps['team'].id}")
     open_layer(admin_page)
-    expect(admin_page.locator('[data-zoom="reset"]')).to_have_text("88%")
+    percent = admin_page.locator('[data-zoom="reset"]')
+    expect(percent).to_have_text("100%")
+    expect(admin_page.locator('[data-zoom="fit"]')).to_have_attribute("aria-pressed", "false")
+    admin_page.locator('[data-zoom="fit"]').click()
+    expect(percent).to_have_text("88%")
+    admin_page.get_by_role("button", name="Close").click()
+    open_layer(admin_page)
+    expect(percent).to_have_text("100%")  # each opening starts at 100%
     clean(admin_page)
 
 
