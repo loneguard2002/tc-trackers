@@ -47,7 +47,6 @@ from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
 from .layout import ladder, tree_options
-from .sits import CYCLE_MESSAGE
 from .overview import (
     chart,
     member_counts,
@@ -55,6 +54,7 @@ from .overview import (
     tracker_counts,
 )
 from .people import TeamPerson, reach_counts, team_people
+from .sits import CYCLE_MESSAGE
 from .tracker_moves import (
     TEAM_DELETED_MESSAGE,
     TRACKERS_CHANGED_MESSAGE,
