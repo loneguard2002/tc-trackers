@@ -1,0 +1,7 @@
+{# The two Activity views: Overview (figures over time) and Log (every entry). ``current`` is "overview" or "log". #}
+{% macro activity_tabs(current) -%}
+<nav class="tabs" aria-label="Activity views">
+  <a class="tab{{ ' active' if current == 'overview' }}" href="{{ url_for('activity.overview') }}"{% if current == 'overview' %} aria-current="page"{% endif %}>Overview</a>
+  <a class="tab{{ ' active' if current == 'log' }}" href="{{ url_for('activity.index') }}"{% if current == 'log' %} aria-current="page"{% endif %}>Log</a>
+</nav>
+{%- endmacro %}

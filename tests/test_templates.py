@@ -100,7 +100,7 @@ LINKS = {
     "manage_lists": 'href="/admin/regions"',
     "import_workbooks": 'href="/import"',
     "manage_email_settings": 'href="/admin/smtp"',
-    "view_activity": 'href="/admin/activity"',
+    "view_activity": 'href="/admin/activity/overview"',
 }
 
 
