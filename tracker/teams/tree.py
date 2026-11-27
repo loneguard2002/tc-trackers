@@ -26,6 +26,7 @@ class TeamRow(NamedTuple):
     id: int
     name: str
     parent_ids: tuple[int, ...]  # the higher teams, ascending; empty for the top level
+    main_id: int | None = None  # the main higher team (team_parents.is_main), where the Teams screens show it
 
 
 def _name_key(row: TeamRow) -> tuple[str, int]:
@@ -104,10 +105,15 @@ def load_team_rows(session: Session, lock: bool = False) -> list[TeamRow]:
         query = query.with_for_update()
     teams = session.execute(query).all()
     parents: dict[int, list[int]] = {}
-    links = select(TeamParent.team_id, TeamParent.parent_id).order_by(TeamParent.team_id, TeamParent.parent_id)
-    for team_id, parent_id in session.execute(links):
+    mains: dict[int, int] = {}
+    links = select(TeamParent.team_id, TeamParent.parent_id, TeamParent.is_main).order_by(
+        TeamParent.team_id, TeamParent.parent_id
+    )
+    for team_id, parent_id, is_main in session.execute(links):
         parents.setdefault(team_id, []).append(parent_id)
-    return [TeamRow(team_id, name, tuple(parents.get(team_id, ()))) for team_id, name in teams]
+        if is_main:
+            mains[team_id] = parent_id
+    return [TeamRow(team_id, name, tuple(parents.get(team_id, ())), mains.get(team_id)) for team_id, name in teams]
 
 
 def team_choices(session: Session) -> list[tuple[int, str]]:
@@ -115,12 +121,22 @@ def team_choices(session: Session) -> list[tuple[int, str]]:
     return [(row.id, row.name) for row in sorted_by_name(load_team_rows(session))]
 
 
-def set_team_parents(session: Session, team_id: int, parent_ids: Iterable[int]) -> None:
-    """Replace the team's higher teams with ``parent_ids`` (the caller checks for cycles and commits)."""
+def set_team_parents(session: Session, team_id: int, parent_ids: Iterable[int], main_id: int | None = None) -> None:
+    """Replace the team's higher teams with ``parent_ids`` (the caller checks for cycles and commits), keeping exactly
+    one main: ``main_id`` when it is among them, else the current main when it is kept, else the first by name."""
+    chosen = sorted(set(parent_ids))
+    current = session.scalar(select(TeamParent.parent_id).where(TeamParent.team_id == team_id, TeamParent.is_main))
     session.execute(delete(TeamParent).where(TeamParent.team_id == team_id))
-    links = [{"team_id": team_id, "parent_id": parent_id} for parent_id in sorted(set(parent_ids))]
-    if links:
-        session.execute(insert(TeamParent), links)
+    if not chosen:
+        return
+    if main_id not in chosen:
+        if current in chosen:
+            main_id = current
+        else:
+            names = session.execute(select(Team.id, Team.name).where(Team.id.in_(chosen))).all()
+            main_id = min(names, key=lambda pair: (pair[1].casefold(), pair[0]))[0] if names else chosen[0]
+    links = [{"team_id": team_id, "parent_id": parent_id, "is_main": parent_id == main_id} for parent_id in chosen]
+    session.execute(insert(TeamParent), links)
 
 
 def parse_team_id(session: Session, value: str | None) -> tuple[Team | None, str | None]:
