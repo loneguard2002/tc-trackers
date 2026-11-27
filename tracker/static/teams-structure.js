@@ -13,6 +13,7 @@
 
   var SVG = "http://www.w3.org/2000/svg";
   var BOX_W = 200, BOX_H = 56, PAD = 24, LABEL = 30;
+  var FIT_MAX = 0.875;  // Fit never enlarges past this: a few teams open at 88%, not filling the screen (owner, 27 Nov)
   var GAPS = { lr: { depth: 80, row: 14 }, tb: { depth: 64, row: 18 } };
   var END_OFFSET = { lr: 8, tb: 30 };
 
@@ -311,7 +312,7 @@
 
   // Fit shows every team (spec 4.9), however small that makes them; the floor only guards a viewport with no size.
   function fit() {
-    var scale = Math.min((viewport.clientWidth - 8) / state.width, (viewport.clientHeight - 8) / state.height, 1.25);
+    var scale = Math.min((viewport.clientWidth - 8) / state.width, (viewport.clientHeight - 8) / state.height, FIT_MAX);
     applyScale(Math.max(scale, 0.02));
   }
 
