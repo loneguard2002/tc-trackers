@@ -260,8 +260,8 @@ def test_routes_carry_their_role(db, user_factory, tracker_factory, team_factory
     (row,) = tracker_access_routes(db, person)
     assert row.role == "editor"
     assert row.routes == [
-        Route("Team Windows: Editor", "editor"),
-        Route("View all trackers: Viewer", "viewer"),
+        Route("Team Windows: Editor", "editor", "team", str(windows.id)),
+        Route("View all trackers: Viewer", "viewer", "all"),
     ]
 
 
