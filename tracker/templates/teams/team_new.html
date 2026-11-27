@@ -9,6 +9,7 @@
   <script src="{{ url_for('static', filename='lists.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='teams-new.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='teams-structure.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% macro counted(n, one, many) %}{{ n }} {{ one if n == 1 else many }}{% endmacro %}
 {% macro team_link(id, name) %}<a class="fam-link" href="{{ url_for('teams.view', team_id=id) }}">{{ name }}</a>{% endmacro %}

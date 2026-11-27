@@ -48,11 +48,7 @@ from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
 from .layout import ladder, main_parent_ids, tree_options
-from .overview import (
-    chart,
-    member_counts,
-    tracker_counts,
-)
+from .overview import chart, structure_items
 from .people import TeamPerson, reach_counts, team_people
 from .sits import CYCLE_MESSAGE, Draft, Preview, add_reason, draft_errors, preview, read_draft
 from .tracker_moves import (
@@ -176,14 +172,23 @@ def _tree_context(rows: list[TeamRow], current_id: int | None) -> dict:
     }
 
 
-def _structure_context(db, rows: list[TeamRow], current_id: int | None, new_open: bool = False) -> dict:
-    """What the New view's Structure card needs beyond ``_tree_context`` (reach, places, search, current_id), which
-    every Teams page passes too (spec 2026-11-26-teams-simple-redesign-design.md 4.2 and 4.3)."""
+def _structure_context(
+    db, rows: list[TeamRow], current_id: int | None, new_open: bool = False, tree: dict | None = None
+) -> dict:
+    """What the New view's Structure card and Whole structure layer need beyond ``_tree_context`` (reach, places,
+    search, current_id), which every Teams page passes too (spec 2026-11-26-teams-simple-redesign-design.md 4.2, 4.3
+    and 4.9). ``tree`` is the caller's ``_tree_context`` result, reused for its reach and places."""
+    reach = tree["reach"] if tree is not None else reach_counts(db)
+    places = tree["places"] if tree is not None else team_places(db)
+    items = structure_items(rows, places, reach)
+    for item in items:
+        item["url"] = url_for("teams.view", team_id=item["id"])
     return {
         "nodes": chart(rows),
         "team_options": tree_options(rows),
         "team_names": team_labels(rows),
         "new_open": new_open,
+        "structure_items": items,
     }
 
 
@@ -197,10 +202,11 @@ def _render_index(form, errors: list[str], status: int):
     db = get_session()
     rows = load_team_rows(db)
     view = chosen_view()
+    tree = _tree_context(rows, None)
     page = render_template(
         "teams/index_new.html" if view == "new" else "teams/index.html",
-        **_tree_context(rows, None),
-        **(_structure_context(db, rows, None, new_open=True) if view == "new" else {}),
+        **tree,
+        **(_structure_context(db, rows, None, new_open=True, tree=tree) if view == "new" else {}),
         view_urls=switch_urls("teams.index"),
         active_view=view,
         choices=team_choices(get_session()),
@@ -232,19 +238,8 @@ def index():
 @bp.get("/structure")
 @permission_required("manage_teams")
 def structure():
-    """Whole structure (spec 4.9); until PR 3, the organisation chart of the earlier New view."""
-    db = get_session()
-    rows = load_team_rows(db)
-    return render_template(
-        "teams/structure.html",
-        nodes=chart(rows),
-        members=member_counts(db),
-        tracker_totals=tracker_counts(db),
-        search=_tree_context(rows, None)["search"],
-        places=team_places(db),
-        page_title="Whole structure",
-        current_page="teams",
-    )
+    """The old Whole structure address: the structure is now a layer on every New view Teams page (spec 4.9)."""
+    return redirect(url_for("teams.index", _anchor="whole-structure"))
 
 
 @bp.post("")
@@ -474,7 +469,9 @@ def _render_team(
         **(_sits_context(db, rows, team, sits, sits_errors, sits_back) if view == "new" and sits is not None else {}),
         sits=sits if view == "new" else None,
         **(
-            _structure_context(db, rows, team.id, new_open=new_form is not None or request.args.get("new") == "1")
+            _structure_context(
+                db, rows, team.id, new_open=new_form is not None or request.args.get("new") == "1", tree=context
+            )
             if view == "new"
             else {}
         ),
