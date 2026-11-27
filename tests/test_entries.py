@@ -1163,10 +1163,31 @@ def test_past_updates_list_only_weeks_that_have_started(client, db, tracker_fact
     started = in_progress_week(date.today(), tracker.week_ending_weekday)
     html = client.get(f"/trackers/{tracker.id}/inputs?week={weeks[-1].isoformat()}").get_data(as_text=True)
     listed = [re.search(r'data-sort-week="([\d-]+)"', r).group(1) for r in past_rows(html)]
-    expected = [w.isoformat() for w in reversed(weeks[:-1]) if w <= started]
+    expected = [w.isoformat() for w in reversed(weeks[:-1]) if w <= (started or date.today())]
     assert listed == expected and len(listed) < len(weeks) - 1
     assert f'<span class="count-pill">{len(expected)}' in html
     assert f"Showing {len(expected)} of {len(expected)} weeks" in html
+
+
+def test_weekly_update_opens_on_the_week_ending_day(client, db, tracker_factory, user_factory, grant, monkeypatch):
+    """On the week-ending day no week is in progress; the page used to fail comparing a date with None."""
+    from tracker.engine.weeks import week_endings
+    from tracker.entries import views
+
+    tracker, _, _ = setup_editor(db, tracker_factory, user_factory, grant, client)
+    weeks = week_endings(tracker.first_week_ending, tracker.last_week_ending)
+    ending_day = weeks[2]
+
+    class OnTheWeekEndingDay(date):
+        @classmethod
+        def today(cls):
+            return ending_day
+
+    monkeypatch.setattr(views, "date", OnTheWeekEndingDay)
+    response = client.get(f"/trackers/{tracker.id}/inputs?week={weeks[-1].isoformat()}")
+    assert response.status_code == 200
+    listed = [re.search(r'data-sort-week="([\d-]+)"', r).group(1) for r in past_rows(response.get_data(as_text=True))]
+    assert listed == [w.isoformat() for w in reversed(weeks[:3])]  # the week ending today is listed
 
 
 def test_red_risks_tile_counts_only_red_risks_past_their_target_date(client, db, tracker_factory, user_factory, grant):

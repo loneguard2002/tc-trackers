@@ -847,7 +847,8 @@ def _render_inputs(tracker: Tracker, weeks, week: date, row, form, errors: list[
     index = weeks.index(week)
     previous = saved.get(weeks[index - 1]) if index else None
     current_week = in_progress_week(today, tracker.week_ending_weekday)
-    past = _past_updates(db, [w for w in weeks[:index] if w <= current_week], saved)
+    # On the week-ending day itself no week is in progress (``None``): that day's week has started, so it counts.
+    past = _past_updates(db, [w for w in weeks[:index] if w <= (current_week or today)], saved)
     risks = list(db.scalars(select(Risk).where(Risk.tracker_id == tracker.id, Risk.status != "Closed")))
     sent_at = db.scalar(
         select(func.max(ReportSend.sent_at)).where(
