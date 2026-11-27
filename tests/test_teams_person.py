@@ -3,12 +3,15 @@ can see and why, "Can … see", and their rights (database)."""
 
 from __future__ import annotations
 
+import html as html_lib
+import re
+
 import pytest
 from test_teams_new_view import swaps  # noqa: F401  (the fixture)
-from tracker.teams.person import check_answer, person_rights, person_teams, person_trackers
 
 from tracker.auth.roles import tracker_access_routes
 from tracker.models import RegionGrant, Tracker, TrackerRegion
+from tracker.teams.person import check_answer, person_rights, person_teams, person_trackers
 from tracker.teams.tree import load_team_rows
 
 
@@ -115,3 +118,69 @@ def test_rights_list_each_set_with_what_it_allows(db, user_factory, give_set, te
         ("Set PMO, held by team PMO Office", ["Create trackers"]),
     ]
     assert person_rights(db, user_factory(full_name="No One")) == []
+
+
+# --- The page -------------------------------------------------------------------------------------------------------
+
+
+def person_page(client, user, query: str = "") -> str:
+    response = client.get(f"/admin/teams/people/{user.id}{query}")
+    assert response.status_code == 200
+    return html_lib.unescape(response.get_data(as_text=True))
+
+
+def test_the_page_shows_figures_teams_trackers_and_rights(client, logged_in_admin, swaps, tom):  # noqa: F811
+    html = person_page(client, tom)
+    assert '<h2 id="person-name">Tom Becker' in html
+    assert re.search(r"<strong>2</strong> <span>teams they are in", html)
+    assert re.search(r"<strong>0</strong> <span>more teams they reach", html)
+    assert re.search(r"<strong>2</strong> <span>trackers they can see", html)
+    assert "Member of Global Markets › EMEA Rates (Editor)" in html
+    assert "Rights in the app" in html and "None. Tom can only work in the trackers above." in html
+    assert f'href="/admin/users/{tom.id}/access"' in html  # Open in Users, for an administrator
+
+
+def test_the_structure_marks_the_persons_teams(client, logged_in_admin, swaps):  # noqa: F811
+    sam = swaps["people"]["Sam Ortiz"]
+    html = person_page(client, sam)
+    assert "Showing Sam Ortiz's teams" in html and "Back to teams" in html
+    assert '<span class="person-mark is-member">Member · Viewer</span>' in html
+    assert html.count('<span class="person-mark is-through">Through Global Markets</span>') == 2
+
+
+def test_check_answers_without_javascript(client, logged_in_admin, db, swaps):  # noqa: F811
+    ana = swaps["people"]["Ana Silva"]
+    rates = db.query(Tracker).filter_by(name="Rates laptop refresh").one()
+    html = person_page(client, ana, f"?check={rates.id}")
+    assert "Rates laptop refresh belongs to EMEA Rates. Ana is not in that team" in html
+    assert f'<option value="{rates.id}" selected>' in html
+
+
+def test_rights_and_open_in_users_need_manage_users(client, logged_in_user, give_set, swaps, tom):  # noqa: F811
+    give_set(["manage_teams"], user=logged_in_user)
+    html = person_page(client, tom)
+    assert "Rights in the app" not in html and "sets of rights" not in html and "Open in Users" not in html
+    give_set(["manage_users"], user=logged_in_user)
+    html = person_page(client, tom)
+    assert "Rights in the app" in html and "Open in Users" in html
+
+
+def test_the_page_is_guarded(client, logged_in_user, db, swaps, tom):  # noqa: F811
+    assert client.get(f"/admin/teams/people/{tom.id}").status_code == 403
+    db.get(type(tom), logged_in_user.id).is_admin = True
+    db.commit()
+    assert client.get("/admin/teams/people/999999").status_code == 404
+    tom.status = "deleted"
+    db.commit()
+    assert client.get(f"/admin/teams/people/{tom.id}").status_code == 404
+
+
+def test_an_inactive_person_says_so(client, logged_in_admin, db, swaps):  # noqa: F811
+    lee = swaps["people"]["Lee Chen"]
+    lee.status = "disabled"
+    db.commit()
+    html = person_page(client, lee)
+    assert (
+        "While it is, the teams and sets below give no access." in html
+        and "None while the account is disabled." in html
+    )

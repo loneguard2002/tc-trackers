@@ -1989,6 +1989,32 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .structure-place { grid-column: 1 / -1; color: var(--muted); font-size: .78rem; }
 .structure-also { grid-column: 1 / -1; justify-self: start; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--warning) 14%, var(--surface)); font-size: .72rem; font-weight: 700; }
 .structure-foot { margin: 0; padding: 10px 16px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; }
+/* The person view (spec 4.8): the Structure card marks their teams; the panel has who, "Can … see", teams, trackers
+   and rights. Green is a member's team, blue a team reached through one; the colours always come with words. */
+.structure-tree li.is-faded > .structure-node { opacity: .55; }
+.person-mark { grid-column: 1 / -1; justify-self: start; padding: 1px 8px; border-radius: 6px; font-size: .75rem; font-weight: 700; }
+.person-mark.is-member { background: color-mix(in srgb, var(--success) 16%, var(--surface)); color: var(--text); }
+.person-mark.is-through { background: color-mix(in srgb, var(--primary) 14%, var(--surface)); color: var(--text); }
+.person-strip { margin: 0 16px 8px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--primary) 8%, var(--surface)); font-size: .875rem; }
+.person-card { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; }
+.person-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.person-avatar { width: 44px; height: 44px; font-size: 1.1rem; }
+.person-who { display: flex; flex: 1 1 220px; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.person-who h2 { margin: 0; font-size: 1.25rem; }
+.person-inactive { margin: 0; }
+.person-check { display: flex; flex-direction: column; gap: 6px; }
+.person-check-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.person-check-row select { flex: 1 1 260px; width: auto; min-width: 0; }
+.person-answer { padding: 10px 12px; border-radius: 8px; border-left: 4px solid var(--field-border); background: color-mix(in srgb, var(--text) 5%, var(--surface)); }
+.person-answer.is-yes { border-left-color: var(--success); }
+.person-answer ul { margin: 6px 0 0; padding-left: 18px; }
+.person-answer p { margin: 4px 0 0; }
+.person-section { padding: 16px 20px; }
+.person-section h3 { margin: 0 0 10px; font-size: 1rem; }
+.person-routes, .person-rights { margin: 0; padding-left: 18px; }
+.route-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; }
+.route-dot.is-member { background: var(--success); }
+.route-dot.is-through { background: var(--primary); }
 .structure-card .new-team-form { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 16px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--primary) 5%, var(--surface)); }
 .structure-card .new-team-form[hidden] { display: none; }
 .structure-card .new-team-form .field-pair { grid-template-columns: minmax(0, 1fr); }
