@@ -6,6 +6,6 @@ from flask import Blueprint
 
 bp = Blueprint("activity", __name__, url_prefix="/admin/activity")
 
-from . import views  # noqa: E402,F401  (registers the routes on ``bp``)
+from . import overview, views  # noqa: E402,F401  (registers the routes on ``bp``)
 
 __all__ = ["bp"]

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "macros.html" import csrf_field, field, icon %}
 {% from "lists/_table.html" import server_no_match, server_pager, server_sort_header %}
+{% from "activity/_tabs.html" import activity_tabs %}
 {% macro person(name, email, deleted) -%}
 {% if name %}{{ name }}<span class="member-email">{{ email }}</span>{% if deleted %}<span class="badge badge-muted">Deleted</span>{% endif %}{% else %}–{% endif %}
 {%- endmacro %}
@@ -10,6 +11,7 @@
 {% block content %}
 <h1>Activity</h1>
 <p class="page-lede">Every recorded change and sign-in, newest first. Entries never contain passwords or other secrets.</p>
+{{ activity_tabs('log') }}
 <div class="settings">
   <section class="settings-section" id="activity" aria-labelledby="section-activity">
     <header class="settings-section-head has-action">
@@ -34,6 +36,12 @@
       <select id="filter-action" name="action">
         <option value="">Any action</option>
         {% for key, label in actions %}<option value="{{ key }}"{{ ' selected' if filters.action == key }}>{{ label }}</option>{% endfor %}
+      </select>
+      {% endcall %}
+      {% call field('Kind', 'What kind of change.', 'filter-kind') %}
+      <select id="filter-kind" name="kind">
+        <option value="">Any kind</option>
+        {% for key, label in kinds %}<option value="{{ key }}"{{ ' selected' if filters.kind == key }}>{{ label }}</option>{% endfor %}
       </select>
       {% endcall %}
       {% call field('From', 'Inclusive.', 'filter-from') %}

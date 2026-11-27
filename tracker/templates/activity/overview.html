@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% from "activity/_tabs.html" import activity_tabs %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='activity-overview.js', v=app_version) }}" defer></script>
+{% endblock %}
+{% block content %}
+<div class="act-overview">
+<h1>Activity</h1>
+<p class="page-lede">{{ lede }}</p>
+{{ activity_tabs('overview') }}
+
+<div class="act-bar">
+  <nav class="act-seg" aria-label="Period">
+    {% for p in periods %}<a href="{{ p.url }}"{% if p.current %} aria-current="true"{% endif %}>{{ p.label }}</a>{% endfor %}
+  </nav>
+  <p class="act-scope">Counts only the entries you can see in the log. Weeks end on Friday. Times are UTC.</p>
+</div>
+{% if retention_note %}<p class="act-retention" role="note">{{ retention_note }}</p>{% endif %}
+
+<section class="act-kpis act-card" aria-label="Headline figures">
+  {% for k in kpis %}
+  <div class="act-kpi">
+    <span class="act-kpi-label">{{ k.label }}</span>
+    <span class="act-kpi-value">{{ k.value }}{% if k.unit %}<span class="act-kpi-unit">{{ k.unit }}</span>{% endif %}</span>
+    <span class="act-delta act-delta-{{ k.delta.tone }}">{{ k.delta.text }}</span>
+  </div>
+  {% endfor %}
+</section>
+
+<section class="act-card" id="heatmap" aria-labelledby="h-heat">
+  <div class="act-card-head">
+    <div>
+      <h2 id="h-heat">Changes per day, last 12 months</h2>
+      <p>{{ heat_note }}</p>
+    </div>
+    <div class="act-heat-key" aria-hidden="true">
+      <span>Less</span>{% for n in heat_levels %}<svg width="11" height="11" viewBox="0 0 11 11"><rect class="heat-{{ n }}" width="11" height="11" rx="2"></rect></svg>{% endfor %}<span>More</span>
+    </div>
+  </div>
+  <div class="act-heat-wrap">
+    <svg class="act-heat-side" width="30" height="{{ heat.height }}" viewBox="0 0 30 {{ heat.height }}" aria-hidden="true">
+      {% for d in heat_days %}<text class="act-axis" x="0" y="{{ d.y }}">{{ d.label }}</text>{% endfor %}
+    </svg>
+    <div class="act-heat-scroll">
+      <svg class="act-heat" width="{{ heat.width }}" height="{{ heat.height }}" viewBox="0 0 {{ heat.width }} {{ heat.height }}" role="group" aria-label="Changes per day over the last 12 months" data-heatmap>
+        {% for m in heat_months %}<text class="act-axis" x="{{ m.x }}" y="12" aria-hidden="true">{{ m.label }}</text>{% endfor %}
+        {% for c in heat_cells %}
+        <a class="heat-day" href="{{ c.url }}" aria-label="{{ c.tip }}" data-detail="{{ c.detail }}"><rect class="heat-{{ c.level }}" x="{{ c.x }}" y="{{ c.y }}" width="{{ heat.cell }}" height="{{ heat.cell }}" rx="2"><title>{{ c.tip }}</title></rect></a>
+        {% endfor %}
+      </svg>
+    </div>
+    <svg class="act-heat-side" width="44" height="{{ heat.height }}" viewBox="0 0 44 {{ heat.height }}" role="group" aria-label="Share of the year’s changes by day of the week">
+      <text class="act-axis act-axis-strong" x="44" y="12" text-anchor="end" aria-hidden="true">Share</text>
+      {% for d in heat_days %}<text class="act-axis" x="44" y="{{ d.y }}" text-anchor="end"><title>{{ d.tip }}</title>{{ d.share }}</text>{% endfor %}
+    </svg>
+  </div>
+  <div class="act-heat-detail">
+    <span data-heat-detail aria-live="polite">Select a day to see it here.</span>
+    <a href="#" data-heat-link hidden>Open this day in the log</a>
+  </div>
+  <p class="act-foot">One square per day; darker means more changes. Sign-ins are not counted. This chart always shows 12 months; the period buttons do not change it.</p>
+</section>
+
+<section class="act-card" id="weekly" aria-labelledby="h-week">
+  <div class="act-card-head">
+    <div>
+      <h2 id="h-week">{{ chart_title }}</h2>
+      <p>{{ chart_note }}</p>
+    </div>
+    <nav class="act-seg" aria-label="What to count">
+      {% for m in metrics %}<a href="{{ m.url }}"{% if m.current %} aria-current="true"{% endif %}>{{ m.label }}</a>{% endfor %}
+    </nav>
+  </div>
+  <div class="act-chart-scroll">
+    <svg class="act-chart" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="group" aria-label="{{ chart_title }}">
+      {% for t in ticks %}
+      <line class="act-grid" x1="{{ chart.left }}" x2="{{ chart.width }}" y1="{{ t.y }}" y2="{{ t.y }}"></line>
+      <text class="act-axis" x="{{ chart.left - 8 }}" y="{{ t.y + 4 }}" text-anchor="end" aria-hidden="true">{{ t.label }}</text>
+      {% endfor %}
+      <line class="act-baseline" x1="{{ chart.left }}" x2="{{ chart.width }}" y1="{{ chart.base }}" y2="{{ chart.base }}"></line>
+      {% for b in bars %}
+      <a href="{{ b.url }}" aria-label="{{ b.tip }}"><rect class="act-bar-rect{{ ' is-now' if b.now }}" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="3"><title>{{ b.tip }}</title></rect></a>
+      {% if b.label %}<text class="act-axis" x="{{ b.cx }}" y="{{ chart.base + 20 }}" text-anchor="middle" aria-hidden="true">{{ b.label }}</text>{% endif %}
+      {% if b.made %}<circle class="act-made" cx="{{ b.cx }}" cy="{{ chart.base + 34 }}" r="4"><title>{{ b.made }}</title></circle>{% endif %}
+      {% endfor %}
+    </svg>
+  </div>
+  <div class="act-legend">
+    <span><i class="act-swatch"></i>Full week</span>
+    <span><i class="act-swatch is-now"></i>This week so far</span>
+    <span><i class="act-dot"></i>A tracker was created that week</span>
+    <span class="act-legend-end">Select a week to see its entries in the log.</span>
+  </div>
+</section>
+
+<section class="act-card act-flush" id="trackers" aria-labelledby="h-trackers">
+  <div class="act-card-head">
+    <div>
+      <h2 id="h-trackers">Weekly updates by tracker</h2>
+      {% if finding %}<p class="{{ 'act-finding' if finding_missed }}">{{ finding }}</p>{% endif %}
+    </div>
+    <div class="act-legend">
+      <span><i class="act-cell is-done"></i>Updated by the week’s end</span>
+      <span><i class="act-cell is-late"></i>Updated late</span>
+      <span><i class="act-cell is-missed"></i>Not updated</span>
+      <span><i class="act-cell is-due"></i>This week, still due</span>
+    </div>
+  </div>
+  {% if tracker_rows %}
+  <div class="act-grid-scroll">
+    <table class="act-updates">
+      <caption class="sr-only">Weekly updates by tracker, last 12 weeks</caption>
+      <thead>
+        <tr>
+          <th scope="col">Tracker</th>
+          {% for h in week_heads %}<th scope="col" class="act-week" title="{{ h.tip }}"><span>{{ h.month }}</span>{{ h.day }}</th>{% endfor %}
+          <th scope="col" class="num">On time</th>
+          <th scope="col" class="num">Last update</th>
+          <th scope="col" class="num">Changes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in tracker_rows %}
+        <tr>
+          <th scope="row"><a href="{{ r.url }}">{{ r.name }}</a></th>
+          {% for c in r.cells %}<td class="act-week"><i class="act-cell is-{{ c.status }}{{ ' is-alert' if c.alert }}" title="{{ c.tip }}" role="img" aria-label="{{ c.tip }}"></i></td>{% endfor %}
+          <td class="num">{{ r.on_time }}</td>
+          <td class="num{{ ' act-finding' if r.missed_last }}">{{ r.last }}</td>
+          <td class="num">{{ r.changes }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="act-card-foot">
+    <span>Last 12 weeks, {{ tracker_total }} tracker{{ 's' if tracker_total != 1 }}. Trackers that missed last week come first, then the least punctual.</span>
+    {% if tracker_more %}<a href="{{ rows_toggle_url }}">{{ 'Show the first 8' if show_all else 'Show all ' ~ tracker_total ~ ' trackers' }}</a>{% endif %}
+  </div>
+  {% else %}
+  <p class="act-empty">No trackers to show. Trackers appear here when you have a role on them.</p>
+  {% endif %}
+</section>
+
+<div class="act-two">
+  <section class="act-card" aria-labelledby="h-people">
+    <div class="act-card-head"><div><h2 id="h-people">Who made the changes</h2><p>{{ people_note }}</p></div></div>
+    {% if people %}
+    <ul class="act-list">
+      {% for p in people %}
+      <li>
+        <span class="act-avatar" aria-hidden="true">{{ p.initials }}</span>
+        <span class="act-list-body">
+          <span class="act-list-line"><a href="{{ p.url }}">{{ p.name }}</a>{% if p.deleted %} <span class="badge badge-muted">Deleted</span>{% endif %}<span>{{ p.count }}</span></span>
+          <span class="act-list-sub"><span>{{ p.share }}</span></span>
+          <svg class="act-meter" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true"><rect class="act-meter-track" width="100" height="4"></rect><rect width="{{ p.bar }}" height="4"></rect></svg>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    <a class="act-more" href="{{ period_log_url }}">Open this period in the log</a>
+    {% else %}
+    <p class="act-empty">No changes in this period.</p>
+    {% endif %}
+  </section>
+
+  <section class="act-card" aria-labelledby="h-kinds">
+    <div class="act-card-head"><div><h2 id="h-kinds">What changed</h2><p>{{ kinds_note }}</p></div></div>
+    {% if kinds %}
+    <ul class="act-list act-list-plain">
+      {% for k in kinds %}
+      <li>
+        <span class="act-list-body">
+          <span class="act-list-line"><a href="{{ k.url }}">{{ k.label }}</a><span class="act-nowrap">{{ k.count }} <span class="act-share">{{ k.share }}</span></span></span>
+          <svg class="act-meter" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true"><rect class="act-meter-track" width="100" height="4"></rect><rect width="{{ k.bar }}" height="4"></rect></svg>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="act-empty">No changes in this period.</p>
+    {% endif %}
+  </section>
+</div>
+</div>
+{% endblock %}

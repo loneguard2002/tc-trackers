@@ -67,7 +67,7 @@
       {% if show_lists %}{{ nav_link('lists', 'lists.regions', 'Regions & business lines', 'globe') }}{% endif %}
       {% if show_smtp %}{{ nav_link('smtp', 'admin.smtp', 'Email settings', 'mail') }}{% endif %}
       {% if show_sign_in %}{{ nav_link('sign_in', 'admin.sign_in_protection', 'Sign-in protection', 'lock', signin_new_blocks(), 'blocked since the page was last opened') }}{% endif %}
-      {% if show_activity %}{{ nav_link('activity', 'activity.index', 'Activity', 'activity') }}{% endif %}
+      {% if show_activity %}{{ nav_link('activity', 'activity.overview', 'Activity', 'activity') }}{% endif %}
       {% if show_feedback %}{{ nav_link('feedback', 'feedback.admin_index', 'Feedback', 'feedback', feedback_new_count(), 'new') }}{% endif %}
       {% endif %}
     </nav>

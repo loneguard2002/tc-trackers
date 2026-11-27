@@ -22,6 +22,7 @@ from ..ids import parse_id
 from ..models import AuditLog, Tracker, User
 from ..servertable import DEFAULT_SIZE, clamp_page, like_pattern, read_state, sort_changes, state_args
 from . import bp
+from .kinds import KIND_ACTIONS, KIND_LABELS
 from .labels import ACTION_LABELS, action_label, describe, feedback_text
 from .retention import retention_days, save_retention
 from .scope import visible_actions, visible_entries
@@ -36,6 +37,7 @@ class ActivityFilters(NamedTuple):
     action: str | None
     start: date | None
     end: date | None
+    kind: str | None = None  # a kind of change (activity/kinds.py), set by the Overview's links
 
 
 def _date(value: str | None) -> date | None:
@@ -49,11 +51,13 @@ def parse_filters(args) -> ActivityFilters:
     """The filters in a query string; any value that cannot be read is ignored."""
     person = parse_id(args.get("person"))
     action = args.get("action", "").strip()
+    kind = args.get("kind", "").strip()
     return ActivityFilters(
         person=person,
         action=action if action in ACTION_LABELS else None,
         start=_date(args.get("from")),
         end=_date(args.get("to")),
+        kind=kind if kind in KIND_LABELS else None,
     )
 
 
@@ -72,6 +76,8 @@ def _filter_args(filters: ActivityFilters) -> dict[str, str | int]:
         args["from"] = filters.start.isoformat()
     if filters.end:
         args["to"] = filters.end.isoformat()
+    if filters.kind:
+        args["kind"] = filters.kind
     return args
 
 
@@ -105,6 +111,8 @@ def index():
         conditions.append(or_(AuditLog.user_id == filters.person, AuditLog.target_user_id == filters.person))
     if filters.action:
         conditions.append(AuditLog.action == filters.action)
+    if filters.kind:
+        conditions.append(AuditLog.action.in_(sorted(KIND_ACTIONS[filters.kind])))
     if filters.start:
         conditions.append(AuditLog.at >= _midnight(filters.start))
     if filters.end and filters.end < date.max:
@@ -259,7 +267,8 @@ def index():
         page_url=lambda page: link(page=page),
         size_form=size_form,
         retention=retention_days(db),
-        filtered=bool(state.q or any((filters.person, filters.action, filters.start, filters.end))),
+        filtered=bool(state.q or any((filters.person, filters.action, filters.start, filters.end, filters.kind))),
+        kinds=list(KIND_LABELS.items()),
         hidden_detail=HIDDEN_DETAIL_MESSAGE,
     )
 
