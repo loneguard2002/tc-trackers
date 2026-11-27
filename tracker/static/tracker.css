@@ -2253,3 +2253,7 @@ body.structure-open { overflow: hidden; }
 .structure-key::before { content: ""; width: 26px; border-top: 2px solid var(--field-border); }
 .structure-key-also::before { border-top: 2px dashed var(--warning); }
 @media (max-width: 640px) { .structure-layer { padding: 0; } .structure-panel { border-radius: 0; } }
+.structure-box-fold { flex: none; align-self: center; min-width: 30px; height: 26px; margin-right: 6px; padding: 0 6px; border: 1px solid var(--field-border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: .78rem; font-weight: 700; cursor: pointer; }
+.structure-box-fold:hover { border-color: var(--primary); color: var(--primary); }
+.structure-stage.is-searching .structure-box:not(.is-match) { opacity: .35; }
+.structure-box.is-match { box-shadow: 0 0 0 3px var(--warning); }
