@@ -13,7 +13,7 @@ from collections.abc import Iterable
 from typing import NamedTuple
 
 from flask import abort, flash, redirect, render_template, request, url_for
-from sqlalchemy import delete, exists, func, insert, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -39,7 +39,6 @@ from ..models import (
     Region,
     Team,
     TeamMember,
-    TeamParent,
     Tracker,
     TrackerRegion,
     User,
@@ -284,12 +283,10 @@ def create():
     db.add(team)
     try:
         db.flush()
-        if parent:
-            db.add(TeamParent(team_id=team.id, parent_id=parent.id))
+        if parent:  # the Sits under team is the main one
+            set_team_parents(db, team.id, [parent.id, *([also.id] if also else [])], main_id=parent.id)
             db.flush()
         if also is not None:
-            db.add(TeamParent(team_id=team.id, parent_id=also.id))
-            db.flush()
             if raises_own_access(db, actor, before):  # a new team has no trackers, so this holds; checked all the same
                 db.rollback()
                 return _refuse_create(parent, [SELF_PROMOTION_MESSAGE])
@@ -806,11 +803,11 @@ def change_parents(team_id: int):
     actor = current_user()
     before = snapshot_access(db, actor)
     current = set(_row(rows, team).parent_ids)
-    if action == "add":
-        db.execute(insert(TeamParent).values(team_id=team.id, parent_id=parent_id))
+    if action == "add":  # set_team_parents keeps the main: the current one, or this one for a top-level team
+        set_team_parents(db, team.id, current | {parent_id})
         changes = [("team_parent_added", parent_id)]
-    elif action == "remove":
-        db.execute(delete(TeamParent).where(TeamParent.team_id == team.id, TeamParent.parent_id == parent_id))
+    elif action == "remove":  # taking out the main passes it to the next by name
+        set_team_parents(db, team.id, current - {parent_id})
         changes = [("team_parent_removed", parent_id)]
     else:  # move: the chosen team becomes the only higher team
         set_team_parents(db, team.id, [parent_id])
