@@ -30,7 +30,7 @@
         <div><strong>{{ members|length }}</strong> <span>{{ 'team' if members|length == 1 else 'teams' }} they are in</span></div>
         <div><strong>{{ teams|length - members|length }}</strong> <span>more {{ 'team' if teams|length - members|length == 1 else 'teams' }} they reach</span></div>
         <div><strong>{{ seen|length }}</strong> <span>{{ 'tracker' if seen|length == 1 else 'trackers' }} they can see</span></div>
-        {% if show_rights %}<div><strong>{{ 'All' if person.is_admin else rights|length }}</strong> <span>{{ 'set' if rights|length == 1 and not person.is_admin else 'sets' }} of rights</span></div>{% endif %}
+        {% if show_rights %}{% set right_count = 0 if inactive else rights|length %}<div><strong>{{ 'All' if person.is_admin and not inactive else right_count }}</strong> <span>{{ 'set' if right_count == 1 and not person.is_admin else 'sets' }} of rights</span></div>{% endif %}
       </div>
 
       <form class="person-check" method="get" action="{{ url_for('teams.person', user_id=person.id) }}">
@@ -103,7 +103,9 @@
     {% if show_rights %}
     <section class="settings-section person-section" aria-labelledby="person-rights">
       <h3 id="person-rights">Rights in the app</h3>
-      {% if person.is_admin %}
+      {% if inactive %}
+      <p>None while the account is {{ person.status }}.</p>
+      {% elif person.is_admin %}
       <p>Administrator: every permission.</p>
       {% elif rights %}
       <ul class="person-rights">

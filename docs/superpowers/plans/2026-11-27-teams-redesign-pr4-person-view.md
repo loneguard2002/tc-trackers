@@ -31,7 +31,8 @@ Structure card, which marks the person's teams. The search list of people is a J
 - R2 `Route` gains `kind` ("admin" | "direct" | "team" | "region" | "all") and `subject` (team id or region code, as
   text), with defaults, so Users › Access is unchanged.
 - R3 "More teams they reach": the teams below each team they are a member of, minus those teams, each with "Through
-  <nearest member team above>" and the highest role among their member teams above it.
+  <the member team above giving the highest role>" (the first by name on a tie) and that role, so the team named is
+  the one that gives the role shown (changed from "nearest" after the final review).
 - R4 The people search offers every active user (spec 4.2), embedded once per New view page as JSON in a data
   attribute (escaped, never run), up to 6 matches shown.
 

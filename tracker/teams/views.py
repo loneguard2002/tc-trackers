@@ -533,7 +533,8 @@ def person(user_id: int):
     Structure card marking their teams. It has no Classic version (plan PR 4, R1)."""
     db = get_session()
     user = db.get(User, user_id) if in_range(user_id) else None
-    if user is None or user.status == "deleted":
+    # Pending and declined accounts are access requests, for Manage users (Users › Access requests): never teams.
+    if user is None or user.status in ("deleted", "pending", "declined"):
         abort(404)
     rows = load_team_rows(db)
     tree = _tree_context(rows, None)
