@@ -2011,9 +2011,10 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
   .fam-depth-5, .fam-depth-6, .fam-depth-7, .fam-depth-8 { padding-left: 60px; }
 }
 .fam-line { color: var(--field-border); font-size: 1.05rem; line-height: 1; }
-.fam-link { display: inline-flex; max-width: calc(100% - 24px); padding: 2px 10px; border: 1px solid var(--field-border); border-radius: 999px; background: var(--surface); color: var(--text); font-size: .875rem; text-decoration: none; overflow-wrap: anywhere; }
+/* The ladder's teams are boxes like the Whole structure's (the owner, 27 Nov 2026): 8px corners, at least 200px. */
+.fam-link { display: inline-flex; align-items: center; box-sizing: border-box; min-width: 200px; min-height: 40px; max-width: calc(100% - 24px); padding: 6px 10px; border: 1px solid var(--field-border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: .875rem; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
 .fam-link:hover { border-color: var(--primary); color: var(--primary); }
-.fam-this { display: inline-flex; flex-wrap: wrap; max-width: calc(100% - 24px); min-width: 0; align-items: center; gap: 8px; padding: 3px 12px; border: 2px solid var(--primary); border-radius: 999px; background: var(--surface); }
+.fam-this { display: inline-flex; flex-wrap: wrap; box-sizing: border-box; min-width: 200px; min-height: 40px; max-width: calc(100% - 24px); align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--primary); border-radius: 8px; background: color-mix(in srgb, var(--primary) 10%, var(--surface)); font-size: .875rem; }
 .fam-tag { color: var(--primary); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .fam-more, .fam-none { color: var(--muted); font-size: .8125rem; }
 .fam-also { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--warning); }
@@ -2037,10 +2038,11 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 
 /* --- Teams Whole structure layer (spec 4.9; teams-structure.js places the boxes and lines) ------------------------ */
 body.structure-open { overflow: hidden; }
-.structure-layer { position: fixed; inset: 0; z-index: 1060; display: flex; padding: 16px; background: color-mix(in srgb, var(--topbar-bg) 70%, transparent); }
+.structure-layer { position: fixed; inset: 0; z-index: 1060; display: flex; align-items: center; justify-content: center; padding: 16px; background: color-mix(in srgb, var(--topbar-bg) 70%, transparent); }
 .structure-layer[hidden] { display: none; }
 [data-theme="dark"] .structure-layer { background: rgba(0, 0, 0, .65); }
-.structure-panel { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; flex: 1; min-width: 0; min-height: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: 0 24px 60px -20px rgba(7, 26, 61, .5); overflow: hidden; }
+/* A pop-up at 70% of the screen, the page dimmed around it (the owner, 27 Nov 2026); full screen on a phone. */
+.structure-panel { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; flex: none; width: 70vw; height: 70vh; min-width: 0; min-height: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: 0 24px 60px -20px rgba(7, 26, 61, .5); overflow: hidden; }
 .structure-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
 .structure-title h2 { margin: 0; font-size: 1.1rem; }
 .structure-stats { margin: 0; color: var(--muted); font-size: .8125rem; }
@@ -2071,7 +2073,7 @@ body.structure-open { overflow: hidden; }
 .structure-key { display: inline-flex; align-items: center; gap: 8px; }
 .structure-key::before { content: ""; width: 26px; border-top: 2px solid var(--field-border); }
 .structure-key-also::before { border-top: 2px dashed var(--warning); }
-@media (max-width: 640px) { .structure-layer { padding: 0; } .structure-panel { border-radius: 0; } }
+@media (max-width: 640px) { .structure-layer { padding: 0; } .structure-panel { width: 100%; height: 100%; border-radius: 0; } }
 .structure-box-fold { flex: none; align-self: center; min-width: 30px; height: 26px; margin-right: 6px; padding: 0 6px; border: 1px solid var(--field-border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: .78rem; font-weight: 700; cursor: pointer; }
 .structure-box-fold:hover { border-color: var(--primary); color: var(--primary); }
 .structure-stage.is-searching .structure-box:not(.is-match) { opacity: .35; }
