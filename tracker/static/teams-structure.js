@@ -40,7 +40,7 @@
   var opener = null;
 
   // folded: team id to true while its branch is folded; query: the Find a team text, lower case.
-  var state = { direction: "lr", fit: true, scale: 1, width: 0, height: 0, folded: {}, query: "" };
+  var state = { direction: "lr", fit: false, scale: 1, width: 0, height: 0, folded: {}, query: "" };
   var boxes = {};  // team id to its box element, for the shown teams
 
   function each(list, fn) { Array.prototype.forEach.call(list, fn); }
@@ -340,7 +340,10 @@
     opener = from || document.querySelector("[data-open-structure]");
     layer.hidden = false;
     document.body.classList.add("structure-open");
-    state.fit = true;
+    // Each opening starts at 100% (the owner, 27 Nov 2026), Fit a click away; a phone opens at Fit, where 100% shows
+    // a box or two.
+    state.fit = window.innerWidth <= 640;
+    state.scale = 1;
     render();
     find.focus();
   }
