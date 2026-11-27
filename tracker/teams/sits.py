@@ -40,10 +40,14 @@ def _settle(rows: list[TeamRow], above, main: int | None) -> Draft:
 
 def read_draft(rows: list[TeamRow], team_id: int, values: Values) -> Draft:
     """The draft the editor shows. Without ``draft=1``, what is saved; with it, ``above`` and ``main`` from the
-    address, unknown teams left out. Then ``add``, ``drop`` and ``make_main`` apply, in that order."""
+    address, leaving out unknown teams, the team itself and teams below it (a loop). Then ``add``, ``drop`` and
+    ``make_main`` apply, in that order."""
     known = {row.id for row in rows}
+    below = descendants(rows, team_id)  # the team itself and every team below it
     if values.get("draft") == "1":
-        above = [team for team in (parse_id(text) for text in values.getlist("above")) if team in known]
+        above = [
+            team for team in (parse_id(text) for text in values.getlist("above")) if team in known and team not in below
+        ]
         main = parse_id(values.get("main"))
     else:
         row = next((row for row in rows if row.id == team_id), None)
@@ -51,7 +55,7 @@ def read_draft(rows: list[TeamRow], team_id: int, values: Values) -> Draft:
         main = main_parent_ids(rows).get(team_id)
     draft = _settle(rows, above, main)
     add = parse_id(values.get("add"))
-    if add in known and add not in descendants(rows, team_id) and add not in draft.above:
+    if add in known and add not in below and add not in draft.above:
         draft = _settle(rows, [*draft.above, add], draft.main)
     drop = parse_id(values.get("drop"))
     if drop in draft.above:

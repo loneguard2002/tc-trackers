@@ -705,10 +705,12 @@ def test_save_refuses_a_change_that_raises_own_access(
     add_member(mine, logged_in_user, "owner")
     team = team_factory("Target", parent=other)
     tracker_factory(name="Target tracker", team_id=team.id)
+    page(client, f"/admin/teams/{team.id}?view=new")
     response = save(client, team, [other.id, mine.id], other.id)
-    assert response.status_code == 302
+    assert response.status_code == 400  # the editor again, the draft kept, the reason inside it
+    editor = _editor(html_lib.unescape(response.get_data(as_text=True)))
+    assert SELF_PROMOTION_MESSAGE in editor and 'role="alert"' in editor and ">Mine<" in editor
     assert _links_and_main(db, team) == ([other.id], other.id)
-    assert SELF_PROMOTION_MESSAGE in page(client, response.headers["Location"])
 
 
 def test_unchanged_save_says_so(client, logged_in_admin, db, abt):
@@ -750,3 +752,26 @@ def test_main_team_set_has_a_label():
 
     assert ACTION_LABELS["team_main_set"] == "Main team set"
     assert ACTION_AREAS["team_main_set"] == ("manage_teams",)
+
+
+def test_save_refuses_the_team_itself_without_an_error_page(client, logged_in_admin, db, abt):
+    t = abt["t"]
+    page(client, f"/admin/teams/{t.id}?view=new")
+    response = save(client, t, [t.id], t.id)
+    assert response.status_code == 400
+    assert CYCLE_MESSAGE in _editor(html_lib.unescape(response.get_data(as_text=True)))
+    assert client.get(f"/admin/teams/{t.id}/sits?draft=1&above={t.id}&main={t.id}").status_code == 200
+
+
+def test_an_unchanged_draft_skips_the_access_preview(client, logged_in_admin, abt, monkeypatch):
+    import tracker.teams.views as views
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("move_impact should not run when the higher teams are unchanged")
+
+    monkeypatch.setattr(views, "move_impact", refuse)
+    t = abt["t"]
+    assert "No change in who can see its trackers." in text_of(
+        _editor(page(client, f"/admin/teams/{t.id}/sits?view=new"))
+    )
+    assert page(client, f"/admin/teams/{t.id}/sits?make_main={abt['a'].id}")  # only the main changes
