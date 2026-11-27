@@ -209,6 +209,7 @@ def _render_index(form, errors: list[str], status: int):
         selected_parent=form.get("parent_id", "") if form else _parent_choice(rows, request.args.get("parent")),
         form=form,
         new_form=form or {},
+        new_errors=errors,
         errors=errors,
         team_total=len(rows),
         page_title="Teams",
@@ -255,7 +256,9 @@ def create():
     description = request.form.get("description", "").strip()
     parent, parent_error = parse_team_id(db, request.form.get("parent_id"))
     also, also_error = parse_team_id(db, request.form.get("also_parent_id"))  # the New view's Also under
-    if also is not None and parent is not None and also.id == parent.id:
+    if also is not None and parent is None:
+        parent, also = also, None  # Top level with Also under X: it sits under X
+    if also is not None and also.id == parent.id:
         also = None  # the same team twice is one link
     region, location, place_error = parse_place(
         db, request.form.get("region_id"), request.form.get("location_id"), None, None
@@ -331,7 +334,7 @@ def _refuse_create(parent: Team | None, errors: list[str]):
             tops = sorted_by_name(row for row in load_team_rows(get_session()) if not row.parent_ids)
             team = get_session().get(Team, tops[0].id) if tops else None
         if team is not None:
-            return _render_team(team, errors, 400, form=request.form, new_form=request.form)
+            return _render_team(team, [], 400, form=request.form, new_form=request.form, new_errors=errors)
     return _render_index(request.form, errors, 400)
 
 
@@ -418,6 +421,7 @@ def _render_team(
     picking: bool = False,
     picked: frozenset[int] = frozenset(),
     new_form=None,
+    new_errors: list[str] | None = None,
 ):
     """The team's page with one tab open; ``picking`` opens the Trackers tab's picker, whose ``picked`` boxes are
     ticked, and shows ``errors`` there instead of in the header."""
@@ -458,6 +462,7 @@ def _render_team(
             else {}
         ),
         new_form=new_form or {},
+        new_errors=new_errors or [],
         selected_parent=new_form.get("parent_id", "") if new_form is not None else str(team.id),
         team_total=len(rows),
         **context,
@@ -479,7 +484,8 @@ def _render_team(
         can_add=current_user().is_admin or not team_holds_sets(db, team.id),
         add_refusal=TEAM_WITH_SETS_MESSAGE,
         delete_blocker=_delete_blocker(team.id, rows),
-        place_choices=location_choices(db, team.region_id, team.location_id),
+        # Edit details keeps the team's own retired region and location; the New team form offers none retired
+        place_choices=location_choices(db, team.region_id, team.location_id) if editing else location_choices(db),
         place=context["places"].get(team.id),
         form=form or {"name": team.name, "description": team.description, **_place_form(team)},
         errors=errors,

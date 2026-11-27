@@ -170,7 +170,9 @@
           location.dispatchEvent(new Event("change"));
         }
         filling = false;
-        if (hint) {
+        if (hint && region.value !== placeRegion) {  // that team's region is retired, so not offered here
+          hint.hidden = true;
+        } else if (hint) {
           hint.querySelector("[data-place-from]").textContent = option.getAttribute("data-team-name");
           hint.hidden = false;
         }
