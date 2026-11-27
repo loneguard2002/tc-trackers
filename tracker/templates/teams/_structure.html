@@ -7,12 +7,15 @@
   {% for node in nodes %}
   {% set id = node.row.id %}
   {% set place = places.get(id) %}
-  <li data-search="{{ search.get(id, '') }}">
+  {#- In the person view (4.8) each team is marked: a member's team, a team reached through one, or faded. -#}
+  {% set mark = person_marks.get(id) if person_marks is defined else none %}
+  <li data-search="{{ search.get(id, '') }}"{% if person_marks is defined %} class="{{ 'is-person-' ~ mark[0] if mark else 'is-faded' }}"{% endif %}>
     <a class="structure-node" href="{{ url_for('teams.view', team_id=id) }}"{% if id == current_id %} aria-current="page"{% endif %}>
       <span class="structure-name">{{ node.row.name }}</span>
       <span class="structure-count">{{ people_count(reach.get(id, 0)) }}</span>
       {% if place %}<span class="structure-place">{% set colour = region_colour(place.region_code) %}{% if colour %}<span class="region-mark region-c{{ colour }}" aria-hidden="true"></span>{% endif %}{{ place.region_code }}{% if place.city %} · {{ place.city }}{% endif %}</span>{% endif %}
       {% if node.also_under %}<span class="structure-also">Also under {{ node.also_under|join(', ') }}</span>{% endif %}
+      {% if mark %}<span class="person-mark is-{{ mark[0] }}">{{ mark[1] }}</span>{% endif %}
     </a>
     {% if node.children %}{{ structure_level(node.children) }}{% endif %}
   </li>
@@ -27,6 +30,9 @@
     <label class="sr-only" for="structure-search">Find a team or person</label>
     <input id="structure-search" class="tree-filter structure-search" type="search" placeholder="Find a team or person" autocomplete="off" data-tree-filter hidden>
   </header>
+  {% if person_marks is defined %}
+  <p class="person-strip">Showing {{ person.full_name }}'s teams · <a href="{{ url_for('teams.index') }}">Back to teams</a></p>
+  {% endif %}
   {% if not editing|default(false) %}{% include "teams/_new_team_form.html" %}{% endif %}
   {% if nodes %}
   <div class="structure-body" data-tree>{{ structure_level(nodes) }}</div>

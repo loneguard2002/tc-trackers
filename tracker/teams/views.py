@@ -19,7 +19,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from werkzeug.datastructures import MultiDict
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
-from ..auth import ROLE_ORDER, ROLES, current_user, permission_required
+from ..auth import ROLE_ORDER, ROLES, current_user, has_permission, permission_required
 from ..auth.accounts import vouched_refusal
 from ..auth.guards import (
     SELF_PROMOTION_MESSAGE,
@@ -50,6 +50,7 @@ from .impact import move_impact
 from .layout import ladder, main_parent_ids, tree_options
 from .overview import chart, structure_items
 from .people import TeamPerson, reach_counts, team_people
+from .person import check_answer, first_name, person_rights, person_teams, person_trackers
 from .sits import CYCLE_MESSAGE, Draft, Preview, add_reason, draft_errors, preview, read_draft
 from .tracker_moves import (
     TEAM_DELETED_MESSAGE,
@@ -513,6 +514,55 @@ def _render_team(
         current_page="teams",
     )
     return page, status
+
+
+@bp.get("/people/<int:user_id>")
+@permission_required("manage_teams")
+def person(user_id: int):
+    """One person's teams, trackers and rights (spec 2026-11-26-teams-simple-redesign-design.md 4.8), beside the
+    Structure card marking their teams. It has no Classic version (plan PR 4, R1)."""
+    db = get_session()
+    user = db.get(User, user_id) if in_range(user_id) else None
+    if user is None or user.status == "deleted":
+        abort(404)
+    rows = load_team_rows(db)
+    tree = _tree_context(rows, None)
+    teams = person_teams(db, rows, user)
+    actor = current_user()
+    show_rights = actor.is_admin or has_permission(actor, "manage_users")
+    trackers = db.scalars(select(Tracker).order_by(func.lower(Tracker.name), Tracker.id)).all()
+    check_id = parse_id(request.args.get("check"))
+    checked = next((tracker for tracker in trackers if tracker.id == check_id), None)
+    page = render_template(
+        "teams/person_new.html",
+        **tree,
+        **_structure_context(db, rows, None, tree=tree),
+        view_urls=switch_urls("teams.index"),
+        active_view="new",
+        team_total=len(rows),
+        place_choices=location_choices(db),
+        selected_parent="",
+        form={},
+        new_form={},
+        new_errors=[],
+        person=user,
+        first=first_name(user),
+        teams=teams,
+        person_marks={
+            line.team.id: ("member", f"Member · {line.role.title()}") if line.member else ("through", line.how)
+            for line in teams
+        },
+        seen=person_trackers(db, rows, user),
+        show_rights=show_rights,
+        rights=person_rights(db, user) if show_rights else [],
+        can_open_users=has_permission(actor, "manage_users"),
+        all_trackers=trackers,
+        check_id=checked.id if checked else None,
+        answer=check_answer(db, rows, user, checked) if checked else None,
+        page_title=user.full_name,
+        current_page="teams",
+    )
+    return page, 200
 
 
 @bp.get("/<int:team_id>/below")

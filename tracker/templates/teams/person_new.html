@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{#- One person in the Teams New view (spec 2026-11-26-teams-simple-redesign-design.md 4.8): the Structure card marking
+    their teams; on the right who they are, "Can … see", their teams, the trackers they can see and why, and (for
+    administrators and Manage users holders) the rights their permission sets give. -#}
+{% from "macros.html" import icon %}
+{% from "teams/_structure.html" import structure_card with context %}
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='teams-new.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='teams-structure.js', v=app_version) }}" defer></script>
+{% endblock %}
+{% block content %}
+{% set inactive = person.status != 'active' %}
+{% set members = teams|selectattr('member')|list %}
+{% include "teams/_simple_head.html" %}
+<div class="teams-simple-layout">
+  {{ structure_card() }}
+  <div class="teams-simple-main">
+    <section class="settings-section person-card" aria-labelledby="person-name">
+      <header class="person-head">
+        <span class="member-avatar person-avatar" aria-hidden="true">{{ person.full_name[:1]|upper }}</span>
+        <div class="person-who">
+          <h2 id="person-name">{{ person.full_name }}{% if inactive %} <span class="badge badge-muted">{{ person.status|title }}</span>{% endif %}</h2>
+          <span class="muted">{{ person.email }}</span>
+        </div>
+        {% if can_open_users %}<a class="button" href="{{ url_for('admin.access', user_id=person.id) }}">{{ icon('users') }}Open in Users</a>{% endif %}
+      </header>
+      {% if inactive %}<p class="form-notice person-inactive">{{ first }}'s account is {{ person.status }}. While it is, the teams and sets below give no access.</p>{% endif %}
+      <div class="team-figures person-figures">
+        <div><strong>{{ members|length }}</strong> <span>{{ 'team' if members|length == 1 else 'teams' }} they are in</span></div>
+        <div><strong>{{ teams|length - members|length }}</strong> <span>more {{ 'team' if teams|length - members|length == 1 else 'teams' }} they reach</span></div>
+        <div><strong>{{ seen|length }}</strong> <span>{{ 'tracker' if seen|length == 1 else 'trackers' }} they can see</span></div>
+        {% if show_rights %}<div><strong>{{ 'All' if person.is_admin else rights|length }}</strong> <span>{{ 'set' if rights|length == 1 and not person.is_admin else 'sets' }} of rights</span></div>{% endif %}
+      </div>
+
+      <form class="person-check" method="get" action="{{ url_for('teams.person', user_id=person.id) }}">
+        <label class="field-label" for="check">Can {{ first }} see…</label>
+        <div class="person-check-row">
+          <select id="check" name="check" data-autosubmit>
+            <option value="">Choose a tracker</option>
+            {% for t in all_trackers %}<option value="{{ t.id }}"{{ ' selected' if t.id == check_id }}>{{ t.name }}{% if t.status == 'archived' %} (archived){% endif %}</option>{% endfor %}
+          </select>
+          <button class="button" type="submit" data-autosubmit-fallback>Check</button>
+        </div>
+        {% if answer %}
+        <div class="person-answer{{ ' is-yes' if answer.routes else ' is-no' }}" role="status">
+          <strong>{{ answer.text }}</strong>
+          {% if answer.routes %}
+          <ul>{% for text, role in answer.routes %}<li>{{ text }} ({{ role|title }})</li>{% endfor %}</ul>
+          {% if answer.highest_wins %}<p class="muted">The highest role wins.</p>{% endif %}
+          {% endif %}
+        </div>
+        {% endif %}
+      </form>
+    </section>
+
+    <section class="settings-section person-section" aria-labelledby="person-teams">
+      <h3 id="person-teams">Teams</h3>
+      {% if teams %}
+      <div class="section-table list-table">
+        <table class="card-rows">
+          <thead><tr><th scope="col">Team</th><th scope="col">How</th><th scope="col">Role</th></tr></thead>
+          <tbody>
+          {% for line in teams %}
+          <tr>
+            <td class="list-name"><a href="{{ url_for('teams.view', team_id=line.team.id) }}">{{ line.team.name }}</a></td>
+            <td><span class="route-dot {{ 'is-member' if line.member else 'is-through' }}" aria-hidden="true"></span>{{ line.how }}{% if not line.member %} <span class="muted">(team above)</span>{% endif %}</td>
+            <td>{{ line.role|title }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty-note">{{ first }} is in no team.</p>
+      {% endif %}
+    </section>
+
+    <section class="settings-section person-section" aria-labelledby="person-trackers">
+      <h3 id="person-trackers">Trackers they can see</h3>
+      {% if seen %}
+      <div class="section-table list-table">
+        <table class="card-rows">
+          <thead><tr><th scope="col">Tracker</th><th scope="col">Role</th><th scope="col">Why</th></tr></thead>
+          <tbody>
+          {% for line in seen %}
+          <tr>
+            <td class="list-name">{{ line.tracker.name }}{% if line.tracker.status == 'archived' %} <span class="badge badge-muted">Archived</span>{% endif %}</td>
+            <td>{{ line.role|title }}</td>
+            <td><ul class="person-routes">{% for text, role in line.routes %}<li>{{ text }} ({{ role|title }})</li>{% endfor %}</ul></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% elif inactive %}
+      <p class="empty-note">None while the account is {{ person.status }}.</p>
+      {% else %}
+      <p class="empty-note">{{ first }} cannot see any tracker yet.</p>
+      {% endif %}
+    </section>
+
+    {% if show_rights %}
+    <section class="settings-section person-section" aria-labelledby="person-rights">
+      <h3 id="person-rights">Rights in the app</h3>
+      {% if person.is_admin %}
+      <p>Administrator: every permission.</p>
+      {% elif rights %}
+      <ul class="person-rights">
+        {% for line in rights %}<li><strong>{{ line.source }}</strong>: {{ line.permissions|join(', ') }}</li>{% endfor %}
+      </ul>
+      {% else %}
+      <p>None. {{ first }} can only work in the trackers above.</p>
+      {% endif %}
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
