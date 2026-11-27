@@ -33,10 +33,14 @@
   var lines = layer.querySelector("[data-structure-lines]");
   var stats = layer.querySelector("[data-structure-stats]");
   var find = layer.querySelector("[data-structure-find]");
+  var foldAll = layer.querySelector("[data-fold-all]");
+  var fitButton = layer.querySelector('[data-zoom="fit"]');
+  var percentButton = layer.querySelector('[data-zoom="reset"]');
   var currentId = parseInt(layer.getAttribute("data-current-team"), 10);
   var opener = null;
 
-  var state = { direction: "lr", scale: 1, width: 0, height: 0 };
+  // folded: team id to true while its branch is folded; query: the Find a team text, lower case.
+  var state = { direction: "lr", fit: true, scale: 1, width: 0, height: 0, folded: {}, query: "" };
   var boxes = {};  // team id to its box element, for the shown teams
 
   function each(list, fn) { Array.prototype.forEach.call(list, fn); }
@@ -48,26 +52,49 @@
     return el;
   }
 
+  // --- The whole main tree, folded or not ---------------------------------------------------------------------------
+
+  // Every team reached from the top, with its depth and how many teams sit below it on the main tree. The stats'
+  // team and shared counts and the "+N" of a folded box come from here, so folding does not change them.
+  var tree = (function () {
+    var depth = {}, count = {}, reached = 0, shared = 0;
+    function walk(item, level) {
+      depth[item.id] = level;
+      reached += 1;
+      if (item.others.length) shared += 1;
+      var total = 0;
+      (below[item.id] || []).forEach(function (child) {
+        if (depth[child.id] === undefined) total += 1 + walk(child, level + 1);
+      });
+      count[item.id] = total;
+      return total;
+    }
+    tops.forEach(function (item) { if (depth[item.id] === undefined) walk(item, 0); });
+    return { depth: depth, count: count, reached: reached, shared: shared };
+  }());
+
+  function anyFolded() { return Object.keys(state.folded).length > 0; }
+
   // --- Layout ------------------------------------------------------------------------------------------------------
 
   // Walks the main tree from the top-level teams; returns the shown teams with their depth and row, and the totals.
   function layout() {
-    var placed = {}, order = [], next = 0, deepest = -1, reached = 0, shared = 0;
+    var placed = {}, order = [], next = 0, deepest = -1;
     function walk(item, depth) {
       placed[item.id] = true;  // visited before its children: a loop ends here
-      reached += 1;
-      if (item.others.length) shared += 1;
       var rows = [];
-      (below[item.id] || []).forEach(function (child) {
-        if (!placed[child.id]) rows.push(walk(child, depth + 1));
-      });
+      if (!state.folded[item.id]) {
+        (below[item.id] || []).forEach(function (child) {
+          if (!placed[child.id]) rows.push(walk(child, depth + 1));
+        });
+      }
       var row = rows.length ? (rows[0] + rows[rows.length - 1]) / 2 : next++;
       order.push({ item: item, depth: depth, row: row });
       if (depth > deepest) deepest = depth;
       return row;
     }
     tops.forEach(function (item) { if (!placed[item.id]) walk(item, 0); });
-    return { nodes: order, rows: next, levels: deepest + 1, reached: reached, shared: shared };
+    return { nodes: order, rows: next, levels: deepest + 1 };
   }
 
   function position(node) {
@@ -80,15 +107,24 @@
   }
 
   // A cubic curve from a higher team's box to a lower team's box; a dotted line whose higher team is not before the
-  // lower team goes round underneath, bottom to bottom. ``offset`` moves a dotted end off the solid line.
+  // lower team goes round underneath, bottom to bottom. In left to right, two boxes in one column are stacked, so
+  // that line goes round their right side instead of through the boxes between them. ``offset`` moves a dotted end
+  // off the solid line. A bend reaches at most 0.75 × BEND past the boxes, inside the stage's padding.
+  var BEND = 30;
   function curve(from, to, offset) {
     var x1, y1, x2, y2, bend;
     var lr = state.direction === "lr";
     var before = lr ? from.x < to.x : from.y < to.y;
+    if (!before && lr && from.x === to.x) {
+      x1 = from.x + BOX_W; y1 = from.y + BOX_H / 2;
+      x2 = to.x + BOX_W; y2 = to.y + BOX_H / 2 + offset;
+      bend = x1 + BEND;
+      return "M" + x1 + " " + y1 + " C" + bend + " " + y1 + " " + bend + " " + y2 + " " + x2 + " " + y2;
+    }
     if (!before) {
       x1 = from.x + BOX_W / 2; y1 = from.y + BOX_H;
       x2 = to.x + BOX_W / 2 + offset; y2 = to.y + BOX_H;
-      bend = Math.max(y1, y2) + 36;
+      bend = Math.max(y1, y2) + BEND;
       return "M" + x1 + " " + y1 + " C" + x1 + " " + bend + " " + x2 + " " + bend + " " + x2 + " " + y2;
     }
     if (lr) {
@@ -131,11 +167,31 @@
     link.appendChild(name);
     link.appendChild(meta);
     box.appendChild(link);
+    if (tree.count[item.id]) box.appendChild(foldButton(item));
     box.addEventListener("mouseenter", function () { light(item.id); });
     box.addEventListener("mouseleave", unlight);
     box.addEventListener("focusin", function () { light(item.id); });
     box.addEventListener("focusout", unlight);
     return box;
+  }
+
+  // "−" folds the team's branch; a folded team shows "+N", N being every team below it on the main tree.
+  function foldButton(item) {
+    var button = document.createElement("button");
+    var folded = !!state.folded[item.id];
+    button.type = "button";
+    button.className = "structure-box-fold";
+    button.textContent = folded ? "+" + tree.count[item.id] : "\u2212";
+    button.setAttribute("aria-label", (folded ? "Unfold " : "Fold ") + item.name);
+    button.setAttribute("aria-expanded", folded ? "false" : "true");
+    button.addEventListener("click", function () {
+      if (folded) delete state.folded[item.id];
+      else state.folded[item.id] = true;
+      render();
+      var again = stage.querySelector('.structure-box[data-team-id="' + item.id + '"] .structure-box-fold');
+      if (again) again.focus();
+    });
+    return button;
   }
 
   function levelLabel(depth) {
@@ -194,9 +250,12 @@
       boxes[node.item.id] = box;
       stage.appendChild(box);
     });
-    stats.textContent = plural(result.reached, "team", "teams") + " · " +
-      plural(result.levels, "level shown", "levels shown") + " · " + result.shared + " shared";
-    fit();
+    stats.textContent = plural(tree.reached, "team", "teams") + " · " +
+      plural(result.levels, "level shown", "levels shown") + " · " + tree.shared + " shared";
+    foldAll.textContent = anyFolded() ? "Unfold all" : "Fold all";
+    mark();
+    if (state.fit) fit();
+    else applyScale(state.scale);
   }
 
   // --- Scale -------------------------------------------------------------------------------------------------------
@@ -206,6 +265,47 @@
     stage.style.transform = "scale(" + scale + ")";
     sizer.style.width = state.width * scale + "px";
     sizer.style.height = state.height * scale + "px";
+    percentButton.textContent = Math.round(scale * 100) + "%";
+    fitButton.setAttribute("aria-pressed", state.fit ? "true" : "false");
+  }
+
+  function zoom(how) {
+    if (how === "fit") {
+      state.fit = true;
+      fit();
+      return;
+    }
+    state.fit = false;
+    if (how === "reset") applyScale(1);
+    else applyScale(Math.min(2, Math.max(0.2, how === "in" ? state.scale * 1.2 : state.scale / 1.2)));
+  }
+
+  // --- Search ------------------------------------------------------------------------------------------------------
+
+  // Marks the shown teams whose name holds the typed text; the stage then fades the rest.
+  function mark() {
+    stage.classList.toggle("is-searching", state.query !== "");
+    Object.keys(boxes).forEach(function (id) {
+      var item = byId[id];
+      boxes[id].classList.toggle("is-match", state.query !== "" && item.name.toLowerCase().indexOf(state.query) !== -1);
+    });
+  }
+
+  // Unfolds the main-tree path to every team whose name holds the text, then draws again.
+  function search(text) {
+    state.query = text.trim().toLowerCase();
+    if (state.query !== "") {
+      items.forEach(function (item) {
+        if (tree.depth[item.id] === undefined || item.name.toLowerCase().indexOf(state.query) === -1) return;
+        var seen = {}, up = item.main;
+        while (up !== null && up !== undefined && !seen[up] && byId[up]) {
+          seen[up] = true;
+          delete state.folded[up];
+          up = byId[up].main;
+        }
+      });
+    }
+    render();
   }
 
   function fit() {
@@ -237,6 +337,7 @@
     opener = from || document.querySelector("[data-open-structure]");
     layer.hidden = false;
     document.body.classList.add("structure-open");
+    state.fit = true;
     render();
     find.focus();
   }
@@ -269,6 +370,27 @@
       render();
     });
   });
+
+  each(layer.querySelectorAll("[data-zoom]"), function (button) {
+    button.addEventListener("click", function () { zoom(button.getAttribute("data-zoom")); });
+  });
+
+  // Fold all folds every team below the top level that has teams below it, so the top two levels stay; Unfold all
+  // opens everything.
+  foldAll.addEventListener("click", function () {
+    if (anyFolded()) {
+      state.folded = {};
+    } else {
+      items.forEach(function (item) {
+        if (tree.depth[item.id] >= 1 && tree.count[item.id]) state.folded[item.id] = true;
+      });
+    }
+    render();
+  });
+
+  find.addEventListener("input", function () { search(find.value); });
+
+  window.addEventListener("resize", function () { if (!layer.hidden && state.fit) fit(); });
 
   // Escape closes; Tab stays inside the layer while it is open (it is modal).
   document.addEventListener("keydown", function (event) {

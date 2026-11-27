@@ -190,3 +190,131 @@ def test_a_long_name_keeps_the_box_size(admin_page, live_server, team_factory):
     assert abs(item.bounding_box()["width"] - 200 * scale) <= 1
     expect(item.locator("a.structure-box-open")).to_have_attribute("title", name)
     clean(admin_page)
+
+
+# --- Fit and zoom, fold, search -------------------------------------------------------------------------------------
+
+
+def inside(inner: dict, outer: dict) -> bool:
+    return (
+        inner["x"] >= outer["x"] - 0.5
+        and inner["y"] >= outer["y"] - 0.5
+        and inner["x"] + inner["width"] <= outer["x"] + outer["width"] + 0.5
+        and inner["y"] + inner["height"] <= outer["y"] + outer["height"] + 0.5
+    )
+
+
+def test_fit_keeps_a_big_structure_on_screen(admin_page, live_server, team_factory):
+    root = team_factory("Root")
+    count = 1
+    for chain in range(4):
+        level2 = team_factory(f"Chain {chain} L2", parent=root)
+        level3 = team_factory(f"Chain {chain} L3", parent=level2)
+        level4 = team_factory(f"Chain {chain} L4", parent=level3)
+        count += 3
+        for leaf in range(7 if chain < 3 else 6):
+            team_factory(f"Chain {chain} leaf {leaf}", parent=level4)
+            count += 1
+    assert count == 40
+    admin_page.goto(f"{live_server}/admin/teams/{root.id}")
+    open_layer(admin_page)
+    expect(admin_page.locator(".structure-box")).to_have_count(40)
+    expect(admin_page.locator("[data-structure-stats]")).to_have_text("40 teams · 5 levels shown · 0 shared")
+    expect(admin_page.locator('[data-zoom="fit"]')).to_have_attribute("aria-pressed", "true")
+    viewport = admin_page.locator("[data-structure-viewport]").bounding_box()
+    outside = [
+        i
+        for i, rect in enumerate(b.bounding_box() for b in admin_page.locator(".structure-box").all())
+        if not inside(rect, viewport)
+    ]
+    assert outside == []
+    clean(admin_page)
+
+
+def test_zoom_buttons_step_and_reset(admin_page, live_server, swaps):  # noqa: F811
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['team'].id}")
+    open_layer(admin_page)
+    percent = admin_page.locator('[data-zoom="reset"]')
+    before = int(percent.inner_text().rstrip("%"))
+    admin_page.get_by_role("button", name="Zoom in").click()
+    expect(admin_page.locator('[data-zoom="fit"]')).to_have_attribute("aria-pressed", "false")
+    expect(percent).not_to_have_text(f"{before}%")
+    assert abs(int(percent.inner_text().rstrip("%")) - min(before * 1.2, 200)) <= 1
+    percent.click()
+    expect(percent).to_have_text("100%")
+    admin_page.get_by_role("button", name="Zoom out").click()
+    expect(percent).to_have_text("83%")
+    admin_page.locator('[data-zoom="fit"]').click()
+    expect(admin_page.locator('[data-zoom="fit"]')).to_have_attribute("aria-pressed", "true")
+    expect(percent).to_have_text(f"{before}%")
+    clean(admin_page)
+
+
+def test_folding_a_branch_hides_it_and_says_how_many(admin_page, live_server, swaps):  # noqa: F811
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['team'].id}")
+    open_layer(admin_page)
+    admin_page.get_by_role("button", name="Fold EMEA Rates").click()
+    expect(box(admin_page, "London Swaps")).to_have_count(0)
+    unfold = admin_page.get_by_role("button", name="Unfold EMEA Rates")
+    expect(unfold).to_have_text("+1")
+    expect(admin_page.locator("[data-structure-stats]")).to_have_text("3 teams · 2 levels shown · 0 shared")
+    expect(admin_page.get_by_role("button", name="Fold Global Markets")).to_have_text("−")
+    unfold.click()
+    expect(box(admin_page, "London Swaps")).to_have_count(1)
+    expect(admin_page.locator("[data-structure-stats]")).to_have_text("3 teams · 3 levels shown · 0 shared")
+    clean(admin_page)
+
+
+def test_fold_all_keeps_the_top_two_levels(admin_page, live_server, team_factory):
+    top = team_factory("Top team")
+    second = team_factory("Second", parent=top)
+    third = team_factory("Third", parent=second)
+    team_factory("Fourth", parent=third)
+    team_factory("Second B", parent=top)
+    admin_page.goto(f"{live_server}/admin/teams/{top.id}")
+    open_layer(admin_page)
+    expect(admin_page.locator(".structure-box")).to_have_count(5)
+    fold_all = admin_page.locator("[data-fold-all]")
+    fold_all.click()
+    expect(admin_page.locator(".structure-box")).to_have_count(3)
+    expect(admin_page.locator(".structure-level")).to_have_text(["Top", "Level 2"])
+    expect(fold_all).to_have_text("Unfold all")
+    expect(admin_page.get_by_role("button", name="Unfold Second", exact=True)).to_have_text("+2")
+    fold_all.click()
+    expect(admin_page.locator(".structure-box")).to_have_count(5)
+    expect(fold_all).to_have_text("Fold all")
+    clean(admin_page)
+
+
+def test_search_unfolds_and_marks_matches(admin_page, live_server, swaps):  # noqa: F811
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['team'].id}")
+    open_layer(admin_page)
+    admin_page.locator("[data-fold-all]").click()
+    expect(box(admin_page, "London Swaps")).to_have_count(0)
+    admin_page.get_by_label("Find a team", exact=True).fill("SWAPS")
+    expect(box(admin_page, "London Swaps")).to_have_class(re.compile(r"\bis-match\b"))
+    stage = admin_page.locator("[data-structure-stage]")
+    expect(stage).to_have_class(re.compile(r"\bis-searching\b"))
+    expect(box(admin_page, "Global Markets")).not_to_have_class(re.compile(r"\bis-match\b"))
+    assert box(admin_page, "Global Markets").evaluate("el => getComputedStyle(el).opacity") == "0.35"
+    admin_page.get_by_label("Find a team", exact=True).fill("")
+    expect(stage).not_to_have_class(re.compile(r"\bis-searching\b"))
+    expect(admin_page.locator(".structure-box.is-match")).to_have_count(0)
+    clean(admin_page)
+
+
+def test_a_folded_other_parent_draws_no_dotted_line(admin_page, live_server, team_factory):
+    alpha, group = team_factory("Alpha"), team_factory("Group")
+    beta = team_factory("Beta", parent=group)
+    team_factory("Shared", parents=(alpha, beta), main=alpha)
+    admin_page.goto(f"{live_server}/admin/teams/{alpha.id}")
+    open_layer(admin_page)
+    expect(admin_page.locator("path.structure-line.is-dotted")).to_have_count(1)
+    admin_page.get_by_role("button", name="Fold Group").click()
+    expect(box(admin_page, "Beta")).to_have_count(0)
+    expect(admin_page.locator("path.structure-line.is-dotted")).to_have_count(0)
+    expect(admin_page.locator("circle.structure-line-end")).to_have_count(0)
+    box(admin_page, "Shared").hover()  # lighting with the other higher team hidden
+    admin_page.get_by_role("button", name="Unfold Group").click()
+    expect(admin_page.locator("path.structure-line.is-dotted")).to_have_count(1)
+    clean(admin_page)
