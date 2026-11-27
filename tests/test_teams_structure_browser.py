@@ -384,3 +384,30 @@ def test_fit_opens_a_small_structure_at_most_at_88_percent(admin_page, live_serv
     open_layer(admin_page)
     expect(admin_page.locator('[data-zoom="reset"]')).to_have_text("88%")
     clean(admin_page)
+
+
+def test_the_layer_is_a_pop_up_at_70_percent_of_the_screen(admin_page, live_server, swaps):  # noqa: F811
+    # The owner's ask (27 Nov 2026): a pop-up at about 70% of the screen, the page dimmed; full screen on a phone.
+    admin_page.set_viewport_size({"width": 1600, "height": 1000})
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['team'].id}")
+    open_layer(admin_page)
+    panel = admin_page.locator(".structure-panel").bounding_box()
+    assert abs(panel["width"] - 1120) <= 2 and abs(panel["height"] - 700) <= 2
+    assert abs(panel["x"] - 240) <= 2 and abs(panel["y"] - 150) <= 2  # centred
+    admin_page.set_viewport_size({"width": 390, "height": 844})
+    panel = admin_page.locator(".structure-panel").bounding_box()
+    assert panel["width"] >= 388 and panel["height"] >= 840
+    clean(admin_page)
+
+
+def test_the_where_it_sits_ladder_uses_the_whole_structure_boxes(admin_page, live_server, swaps):  # noqa: F811
+    # The owner's ask (27 Nov 2026): boxes like the Whole structure's, not rounded pills.
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['team'].id}")
+    style = (
+        "el => [getComputedStyle(el).borderRadius, getComputedStyle(el).fontWeight, el.getBoundingClientRect().width]"
+    )
+    radius, weight, width = admin_page.locator(".family .fam-link").first.evaluate(style)
+    this_radius, _, this_width = admin_page.locator(".family .fam-this").evaluate(style)
+    assert radius == this_radius == "8px" and weight == "600"
+    assert width >= 199 and this_width >= 199  # at least a Whole structure box's 200px
+    clean(admin_page)
