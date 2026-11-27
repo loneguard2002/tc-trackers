@@ -115,6 +115,7 @@ ACTION_AREAS: dict[str, tuple[str, ...]] = {
             "team_moved",
             "team_parent_added",
             "team_parent_removed",
+            "team_main_set",
             "team_renamed",
         ),
         ("manage_teams",),

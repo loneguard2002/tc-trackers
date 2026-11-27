@@ -10,10 +10,11 @@ import pytest
 from conftest import post
 from sqlalchemy import select
 
+from tracker.audit import NO_CHANGES_MESSAGE
 from tracker.auth.guards import SELF_PROMOTION_MESSAGE, TEAM_WITH_SETS_MESSAGE
 from tracker.models import AuditLog, Team, TeamMember, TeamParent
 from tracker.teams.overview import FOLD_OVER, chart
-from tracker.teams.tree import ALREADY_MEMBER_MESSAGE, TeamRow, load_team_rows
+from tracker.teams.tree import ALREADY_MEMBER_MESSAGE, TEAM_CHOICE_ERROR, TeamRow, load_team_rows
 from tracker.teams.views import CYCLE_MESSAGE
 
 
@@ -247,18 +248,6 @@ def test_a_team_holding_sets_shows_the_refusal_instead_of_the_panel(client, logg
 # --- Where it sits --------------------------------------------------------------------------------------------------
 
 
-def test_keep_shows_both_chains_after(client, logged_in_admin, swaps, team_factory, user_factory, add_member):
-    apac = team_factory("APAC Desk", parent=swaps["top"])
-    add_member(apac, user_factory(full_name="Kai Wong"), "editor")
-    html = page(client, f"/admin/teams/{swaps['team'].id}/parents?view=new&to={apac.id}&how=add")
-    now = re.search(r'<figure class="sits-now">(.*?)</figure>', html, re.S).group(1)
-    after = re.search(r'<figure class="sits-after">(.*?)</figure>', html, re.S).group(1)
-    assert now.count('class="access-chain') == 1 and after.count('class="access-chain') == 2
-    assert re.search(r'<li class="is-new">.*?APAC Desk', after, re.S)
-    assert "Kai Wong gains Editor on Swaps desk rollout." in html
-    assert "Put London Swaps under APAC Desk too" in html
-
-
 def test_move_replaces_every_higher_team(
     client, logged_in_admin, db, team_factory, user_factory, add_member, tracker_factory
 ):
@@ -266,20 +255,11 @@ def test_move_replaces_every_higher_team(
     team = team_factory("Moving", parents=(a, b))
     add_member(a, user_factory(full_name="Ann Above"), "viewer")
     tracker_factory(name="Their tracker", team_id=team.id)
-    preview = page(client, f"/admin/teams/{team.id}/parents?view=new&to={c.id}&how=move")
-    assert "Ann Above loses Viewer on Their tracker." in preview and "Move Moving under C" in preview
     response = post(client, f"/admin/teams/{team.id}/parents", {"action": "move", "parent_id": str(c.id)})
     assert response.status_code == 302
     assert load_team_rows(db) and next(r for r in load_team_rows(db) if r.id == team.id).parent_ids == (c.id,)
     actions = sorted(e.action for e in db.scalars(select(AuditLog).where(AuditLog.entity_id == str(team.id))))
     assert actions == ["team_parent_added", "team_parent_removed", "team_parent_removed"]
-
-
-def test_move_to_the_only_higher_team_is_a_notice(client, logged_in_admin, team_factory):
-    a = team_factory("A")
-    team = team_factory("Under A", parent=a)
-    html = page(client, f"/admin/teams/{team.id}/parents?view=new&to={a.id}&how=move")
-    assert "Under A is already under A." in html and "move-confirm" not in html
 
 
 def test_move_into_a_team_below_is_a_cycle(client, logged_in_admin, team_factory):
@@ -325,7 +305,8 @@ def test_classic_shows_a_move_preview_as_a_move(client, logged_in_admin, team_fa
 def test_odd_query_keys_do_not_break_the_switch(client, logged_in_admin, team_factory, query):
     team = team_factory("Desk")
     for url in ("/admin/teams", f"/admin/teams/{team.id}", f"/admin/teams/{team.id}/parents"):
-        page(client, f"{url}?view=new&{query}", 302 if url == "/admin/teams" else 200)  # the index opens Desk
+        status = 200 if url == f"/admin/teams/{team.id}" else 302  # the index opens Desk; parents opens the editor
+        page(client, f"{url}?view=new&{query}", status)
 
 
 # --- The team page (simple redesign, spec 4.4 and 4.5) ---------------------------------------------------------------
@@ -600,3 +581,172 @@ def test_also_under_does_not_become_main(client, logged_in_admin, db, team_facto
     )
     ops = db.scalar(select(Team).where(Team.name == "Ops"))
     assert db.scalar(select(TeamParent.parent_id).where(TeamParent.team_id == ops.id, TeamParent.is_main)) == zeta.id
+
+
+# --- The Where it sits editor (PR 2, spec 4.6) -----------------------------------------------------------------------
+
+
+def _editor(html: str) -> str:
+    return re.search(r'<section class="family sits-editor".*?</section>', html, re.S).group(0)
+
+
+def _links_and_main(db, team):
+    db.expire_all()
+    rows = db.execute(select(TeamParent.parent_id, TeamParent.is_main).where(TeamParent.team_id == team.id)).all()
+    return sorted(parent for parent, _ in rows), next((parent for parent, main in rows if main), None)
+
+
+def _actions(db, team):
+    return sorted(e.action for e in db.scalars(select(AuditLog).where(AuditLog.entity_id == str(team.id))))
+
+
+@pytest.fixture
+def abt(team_factory):
+    a, b, c = team_factory("A"), team_factory("B"), team_factory("C")
+    return {"a": a, "b": b, "c": c, "t": team_factory("T", parents=(a, b), main=b)}
+
+
+def test_editor_lists_higher_teams_with_the_main_marked(client, logged_in_admin, abt):
+    editor = _editor(page(client, f"/admin/teams/{abt['t'].id}/sits?view=new"))
+    text = text_of(editor)
+    assert "Where T sits" in text and "Make main" in text and 'aria-label="Take out of A"' in editor
+    row_b = re.search(r'<li class="sits-row[^"]*">(?:(?!</li>).)*?>B<.*?</li>', editor, re.S).group(0)
+    assert "Main team" in text_of(row_b)
+
+
+def test_editor_actions_change_the_draft_in_the_address(client, logged_in_admin, abt):
+    a, b, c, t = abt["a"].id, abt["b"].id, abt["c"].id, abt["t"].id
+    base = f"/admin/teams/{t}/sits?view=new&draft=1&above={a}&above={b}"
+    editor = _editor(page(client, f"{base}&main={b}&add={c}"))
+    assert editor.count('class="sits-row') == 3
+    editor = _editor(page(client, f"{base}&main={b}&make_main={a}"))
+    row_a = re.search(r'<li class="sits-row[^"]*">(?:(?!</li>).)*?>A<.*?</li>', editor, re.S).group(0)
+    assert "Main team" in text_of(row_a)
+    assert _editor(page(client, f"{base}&main={b}&drop={b}")).count('class="sits-row') == 1
+
+
+def test_editor_preview_names_who_gains_and_loses(client, logged_in_admin, swaps):
+    team = swaps["team"]
+    editor = text_of(_editor(page(client, f"/admin/teams/{team.id}/sits?view=new&drop={swaps['rates'].id}")))
+    assert "lose access" in editor and "Priya Nair" in editor and "The same applies to the teams below it." in editor
+
+
+def test_editor_preview_says_when_nothing_changes(client, logged_in_admin, abt):
+    editor = text_of(_editor(page(client, f"/admin/teams/{abt['t'].id}/sits?view=new&make_main={abt['a'].id}")))
+    assert "No change in who can see its trackers." in editor
+
+
+def test_editor_add_offers_indented_options_with_reasons(client, logged_in_admin, abt, team_factory):
+    kid = team_factory("Kid", parent=abt["t"])
+    editor = _editor(page(client, f"/admin/teams/{abt['t'].id}/sits?view=new"))
+    assert re.search(
+        rf'<option value="{kid.id}"[^>]*disabled[^>]*>[^<]*Kid \(below this team, would make a loop\)', editor
+    )
+    assert re.search(rf'<option value="{abt["a"].id}"[^>]*disabled[^>]*>[^<]*A \(already above\)', editor)
+    assert re.search(rf'<option value="{abt["t"].id}"[^>]*disabled[^>]*>[^<]*T \(this team\)', editor)
+    assert re.search(rf'<option value="{abt["c"].id}">[^<]*C<', editor)
+
+
+def save(client, team, above, main, back=None):
+    data = {"above": [str(i) for i in above], "main": str(main) if main else ""}
+    if back:
+        data["back"] = str(back)
+    return post(client, f"/admin/teams/{team.id}/sits", data)
+
+
+def test_save_writes_links_main_and_activity(client, logged_in_admin, db, team_factory):
+    a, b, c = team_factory("A"), team_factory("B"), team_factory("C")
+    t = team_factory("T", parent=a)
+    page(client, f"/admin/teams/{t.id}?view=new")
+    response = save(client, t, [b.id, c.id], c.id)
+    assert response.status_code == 302 and response.headers["Location"].endswith(f"/admin/teams/{t.id}")
+    assert _links_and_main(db, t) == (sorted([b.id, c.id]), c.id)
+    assert _actions(db, t) == ["team_main_set", "team_parent_added", "team_parent_added", "team_parent_removed"]
+    main_set = db.scalar(select(AuditLog).where(AuditLog.entity_id == str(t.id), AuditLog.action == "team_main_set"))
+    assert main_set.detail == {"team": "T", "before": "A", "after": "C"}
+    assert "Saved where T sits." in page(client, response.headers["Location"])
+
+
+def test_only_the_main_changed_writes_one_entry(client, logged_in_user, db, give_set, abt):
+    give_set(["manage_teams"], user=logged_in_user)
+    t = abt["t"]
+    response = save(client, t, [abt["a"].id, abt["b"].id], abt["a"].id)
+    assert response.status_code == 302
+    assert _links_and_main(db, t)[1] == abt["a"].id
+    assert _actions(db, t) == ["team_main_set"]
+
+
+def test_taking_out_every_higher_team_makes_it_top_level(client, logged_in_admin, db, abt):
+    t = abt["t"]
+    page(client, f"/admin/teams/{t.id}?view=new")
+    assert save(client, t, [], None).status_code == 302
+    assert _links_and_main(db, t) == ([], None)
+    assert _actions(db, t) == ["team_parent_removed", "team_parent_removed"]
+    assert "this team · top level" in text_of(_ladder(page(client, f"/admin/teams/{t.id}")))
+
+
+def test_save_refuses_a_loop_and_a_stale_team(client, logged_in_admin, db, abt, team_factory):
+    t = abt["t"]
+    kid = team_factory("Kid", parent=t)
+    page(client, f"/admin/teams/{t.id}?view=new")
+    for above, message in (([kid.id], CYCLE_MESSAGE), ([999999], TEAM_CHOICE_ERROR)):
+        response = save(client, t, above, above[0])
+        assert response.status_code == 400
+        editor = _editor(html_lib.unescape(response.get_data(as_text=True)))
+        assert message in editor and 'role="alert"' in editor
+    assert _links_and_main(db, t) == (sorted([abt["a"].id, abt["b"].id]), abt["b"].id)
+
+
+def test_save_refuses_a_change_that_raises_own_access(
+    client, logged_in_user, db, give_set, team_factory, add_member, tracker_factory
+):
+    give_set(["manage_teams"], user=logged_in_user)
+    mine, other = team_factory("Mine"), team_factory("Other")
+    add_member(mine, logged_in_user, "owner")
+    team = team_factory("Target", parent=other)
+    tracker_factory(name="Target tracker", team_id=team.id)
+    response = save(client, team, [other.id, mine.id], other.id)
+    assert response.status_code == 302
+    assert _links_and_main(db, team) == ([other.id], other.id)
+    assert SELF_PROMOTION_MESSAGE in page(client, response.headers["Location"])
+
+
+def test_unchanged_save_says_so(client, logged_in_admin, db, abt):
+    response = save(client, abt["t"], [abt["a"].id, abt["b"].id], abt["b"].id)
+    assert response.status_code == 302 and _actions(db, abt["t"]) == []
+    assert NO_CHANGES_MESSAGE in page(client, response.headers["Location"])
+
+
+def test_put_below_opens_the_editor_of_the_team_being_placed(client, logged_in_admin, db, team_factory):
+    r, x = team_factory("R"), team_factory("X")
+    page(client, f"/admin/teams/{r.id}?view=new")
+    response = client.get(f"/admin/teams/{r.id}/below?team_id={x.id}")
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(f"/admin/teams/{x.id}/sits?add={r.id}&back={r.id}")
+    editor = _editor(page(client, response.headers["Location"]))
+    assert editor.count('class="sits-row') == 1 and ">R<" in editor
+    response = save(client, x, [r.id], r.id, back=r.id)
+    assert response.headers["Location"].endswith(f"/admin/teams/{r.id}")
+
+
+def test_new_view_parents_page_redirects_to_the_editor(client, logged_in_admin, abt):
+    page(client, f"/admin/teams/{abt['t'].id}?view=new")
+    response = client.get(f"/admin/teams/{abt['t'].id}/parents")
+    assert response.status_code == 302 and response.headers["Location"].endswith(f"/admin/teams/{abt['t'].id}/sits")
+
+
+def test_classic_sits_redirects_to_the_parents_page(client, logged_in_admin, abt):
+    response = client.get(f"/admin/teams/{abt['t'].id}/sits?view=classic")
+    assert response.status_code == 302 and response.headers["Location"].endswith(f"/admin/teams/{abt['t'].id}/parents")
+
+
+def test_change_where_it_sits_links_to_the_editor(client, logged_in_admin, abt):
+    assert f'href="/admin/teams/{abt["t"].id}/sits"' in _ladder(page(client, f"/admin/teams/{abt['t'].id}?view=new"))
+
+
+def test_main_team_set_has_a_label():
+    from tracker.activity.labels import ACTION_LABELS
+    from tracker.activity.scope import ACTION_AREAS
+
+    assert ACTION_LABELS["team_main_set"] == "Main team set"
+    assert ACTION_AREAS["team_main_set"] == ("manage_teams",)

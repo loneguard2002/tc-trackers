@@ -1,0 +1,60 @@
+{#- The Where it sits editor in the team card (spec 2026-11-26-teams-simple-redesign-design.md 4.6). Every action is a
+    button in a GET form that reloads the page with the draft in the address, so the preview is always exact and no
+    script is needed; Save posts the whole draft once. Expects team, sits (a Draft), sits_options, sits_preview,
+    sits_errors, sits_back and team_names. -#}
+{% from "macros.html" import csrf_field, icon %}
+{% macro draft_fields() -%}
+{% for id in sits.above %}<input type="hidden" name="above" value="{{ id }}">{% endfor %}
+{% if sits.main %}<input type="hidden" name="main" value="{{ sits.main }}">{% endif %}
+{% if sits_back %}<input type="hidden" name="back" value="{{ sits_back }}">{% endif %}
+{%- endmacro %}
+<section class="family sits-editor" aria-labelledby="sits-edit-title">
+  <h3 class="sits-title" id="sits-edit-title">Where {{ team.name }} sits</h3>
+  <p class="sits-help">A team can sit under more than one team. That makes it a shared team: members of every team above can see its trackers. The main team decides where it shows in the structure.</p>
+  {% if sits_errors %}
+  <div class="form-alert" role="alert">
+    <strong>Please correct the following:</strong>
+    <ul class="form-error">{% for e in sits_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  <form class="sits-draft" method="get" action="{{ url_for('teams.sits', team_id=team.id) }}">
+    <input type="hidden" name="draft" value="1">
+    {{ draft_fields() }}
+    {% if sits.above %}
+    <ul class="sits-list">
+      {% for id in sits.above %}
+      <li class="sits-row{{ ' is-main' if id == sits.main }}">
+        <span class="sits-name">{{ team_names[id] }}</span>
+        {% if id == sits.main %}<span class="sits-main">Main team</span>
+        {% else %}<button class="button button-small" type="submit" name="make_main" value="{{ id }}">Make main</button>{% endif %}
+        <button class="tool-button is-danger" type="submit" name="drop" value="{{ id }}" aria-label="Take out of {{ team_names[id] }}" title="Take out of {{ team_names[id] }}">{{ icon('close') }}</button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="fam-none">Top level: no team above it.</p>
+    {% endif %}
+    <div class="sits-add">
+      <label for="sits-add">Add a team above</label>
+      <select id="sits-add" name="add">
+        <option value="">Choose a team</option>
+        {% for o in sits_options %}<option value="{{ o.id }}"{% if o.disabled %} disabled{% endif %}>{{ o.label }}</option>{% endfor %}
+      </select>
+      <button class="button button-small" type="submit">Add</button>
+    </div>
+  </form>
+  {% set p = sits_preview %}
+  <div class="sits-preview-box" aria-live="polite">
+    {% if not (p.gain or p.lose or p.other_role) %}<p>No change in who can see its trackers.</p>{% endif %}
+    {% if p.gain %}<p class="sits-gain">{{ p.gain|length }} gain access: {{ p.gain|join(', ') }}</p>{% endif %}
+    {% if p.lose %}<p class="sits-lose">{{ p.lose|length }} lose access: {{ p.lose|join(', ') }}</p>{% endif %}
+    {% if p.other_role %}<p>{{ p.other_role|length }} would see a different role: {{ p.other_role|join(', ') }}</p>{% endif %}
+    {% if p.gain or p.lose or p.other_role %}<p class="sits-help">The same applies to the teams below it.</p>{% endif %}
+  </div>
+  <form class="sits-save" method="post" action="{{ url_for('teams.save_sits', team_id=team.id) }}">
+    {{ csrf_field(csrf_token()) }}
+    {{ draft_fields() }}
+    <a class="button" href="{{ url_for('teams.view', team_id=sits_back or team.id) }}">Cancel</a>
+    <button class="button primary" type="submit">Save</button>
+  </form>
+</section>
