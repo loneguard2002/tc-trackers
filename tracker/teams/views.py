@@ -51,7 +51,6 @@ from .layout import ladder, main_parent_ids, tree_options
 from .overview import (
     chart,
     member_counts,
-    paths_to,
     tracker_counts,
 )
 from .people import TeamPerson, reach_counts, team_people
@@ -751,15 +750,8 @@ def _render_parents(
         after = {"add": current | {parent_id}, "move": frozenset({parent_id})}.get(action, current - {parent_id})
         impact = move_impact(db, team, after)
     view = chosen_view()
-    extra = {}
-    if view == "new":  # the chains of teams above it now and, for a change being previewed, after it
-        extra = {
-            "chains_now": paths_to(rows, team.id),
-            "chains_after": paths_to(rows, team.id, after) if after is not None else None,
-        }
     page = render_template(
-        "teams/parents_new.html" if view == "new" else "teams/parents.html",
-        **extra,
+        "teams/parents.html",
         view_urls=switch_urls("teams.parents", team_id=team.id),
         active_view=view,
         team=team,

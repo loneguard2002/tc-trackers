@@ -54,34 +54,6 @@ def chart(rows: list[TeamRow]) -> list[ChartNode]:
     return build(None, 1, frozenset())
 
 
-MAX_CHAINS = 6
-
-
-def paths_to(rows: list[TeamRow], team_id: int, parent_ids: frozenset[int] | None = None) -> list[list[TeamRow]]:
-    """Each chain of teams from the top level down to just above the team, by name; none for a top-level team.
-    ``parent_ids`` stands in for the team's own higher teams (a change being previewed). At most ``MAX_CHAINS``."""
-    by_id = {row.id: row for row in rows}
-
-    def up(current: int, path: frozenset[int]) -> list[list[TeamRow]]:
-        chains: list[list[TeamRow]] = []
-        for parent_id in by_id[current].parent_ids if current in by_id else ():
-            if parent_id in path or parent_id not in by_id:  # a cycle in corrupted data, or a team just deleted
-                continue
-            chains.extend([*chain, by_id[parent_id]] for chain in up(parent_id, path | {parent_id}) or [[]])
-        return chains
-
-    if parent_ids is None:
-        chains = up(team_id, frozenset({team_id}))
-    else:
-        chains = []
-        for parent_id in parent_ids:
-            if parent_id in by_id and parent_id != team_id:
-                above = up(parent_id, frozenset({team_id, parent_id})) or [[]]
-                chains.extend([*chain, by_id[parent_id]] for chain in above)
-    chains.sort(key=lambda chain: [(row.name.casefold(), row.id) for row in chain])
-    return chains[:MAX_CHAINS]
-
-
 def member_counts(session: Session) -> dict[int, int]:
     """Team id to its number of active direct members."""
     return dict(
