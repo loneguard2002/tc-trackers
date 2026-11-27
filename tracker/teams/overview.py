@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import TeamMember, Tracker, User
+from .layout import main_parent_ids
 from .tree import TeamRow, sorted_by_name
 
 FOLD_FROM_DEPTH = 3  # the top level is depth 1
@@ -28,15 +29,16 @@ class ChartNode(NamedTuple):
 
 
 def chart(rows: list[TeamRow]) -> list[ChartNode]:
-    """The top-level teams, each with the teams below it. A team under several teams sits under the first by name
-    and names the others in ``also_under`` (their ids in ``also_ids``)."""
+    """The top-level teams, each with the teams below it. A team under several teams sits under its main team
+    (``layout.main_parent_ids``) and names the others in ``also_under`` (their ids in ``also_ids``), by name."""
     by_id = {row.id: row for row in rows}
+    main = main_parent_ids(rows)
     placed_under: dict[int | None, list[TeamRow]] = {}
     also: dict[int, list[TeamRow]] = {}
     for row in rows:
         parents = sorted_by_name(by_id[parent_id] for parent_id in row.parent_ids if parent_id in by_id)
-        placed_under.setdefault(parents[0].id if parents else None, []).append(row)
-        also[row.id] = parents[1:]
+        placed_under.setdefault(main.get(row.id), []).append(row)
+        also[row.id] = [parent for parent in parents if parent.id != main.get(row.id)]
 
     def build(parent_id: int | None, depth: int, path: frozenset[int]) -> list[ChartNode]:
         nodes = []

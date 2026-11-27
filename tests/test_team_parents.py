@@ -296,3 +296,28 @@ def test_notices_sit_in_the_section_they_belong_to(client, logged_in_admin, tree
     now, add = added.split('id="section-add"')
     assert "Desktops is already under Windows." in flat(add)
     assert "Desktops is already under" not in flat(now)
+
+
+def _main_of(db, team):
+    db.expire_all()
+    return db.scalar(select(TeamParent.parent_id).where(TeamParent.team_id == team.id, TeamParent.is_main))
+
+
+def test_classic_remove_of_the_main_passes_it_to_the_next_by_name(client, logged_in_admin, db, team_factory):
+    a, b, c = team_factory("A"), team_factory("B"), team_factory("C")
+    t = team_factory("T", parents=(a, b, c), main=b)
+    assert post(client, f"/admin/teams/{t.id}/parents", {"action": "remove", "parent_id": str(b.id)}).status_code == 302
+    assert _main_of(db, t) == a.id
+
+
+def test_classic_add_to_a_top_level_team_makes_it_main(client, logged_in_admin, db, team_factory):
+    a, t = team_factory("A"), team_factory("T")
+    assert post(client, f"/admin/teams/{t.id}/parents", {"action": "add", "parent_id": str(a.id)}).status_code == 302
+    assert _main_of(db, t) == a.id
+
+
+def test_classic_add_keeps_the_current_main(client, logged_in_admin, db, team_factory):
+    a, b, z = team_factory("A"), team_factory("B"), team_factory("Z")
+    t = team_factory("T", parents=(z,))
+    post(client, f"/admin/teams/{t.id}/parents", {"action": "add", "parent_id": str(a.id)})
+    assert _main_of(db, t) == z.id  # A sorts first, but Z was there first

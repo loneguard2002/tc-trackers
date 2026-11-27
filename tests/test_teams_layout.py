@@ -54,3 +54,13 @@ def test_cycles_end():
     rows = [TeamRow(1, "A", ()), TeamRow(2, "B", (3,)), TeamRow(3, "C", (2,))]
     assert ladder(rows, 2).path == [rows[2]]  # stops at C, which points back at B
     assert [o.id for o in tree_options(rows)] == [1]  # B and C cannot be reached from the top
+
+
+def test_main_parent_follows_the_stored_main():
+    rows = [*ROWS[:3], TeamRow(4, "Shared Analytics", (2, 3), main_id=2)]
+    assert main_parent_ids(rows)[4] == 2  # EMEA, although Data Products sorts first
+
+
+def test_a_main_that_is_not_a_parent_falls_back_to_first_by_name():
+    rows = [*ROWS[:3], TeamRow(4, "Shared Analytics", (2, 3), main_id=99)]
+    assert main_parent_ids(rows)[4] == 3

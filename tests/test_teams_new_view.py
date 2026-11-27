@@ -575,3 +575,28 @@ def test_ladder_names_each_tier_for_screen_readers(client, logged_in_admin, swap
     assert re.search(r'class="sr-only">Level 1: </span>\s*<a[^>]*>Global Markets', lad)
     assert re.search(r'class="sr-only">Level 3: </span>\s*<span class="fam-this"><strong>London Swaps', lad)
     assert 'class="sr-only">Level 4: </span>' in lad  # the "No teams below" row
+
+
+# --- The main team (PR 2) --------------------------------------------------------------------------------------------
+
+
+def test_structure_card_places_a_team_under_its_main(client, logged_in_admin, team_factory):
+    alpha, beta = team_factory("Alpha"), team_factory("Beta")
+    team_factory("Shared", parents=(alpha, beta), main=beta)
+    card = _card(page(client, f"/admin/teams/{alpha.id}?view=new"))
+    assert "Also under Alpha" in card
+    beta_item = re.search(r'<li data-search="beta[^"]*">.*?</li>\s*</ul>\s*</li>', card, re.S).group(0)
+    assert ">Shared<" in beta_item
+
+
+def test_also_under_does_not_become_main(client, logged_in_admin, db, team_factory, region_factory):
+    zeta, alpha = team_factory("Zeta"), team_factory("Alpha")
+    region = region_factory("EMEA")
+    page(client, f"/admin/teams/{zeta.id}?view=new")
+    post(
+        client,
+        "/admin/teams",
+        {"name": "Ops", "parent_id": str(zeta.id), "also_parent_id": str(alpha.id), "region_id": str(region.id)},
+    )
+    ops = db.scalar(select(Team).where(Team.name == "Ops"))
+    assert db.scalar(select(TeamParent.parent_id).where(TeamParent.team_id == ops.id, TeamParent.is_main)) == zeta.id

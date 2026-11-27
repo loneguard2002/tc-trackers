@@ -16,13 +16,14 @@ NB = " "  # a no-break space: a select keeps it, where it would collapse ordina
 
 
 def main_parent_ids(rows: list[TeamRow]) -> dict[int, int]:
-    """Team id to its main higher team: the first by name among its higher teams. Top-level teams are absent."""
+    """Team id to its main higher team: the stored main (``TeamRow.main_id``) when it is one of its higher teams,
+    else the first by name among them. Top-level teams are absent."""
     by_id = {row.id: row for row in rows}
     found: dict[int, int] = {}
     for row in rows:
         parents = sorted_by_name(by_id[parent_id] for parent_id in row.parent_ids if parent_id in by_id)
         if parents:
-            found[row.id] = parents[0].id
+            found[row.id] = row.main_id if row.main_id in {parent.id for parent in parents} else parents[0].id
     return found
 
 
