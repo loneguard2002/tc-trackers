@@ -47,6 +47,7 @@ from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
 from .layout import ladder, tree_options
+from .sits import CYCLE_MESSAGE
 from .overview import (
     chart,
     member_counts,
@@ -83,7 +84,6 @@ from .tree import (
 )
 from .view_choice import chosen_view, switch_urls
 
-CYCLE_MESSAGE = "A team cannot be placed under itself or under a team below it."
 ALREADY_UNDER = "{team} is already under {parent}."
 NOT_UNDER = "{team} is not under {parent}."
 HAS_CHILDREN_MESSAGE = "This team has teams below it. Remove them from under it or delete them first."
