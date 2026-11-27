@@ -81,6 +81,8 @@
     var placed = {}, order = [], next = 0, deepest = -1;
     function walk(item, depth) {
       placed[item.id] = true;  // visited before its children: a loop ends here
+      var node = { item: item, depth: depth, row: 0 };
+      order.push(node);  // each team before the teams below it: the boxes' reading and Tab order
       var rows = [];
       if (!state.folded[item.id]) {
         (below[item.id] || []).forEach(function (child) {
@@ -88,7 +90,7 @@
         });
       }
       var row = rows.length ? (rows[0] + rows[rows.length - 1]) / 2 : next++;
-      order.push({ item: item, depth: depth, row: row });
+      node.row = row;
       if (depth > deepest) deepest = depth;
       return row;
     }
@@ -276,7 +278,7 @@
     }
     state.fit = false;
     if (how === "reset") applyScale(1);
-    else applyScale(Math.min(2, Math.max(0.2, how === "in" ? state.scale * 1.2 : state.scale / 1.2)));
+    else applyScale(Math.min(2, Math.max(Math.min(0.2, state.scale), how === "in" ? state.scale * 1.2 : state.scale / 1.2)));
   }
 
   // --- Search ------------------------------------------------------------------------------------------------------
@@ -307,9 +309,10 @@
     render();
   }
 
+  // Fit shows every team (spec 4.9), however small that makes them; the floor only guards a viewport with no size.
   function fit() {
     var scale = Math.min((viewport.clientWidth - 8) / state.width, (viewport.clientHeight - 8) / state.height, 1.25);
-    applyScale(Math.max(scale, 0.2));
+    applyScale(Math.max(scale, 0.02));
   }
 
   // --- Lighting ----------------------------------------------------------------------------------------------------

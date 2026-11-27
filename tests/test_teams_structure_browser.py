@@ -204,6 +204,45 @@ def inside(inner: dict, outer: dict) -> bool:
     )
 
 
+def big_structure(team_factory):
+    """40 teams over 5 levels: Root, then 4 chains of three, with 27 teams at the bottom."""
+    root = team_factory("Root")
+    for chain in range(4):
+        level2 = team_factory(f"Chain {chain} L2", parent=root)
+        level3 = team_factory(f"Chain {chain} L3", parent=level2)
+        level4 = team_factory(f"Chain {chain} L4", parent=level3)
+        for leaf in range(7 if chain < 3 else 6):
+            team_factory(f"Chain {chain} leaf {leaf}", parent=level4)
+    return root
+
+
+def test_fit_shows_every_team_top_to_bottom_in_a_small_window(admin_page, live_server, team_factory):
+    root = big_structure(team_factory)
+    admin_page.set_viewport_size({"width": 1100, "height": 600})
+    admin_page.goto(f"{live_server}/admin/teams/{root.id}")
+    open_layer(admin_page)
+    for direction in ("Top to bottom", "Left to right"):
+        admin_page.get_by_role("button", name=direction).click()
+        viewport = admin_page.locator("[data-structure-viewport]").bounding_box()
+        rects = [b.bounding_box() for b in admin_page.locator(".structure-box").all()]
+        assert len(rects) == 40 and all(inside(rect, viewport) for rect in rects), direction
+    admin_page.get_by_role("button", name="Zoom out").click()  # zooming out from a small Fit does not zoom in
+    percent = admin_page.locator('[data-zoom="reset"]')
+    assert int(percent.inner_text().rstrip("%")) <= 20
+    clean(admin_page)
+
+
+def test_tab_reaches_the_boxes_top_team_first(admin_page, live_server, swaps):  # noqa: F811
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['team'].id}")
+    open_layer(admin_page)
+    admin_page.locator("[data-structure-close]").focus()
+    admin_page.keyboard.press("Tab")
+    expect(box(admin_page, "Global Markets").locator("a.structure-box-open")).to_be_focused()
+    names = admin_page.eval_on_selector_all(".structure-box-name", "els => els.map(el => el.textContent)")
+    assert names == ["Global Markets", "EMEA Rates", "London Swaps"]  # reading order: each team before those below
+    clean(admin_page)
+
+
 def test_fit_keeps_a_big_structure_on_screen(admin_page, live_server, team_factory):
     root = team_factory("Root")
     count = 1
