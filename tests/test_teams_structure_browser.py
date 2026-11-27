@@ -375,3 +375,12 @@ def test_the_layer_works_at_phone_width(admin_page, live_server, swaps, team_fac
     admin_page.locator("[data-structure-close]").click()
     expect(layer).to_be_hidden()
     clean(admin_page)
+
+
+def test_fit_opens_a_small_structure_at_most_at_88_percent(admin_page, live_server, swaps):  # noqa: F811
+    # The owner's ask (27 Nov 2026): 70% of the earlier 125% fit, so a few teams no longer fill the screen.
+    admin_page.set_viewport_size({"width": 1600, "height": 1000})
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['team'].id}")
+    open_layer(admin_page)
+    expect(admin_page.locator('[data-zoom="reset"]')).to_have_text("88%")
+    clean(admin_page)
