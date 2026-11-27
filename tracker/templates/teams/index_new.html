@@ -5,6 +5,7 @@
 {% block head_extra %}
   <script src="{{ url_for('static', filename='admin.js', v=app_version) }}" defer></script>
   <script src="{{ url_for('static', filename='teams-new.js', v=app_version) }}" defer></script>
+  <script src="{{ url_for('static', filename='teams-structure.js', v=app_version) }}" defer></script>
 {% endblock %}
 {% block content %}
 {% include "teams/_simple_head.html" %}

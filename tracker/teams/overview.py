@@ -12,6 +12,7 @@ from typing import NamedTuple
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..lists.catalogue import Place
 from ..models import TeamMember, Tracker, User
 from .layout import main_parent_ids
 from .tree import TeamRow, sorted_by_name
@@ -52,6 +53,29 @@ def chart(rows: list[TeamRow]) -> list[ChartNode]:
         return nodes
 
     return build(None, 1, frozenset())
+
+
+def structure_items(rows: list[TeamRow], places: dict[int, Place], reach: dict[int, int]) -> list[dict]:
+    """The Whole structure's data (spec 4.9), one dict per team by name: its main higher team (where it sits), the
+    other higher teams by name (its dotted lines), its place ("EMEA · London", "EMEA" or "") and how many people
+    reach it through teams. The script lays it out; ``layout.main_parent_ids`` decides the main team."""
+    by_id = {row.id: row for row in rows}
+    main = main_parent_ids(rows)
+    items = []
+    for row in sorted_by_name(rows):
+        place = places.get(row.id)
+        parents = sorted_by_name(by_id[parent_id] for parent_id in row.parent_ids if parent_id in by_id)
+        items.append(
+            {
+                "id": row.id,
+                "name": row.name,
+                "main": main.get(row.id),
+                "others": [parent.id for parent in parents if parent.id != main.get(row.id)],
+                "place": " · ".join(part for part in (place.region_code, place.city) if part) if place else "",
+                "people": reach.get(row.id, 0),
+            }
+        )
+    return items
 
 
 def member_counts(session: Session) -> dict[int, int]:

@@ -3,7 +3,9 @@ the Where it sits ladder and the indented team options (no database)."""
 
 from __future__ import annotations
 
+from tracker.lists.catalogue import Place
 from tracker.teams.layout import TreeOption, ladder, main_parent_ids, tree_options
+from tracker.teams.overview import structure_items
 from tracker.teams.tree import TeamRow
 
 ROWS = [
@@ -64,3 +66,20 @@ def test_main_parent_follows_the_stored_main():
 def test_a_main_that_is_not_a_parent_falls_back_to_first_by_name():
     rows = [*ROWS[:3], TeamRow(4, "Shared Analytics", (2, 3), main_id=99)]
     assert main_parent_ids(rows)[4] == 3
+
+
+def test_structure_items_carry_main_others_place_and_people():
+    rows = [
+        TeamRow(1, "Group", ()),
+        TeamRow(2, "EMEA", (1,)),
+        TeamRow(3, "Data", (1,)),
+        TeamRow(4, "Shared", (2, 3), main_id=2),
+    ]
+    places = {2: Place(1, "EMEA", 2, "London, United Kingdom", "London")}
+    items = structure_items(rows, places, {4: 3})
+    assert [item["name"] for item in items] == ["Data", "EMEA", "Group", "Shared"]
+    by_name = {item["name"]: item for item in items}
+    assert by_name["Shared"] == {"id": 4, "name": "Shared", "main": 2, "others": [3], "place": "", "people": 3}
+    assert by_name["EMEA"]["place"] == "EMEA · London"
+    assert by_name["Group"]["main"] is None and by_name["Group"]["others"] == []
+    assert by_name["Group"]["people"] == 0

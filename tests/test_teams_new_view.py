@@ -4,6 +4,7 @@ page with its access map, the Add a member panel and Where it sits (database).""
 from __future__ import annotations
 
 import html as html_lib
+import json
 import re
 
 import pytest
@@ -80,42 +81,6 @@ def test_deep_wide_branches_fold():
     assert not chart(rows)[0].folded  # the first levels never fold
 
 
-def test_the_chart_page_shows_each_team_with_its_counts(
-    client, logged_in_admin, db, team_factory, user_factory, add_member, tracker_factory
-):
-    team = team_factory("London Swaps")
-    for status in ("active", "active", "disabled"):
-        add_member(team, user_factory(status=status), "viewer")
-    tracker_factory(name="Live", team_id=team.id)
-    tracker_factory(name="Old", team_id=team.id, status="archived")
-    html = page(client, "/admin/teams/structure?view=new")
-    assert "data-chart" in html and "London Swaps" in html
-    assert "2 members · 1 tracker" in html
-
-
-def test_the_chart_marks_also_under_and_folds(client, logged_in_admin, team_factory):
-    alpha, beta = team_factory("Alpha"), team_factory("Beta")
-    team_factory("Shared", parents=(alpha, beta))
-    html = page(client, "/admin/teams/structure?view=new")
-    assert "Also under Beta" in html
-    chart_html = html.split("data-chart", 1)[1].split("</section>", 1)[0]
-    assert chart_html.count(">Shared<") == 1  # once in the chart (the New team panel lists it too)
-
-
-def test_the_chart_carries_the_dotted_lines_data(client, logged_in_admin, team_factory):
-    alpha, beta = team_factory("Alpha"), team_factory("Beta")
-    shared = team_factory("Shared", parents=(alpha, beta))
-    html = page(client, "/admin/teams/structure?view=new")
-    assert f'data-team-id="{shared.id}" data-also-ids="{beta.id}"' in html  # a dotted line from Beta, the other
-    assert f'data-team-id="{alpha.id}">' in html  # no other higher team, no line
-    assert "data-chart-links" in html
-    assert re.search(r'<label class="org-links-toggle" data-links-toggle hidden>', html)  # shown by the script
-
-
-def test_an_empty_chart_says_so(client, logged_in_admin):
-    assert "No teams yet." in page(client, "/admin/teams/structure?view=new")
-
-
 # --- The Structure card and the index (simple redesign) -------------------------------------------------------------
 
 
@@ -158,10 +123,45 @@ def test_structure_card_marks_the_current_team_and_counts_people(
     assert ">Desk<" in node and "1 person" in node
 
 
-def test_whole_structure_route_shows_the_chart(client, logged_in_admin, team_factory):
-    team_factory("Desk")
-    html = page(client, "/admin/teams/structure?view=new")
-    assert "data-chart" in html and "Back to teams" in html
+def test_old_structure_address_redirects(client, logged_in_admin):
+    response = client.get("/admin/teams/structure")
+    assert response.status_code == 302 and response.headers["Location"].endswith("/admin/teams#whole-structure")
+
+
+def _structure_data(html: str) -> list[dict]:
+    raw = re.search(r'<script type="application/json" id="structure-data">(.*?)</script>', html, re.S).group(1)
+    return json.loads(raw)
+
+
+def test_team_page_carries_the_whole_structure_data(client, logged_in_admin, swaps):
+    team, rates = swaps["team"], swaps["rates"]
+    response = client.get(f"/admin/teams/{team.id}?view=new")
+    items = {item["name"]: item for item in _structure_data(response.get_data(as_text=True))}
+    assert len(items) == 3
+    swaps_item = items["London Swaps"]
+    assert swaps_item["main"] == rates.id and swaps_item["others"] == []
+    assert swaps_item["url"] == f"/admin/teams/{team.id}"
+    assert swaps_item["people"] == 6
+
+
+def test_whole_structure_button_and_hidden_layer(client, logged_in_admin, team_factory):
+    team = team_factory("Desk")
+    html = page(client, f"/admin/teams/{team.id}?view=new")
+    assert re.search(r'<a class="button" href="#whole-structure" data-open-structure>Whole structure</a>', html)
+    layer = re.search(r'<div class="structure-layer" id="whole-structure"[^>]*>', html).group(0)
+    assert " hidden" in layer and 'role="dialog"' in layer and 'aria-modal="true"' in layer
+    assert f'data-current-team="{team.id}"' in layer
+    assert "Fold all" in html and "Left to right" in html and "Top to bottom" in html
+    assert "Also sits under (shared team)" in html
+    assert "teams-structure.js" in html
+
+
+def test_structure_data_escapes_names(client, logged_in_admin, team_factory):
+    team = team_factory("</script><b>x")
+    raw = client.get(f"/admin/teams/{team.id}?view=new").get_data(as_text=True)
+    assert "\\u003c/script\\u003e\\u003cb\\u003ex" in raw
+    assert "<b>x" not in raw
+    assert _structure_data(raw)[0]["name"] == "</script><b>x"
 
 
 def test_whole_structure_needs_manage_teams(client, logged_in_user):

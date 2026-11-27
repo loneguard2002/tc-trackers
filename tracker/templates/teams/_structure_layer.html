@@ -1,0 +1,41 @@
+{#- The Whole structure layer (spec 4.9): hidden until the header button opens it; teams-structure.js lays out the
+    teams from the JSON block below. Expects structure_items and current_id. -#}
+<div class="structure-layer" id="whole-structure" role="dialog" aria-modal="true" aria-labelledby="whole-structure-title" data-structure-layer data-current-team="{{ current_id or '' }}" hidden>
+  <div class="structure-panel">
+    <div class="structure-bar">
+      <div class="structure-title">
+        <h2 id="whole-structure-title">Whole structure</h2>
+        <p class="structure-stats" data-structure-stats></p>
+      </div>
+      <div class="structure-tools">
+        <label class="sr-only" for="structure-find">Find a team</label>
+        <input type="search" id="structure-find" class="structure-find" placeholder="Find a team" autocomplete="off" data-structure-find>
+        <div class="structure-group" role="group" aria-label="Direction">
+          <button type="button" class="button secondary" data-direction="lr" aria-pressed="true">Left to right</button>
+          <button type="button" class="button secondary" data-direction="tb" aria-pressed="false">Top to bottom</button>
+        </div>
+        <div class="structure-group" role="group" aria-label="Zoom">
+          <button type="button" class="button secondary" data-zoom="out" aria-label="Zoom out">−</button>
+          <button type="button" class="button secondary" data-zoom="fit">Fit</button>
+          <button type="button" class="button secondary" data-zoom="reset">100%</button>
+          <button type="button" class="button secondary" data-zoom="in" aria-label="Zoom in">+</button>
+        </div>
+        <button type="button" class="button secondary" data-fold-all>Fold all</button>
+        <button type="button" class="button" data-structure-close>Close</button>
+      </div>
+    </div>
+    <div class="structure-viewport" data-structure-viewport>
+      <div class="structure-sizer" data-structure-sizer>
+        <div class="structure-stage" data-structure-stage>
+          <svg class="structure-lines" data-structure-lines aria-hidden="true"></svg>
+        </div>
+      </div>
+    </div>
+    <div class="structure-legend">
+      <span class="structure-key structure-key-main">Where a team sits</span>
+      <span class="structure-key structure-key-also">Also sits under (shared team)</span>
+      <span class="structure-legend-help">Point at a team to light up its lines. Click a name to open the team. Use − / + on a box to fold or unfold a branch.</span>
+    </div>
+  </div>
+  <script type="application/json" id="structure-data">{{ structure_items|tojson }}</script>
+</div>
