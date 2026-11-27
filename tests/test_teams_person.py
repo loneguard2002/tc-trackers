@@ -208,3 +208,16 @@ def page_html(client, url: str) -> str:
     response = client.get(url)
     assert response.status_code == 200
     return html_lib.unescape(response.get_data(as_text=True))
+
+
+@pytest.mark.parametrize("status", ["pending", "declined"])
+def test_sign_up_requests_are_not_shown(client, logged_in_admin, user_factory, status):
+    # A pending or declined access request is for Manage users (Users › Access requests), not a person in teams.
+    request_user = user_factory(full_name="Asking Person", status=status)
+    assert client.get(f"/admin/teams/people/{request_user.id}").status_code == 404
+
+
+def test_an_inactive_administrator_has_no_rights_while_inactive(client, logged_in_admin, db, user_factory):
+    admin = user_factory(full_name="Old Admin", is_admin=True, status="disabled")
+    html = person_page(client, admin)
+    assert "Administrator: every permission." not in html and "None while the account is disabled." in html
