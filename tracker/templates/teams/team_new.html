@@ -144,7 +144,7 @@
           <tr data-route="{{ row.route }}" data-status="{{ row.route }}"{% if u.status != 'active' %} data-uncounted{% endif %} data-search="{{ (u.full_name ~ ' ' ~ u.email ~ ' ' ~ (row.person.inherited|map(attribute='team_name')|join(' ')) ~ ' ' ~ row.person.role ~ ' ' ~ u.status)|lower }}" data-sort-person="{{ u.full_name }}" data-sort-role="{{ row.person.role }}">
             <td><div class="member-cell">
               <span class="member-avatar" aria-hidden="true">{{ u.full_name[:1]|upper }}</span>
-              <span class="member-who"><span class="member-name">{{ u.full_name }}{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}{% if u.status != 'active' %} <span class="badge badge-muted">{{ u.status|title }}</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
+              <span class="member-who"><span class="member-name"><a href="{{ url_for('teams.person', user_id=u.id) }}">{{ u.full_name }}</a>{% if u.id == current_user.id %} <span class="muted">(you)</span>{% endif %}{% if u.status != 'active' %} <span class="badge badge-muted">{{ u.status|title }}</span>{% endif %}</span><span class="member-email">{{ u.email }}</span></span>
             </div></td>
             <td data-label="How:"><div class="how-lines">
               {% if row.person.direct_role %}<span class="how-line"><span class="how-dot is-member" aria-hidden="true"></span>Member of this team</span>{% endif %}

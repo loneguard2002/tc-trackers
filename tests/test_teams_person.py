@@ -4,6 +4,7 @@ can see and why, "Can … see", and their rights (database)."""
 from __future__ import annotations
 
 import html as html_lib
+import json
 import re
 
 import pytest
@@ -184,3 +185,26 @@ def test_an_inactive_person_says_so(client, logged_in_admin, db, swaps):  # noqa
         "While it is, the teams and sets below give no access." in html
         and "None while the account is disabled." in html
     )
+
+
+def test_the_structure_card_offers_every_active_person(client, logged_in_admin, db, swaps, user_factory):  # noqa: F811
+    user_factory(full_name="Nobody Inteams")
+    user_factory(full_name="Gone Away", status="disabled")
+    raw = client.get(f"/admin/teams/{swaps['team'].id}?view=new").get_data(as_text=True)
+    people = json.loads(html_lib.unescape(re.search(r'data-people="([^"]*)"', raw).group(1)))  # escaped, never run
+    names = [p["name"] for p in people]
+    assert "Nobody Inteams" in names and "Gone Away" not in names and "Tom Becker" in names
+    tom = swaps["people"]["Tom Becker"]
+    assert {"name": "Tom Becker", "email": tom.email, "url": f"/admin/teams/people/{tom.id}"} in people
+
+
+def test_names_in_the_people_list_open_the_person_view(client, logged_in_admin, swaps):  # noqa: F811
+    tom = swaps["people"]["Tom Becker"]
+    html = page_html(client, f"/admin/teams/{swaps['team'].id}?view=new")
+    assert f'<a href="/admin/teams/people/{tom.id}">Tom Becker</a>' in html
+
+
+def page_html(client, url: str) -> str:
+    response = client.get(url)
+    assert response.status_code == 200
+    return html_lib.unescape(response.get_data(as_text=True))

@@ -28,8 +28,14 @@
     <h2 id="structure-title">Structure</h2>
     <a class="button primary button-small" href="{{ url_for('teams.view', team_id=current_id, new=1) if current_id else url_for('teams.index', new=1) }}#new-team-form" data-new-team>{{ icon('plus') }}New team</a>
     <label class="sr-only" for="structure-search">Find a team or person</label>
-    <input id="structure-search" class="tree-filter structure-search" type="search" placeholder="Find a team or person" autocomplete="off" data-tree-filter hidden>
+    <input id="structure-search" class="tree-filter structure-search" type="search" placeholder="Find a team or person" autocomplete="off" data-tree-filter data-people-search hidden>
   </header>
+  {#- People matching the search (teams-new.js, from data-people, escaped and never run): up to 6, each opening the
+      person view (spec 4.2). -#}
+  <div class="structure-people" data-people="{{ people_items|tojson|forceescape }}" data-people-results hidden>
+    <h3 class="structure-people-title">People</h3>
+    <ul class="structure-people-list"></ul>
+  </div>
   {% if person_marks is defined %}
   <p class="person-strip">Showing {{ person.full_name }}'s teams · <a href="{{ url_for('teams.index') }}">Back to teams</a></p>
   {% endif %}
