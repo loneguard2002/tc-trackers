@@ -16,6 +16,7 @@ from flask import abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
+from werkzeug.datastructures import MultiDict
 
 from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import ROLE_ORDER, ROLES, current_user, permission_required
@@ -46,7 +47,7 @@ from ..models import (
 from ..naming import description_error, name_error, name_taken
 from . import bp
 from .impact import move_impact
-from .layout import ladder, tree_options
+from .layout import ladder, main_parent_ids, tree_options
 from .overview import (
     chart,
     member_counts,
@@ -54,7 +55,7 @@ from .overview import (
     tracker_counts,
 )
 from .people import TeamPerson, reach_counts, team_people
-from .sits import CYCLE_MESSAGE
+from .sits import CYCLE_MESSAGE, Draft, add_reason, draft_errors, preview, read_draft
 from .tracker_moves import (
     TEAM_DELETED_MESSAGE,
     TRACKERS_CHANGED_MESSAGE,
@@ -408,6 +409,19 @@ def _simple_team_context(db, rows: list[TeamRow], team: Team) -> dict:
     }
 
 
+def _sits_context(
+    db, rows: list[TeamRow], team: Team, draft: Draft, errors: list[str] | None, back: int | None
+) -> dict:
+    """What the Where it sits editor needs (spec 4.6): the teams that may be added above, with the reason for those
+    that may not, and who the whole draft would give or take access, against what is saved now."""
+    return {
+        "sits_options": tree_options(rows, add_reason(rows, team.id, draft)),
+        "sits_preview": preview(move_impact(db, team, frozenset(draft.above))),
+        "sits_errors": errors or [],
+        "sits_back": back,
+    }
+
+
 def _render_team(
     team: Team,
     errors: list[str],
@@ -419,6 +433,9 @@ def _render_team(
     picked: frozenset[int] = frozenset(),
     new_form=None,
     new_errors: list[str] | None = None,
+    sits: Draft | None = None,
+    sits_errors: list[str] | None = None,
+    sits_back: int | None = None,
 ):
     """The team's page with one tab open; ``picking`` opens the Trackers tab's picker, whose ``picked`` boxes are
     ticked, and shows ``errors`` there instead of in the header."""
@@ -453,6 +470,8 @@ def _render_team(
     page = render_template(
         "teams/team_new.html" if view == "new" else "teams/team.html",
         **(_simple_team_context(db, rows, team) if view == "new" else {}),
+        **(_sits_context(db, rows, team, sits, sits_errors, sits_back) if view == "new" and sits is not None else {}),
+        sits=sits if view == "new" else None,
         **(
             _structure_context(db, rows, team.id, new_open=new_form is not None or request.args.get("new") == "1")
             if view == "new"
@@ -506,6 +525,8 @@ def add_below(team_id: int):
     child, error = parse_team_id(get_session(), request.args.get("team_id"))
     if child is None:
         return _render_team(team, [error or TEAM_CHOICE_ERROR], 400, tab="below")
+    if chosen_view() == "new":  # the Where it sits editor of the team being placed, with this team added
+        return redirect(url_for("teams.sits", team_id=child.id, add=team.id, back=team.id))
     return redirect(url_for("teams.parents", team_id=child.id, add=team.id, back=team.id))
 
 
@@ -761,6 +782,10 @@ def _render_parents(
 @permission_required("manage_teams")
 def parents(team_id: int):
     team = _team_or_404(team_id)
+    if chosen_view() == "new":  # the New view changes where a team sits in its editor
+        return redirect(
+            url_for("teams.sits", team_id=team.id, add=request.args.get("add"), back=request.args.get("back"))
+        )
     action = next((key for key in ("add", "remove", "move") if key in request.args), None)
     text = request.args.get(action, "") if action else ""
     if action is None and "to" in request.args:  # the New view's form: a team, and whether to keep the others
@@ -839,6 +864,80 @@ def change_parents(team_id: int):
     if back is not None:
         return redirect(url_for("teams.view", team_id=back, tab="below"))
     return redirect(url_for("teams.parents", team_id=team.id))
+
+
+# --- Where it sits, the New view's editor (spec 4.6) ----------------------------------------------------------------
+
+
+@bp.get("/<int:team_id>/sits")
+@permission_required("manage_teams")
+def sits(team_id: int):
+    """The Where it sits editor: the draft in the address, changed by Add, Make main and Take out, then one Save."""
+    team = _team_or_404(team_id)
+    if chosen_view() != "new":
+        return redirect(url_for("teams.parents", team_id=team.id))
+    draft = read_draft(load_team_rows(get_session()), team.id, request.args)
+    return _render_team(team, [], 200, sits=draft, sits_back=_back_team(request.args.get("back")))
+
+
+@bp.post("/<int:team_id>/sits")
+@permission_required("manage_teams")
+def save_sits(team_id: int):
+    """Save the whole draft at once: every link added or taken out and the main team, under the lock and one
+    self-promotion check over the combined change."""
+    team = _team_or_404(team_id)
+    db = get_session()
+    rows = load_team_rows(db, lock=True)  # held until commit or rollback, so a concurrent change cannot form a cycle
+    if team.id not in {row.id for row in rows}:
+        db.rollback()
+        abort(404)
+    back = _back_team(request.form.get("back"))
+    above, main = request.form.getlist("above"), request.form.get("main", "")
+    draft, errors = draft_errors(rows, team.id, above, main)
+    if errors:
+        db.rollback()
+        posted = read_draft(
+            load_team_rows(db), team.id, MultiDict([("draft", "1"), ("main", main), *(("above", a) for a in above)])
+        )
+        return _render_team(team, [], 400, sits=posted, sits_errors=errors, sits_back=back)
+    current = set(_row(rows, team).parent_ids)
+    current_main = main_parent_ids(rows).get(team.id)
+    target = back if back is not None else team.id
+    if set(draft.above) == current and draft.main == current_main:
+        db.rollback()
+        flash(NO_CHANGES_MESSAGE, "info")
+        return redirect(url_for("teams.view", team_id=target))
+    actor = current_user()
+    before = snapshot_access(db, actor)
+    set_team_parents(db, team.id, draft.above, main_id=draft.main)
+    if set(draft.above) != current and raises_own_access(db, actor, before):  # the main alone changes no access
+        return _refuse(team, SELF_PROMOTION_MESSAGE, back)
+    labels = team_labels(rows)
+    changes = [("team_parent_removed", dropped) for dropped in sorted(current - set(draft.above))]
+    changes += [("team_parent_added", added) for added in sorted(set(draft.above) - current)]
+    for logged_action, changed_id in changes:
+        record(
+            db,
+            user_id=actor.id,
+            tracker_id=None,
+            action=logged_action,
+            entity="team",
+            entity_id=team.id,
+            detail={"team": labels[team.id], "parent": labels[changed_id]},
+        )
+    if current_main is not None and draft.main is not None and draft.main != current_main:
+        record(
+            db,
+            user_id=actor.id,
+            tracker_id=None,
+            action="team_main_set",
+            entity="team",
+            entity_id=team.id,
+            detail={"team": labels[team.id], "before": labels[current_main], "after": labels[draft.main]},
+        )
+    db.commit()
+    flash(f"Saved where {team.name} sits.", "success")
+    return redirect(url_for("teams.view", team_id=target))
 
 
 @bp.post("/<int:team_id>/delete", endpoint="delete")

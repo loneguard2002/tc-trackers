@@ -58,6 +58,9 @@
           <div><strong>{{ active_trackers }}</strong> <span>{{ 'tracker' if active_trackers == 1 else 'trackers' }}</span></div>
         </div>
 
+        {% if sits %}
+        {% include "teams/_sits_editor.html" %}
+        {% else %}
         <section class="family" aria-labelledby="sits-title">
           <h3 class="family-label" id="sits-title">Where it sits</h3>
           {% for row in ladder.path %}{% call fam_row(loop.index0) %}{{ team_link(row.id, row.name) }}{% endcall %}{% endfor %}
@@ -72,7 +75,7 @@
           <div class="fam-also"><span class="fam-also-label">Also sits under</span> {% for row in path %}{% if not loop.first %}<span class="fam-sep" aria-hidden="true">›</span> {% endif %}{{ team_link(row.id, row.name) }} {% endfor %}</div>
           {% endfor %}
           <div class="fam-foot">
-            <a class="fam-change" href="{{ url_for('teams.parents', team_id=team.id) }}">Change where it sits</a>
+            <a class="fam-change" href="{{ url_for('teams.sits', team_id=team.id) }}">Change where it sits</a>
             <form class="below-form" method="get" action="{{ url_for('teams.add_below', team_id=team.id) }}">
               <label for="below-team">Put an existing team below</label>
               <select id="below-team" name="team_id" required>
@@ -83,6 +86,7 @@
             </form>
           </div>
         </section>
+        {% endif %}
       </div>
       <nav class="tabs team-tabs" aria-label="Team sections">
         {% for key, label, count in (('people', 'People', active_people), ('trackers', 'Trackers', trackers|length)) %}
