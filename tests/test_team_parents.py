@@ -317,7 +317,7 @@ def test_classic_add_to_a_top_level_team_makes_it_main(client, logged_in_admin, 
 
 
 def test_classic_add_keeps_the_current_main(client, logged_in_admin, db, team_factory):
-    a, b, z = team_factory("A"), team_factory("B"), team_factory("Z")
+    a, z = team_factory("A"), team_factory("Z")
     t = team_factory("T", parents=(z,))
     post(client, f"/admin/teams/{t.id}/parents", {"action": "add", "parent_id": str(a.id)})
     assert _main_of(db, t) == z.id  # A sorts first, but Z was there first
