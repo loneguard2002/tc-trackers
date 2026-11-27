@@ -531,3 +531,47 @@ def test_sits_under_preselects_the_viewed_team(client, logged_in_admin, swaps):
     assert "hidden" not in form.split(">", 1)[0]
     assert re.search(rf'<option value="{swaps["rates"].id}"[^>]*selected', _select(form, "parent_id"))
     assert "No second team" in _select(form, "also_parent_id")
+
+
+# --- Final review fixes ----------------------------------------------------------------------------------------------
+
+
+def test_refused_create_shows_its_reason_inside_the_form(client, logged_in_admin, team_factory, region_factory):
+    alpha = team_factory("Alpha")
+    region = region_factory("EMEA")
+    page(client, f"/admin/teams/{alpha.id}?view=new")
+    response = post(client, "/admin/teams", {"name": "Alpha", "parent_id": str(alpha.id), "region_id": str(region.id)})
+    form = _form(html_lib.unescape(response.get_data(as_text=True)))
+    assert 'role="alert"' in form and "already" in text_of(form).lower()
+
+
+def test_top_level_with_also_under_sits_under_that_team(client, logged_in_admin, db, team_factory, region_factory):
+    beta = team_factory("Beta")
+    region = region_factory("EMEA")
+    page(client, f"/admin/teams/{beta.id}?view=new")
+    post(
+        client,
+        "/admin/teams",
+        {"name": "Ops", "parent_id": "", "also_parent_id": str(beta.id), "region_id": str(region.id)},
+    )
+    team = db.scalar(select(Team).where(Team.name == "Ops"))
+    assert _links(db, team.id) == [beta.id]
+    created = db.scalar(select(AuditLog).where(AuditLog.entity_id == str(team.id), AuditLog.action == "team_created"))
+    assert created.detail["parent"] == "Beta"
+    assert not db.scalar(
+        select(AuditLog).where(AuditLog.entity_id == str(team.id), AuditLog.action == "team_parent_added")
+    )
+
+
+def test_new_team_form_does_not_offer_a_retired_region(client, logged_in_admin, team_factory, region_factory):
+    old = region_factory("OLD", retired=True)
+    team = team_factory("Legacy", region_id=old.id)
+    form = _form(page(client, f"/admin/teams/{team.id}?view=new&new=1"))
+    assert f'<option value="{old.id}"' not in _select(form, "region_id")
+
+
+def test_ladder_names_each_tier_for_screen_readers(client, logged_in_admin, swaps):
+    lad = _ladder(page(client, f"/admin/teams/{swaps['team'].id}?view=new"))
+    assert re.search(r'class="sr-only">Level 1: </span>\s*<a[^>]*>Global Markets', lad)
+    assert re.search(r'class="sr-only">Level 3: </span>\s*<span class="fam-this"><strong>London Swaps', lad)
+    assert 'class="sr-only">Level 4: </span>' in lad  # the "No teams below" row

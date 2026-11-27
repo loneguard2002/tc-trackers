@@ -11,12 +11,6 @@
 <div class="teams-simple-layout">
   {{ structure_card() }}
   <div class="teams-simple-main">
-    {% if errors %}
-    <div class="form-alert" role="alert">
-      <strong>Please correct the following:</strong>
-      <ul class="form-error">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
-    </div>
-    {% endif %}
     <section class="settings-section">
       <p class="empty-note">No team to show yet. Create the first team with the form on the left.</p>
     </section>

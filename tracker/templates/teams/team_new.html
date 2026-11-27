@@ -12,7 +12,7 @@
 {% endblock %}
 {% macro counted(n, one, many) %}{{ n }} {{ one if n == 1 else many }}{% endmacro %}
 {% macro team_link(id, name) %}<a class="fam-link" href="{{ url_for('teams.view', team_id=id) }}">{{ name }}</a>{% endmacro %}
-{% macro fam_row(depth, extra='') %}<div class="fam-row fam-depth-{{ [depth, 8]|min }}{{ ' ' ~ extra if extra }}">{% if depth %}<span class="fam-line" aria-hidden="true">└</span>{% endif %}{{ caller() }}</div>{% endmacro %}
+{% macro fam_row(depth, extra='') %}<div class="fam-row fam-depth-{{ [depth, 8]|min }}{{ ' ' ~ extra if extra }}">{% if depth %}<span class="fam-line" aria-hidden="true">└</span>{% endif %}<span class="sr-only">Level {{ depth + 1 }}: </span>{{ caller() }}</div>{% endmacro %}
 {% block content %}
 {% include "teams/_simple_head.html" %}
 <div class="teams-simple-layout">

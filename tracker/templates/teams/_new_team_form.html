@@ -5,6 +5,12 @@
 <form id="new-team-form" class="new-team-form" method="post" action="{{ url_for('teams.create') }}"{% if not new_open %} hidden{% endif %}>
   {{ csrf_field(csrf_token()) }}
   <h3 class="new-team-title">New team</h3>
+  {% if new_errors|default([]) %}
+  <div class="form-alert" role="alert">
+    <strong>Please correct the following:</strong>
+    <ul class="form-error">{% for e in new_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
   {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
   <input id="name" name="name" value="{{ new_form.get('name', '') }}" maxlength="100" required aria-describedby="name-help" data-new-name>
   {% endcall %}
