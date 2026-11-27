@@ -1989,6 +1989,12 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .structure-place { grid-column: 1 / -1; color: var(--muted); font-size: .78rem; }
 .structure-also { grid-column: 1 / -1; justify-self: start; padding: 0 8px; border-radius: 999px; background: color-mix(in srgb, var(--warning) 14%, var(--surface)); font-size: .72rem; font-weight: 700; }
 .structure-foot { margin: 0; padding: 10px 16px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8125rem; }
+.structure-people { margin: 0 16px 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.structure-people-title { margin: 0 0 4px; color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.structure-people-list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.structure-people-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.structure-people-list a { font-weight: 600; }
+.structure-people-hint { color: var(--muted); font-size: .75rem; }
 /* The person view (spec 4.8): the Structure card marks their teams; the panel has who, "Can … see", teams, trackers
    and rights. Green is a member's team, blue a team reached through one; the colours always come with words. */
 .structure-tree li.is-faded > .structure-node { opacity: .55; }
@@ -2012,6 +2018,10 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .person-section { padding: 16px 20px; }
 .person-section h3 { margin: 0 0 10px; font-size: 1rem; }
 .person-routes, .person-rights { margin: 0; padding-left: 18px; }
+/* The person panel is narrower than the standard table's 640px floor: these tables shrink to it and their reasons
+   wrap, never clipped. */
+.person-section .card-rows { min-width: 0; }
+.person-section .list-table td { white-space: normal; overflow-wrap: anywhere; }
 .route-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; }
 .route-dot.is-member { background: var(--success); }
 .route-dot.is-through { background: var(--primary); }

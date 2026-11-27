@@ -184,7 +184,17 @@ def _structure_context(
     items = structure_items(rows, places, reach)
     for item in items:
         item["url"] = url_for("teams.view", team_id=item["id"])
+    # The people the Structure card's search offers (4.2): every active user, so someone in no team can be looked up.
+    people = [
+        {"name": name, "email": email, "url": url_for("teams.person", user_id=user_id)}
+        for user_id, name, email in db.execute(
+            select(User.id, User.full_name, User.email)
+            .where(User.status == "active")
+            .order_by(func.lower(User.full_name), User.id)
+        )
+    ]
     return {
+        "people_items": people,
         "nodes": chart(rows),
         "team_options": tree_options(rows),
         "team_names": team_labels(rows),

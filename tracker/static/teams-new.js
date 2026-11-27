@@ -65,4 +65,38 @@
     }
   }
 
+
+  // The Structure card's search also finds people (spec 4.2): up to 6 whose name or email holds the typed text, each
+  // opening their person view. The list comes from data-people; the tree's own filter is admin.js's.
+  each(document.querySelectorAll("input[data-people-search]"), function (input) {
+    var box = document.querySelector("[data-people-results]");
+    if (!box) return;
+    var list = box.querySelector("ul");
+    var people;
+    try {
+      people = JSON.parse(box.getAttribute("data-people") || "[]");
+    } catch (_) {
+      people = [];
+    }
+    input.addEventListener("input", function () {
+      var text = input.value.trim().toLowerCase();
+      var found = text === "" ? [] : people.filter(function (p) {
+        return (p.name + " " + p.email).toLowerCase().indexOf(text) !== -1;
+      }).slice(0, 6);
+      while (list.firstChild) list.removeChild(list.firstChild);
+      found.forEach(function (p) {
+        var item = document.createElement("li");
+        var link = document.createElement("a");
+        link.href = p.url;
+        link.textContent = p.name;
+        var hint = document.createElement("span");
+        hint.className = "structure-people-hint";
+        hint.textContent = "See memberships and rights";
+        item.appendChild(link);
+        item.appendChild(hint);
+        list.appendChild(item);
+      });
+      box.hidden = found.length === 0;
+    });
+  });
 })();
