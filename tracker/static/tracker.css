@@ -1968,6 +1968,7 @@ dialog.perm-drawer[open] { display: block; animation: drawer-in .25s ease-out; }
 .sits-lose { color: var(--danger); font-weight: 600; }
 .sits-save { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 /* --- Teams New view, simple layout (docs/superpowers/specs/2026-11-26-teams-simple-redesign-design.md) ------------ */
+.teams-simple-head, .teams-simple-layout { max-width: 1280px; }
 .teams-simple-layout { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: 20px; align-items: start; }
 .teams-simple-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .teams-simple-main > .settings-section, .teams-simple-main > .list-panel { margin: 0; }

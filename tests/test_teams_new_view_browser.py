@@ -111,3 +111,11 @@ def test_where_it_sits_editor_end_to_end(admin_page, live_server, db, team_facto
     b_item = admin_page.locator(".structure-card li", has=admin_page.locator(".structure-node", has_text="B")).first
     expect(b_item.locator(".structure-node", has_text="T")).to_be_visible()
     clean(admin_page)
+
+
+def test_a_wide_screen_keeps_the_standard_page_width(admin_page, live_server, swaps):  # noqa: F811
+    admin_page.set_viewport_size({"width": 1920, "height": 1000})
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['team'].id}")
+    for selector in (".teams-simple-head", ".teams-simple-layout"):
+        assert admin_page.locator(selector).bounding_box()["width"] <= 1280, selector
+    clean(admin_page)
