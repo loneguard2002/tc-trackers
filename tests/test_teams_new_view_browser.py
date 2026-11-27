@@ -145,8 +145,28 @@ def test_no_page_scrolls_sideways_at_phone_width(admin_page, live_server, swaps)
         f"/admin/teams/{team.id}?new=1",
         f"/admin/teams/{team.id}",
         "/admin/teams/structure",
-        f"/admin/teams/{team.id}/parents?to={swaps['top'].id}&how=move",
+        f"/admin/teams/{team.id}/sits",
     ):
         admin_page.goto(f"{live_server}{url}")
         assert admin_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), url
+    clean(admin_page)
+
+
+def test_where_it_sits_editor_end_to_end(admin_page, live_server, db, team_factory):
+    a, b = team_factory("A"), team_factory("B")
+    t = team_factory("T", parent=a)
+    admin_page.goto(f"{live_server}/admin/teams/{t.id}")
+    admin_page.get_by_role("link", name="Change where it sits").click()
+    editor = admin_page.locator(".sits-editor")
+    expect(editor.get_by_role("heading", name="Where T sits")).to_be_visible()
+    editor.get_by_label("Add a team above").select_option(str(b.id))
+    editor.get_by_role("button", name="Add", exact=True).click()
+    expect(editor.locator(".sits-row")).to_have_count(2)
+    editor.locator(".sits-row", has_text="B").get_by_role("button", name="Make main").click()
+    expect(editor.locator(".sits-row.is-main")).to_contain_text("B")
+    expect(editor).to_contain_text("No change in who can see its trackers.")
+    editor.get_by_role("button", name="Save").click()
+    expect(admin_page.get_by_text("Saved where T sits.")).to_be_visible()
+    b_item = admin_page.locator(".structure-card li", has=admin_page.locator(".structure-node", has_text="B")).first
+    expect(b_item.locator(".structure-node", has_text="T")).to_be_visible()
     clean(admin_page)
