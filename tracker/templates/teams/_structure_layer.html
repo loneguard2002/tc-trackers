@@ -1,6 +1,6 @@
 {#- The Whole structure layer (spec 4.9): hidden until the header button opens it; teams-structure.js lays out the
-    teams from the JSON block below. Expects structure_items and current_id. -#}
-<div class="structure-layer" id="whole-structure" role="dialog" aria-modal="true" aria-labelledby="whole-structure-title" data-structure-layer data-current-team="{{ current_id or '' }}" hidden>
+    teams from the JSON in data-structure (escaped, never run). Expects structure_items and current_id. -#}
+<div class="structure-layer" id="whole-structure" role="dialog" aria-modal="true" aria-labelledby="whole-structure-title" data-structure-layer data-current-team="{{ current_id or '' }}" data-structure="{{ structure_items|tojson|forceescape }}" hidden>
   <div class="structure-panel">
     <div class="structure-bar">
       <div class="structure-title">
@@ -37,5 +37,4 @@
       <span class="structure-legend-help">Point at a team to light up its lines. Click a name to open the team. Use − / + on a box to fold or unfold a branch.</span>
     </div>
   </div>
-  <script type="application/json" id="structure-data">{{ structure_items|tojson }}</script>
 </div>

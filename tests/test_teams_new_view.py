@@ -14,7 +14,7 @@ from sqlalchemy import select
 from tracker.audit import NO_CHANGES_MESSAGE
 from tracker.auth.guards import SELF_PROMOTION_MESSAGE, TEAM_WITH_SETS_MESSAGE
 from tracker.models import AuditLog, Team, TeamMember, TeamParent
-from tracker.teams.overview import FOLD_OVER, chart
+from tracker.teams.overview import chart
 from tracker.teams.tree import ALREADY_MEMBER_MESSAGE, TEAM_CHOICE_ERROR, TeamRow, load_team_rows
 from tracker.teams.views import CYCLE_MESSAGE
 
@@ -53,7 +53,6 @@ def test_a_team_under_two_teams_shows_once_with_also_under(db, team_factory):
     team_factory("Shared", parents=(beta, alpha))
     shared = [node for node in walk(chart(load_team_rows(db))) if node.row.name == "Shared"]
     assert len(shared) == 1 and shared[0].also_under == ["Beta"]  # under Alpha, the first by name
-    assert shared[0].also_ids == (beta.id,)  # for the dotted line from Beta
     alpha_node = next(node for node in chart(load_team_rows(db)) if node.row.name == "Alpha")
     assert [child.row.name for child in alpha_node.children] == ["Shared"]
 
@@ -69,16 +68,6 @@ def test_the_chart_ends_on_a_cycle():
     ]
     names = [node.row.name for node in walk(chart(rows))]
     assert names == ["A", "B", "C"]
-
-
-def test_deep_wide_branches_fold():
-    rows = [TeamRow(1, "Top", ()), TeamRow(2, "Mid", (1,)), TeamRow(3, "Deep", (2,)), TeamRow(4, "Narrow", (2,))]
-    rows += [TeamRow(10 + i, f"Leaf {i:02}", (3,)) for i in range(FOLD_OVER + 1)]
-    rows += [TeamRow(30 + i, f"Twig {i:02}", (4,)) for i in range(FOLD_OVER)]
-    nodes = {node.row.name: node for node in walk(chart(rows))}
-    assert nodes["Deep"].folded and not nodes["Narrow"].folded
-    rows = [TeamRow(1, "Top", ())] + [TeamRow(10 + i, f"Leaf {i:02}", (1,)) for i in range(FOLD_OVER + 5)]
-    assert not chart(rows)[0].folded  # the first levels never fold
 
 
 # --- The Structure card and the index (simple redesign) -------------------------------------------------------------
@@ -129,8 +118,8 @@ def test_old_structure_address_redirects(client, logged_in_admin):
 
 
 def _structure_data(html: str) -> list[dict]:
-    raw = re.search(r'<script type="application/json" id="structure-data">(.*?)</script>', html, re.S).group(1)
-    return json.loads(raw)
+    raw = re.search(r'<div class="structure-layer" id="whole-structure"[^>]*\sdata-structure="([^"]*)"', html).group(1)
+    return json.loads(html_lib.unescape(raw))
 
 
 def test_team_page_carries_the_whole_structure_data(client, logged_in_admin, swaps):

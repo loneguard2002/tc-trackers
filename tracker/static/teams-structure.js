@@ -1,7 +1,7 @@
 /* The Teams Whole structure layer (docs/superpowers/specs/2026-11-26-teams-simple-redesign-design.md 4.9). ES5, no
    inline handlers (CSP): positions and the scale are set through the CSSOM.
 
-   The teams come from the JSON block #structure-data (tracker/teams/overview.py structure_items). They are laid out
+   The teams come from the layer's data-structure JSON (tracker/teams/overview.py structure_items). They are laid out
    as a tidy tree on their main teams: each team with nothing shown below it takes the next row, and a team with
    teams below sits midway between its first and last. Teams in a damaged loop, which no walk from the top reaches,
    are left out; every walk keeps a visited set. */
@@ -9,15 +9,14 @@
   "use strict";
 
   var layer = document.querySelector("[data-structure-layer]");
-  var source = document.getElementById("structure-data");
-  if (!layer || !source) return;
+  if (!layer) return;
 
   var SVG = "http://www.w3.org/2000/svg";
   var BOX_W = 200, BOX_H = 56, PAD = 24, LABEL = 30;
   var GAPS = { lr: { depth: 80, row: 14 }, tb: { depth: 64, row: 18 } };
   var END_OFFSET = { lr: 8, tb: 30 };
 
-  var items = JSON.parse(source.textContent);
+  var items = JSON.parse(layer.getAttribute("data-structure") || "[]");
   var byId = {};
   var below = {};  // team id to the teams whose main team it is, by name (the data comes by name)
   var tops = [];

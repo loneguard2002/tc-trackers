@@ -1,9 +1,7 @@
-"""The Teams New view in a browser: the chart search, the New team panel, the role switch, the Add a member preview,
+"""The Teams New view in a browser: the New team panel, the role switch, the Add a member preview,
 and phone width, each without a Content Security Policy violation or a script error (database)."""
 
 from __future__ import annotations
-
-import re
 
 import pytest
 from conftest import browser_sign_in
@@ -27,16 +25,6 @@ def admin_page(page, live_server, user_factory):
 
 def clean(page):
     assert page.evaluate("window.__csp") == [] and page.evaluate("window.__errors") == []
-
-
-def test_the_chart_search_marks_a_matching_team(admin_page, live_server, swaps):  # noqa: F811
-    admin_page.goto(f"{live_server}/admin/teams/structure")
-    admin_page.get_by_label("Find a team or person").fill("swaps")
-    expect(admin_page.locator("li.is-match > .org-node")).to_have_count(1)
-    expect(admin_page.locator("li.is-match > .org-node")).to_contain_text("London Swaps")
-    admin_page.get_by_label("Find a team or person").fill("priya")  # a member's name finds their team
-    expect(admin_page.locator("li.is-match > .org-node")).to_contain_text("EMEA Rates")
-    clean(admin_page)
 
 
 def test_new_team_form_opens_in_place_and_fills_the_place(
@@ -90,54 +78,6 @@ def test_structure_search_filters_teams(admin_page, live_server, swaps, team_fac
     clean(admin_page)
 
 
-def test_the_chart_draws_a_dotted_line_from_the_other_higher_team(admin_page, live_server, team_factory):
-    alpha, beta = team_factory("Alpha"), team_factory("Beta")
-    shared = team_factory("Shared", parents=(alpha, beta))
-    team_factory("Solo", parent=alpha)
-    admin_page.goto(f"{live_server}/admin/teams/structure")
-    lines = admin_page.locator("[data-chart-links] path")
-    expect(lines).to_have_count(1)
-    assert lines.get_attribute("data-from") == str(beta.id) and lines.get_attribute("data-to") == str(shared.id)
-    # The line starts at Beta's box and ends at Shared's, below it.
-    beta_box = admin_page.locator(f'.org-node[data-team-id="{beta.id}"]').bounding_box()
-    shared_box = admin_page.locator(f'.org-node[data-team-id="{shared.id}"]').bounding_box()
-    end = admin_page.locator("[data-chart-links] circle").bounding_box()
-    assert abs(end["y"] + end["height"] / 2 - shared_box["y"]) < 3
-    assert shared_box["y"] > beta_box["y"] + beta_box["height"]
-    # Pointing at Shared lights its line and marks Beta.
-    admin_page.locator(f'.org-node[data-team-id="{shared.id}"]').hover()
-    expect(lines).to_have_class("is-lit")
-    expect(admin_page.locator(f'.org-node[data-team-id="{beta.id}"]')).to_have_class(re.compile("is-linked"))
-    # The switch hides the lines, and the choice is kept.
-    toggle = admin_page.get_by_label("Show “also under” lines")
-    expect(toggle).to_be_checked()
-    toggle.uncheck()
-    expect(lines).to_be_hidden()
-    admin_page.reload()
-    expect(admin_page.get_by_label("Show “also under” lines")).not_to_be_checked()
-    expect(admin_page.locator("[data-chart-links] path")).to_be_hidden()
-    clean(admin_page)
-
-
-def test_no_switch_without_a_team_under_two_teams(admin_page, live_server, swaps):  # noqa: F811
-    admin_page.goto(f"{live_server}/admin/teams/structure")
-    expect(admin_page.locator(".org-node").first).to_be_visible()
-    expect(admin_page.locator("[data-links-toggle]")).to_be_hidden()
-    expect(admin_page.locator("[data-chart-links] path")).to_have_count(0)
-    clean(admin_page)
-
-
-def test_the_dotted_lines_are_left_out_at_phone_width(admin_page, live_server, team_factory):
-    alpha, beta = team_factory("Alpha"), team_factory("Beta")
-    team_factory("Shared", parents=(alpha, beta))
-    admin_page.set_viewport_size({"width": 390, "height": 844})
-    admin_page.goto(f"{live_server}/admin/teams/structure")
-    expect(admin_page.get_by_text("Also under Beta")).to_be_visible()
-    expect(admin_page.locator("[data-chart-links]")).to_be_hidden()
-    expect(admin_page.locator("[data-links-toggle]")).to_be_hidden()
-    clean(admin_page)
-
-
 def test_no_page_scrolls_sideways_at_phone_width(admin_page, live_server, swaps):  # noqa: F811
     admin_page.set_viewport_size({"width": 390, "height": 844})
     team = swaps["team"]
@@ -146,6 +86,7 @@ def test_no_page_scrolls_sideways_at_phone_width(admin_page, live_server, swaps)
         f"/admin/teams/{team.id}",
         "/admin/teams/structure",
         f"/admin/teams/{team.id}/sits",
+        f"/admin/teams/{team.id}#whole-structure",  # the Whole structure layer open
     ):
         admin_page.goto(f"{live_server}{url}")
         assert admin_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), url

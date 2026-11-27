@@ -318,3 +318,21 @@ def test_a_folded_other_parent_draws_no_dotted_line(admin_page, live_server, tea
     admin_page.get_by_role("button", name="Unfold Group").click()
     expect(admin_page.locator("path.structure-line.is-dotted")).to_have_count(1)
     clean(admin_page)
+
+
+def test_the_layer_works_at_phone_width(admin_page, live_server, swaps, team_factory):  # noqa: F811
+    team_factory("APAC Desk")
+    team_factory("Shared", parents=(swaps["rates"], swaps["top"]), main=swaps["rates"])
+    admin_page.set_viewport_size({"width": 390, "height": 844})
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['team'].id}")
+    layer = open_layer(admin_page)
+    assert admin_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    for control in ("[data-structure-close]", "[data-fold-all]", '[data-zoom="in"]', "#structure-find"):
+        assert inside(admin_page.locator(control).bounding_box(), {"x": 0, "y": 0, "width": 390, "height": 844})
+    viewport = admin_page.locator("[data-structure-viewport]").bounding_box()
+    assert viewport["height"] > 200  # the chart keeps room below the wrapped controls
+    rects = [b.bounding_box() for b in admin_page.locator(".structure-box").all()]
+    assert len(rects) == 5 and all(inside(rect, viewport) for rect in rects)
+    admin_page.locator("[data-structure-close]").click()
+    expect(layer).to_be_hidden()
+    clean(admin_page)
