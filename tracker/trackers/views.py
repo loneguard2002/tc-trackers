@@ -13,7 +13,6 @@ from ..audit import NO_CHANGES_MESSAGE, change, record
 from ..auth import (
     ROLE_ORDER,
     ROLES,
-    admin_required,
     current_user,
     has_permission,
     login_required,
@@ -708,7 +707,7 @@ def view(tracker_id: int):
 
 
 @bp.post("/trackers/<int:tracker_id>/archive")
-@admin_required
+@permission_required("archive_trackers")
 @require_tracker_role("owner")
 def archive(tracker_id: int):
     tracker, db = g.tracker, get_session()

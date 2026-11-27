@@ -6,7 +6,7 @@
 {% block content %}
 <h1>{{ tracker.name }}</h1>
 {% include "trackers/_nav.html" %}
-{% set can_archive = current_user and current_user.is_admin and tracker.status == 'active' %}
+{% set can_archive = can('archive_trackers') and tracker.status == 'active' %}
 <nav class="subnav" aria-label="Settings sections">
   <a href="#general">General</a>
   <a href="#reporting-period">Reporting period</a>

@@ -76,11 +76,12 @@ ROLE_GUIDE: tuple[RoleRow, ...] = (
 NOT_IN_GUIDE: dict[str, str] = {
     "trackers.view": "the tracker's own address, which opens its first page",
     "trackers.role_guide": "this table",
-    "trackers.archive": "administrators only (the administrator note says so)",
+    "trackers.archive": "Owners who hold the Archive trackers permission, and administrators (a note says so)",
 }
 
 ROLE_NOTES: tuple[str, ...] = (
     "Administrators can do everything on every tracker, including archiving it.",
+    "An Owner can archive the tracker when a permission set gives them Archive trackers.",
     "An archived tracker cannot be changed by anyone.",
     "If you have a role from more than one place, the highest one counts.",
     "People with Manage teams choose who has which role.",

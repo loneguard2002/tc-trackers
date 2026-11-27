@@ -410,10 +410,33 @@ def test_countdown_timeline_marks_a_late_forecast_and_months():
     assert len([label for _, label in far["months"] if label]) <= 10
 
 
-def test_archive_is_admin_only(client, logged_in_user, tracker_factory, grant):
+def test_an_owner_without_archive_trackers_cannot_archive(client, logged_in_user, tracker_factory, grant):
     tracker = tracker_factory()
     grant(logged_in_user, tracker, "owner")
     assert post(client, f"/trackers/{tracker.id}/archive").status_code == 403
+    assert 'id="archive"' not in client.get(f"/trackers/{tracker.id}/settings").get_data(as_text=True)
+
+
+def test_archive_trackers_lets_an_owner_archive(client, logged_in_user, db, tracker_factory, grant, give_set):
+    give_set(["archive_trackers"], user=logged_in_user)
+    tracker = tracker_factory()
+    grant(logged_in_user, tracker, "owner")
+    settings = client.get(f"/trackers/{tracker.id}/settings").get_data(as_text=True)
+    assert 'id="archive"' in settings and f'action="/trackers/{tracker.id}/archive"' in settings
+    assert post(client, f"/trackers/{tracker.id}/archive").status_code == 302
+    db.refresh(tracker)
+    assert tracker.status == "archived"
+    entry = db.scalar(select(AuditLog).where(AuditLog.tracker_id == tracker.id, AuditLog.action == "tracker_archived"))
+    assert entry.user_id == logged_in_user.id
+
+
+def test_archive_trackers_needs_the_owner_role_too(client, logged_in_user, db, tracker_factory, grant, give_set):
+    give_set(["archive_trackers"], user=logged_in_user)
+    tracker = tracker_factory()
+    grant(logged_in_user, tracker, "editor")
+    assert post(client, f"/trackers/{tracker.id}/archive").status_code == 404  # below Owner, as on every Owner page
+    db.refresh(tracker)
+    assert tracker.status == "active"
 
 
 def test_archived_tracker_refuses_changes(client, logged_in_admin, db, tracker_factory, user_factory, labels_form):
