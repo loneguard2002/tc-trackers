@@ -80,3 +80,7 @@ def test_preview_names_people_once():
         trackers=[t1, t2],
     )
     assert preview(impact) == Preview(["Ana"], ["Ben"], [])
+
+
+def test_a_posted_draft_leaves_out_the_team_itself_and_teams_below():
+    assert read_draft(ROWS, T, args(draft=1, above=[T, K, A], main=T)) == Draft((A,), A)

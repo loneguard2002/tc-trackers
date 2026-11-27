@@ -54,7 +54,7 @@ from .overview import (
     tracker_counts,
 )
 from .people import TeamPerson, reach_counts, team_people
-from .sits import CYCLE_MESSAGE, Draft, add_reason, draft_errors, preview, read_draft
+from .sits import CYCLE_MESSAGE, Draft, Preview, add_reason, draft_errors, preview, read_draft
 from .tracker_moves import (
     TEAM_DELETED_MESSAGE,
     TRACKERS_CHANGED_MESSAGE,
@@ -413,9 +413,11 @@ def _sits_context(
 ) -> dict:
     """What the Where it sits editor needs (spec 4.6): the teams that may be added above, with the reason for those
     that may not, and who the whole draft would give or take access, against what is saved now."""
+    saved = set(_row(rows, team).parent_ids)
+    unchanged = set(draft.above) == saved  # the same higher teams (perhaps another main): no one's access changes
     return {
         "sits_options": tree_options(rows, add_reason(rows, team.id, draft)),
-        "sits_preview": preview(move_impact(db, team, frozenset(draft.above))),
+        "sits_preview": Preview([], [], []) if unchanged else preview(move_impact(db, team, frozenset(draft.above))),
         "sits_errors": errors or [],
         "sits_back": back,
     }
@@ -903,7 +905,8 @@ def save_sits(team_id: int):
     before = snapshot_access(db, actor)
     set_team_parents(db, team.id, draft.above, main_id=draft.main)
     if set(draft.above) != current and raises_own_access(db, actor, before):  # the main alone changes no access
-        return _refuse(team, SELF_PROMOTION_MESSAGE, back)
+        db.rollback()  # the editor again, with the draft kept and the reason inside it
+        return _render_team(team, [], 400, sits=draft, sits_errors=[SELF_PROMOTION_MESSAGE], sits_back=back)
     labels = team_labels(rows)
     changes = [("team_parent_removed", dropped) for dropped in sorted(current - set(draft.above))]
     changes += [("team_parent_added", added) for added in sorted(set(draft.above) - current)]
