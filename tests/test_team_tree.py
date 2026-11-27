@@ -73,8 +73,8 @@ def test_load_team_rows_reads_links(db, team_factory):
     assert load_team_rows(db) == [
         TeamRow(infrastructure.id, "Infrastructure", ()),
         TeamRow(applications.id, "applications", ()),
-        TeamRow(windows.id, "Windows", (infrastructure.id,)),
-        TeamRow(desktops.id, "Desktops", (applications.id, windows.id)),
+        TeamRow(windows.id, "Windows", (infrastructure.id,), infrastructure.id),
+        TeamRow(desktops.id, "Desktops", (applications.id, windows.id), applications.id),  # main: first by name
     ]
     assert load_team_rows(db, lock=True) == load_team_rows(db)
     assert team_choices(db) == [
@@ -119,3 +119,53 @@ def test_parse_id_refuses_anything_else(text):
 
 def test_in_range_bounds_ids_from_urls():
     assert in_range(1) and in_range(MAX_ID) and not in_range(0) and not in_range(MAX_ID + 1)
+
+
+# --- The main higher team (spec 2026-11-26-teams-simple-redesign-design.md 4.6) -------------------------------------
+
+
+def _main(db, team):
+    from sqlalchemy import select
+
+    from tracker.models import TeamParent
+
+    return db.scalars(select(TeamParent.parent_id).where(TeamParent.team_id == team.id, TeamParent.is_main)).all()
+
+
+def test_set_team_parents_keeps_the_current_main(db, team_factory):
+    a, b, c = team_factory("A"), team_factory("B"), team_factory("C")
+    t = team_factory("T", parents=(a, b), main=b)
+    set_team_parents(db, t.id, [b.id, c.id])
+    db.commit()
+    assert _main(db, t) == [b.id]
+
+
+def test_set_team_parents_moves_the_main_to_the_next_by_name(db, team_factory):
+    a, b, c = team_factory("A"), team_factory("B"), team_factory("C")
+    t = team_factory("T", parents=(a, b, c), main=b)
+    set_team_parents(db, t.id, [a.id, c.id])
+    db.commit()
+    assert _main(db, t) == [a.id]
+
+
+def test_set_team_parents_takes_the_given_main(db, team_factory):
+    a, b = team_factory("A"), team_factory("B")
+    t = team_factory("T", parents=(a,))
+    set_team_parents(db, t.id, [a.id, b.id], main_id=b.id)
+    db.commit()
+    assert _main(db, t) == [b.id]
+
+
+def test_top_level_has_no_main(db, team_factory):
+    a = team_factory("A")
+    t = team_factory("T", parent=a)
+    set_team_parents(db, t.id, [])
+    db.commit()
+    assert _main(db, t) == []
+
+
+def test_load_team_rows_reads_the_main(db, team_factory):
+    a, b = team_factory("A"), team_factory("B")
+    t = team_factory("T", parents=(a, b), main=b)
+    assert next(r for r in load_team_rows(db) if r.id == t.id).main_id == b.id
+    assert next(r for r in load_team_rows(db) if r.id == a.id).main_id is None

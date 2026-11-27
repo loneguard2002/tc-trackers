@@ -284,8 +284,15 @@ def labels_form(region_factory, business_line_factory) -> dict:
 def team_factory(db):
     counter = {"n": 0}
 
-    def make(name: str | None = None, parent: Team | None = None, parents: tuple[Team, ...] = (), **kw) -> Team:
-        """A team below ``parent`` and below each team in ``parents`` (top level without either)."""
+    def make(
+        name: str | None = None,
+        parent: Team | None = None,
+        parents: tuple[Team, ...] = (),
+        main: Team | None = None,
+        **kw,
+    ) -> Team:
+        """A team below ``parent`` and below each team in ``parents`` (top level without either). Its main higher team
+        is ``main``, else the first by name, as migration 0021 chose for existing teams."""
         if name is None:
             counter["n"] += 1
             name = f"Team {counter['n']}"
@@ -295,7 +302,9 @@ def team_factory(db):
         db.add(team)
         db.flush()
         higher = ([parent] if parent else []) + list(parents)
-        db.add_all(TeamParent(team_id=team.id, parent_id=other.id) for other in higher)
+        first = min(higher, key=lambda other: (other.name.casefold(), other.id)) if higher else None
+        chosen = main if main in higher else first
+        db.add_all(TeamParent(team_id=team.id, parent_id=other.id, is_main=other is chosen) for other in higher)
         db.commit()
         return team
 

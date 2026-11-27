@@ -171,10 +171,13 @@ class TeamParent(Base):
     __table_args__ = (
         CheckConstraint("team_id <> parent_id", name="not_self"),
         Index("ix_team_parents_parent_id", "parent_id"),
+        # One main higher team per team: where the Teams screens show it (tracker/teams/tree.py set_team_parents).
+        Index("uq_team_parents_main", "team_id", unique=True, postgresql_where=text("is_main")),
     )
 
     team_id: Mapped[int] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True)
     parent_id: Mapped[int] = mapped_column(ForeignKey("teams.id", ondelete="RESTRICT"), primary_key=True)
+    is_main: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
 
 
 class TeamMember(Base):
