@@ -114,7 +114,7 @@ def test_effective_access_lists_the_region_route(db, user_factory, tracker_facto
     region_grant(emea, user, "viewer")
     [access] = tracker_access_routes(db, user)
     assert access.tracker.id == tracker.id and access.role == "viewer"
-    assert Route("Region EMEA: Viewer", "viewer") in access.routes
+    assert Route("Region EMEA: Viewer", "viewer", "region", "EMEA") in access.routes
 
 
 def test_access_list_shows_region_route_once_per_region(

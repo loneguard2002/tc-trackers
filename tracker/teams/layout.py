@@ -51,6 +51,12 @@ def _main_path(by_id: dict[int, TeamRow], main: dict[int, int], team_id: int) ->
     return path[::-1]
 
 
+def main_path(rows: list[TeamRow], team_id: int) -> list[TeamRow]:
+    """The team's main path: the teams above it along main teams, top first, then the team itself."""
+    by_id = {row.id: row for row in rows}
+    return [*_main_path(by_id, main_parent_ids(rows), team_id), *([by_id[team_id]] if team_id in by_id else [])]
+
+
 def ladder(rows: list[TeamRow], team_id: int) -> Ladder:
     by_id = {row.id: row for row in rows}
     main = main_parent_ids(rows)

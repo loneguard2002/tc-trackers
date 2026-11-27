@@ -136,6 +136,10 @@ def team_access(session: Session, tracker: Tracker) -> list[TeamAccess]:
 class Route(NamedTuple):
     text: str
     role: str  # the role this route gives; it "sets the role" when it equals the tracker's effective role
+    kind: str = (
+        ""  # "admin", "direct", "team", "region" or "all": for wording a route elsewhere (the Teams person view)
+    )
+    subject: str = ""  # the team's id for "team", the region's code for "region", else empty
 
 
 class TrackerAccess(NamedTuple):
@@ -158,18 +162,18 @@ def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
     from .permissions import set_permission_sources
 
     trackers = {tracker.id: tracker for tracker in session.scalars(select(Tracker))}
-    routes: dict[int, list[tuple[str, str]]] = {}  # tracker id -> [(role, route text)]
+    routes: dict[int, list[tuple[str, str, str, str]]] = {}  # tracker id -> [(role, text, kind, subject)]
 
-    def add(tracker_ids, role: str, text: str) -> None:
+    def add(tracker_ids, role: str, text: str, kind: str, subject: str = "") -> None:
         for tracker_id in tracker_ids:
             if tracker_id in trackers:
-                routes.setdefault(tracker_id, []).append((role, text))
+                routes.setdefault(tracker_id, []).append((role, text, kind, subject))
 
     if user.is_admin:
-        add(trackers, "owner", "Administrator")
+        add(trackers, "owner", "Administrator", "admin")
     direct = session.execute(select(TrackerRole.tracker_id, TrackerRole.role).where(TrackerRole.user_id == user.id))
     for tracker_id, role in direct:
-        add([tracker_id], role, f"Direct role: {role.title()}")
+        add([tracker_id], role, f"Direct role: {role.title()}", "direct")
     rows = load_team_rows(session)
     labels = team_labels(rows)
     by_team: dict[int, list[int]] = {}
@@ -179,7 +183,7 @@ def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
     memberships = session.execute(select(TeamMember.team_id, TeamMember.role).where(TeamMember.user_id == user.id))
     for team_id, role in sorted(memberships, key=lambda m: (labels.get(m.team_id, "").casefold(), m.team_id)):
         reached = [tracker_id for team in descendants(rows, team_id) for tracker_id in by_team.get(team, [])]
-        add(reached, role, f"Team {labels.get(team_id, '')}: {role.title()}")
+        add(reached, role, f"Team {labels.get(team_id, '')}: {role.title()}", "team", str(team_id))
     grants = session.execute(
         select(Region.id, Region.code, RegionGrant.role)
         .join(RegionGrant, RegionGrant.region_id == Region.id)
@@ -189,14 +193,14 @@ def tracker_access_routes(session: Session, user: User) -> list[TrackerAccess]:
     for tracker_id, region_id in session.execute(select(TrackerRegion.tracker_id, TrackerRegion.region_id)):
         covered.setdefault(region_id, []).append(tracker_id)
     for region_id, code, role in sorted(grants, key=lambda g: (g.code.casefold(), g.code, g.id)):
-        add(covered.get(region_id, []), role, f"Region {code}: {role.title()}")
+        add(covered.get(region_id, []), role, f"Region {code}: {role.title()}", "region", code)
     if any(permission == "view_all_trackers" for permission, _source in set_permission_sources(session, user)):
-        add(trackers, "viewer", "View all trackers: Viewer")
+        add(trackers, "viewer", "View all trackers: Viewer", "all")
     access = [
         TrackerAccess(
             trackers[tracker_id],
-            ROLE_BY_RANK[max(ROLE_ORDER[role] for role, _text in found)],
-            [Route(text, role) for role, text in found],
+            ROLE_BY_RANK[max(ROLE_ORDER[role] for role, *_rest in found)],
+            [Route(text, role, kind, subject) for role, text, kind, subject in found],
         )
         for tracker_id, found in routes.items()
     ]
