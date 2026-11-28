@@ -30,7 +30,7 @@ def clean(page):
 
 
 def open_layer(page):
-    page.get_by_role("link", name="Whole structure").click()
+    page.get_by_role("link", name="Org chart").click()
     layer = page.locator("#whole-structure")
     expect(layer).to_be_visible()
     return layer
@@ -112,7 +112,7 @@ def test_escape_closes_and_focus_returns_to_the_button(admin_page, live_server, 
     admin_page.keyboard.press("Tab")  # Tab moves on through the layer's controls
     admin_page.keyboard.press("Escape")
     expect(layer).to_be_hidden()
-    expect(admin_page.get_by_role("link", name="Whole structure")).to_be_focused()
+    expect(admin_page.get_by_role("link", name="Org chart")).to_be_focused()
     assert not admin_page.evaluate("document.body.classList.contains('structure-open')")
     clean(admin_page)
 
@@ -421,4 +421,14 @@ def test_the_where_it_sits_ladder_uses_the_whole_structure_boxes(admin_page, liv
     this_radius, _, this_width = admin_page.locator(".family .fam-this").evaluate(style)
     assert radius == this_radius == "8px" and weight == "600"
     assert width >= 199 and this_width >= 199  # at least a Whole structure box's 200px
+    clean(admin_page)
+
+
+@pytest.mark.parametrize("tab", ["people", "trackers"])
+def test_the_open_tab_hangs_straight_under_the_tabs(admin_page, live_server, swaps, tab):  # noqa: F811
+    # The owner's ask (28 Nov 2026): no gap between the tabs and what they show.
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['team'].id}?tab={tab}")
+    card = admin_page.locator(".team-card-simple").bounding_box()
+    panel = admin_page.locator(f"#{tab}").bounding_box()
+    assert abs((card["y"] + card["height"]) - panel["y"]) <= 1
     clean(admin_page)

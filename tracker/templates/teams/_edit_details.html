@@ -8,12 +8,15 @@
           {{ csrf_field(csrf_token()) }}
           {% if tab != 'people' %}<input type="hidden" name="tab" value="{{ tab }}">{% endif %}
           <div class="field-stack">
+            {#- Name and Description side by side, then Region and Location: two rows, not four (the owner, 28 Nov). -#}
+            <div class="field-pair">
             {% call field('Name', 'Unique, at most 100 characters.', 'name') %}
             <input id="name" name="name" value="{{ form.get('name', '') }}" maxlength="100" required aria-describedby="name-help">
             {% endcall %}
             {% call field('Description', 'Optional, at most 500 characters.', 'description') %}
-            <textarea id="description" name="description" rows="2" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
+            <textarea id="description" name="description" rows="1" maxlength="500" aria-describedby="description-help">{{ form.get('description', '') }}</textarea>
             {% endcall %}
+            </div>
             {% include "teams/_place_fields.html" %}
           </div>
           <div class="team-edit-foot">

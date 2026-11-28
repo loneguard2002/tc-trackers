@@ -136,7 +136,9 @@ def test_team_page_carries_the_whole_structure_data(client, logged_in_admin, swa
 def test_whole_structure_button_and_hidden_layer(client, logged_in_admin, team_factory):
     team = team_factory("Desk")
     html = page(client, f"/admin/teams/{team.id}?view=new")
-    assert re.search(r'<a class="button" href="#whole-structure" data-open-structure>Whole structure</a>', html)
+    assert re.search(
+        r'<a class="button" href="#whole-structure" data-open-structure><svg[^>]*>.*?</svg>Org chart</a>', html, re.S
+    )
     layer = re.search(r'<div class="structure-layer" id="whole-structure"[^>]*>', html).group(0)
     assert " hidden" in layer and 'role="dialog"' in layer and 'aria-modal="true"' in layer
     assert f'data-current-team="{team.id}"' in layer
@@ -764,3 +766,17 @@ def test_an_unchanged_draft_skips_the_access_preview(client, logged_in_admin, ab
         _editor(page(client, f"/admin/teams/{t.id}/sits?view=new"))
     )
     assert page(client, f"/admin/teams/{t.id}/sits?make_main={abt['a'].id}")  # only the main changes
+
+
+def test_the_header_keeps_its_icons_together_and_says_why_delete_is_off(client, logged_in_admin, swaps):  # noqa: F811
+    # The owner's ask (28 Nov 2026): Edit as an icon like Delete, the reason under the header.
+    html = team_page(client, swaps["rates"])
+    header = re.search(r'<header class="team-header team-header-simple">(.*?)</header>', html, re.S).group(1)
+    assert 'title="Edit details"' in header and ">Edit</a>" not in header and "team-delete-note" not in header
+    assert "Delete is off. This team has teams below it." in html
+
+
+def test_edit_details_puts_name_beside_description(client, logged_in_admin, swaps):  # noqa: F811
+    html = page(client, f"/admin/teams/{swaps['team'].id}?view=new&edit=1")
+    pair = re.search(r'<div class="field-pair">(.*?)</div>\s*<div class="field-pair">', html, re.S).group(1)
+    assert 'id="name"' in pair and 'id="description"' in pair

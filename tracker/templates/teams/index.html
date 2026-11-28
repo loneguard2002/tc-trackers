@@ -28,6 +28,7 @@
       <p class="empty-note">Choose a team to see its people and trackers.</p>
     </section>
 
+    {% if can('create_teams') %}
     <section class="settings-section" id="new-team" aria-labelledby="section-new-team">
       <header class="settings-section-head">
         <h2 id="section-new-team">New team</h2>
@@ -57,6 +58,7 @@
         </div>
       </form>
     </section>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

@@ -13,12 +13,14 @@
           </select>
         </div>
         <button class="button" type="submit">{{ icon('plus') }}Add selected team</button>
+        {% if can('create_teams') %}
         <span class="team-add-or">or</span>
         <a class="button" href="{{ url_for('teams.index', parent=team.id, _anchor='new-team') }}">{{ icon('plus') }}New team</a>
+        {% endif %}
       </form>
       {% else %}
       <p class="team-add-panel team-add-note"><span>No other team can be placed below {{ team.name }}.</span>
-        <a class="button" href="{{ url_for('teams.index', parent=team.id, _anchor='new-team') }}">{{ icon('plus') }}New team</a></p>
+        {% if can('create_teams') %}<a class="button" href="{{ url_for('teams.index', parent=team.id, _anchor='new-team') }}">{{ icon('plus') }}New team</a>{% endif %}</p>
       {% endif %}
       {% if below %}
       <div class="list-tools">
