@@ -256,6 +256,8 @@ def structure():
 @bp.post("")
 @permission_required("manage_teams")
 def create():
+    if not has_permission(current_user(), "create_teams"):  # creating a team is its own permission (28 Nov 2026)
+        abort(403)
     db = get_session()
     name = request.form.get("name", "").strip()
     description = request.form.get("description", "").strip()

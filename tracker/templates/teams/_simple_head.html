@@ -1,4 +1,5 @@
 {#- The Teams New view's page header (spec 4.1). Expects team_total, view_urls and active_view. Also holds the Whole structure layer (spec 4.9). -#}
+{% from "macros.html" import icon %}
 <header class="list-head teams-simple-head">
   <div>
     <h1>Teams <span class="count-pill title-count">{{ team_total }}<span class="sr-only"> teams</span></span></h1>
@@ -6,7 +7,7 @@
   </div>
   <div class="teams-head-actions">
     {% include "teams/_view_switch.html" %}
-    <a class="button" href="#whole-structure" data-open-structure>Whole structure</a>
+    <a class="button" href="#whole-structure" data-open-structure>{{ icon('teams') }}Org chart</a>
   </div>
 </header>
 {% include "teams/_structure_layer.html" %}

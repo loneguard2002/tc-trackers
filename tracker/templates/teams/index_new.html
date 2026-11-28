@@ -13,7 +13,7 @@
   {{ structure_card() }}
   <div class="teams-simple-main">
     <section class="settings-section">
-      <p class="empty-note">No team to show yet. Create the first team with the form on the left.</p>
+      <p class="empty-note">No team to show yet.{% if can('create_teams') %} Create the first team with the form on the left.{% else %} Creating teams needs the Create teams permission.{% endif %}</p>
     </section>
   </div>
 </div>

@@ -31,10 +31,9 @@
         {{ alert }}
         <h2 class="team-simple-name">{{ team.name }}</h2>
         {% if place %}<span class="team-pill team-header-place">{% set colour = region_colour(place.region_code) %}{% if colour %}<span class="region-mark region-c{{ colour }}" aria-hidden="true"></span>{% endif %}<strong>{{ place.region_code }}</strong>{% if place.location %}{{ icon('pin') }}{{ place.location }}{% endif %}</span>{% else %}<span class="team-pill team-header-place is-unset">Region not set</span>{% endif %}
-        <a class="button" href="{{ url_for('teams.view', team_id=team.id, edit=1, tab=tab if tab != 'people' else none) }}">{{ icon('edit') }}Edit</a>
+        <a class="button icon-only" href="{{ url_for('teams.view', team_id=team.id, edit=1, tab=tab if tab != 'people' else none) }}" title="Edit details">{{ icon('edit') }}<span class="sr-only">Edit details</span></a>
         {% if delete_blocker %}
-        <span class="team-delete-blocked"><button class="button danger icon-only" type="button" disabled title="{{ delete_blocker }}">{{ icon('trash') }}<span class="sr-only">{{ delete_blocker }}</span></button>
-          <span class="team-delete-note" aria-hidden="true">{{ delete_blocker }}</span></span>
+        <span class="team-delete-blocked"><button class="button danger icon-only" type="button" disabled title="{{ delete_blocker }}">{{ icon('trash') }}<span class="sr-only">{{ delete_blocker }}</span></button></span>
         {% else %}
         <form class="team-delete-form" method="post" action="{{ url_for('teams.delete', team_id=team.id) }}"
           data-confirm="Delete {{ team.name }}? Its members lose the access it gives." data-inline-confirm>
@@ -50,6 +49,8 @@
         </form>
         {% endif %}
       </header>
+      {#- Why it cannot be deleted sits under the header, so the icons keep to the right (the owner, 28 Nov 2026). -#}
+      {% if delete_blocker %}<p class="team-delete-hint" aria-hidden="true">Delete is off. {{ delete_blocker }}</p>{% endif %}
       {% endif %}
       <div class="team-simple-body">
         {% if team.description and not editing %}<p class="team-simple-desc">{{ team.description }}</p>{% endif %}
