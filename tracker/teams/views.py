@@ -416,6 +416,36 @@ def _simple_team_context(db, rows: list[TeamRow], team: Team) -> dict:
     }
 
 
+class Placing(NamedTuple):
+    """Put an existing team below this one, in place (the owner, 28 Nov 2026): the team being placed, how ("move":
+    under this team alone; "also": under this team as well, a shared team), its higher teams now, and the draft Save
+    posts to its Where it sits editor."""
+
+    child: Team
+    how: str
+    now: list[str]  # the names of the teams it sits under now, by name
+    above: tuple[int, ...]
+    main: int
+
+
+def _placing(rows: list[TeamRow], team: Team, child: Team, how: str) -> Placing:
+    current = set(_row(rows, child).parent_ids)
+    labels = team_labels(rows)
+    if how == "also" and current:
+        main = main_parent_ids(rows).get(child.id, team.id)
+        above = tuple(sorted(current | {team.id}))
+    else:
+        how, main, above = ("move" if current else "put"), team.id, (team.id,)
+    names = sorted((labels[t] for t in current if t in labels), key=lambda name: (name.casefold(), name))
+    return Placing(child, how, names, above, main)
+
+
+def _placing_context(db, placing: Placing, back: int) -> dict:
+    """What the in-place Put below panel shows: the choice, and who the change would give or take access."""
+    impact = move_impact(db, placing.child, frozenset(placing.above))
+    return {"placing": placing, "placing_preview": preview(impact), "placing_back": back}
+
+
 def _sits_context(
     db, rows: list[TeamRow], team: Team, draft: Draft, errors: list[str] | None, back: int | None
 ) -> dict:
@@ -445,6 +475,7 @@ def _render_team(
     sits: Draft | None = None,
     sits_errors: list[str] | None = None,
     sits_back: int | None = None,
+    placing: Placing | None = None,
 ):
     """The team's page with one tab open; ``picking`` opens the Trackers tab's picker, whose ``picked`` boxes are
     ticked, and shows ``errors`` there instead of in the header."""
@@ -481,6 +512,7 @@ def _render_team(
         **(_simple_team_context(db, rows, team) if view == "new" else {}),
         **(_sits_context(db, rows, team, sits, sits_errors, sits_back) if view == "new" and sits is not None else {}),
         sits=sits if view == "new" else None,
+        **(_placing_context(db, placing, team.id) if view == "new" and placing is not None else {"placing": None}),
         **(
             _structure_context(
                 db, rows, team.id, new_open=new_form is not None or request.args.get("new") == "1", tree=context
@@ -586,8 +618,15 @@ def add_below(team_id: int):
     child, error = parse_team_id(get_session(), request.args.get("team_id"))
     if child is None:
         return _render_team(team, [error or TEAM_CHOICE_ERROR], 400, tab="below")
-    if chosen_view() == "new":  # the Where it sits editor of the team being placed, with this team added
-        return redirect(url_for("teams.sits", team_id=child.id, add=team.id, back=team.id))
+    if chosen_view() == "new":  # in place, on this team's page: move it here, or also put it here (28 Nov 2026)
+        rows = load_team_rows(get_session())
+        if child.id in ancestors(rows, team.id) or child.id == team.id:
+            return _render_team(team, [CYCLE_MESSAGE], 400)
+        if team.id in _row(rows, child).parent_ids:
+            flash(ALREADY_UNDER.format(team=child.name, parent=team.name), "info")
+            return redirect(url_for("teams.view", team_id=team.id))
+        how = "also" if request.args.get("how") == "also" else "move"
+        return _render_team(team, [], 200, placing=_placing(rows, team, child, how))
     return redirect(url_for("teams.parents", team_id=child.id, add=team.id, back=team.id))
 
 

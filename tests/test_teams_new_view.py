@@ -225,7 +225,9 @@ def test_a_refused_add_shows_the_new_view_with_the_message(client, logged_in_adm
     response = post(client, f"/admin/teams/{team.id}/members", {"user_id": str(ana.id), "role": "viewer"})
     assert response.status_code == 400
     html = html_lib.unescape(response.get_data(as_text=True))
-    assert ALREADY_MEMBER_MESSAGE in html and '<section class="family"' in html and 'id="people-table"' in html
+    assert (
+        ALREADY_MEMBER_MESSAGE in html and '<section class="family family-two"' in html and 'id="people-table"' in html
+    )
 
 
 def test_a_team_holding_sets_shows_the_refusal_instead_of_the_panel(client, logged_in_user, give_set, team_factory):
@@ -308,7 +310,7 @@ def text_of(html: str) -> str:
 
 
 def _ladder(html: str) -> str:
-    return re.search(r'<section class="family".*?</section>', html, re.S).group(0)
+    return re.search(r'<section class="family family-two".*?</section>', html, re.S).group(0)
 
 
 def _people(html: str) -> str:
@@ -710,16 +712,50 @@ def test_unchanged_save_says_so(client, logged_in_admin, db, abt):
     assert NO_CHANGES_MESSAGE in page(client, response.headers["Location"])
 
 
-def test_put_below_opens_the_editor_of_the_team_being_placed(client, logged_in_admin, db, team_factory):
-    r, x = team_factory("R"), team_factory("X")
+def _place(html: str) -> str:
+    return re.search(r'<div class="place-below".*?</form>\s*</div>', html, re.S).group(0)
+
+
+def test_put_below_opens_in_place_on_this_teams_page(client, logged_in_admin, db, team_factory):
+    # The owner's ask (28 Nov 2026): Put below stays on this team's page, with Move it here or Also put it here.
+    r, old, x = team_factory("R"), team_factory("Old"), team_factory("X")
+    x_moved = team_factory("Placed", parent=old)
     page(client, f"/admin/teams/{r.id}?view=new")
-    response = client.get(f"/admin/teams/{r.id}/below?team_id={x.id}")
-    assert response.status_code == 302
-    assert response.headers["Location"].endswith(f"/admin/teams/{x.id}/sits?add={r.id}&back={r.id}")
-    editor = _editor(page(client, response.headers["Location"]))
-    assert editor.count('class="sits-row') == 1 and ">R<" in editor
-    response = save(client, x, [r.id], r.id, back=r.id)
+    html = page(client, f"/admin/teams/{r.id}/below?team_id={x_moved.id}")
+    panel = _place(html)
+    assert "Put Placed below R" in panel and "Placed sits under Old now." in panel
+    assert "Move it here" in panel and "Also put it here" in panel
+    assert f'action="/admin/teams/{x_moved.id}/sits"' in panel
+    assert re.findall(r'name="above" value="(\d+)"', panel) == [str(r.id)]  # move: under R alone
+    assert f'name="main" value="{r.id}"' in panel and f'name="back" value="{r.id}"' in panel
+    also = _place(page(client, f"/admin/teams/{r.id}/below?team_id={x_moved.id}&how=also"))
+    assert sorted(re.findall(r'name="above" value="(\d+)"', also)) == sorted([str(r.id), str(old.id)])
+    assert f'name="main" value="{old.id}"' in also  # the main team stays
+    top = _place(page(client, f"/admin/teams/{r.id}/below?team_id={x.id}"))
+    assert "Move it here" not in top and ">Put it here</button>" in top  # a top-level team has nothing to leave
+
+
+def test_put_below_moves_and_returns_here(client, logged_in_admin, db, team_factory):
+    r, old = team_factory("R"), team_factory("Old")
+    placed = team_factory("Placed", parent=old)
+    page(client, f"/admin/teams/{r.id}?view=new")
+    response = save(client, placed, [r.id], r.id, back=r.id)
     assert response.headers["Location"].endswith(f"/admin/teams/{r.id}")
+    assert _links_and_main(db, placed) == ([r.id], r.id)
+
+
+def test_put_below_shows_who_gains_access(client, logged_in_admin, swaps, team_factory, tracker_factory):
+    desk = team_factory("Desk")
+    tracker_factory(name="Desk tracker", team_id=desk.id)
+    page(client, f"/admin/teams/{swaps['rates'].id}?view=new")
+    panel = _place(page(client, f"/admin/teams/{swaps['rates'].id}/below?team_id={desk.id}"))
+    assert "3 gain access: Priya Nair, Sam Ortiz, Tom Becker" in panel
+
+
+def test_put_below_refuses_a_loop(client, logged_in_admin, swaps):
+    page(client, f"/admin/teams/{swaps['team'].id}?view=new")
+    response = client.get(f"/admin/teams/{swaps['team'].id}/below?team_id={swaps['top'].id}")
+    assert response.status_code == 400 and CYCLE_MESSAGE in html_lib.unescape(response.get_data(as_text=True))
 
 
 def test_new_view_parents_page_redirects_to_the_editor(client, logged_in_admin, abt):
