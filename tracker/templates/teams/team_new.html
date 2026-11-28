@@ -63,7 +63,10 @@
         {% if sits %}
         {% include "teams/_sits_editor.html" %}
         {% else %}
-        <section class="family" aria-labelledby="sits-title">
+        {#- Two columns (the owner, 28 Nov 2026): the ladder on the left, "Change it" on the right; they stack when
+            narrow. Put below opens in place in the right column: move the team here, or also put it here. -#}
+        <section class="family family-two" aria-labelledby="sits-title">
+          <div class="family-ladder">
           <h3 class="family-label" id="sits-title">Where it sits</h3>
           {% for row in ladder.path %}{% call fam_row(loop.index0) %}{{ team_link(row.id, row.name) }}{% endcall %}{% endfor %}
           {% set depth = ladder.path|length %}
@@ -76,16 +79,50 @@
           {% for path in ladder.also %}
           <div class="fam-also"><span class="fam-also-label">Also sits under</span> {% for row in path %}{% if not loop.first %}<span class="fam-sep" aria-hidden="true">›</span> {% endif %}{{ team_link(row.id, row.name) }} {% endfor %}</div>
           {% endfor %}
-          <div class="fam-foot">
-            <a class="fam-change" href="{{ url_for('teams.sits', team_id=team.id) }}">Change where it sits</a>
+          </div>
+          <div class="family-change">
+            <h3 class="family-label">Change it</h3>
+            {% if placing %}
+            {% set p = placing_preview %}
+            <div class="place-below" aria-labelledby="place-title">
+              <h4 class="place-title" id="place-title">Put {{ placing.child.name }} below {{ team.name }}</h4>
+              {% if placing.now %}
+              <p class="sits-help">{{ placing.child.name }} sits under {{ placing.now|join(', ') }} now.</p>
+              <div class="place-choices">
+                <a class="place-choice{{ ' is-chosen' if placing.how == 'move' }}" href="{{ url_for('teams.add_below', team_id=team.id) }}?team_id={{ placing.child.id }}&amp;how=move"{% if placing.how == 'move' %} aria-current="true"{% endif %} data-place-how="move">
+                  <strong>Move it here</strong><span>It leaves {{ placing.now|join(', ') }}.</span></a>
+                <a class="place-choice{{ ' is-chosen' if placing.how == 'also' }}" href="{{ url_for('teams.add_below', team_id=team.id) }}?team_id={{ placing.child.id }}&amp;how=also"{% if placing.how == 'also' %} aria-current="true"{% endif %} data-place-how="also">
+                  <strong>Also put it here</strong><span>It stays under {{ placing.now|join(', ') }} too: a shared team.</span></a>
+              </div>
+              {% endif %}
+              <div class="sits-preview-box" aria-live="polite">
+                {% if not (p.gain or p.lose or p.other_role) %}<p>No change in who can see its trackers.</p>{% endif %}
+                {% if p.gain %}<p class="sits-gain">{{ p.gain|length }} gain access: {{ p.gain|join(', ') }}</p>{% endif %}
+                {% if p.lose %}<p class="sits-lose">{{ p.lose|length }} lose access: {{ p.lose|join(', ') }}</p>{% endif %}
+                {% if p.other_role %}<p>{{ p.other_role|length }} would see a different role: {{ p.other_role|join(', ') }}</p>{% endif %}
+              </div>
+              <form class="sits-save" method="post" action="{{ url_for('teams.save_sits', team_id=placing.child.id) }}">
+                {{ csrf_field(csrf_token()) }}
+                {% for id in placing.above %}<input type="hidden" name="above" value="{{ id }}">{% endfor %}
+                <input type="hidden" name="main" value="{{ placing.main }}">
+                <input type="hidden" name="back" value="{{ placing_back }}">
+                <a class="button" href="{{ url_for('teams.view', team_id=team.id) }}">Cancel</a>
+                <button class="button primary" type="submit">{{ {'move': 'Move it here', 'also': 'Also put it here', 'put': 'Put it here'}[placing.how] }}</button>
+              </form>
+            </div>
+            {% else %}
+            <a class="button fam-change" href="{{ url_for('teams.sits', team_id=team.id) }}">{{ icon('teams') }}Change where it sits</a>
             <form class="below-form" method="get" action="{{ url_for('teams.add_below', team_id=team.id) }}">
               <label for="below-team">Put an existing team below</label>
-              <select id="below-team" name="team_id" required>
-                <option value="">Choose a team</option>
-                {% for o in below_options %}<option value="{{ o.id }}"{% if o.disabled %} disabled{% endif %}>{{ o.label }}</option>{% endfor %}
-              </select>
-              <button class="button button-small" type="submit">Put below</button>
+              <div class="below-form-row">
+                <select id="below-team" name="team_id" required>
+                  <option value="">Choose a team</option>
+                  {% for o in below_options %}<option value="{{ o.id }}"{% if o.disabled %} disabled{% endif %}>{{ o.label }}</option>{% endfor %}
+                </select>
+                <button class="button button-small" type="submit">Put below</button>
+              </div>
             </form>
+            {% endif %}
           </div>
         </section>
         {% endif %}

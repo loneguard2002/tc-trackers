@@ -119,3 +119,35 @@ def test_a_wide_screen_keeps_the_standard_page_width(admin_page, live_server, sw
     for selector in (".teams-simple-head", ".teams-simple-layout"):
         assert admin_page.locator(selector).bounding_box()["width"] <= 1280, selector
     clean(admin_page)
+
+
+def test_put_below_in_place_moves_the_team_here(admin_page, live_server, db, team_factory):
+    # The owner's ask (28 Nov 2026): Where it sits in two columns; Put below stays on this page.
+    r, old = team_factory("R"), team_factory("Old")
+    placed = team_factory("Placed", parent=old)
+    admin_page.goto(f"{live_server}/admin/teams/{r.id}")
+    ladder = admin_page.locator(".family-ladder").bounding_box()
+    change = admin_page.locator(".family-change").bounding_box()
+    assert change["x"] > ladder["x"] + ladder["width"] - 1  # side by side on a wide screen
+    admin_page.get_by_label("Put an existing team below").select_option(str(placed.id))
+    admin_page.get_by_role("button", name="Put below").click()
+    assert admin_page.url.split("?")[0].endswith(f"/admin/teams/{r.id}/below")  # still R's page
+    panel = admin_page.locator(".place-below")
+    expect(panel).to_contain_text("Put Placed below R")
+    panel.get_by_role("link", name="Also put it here").click()
+    expect(admin_page.locator(".place-choice.is-chosen")).to_contain_text("Also put it here")
+    panel = admin_page.locator(".place-below")
+    panel.get_by_role("link", name="Move it here").click()
+    admin_page.locator(".place-below").get_by_role("button", name="Move it here").click()
+    expect(admin_page.get_by_text("Saved where Placed sits.")).to_be_visible()
+    expect(admin_page.locator(".family-ladder")).to_contain_text("Placed")
+    clean(admin_page)
+
+
+def test_the_change_column_fits_its_controls(admin_page, live_server, swaps):  # noqa: F811
+    admin_page.goto(f"{live_server}/admin/teams/{swaps['rates'].id}")
+    column = admin_page.locator(".family-change").bounding_box()
+    for control in (admin_page.locator("#below-team"), admin_page.get_by_role("button", name="Put below")):
+        rect = control.bounding_box()
+        assert rect["x"] + rect["width"] <= column["x"] + column["width"] + 1
+    clean(admin_page)
